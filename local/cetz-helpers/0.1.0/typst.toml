@@ -1,0 +1,7 @@
+[package]
+name = "cetz-helpers"
+version = "0.1.0"
+entrypoint = "lib.typ"
+authors = ["Kim Taeyoung"]
+license = "MIT"
+description = "Reusable CeTZ legend and description box helpers."

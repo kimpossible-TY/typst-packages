@@ -1,0 +1,7 @@
+[package]
+name = "scoped-annotations"
+version = "0.1.0"
+entrypoint = "lib.typ"
+authors = ["Kim Taeyoung"]
+license = "MIT"
+description = "Scoped labels and local mannot/CeTZ annotation helpers."

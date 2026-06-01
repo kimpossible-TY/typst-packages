@@ -1,0 +1,7 @@
+[package]
+name = "text-utils"
+version = "0.1.0"
+entrypoint = "lib.typ"
+authors = ["Kim Taeyoung"]
+license = "MIT"
+description = "Reusable text helpers for Typst documents."

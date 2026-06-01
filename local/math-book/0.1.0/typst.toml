@@ -1,0 +1,11 @@
+[package]
+name = "math-book"
+version = "0.1.0"
+entrypoint = "lib.typ"
+authors = ["Kim Taeyoung"]
+license = "MIT"
+description = "A reusable mathematical book and lecture-note template."
+
+[template]
+path = "template"
+entrypoint = "main.typ"
