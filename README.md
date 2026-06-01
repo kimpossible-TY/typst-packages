@@ -1,6 +1,6 @@
 # Custom Typst Packages
 
-Personal Typst packages extracted from the PDE notes project. These packages provide a unified design system, mathematical note templates, theorem/proof structures, and advanced layout/drawing tools.
+These packages provide a unified design system, mathematical note templates, theorem/proof structures, and advanced layout/drawing tools.
 
 ---
 
