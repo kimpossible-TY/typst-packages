@@ -1,6 +1,6 @@
 #import "@local/text-utils:0.1.0": *
 #import "@local/math-blocks:0.1.0": *
-#import "@local/scoped-annotations:0.1.0": local-tag-scope
+#import "@local/scoped-annotations:0.1.0": local-scope-annotations
 #import "@local/cetz-helpers:0.1.0": legend_box, description_box
 #import "@preview/cetz:0.4.2": *
 
@@ -32,7 +32,7 @@ this paragraph should be indented and capitalized.
   $ a^2 + b^2 = c^2 $
 ]
 
-#local-tag-scope(s => [
+#local-scope-annotations(s => [
   #heading(level: 2)[Local Target] #(s.tag)("target")
 
   Local reference target: #(s.ref)("target").

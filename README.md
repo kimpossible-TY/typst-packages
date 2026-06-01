@@ -6,7 +6,7 @@ Personal Typst packages extracted from the PDE notes project.
 
 - `@local/text-utils:0.1.0`: text helpers, title capitalization, paragraph markers, custom highlighting.
 - `@local/math-blocks:0.1.0`: theorem-like blocks, callouts, themes, proof helpers, flow boxes.
-- `@local/scoped-annotations:0.1.0`: local label scopes and mannot/CeTZ annotation helpers.
+- `@local/scoped-annotations:0.1.0`: one local-scope annotation function for scoped labels and mannot/CeTZ overlays.
 - `@local/cetz-helpers:0.1.0`: reusable CeTZ legend and description boxes.
 - `@local/math-book:0.1.0`: mathematical book/lecture-note template.
 

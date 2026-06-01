@@ -1,8 +1,8 @@
 #import "@preview/mannot:0.3.3": *
 
-#let _local-tag-scope-counter = counter("_local-tag-scope-counter")
+#let _local-scope-counter = counter("_local-scope-counter")
 
-#let local-tag-scope(
+#let _local-scope(
   body,
   prefix: auto,
   namespace: "local-scope",
@@ -27,10 +27,10 @@
   }
 
   if prefix == auto {
-    _local-tag-scope-counter.step()
+    _local-scope-counter.step()
 
     context {
-      let n = _local-tag-scope-counter.get().first()
+      let n = _local-scope-counter.get().first()
       make-scope(namespace + "-" + str(n))
     }
   } else {
@@ -38,9 +38,9 @@
   }
 }
 
-#let _annot-cetz-local-counter = counter("_annot-cetz-local-counter")
+#let _local-scope-annotation-counter = counter("_local-scope-annotation-counter")
 
-#let annot-cetz-local(
+#let _local-scope-annotation(
   tag,
   cetz,
   drawable,
@@ -96,10 +96,10 @@
   }
 
   if id == auto {
-    _annot-cetz-local-counter.step()
+    _local-scope-annotation-counter.step()
 
     context {
-      let n = _annot-cetz-local-counter.get().first()
+      let n = _local-scope-annotation-counter.get().first()
       build("auto-" + str(n))
     }
   } else {
@@ -107,7 +107,7 @@
   }
 }
 
-#let mannot-scope(
+#let local-scope-annotations(
   body,
   prefix: auto,
   parent: auto,
@@ -122,15 +122,21 @@
   }
 
   let namespace = if parent != auto and name == auto {
-    parent.prefix + "-mannot-scope"
+    parent.prefix + "-local-scope-annotations"
   } else {
-    "mannot-scope"
+    "local-scope-annotations"
   }
 
-  local-tag-scope(scope => {
+  _local-scope(scope => {
     let annot = (names, cetz, drawable) => {
-      annot-cetz-local(
-        (scope.tags)(names),
+      let annotation-tags = if type(names) == array {
+        (scope.tags)(names)
+      } else {
+        ((scope.tag)(names),)
+      }
+
+      _local-scope-annotation(
+        annotation-tags,
         cetz,
         drawable,
       )
