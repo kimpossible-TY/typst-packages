@@ -1,10 +1,10 @@
 #import "@local/text-utils:0.1.0": capitalize-title, is-numeric-title
 
+// Standard fonts and sizes used for mathematical blocks.
 #let math_font = "New Computer Modern Math"
 #let title_size = 10.8pt
 
-// Shared document palettes. Pick one in the document, then apply it through
-// #set page(fill: ...) and #set text(fill: ...).
+// Light theme color palette definition.
 #let light-theme = (
   page: white,
   text: luma(0%),
@@ -25,6 +25,7 @@
   ),
 )
 
+// Dark theme color palette definition.
 #let dark-theme = (
   page: rgb("#10151f"),
   text: rgb("#e8edf3"),
@@ -45,6 +46,7 @@
   ),
 )
 
+// Automatically determines whether to use the light or dark theme based on the current text fill color.
 #let theme-from-text-fill() = {
   if text.fill == dark-theme.text {
     dark-theme
@@ -53,6 +55,13 @@
   }
 }
 
+// Renders a visual callout block with a thick left border and filled background.
+//
+// Parameters:
+//   - type: Type of the callout (determines colors: note, warning, theorem, etc.).
+//   - title: Optional title of the callout.
+//   - inline-title: If true, renders the title inline with the body text.
+//   - body: The main content of the callout block.
 #let callout(
   type: "note",
   title: none,
@@ -82,8 +91,10 @@
   )
 }
 
+// Holds the styling format of heading numbers (e.g. "1.1").
 #let heading-numbering-style = state("heading-numbering-style", "1.1")
 
+// Generates a numbered string based on current heading and local item counter.
 #let scoped-numbering(item-counter) = {
   context numbering(
     heading-numbering-style.get(),
@@ -92,8 +103,10 @@
   )
 }
 
+// A list of all standard mathematical block kinds.
 #let math-block-kinds = ("theorem", "proposition", "lemma", "definition", "note")
 
+// Custom figure numbering function that prepends the chapter (level 1 heading) number.
 #let scoped-figure-numbering(..nums) = {
   let n = nums.pos().first()
   context {
@@ -103,6 +116,8 @@
   }
 }
 
+// Computes the formatted title string for mathematical blocks.
+// Formats: "Theorem 1.1 : " or "Theorem 1.1 (Some Title) : ".
 #let math-block-title(label, kind, title) = context {
   let c = counter(figure.where(kind: kind))
   let num = scoped-numbering(c)
@@ -114,6 +129,14 @@
   }
 }
 
+// Creates a numbered, referenceable mathematical block wrapped in a Typst figure.
+//
+// Parameters:
+//   - kind: The figure kind string (e.g., "theorem").
+//   - label: The display label prefix (e.g., "Theorem").
+//   - body: The content inside the block.
+//   - title: Optional title of the mathematical block.
+//   - callout-type: Custom theme callout style to use. Defaults to `kind`.
 #let numbered-math-block(kind, label, body, title: none, callout-type: none) = {
   let box-type = if callout-type == none { kind } else { callout-type }
 
@@ -131,12 +154,14 @@
   )
 }
 
+// Resets all internal mathematical block counters back to zero.
 #let reset-math-block-counters() = {
   for kind in math-block-kinds {
     counter(figure.where(kind: kind)).update(0)
   }
 }
 
+// Applies a show rule to reset block counters at each top-level heading.
 #let apply-math-block-reset(body) = {
   show heading.where(level: 1): it => {
     reset-math-block-counters()
@@ -146,12 +171,14 @@
   body
 }
 
+// Pre-defined convenience helper blocks for mathematical notes.
 #let theorem(body, title: none) = numbered-math-block("theorem", "Theorem", body, title: title)
 #let proposition(body, title: none) = numbered-math-block("proposition", "Proposition", body, title: title)
 #let lemma(body, title: none) = numbered-math-block("lemma", "Lemma", body, title: title)
 #let definition(body, title: none) = numbered-math-block("definition", "Definition", body, title: title)
 #let note(body, title: none) = numbered-math-block("note", "Note", body, title: title)
 
+// Renders an indented callout for highlighted/emphasized text.
 #let emphasis(body, title: none) = pad(left: 2em, callout(
   type: "emphasis",
   title: if title != none { strong(capitalize-title(title)) } else { none },
@@ -159,8 +186,10 @@
   body,
 ))
 
+// Standard Q.E.D. right-aligned symbol.
 #let qed = h(1fr) + sym.qed
 
+// Renders a formal proof block with a starting label and ending Q.E.D. symbol.
 #let proof(body) = {
   parbreak()
   text(weight: "bold", font: math_font)[Proof. ]
@@ -169,10 +198,12 @@
   qed
 }
 
+// Helper spacer/dots pattern for equations.
 #let dots_space = {
   $& wide dots.h.c thin$
 }
 
+// Renders a centered block container with a solid outline matching the active theme's rule color.
 #let flowbox(body) = context {
   let theme = theme-from-text-fill()
 
@@ -183,3 +214,4 @@
     align(center, body),
   )
 }
+

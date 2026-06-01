@@ -1,30 +1,37 @@
 # Custom Typst Packages
 
-Personal Typst packages extracted from the PDE notes project.
+Personal Typst packages extracted from the PDE notes project. These packages provide a unified design system, mathematical note templates, theorem/proof structures, and advanced layout/drawing tools.
 
-## Packages
+---
 
-- `@local/text-utils:0.1.0`: text helpers, title capitalization, paragraph markers, custom highlighting.
-- `@local/math-blocks:0.1.0`: theorem-like blocks, callouts, themes, proof helpers, flow boxes.
-- `@local/scoped-annotations:0.1.0`: one local-scope annotation function for scoped labels and mannot/CeTZ overlays.
-- `@local/cetz-helpers:0.1.0`: reusable CeTZ legend and description boxes.
-- `@local/math-book:0.1.0`: mathematical book/lecture-note template.
+## Repository Layout
+
+```text
+local/
+  text-utils/0.1.0/          # Text manipulation & paragraph indentation helpers
+  math-blocks/0.1.0/         # Theorem, Lemma, Definition environments & callout styles
+  scoped-annotations/0.1.0/  # Local-scope reference targets and CeTZ drawing overlays
+  cetz-helpers/0.1.0/        # Reusable legend and description boxes for CeTZ diagrams
+  math-book/0.1.0/           # Mathematical book/lecture-note document template
+scripts/                     # Utility installation and test scripts
+tests/                       # Smoke tests for verifying package compilation
+```
+
+---
 
 ## Install Locally
 
-From this repository root:
+To install the packages locally on your machine, run the following command from the repository root:
 
 ```sh
 ./scripts/install-local.sh
 ```
 
-This copies `local/*` into Typst's local package path:
+This copies the packages under `local/*` into Typst's local package directory:
+- **macOS / Linux**: `~/Library/Application Support/typst/packages/local/` or `~/.local/share/typst/packages/local/`
+- **Windows**: `%APPDATA%\typst\packages\local\`
 
-```text
-~/Library/Application Support/typst/packages/local
-```
-
-After installation, other Typst projects can import the packages like this:
+Once installed, they can be imported into any Typst project via:
 
 ```typst
 #import "@local/text-utils:0.1.0": *
@@ -33,30 +40,169 @@ After installation, other Typst projects can import the packages like this:
 #import "@local/cetz-helpers:0.1.0": *
 ```
 
-## Smoke Test
+---
+
+## Packages Usage Guide
+
+### 1. `@local/text-utils:0.1.0`
+Provides text helpers, title capitalization, and custom paragraph markers.
+
+* **Paragraph Tabs (`apply-paragraph-tabs`)**: Renders custom paragraph markers. If `#paragraph-tab` is followed by a lowercase letter, it automatically capitalizes the letter and indents by `1.5em`.
+* **Highlighter (`highlighted`)**: Intelligently highlights background colors for both inline text and mathematical equations, automatically adjusting color based on whether light or dark theme is active.
+
+```typst
+#import "@local/text-utils:0.1.0": *
+
+// Apply the indentation rule to the document
+#show: apply-paragraph-tabs
+
+#paragraph-tab
+this paragraph starts with a tab and will be automatically capitalized and indented.
+
+We can highlight text and inline formulas:
+#highlighted[
+  This is highlighted text containing a formula $a^2 + b^2 = c^2$.
+]
+```
+
+---
+
+### 2. `@local/math-blocks:0.1.0`
+Provides beautiful, themeable, numbered theorem-like blocks, proofs, and general callouts.
+
+* **Environments**: `#theorem`, `#proposition`, `#lemma`, `#definition`, `#note`, `#emphasis`, and `#proof`.
+* **Counter resets**: Calling `#show: apply-math-block-reset` will reset block numbering counters automatically at each level-1 heading (e.g. Chapter).
+* **Themes**: Comes with predefined `light-theme` and `dark-theme` colors.
+
+```typst
+#import "@local/math-blocks:0.1.0": *
+
+// Reset math blocks numbers at every Chapter (= level 1 heading)
+#show: apply-math-block-reset
+
+= Chapter 1
+
+#definition(title: "Vector Space")[
+  A vector space is a set of objects called vectors...
+]
+
+#theorem(title: "Pythagorean Theorem")[
+  In a right-angled triangle, the square of the hypotenuse is equal to...
+]
+
+#proof[
+  The proof proceeds by geometric dissection:
+  $ a^2 + b^2 = c^2. $
+]
+```
+
+---
+
+### 3. `@local/scoped-annotations:0.1.0`
+Allows you to create a localized reference scope. This prevents name clashes in labels and lets you draw overlay annotations (lines, arrows, shapes) on top of target document elements using CeTZ.
+
+* **Usage**: Wrap sections in `local-scope-annotations(s => [ ... ])`.
+* **`s.tag(name)`**: Defines a label locally in the scope.
+* **`s.ref(name)`**: References a label defined in the scope.
+* **`s.annot(targets, cetz, canvas-drawings)`**: Draws custom shapes/lines overlaying the targeted elements.
+
+```typst
+#import "@local/scoped-annotations:0.1.0": local-scope-annotations
+#import "@preview/cetz:0.4.2": *
+
+#local-scope-annotations(s => [
+  We label this term #(s.tag)("term1") $x^2$. 
+  Later, we can refer to #(s.ref)("term1").
+
+  // Draw an annotation arrow overlaying the term
+  #s.annot("term1", cetz, {
+    import cetz.draw: *
+    // "term1" maps to coordinates matching the location of the label
+    line("term1.south", (0, -0.5), mark: (end: "stealth"), stroke: red + 1pt)
+    content((0, -0.7), [Target Term], anchor: "north")
+  })
+])
+```
+
+---
+
+### 4. `@local/cetz-helpers:0.1.0`
+Provides helpers for drawing legend boxes and description boxes inside CeTZ canvas drawings.
+
+* **`legend_box`**: Draws a legend at the specified coordinates containing series names, line strokes, and line marks.
+* **`description_box`**: Places a styled text info box on the canvas.
+
+```typst
+#import "@local/cetz-helpers:0.1.0": legend_box, description_box
+#import "@preview/cetz:0.4.2": *
+
+#canvas({
+  import draw: *
+  // Draw some paths...
+  line((0, 0), (2, 2), stroke: 1.5pt + blue, name: "series1")
+  
+  // Render a clean legend box
+  legend_box(
+    x: 3,
+    y: 2,
+    width: 3.5,
+    items: (
+      (text: [Series 1], stroke: 1.5pt + blue),
+    )
+  )
+
+  // Render a description box next to it
+  description_box(
+    x: 3,
+    y: 0,
+    width: 4cm,
+    body: [This chart illustrates the linear relationship.]
+  )
+})
+```
+
+---
+
+### 5. `@local/math-book:0.1.0`
+A document template designed for mathematics lecture notes, books, and thesis documents. It sets up page dimensions, clean margins, fonts (Times New Roman), custom running headers/footers, and integrates text/math block styling.
+
+```typst
+#import "@local/math-book:0.1.0": *
+#import "@local/math-blocks:0.1.0": *
+
+// Setup entry point with document metadata
+#show: apply-math-book.with(
+  title: "Advanced Real Analysis",
+  author: "Isaac Newton",
+  description: "Lecture notes covering measure theory and integration."
+)
+
+// Include a cover page and Table of Contents
+#include "template/cover.typ"
+
+= Measure Theory
+
+#definition[
+  A sigma-algebra on a set $X$ is a collection of subsets...
+]
+```
+
+---
+
+## Tests
+
+### Smoke Test
+Runs local installation and verifies general syntax compliance:
 
 ```sh
 ./scripts/test.sh
 ```
 
-The test installs the local packages and compiles `tests/package-smoke.typ`.
-
-## Template Test
+### Template Initialization Test
+Verifies initializing a new project from the math-book template works:
 
 ```sh
 typst init @local/math-book:0.1.0 /tmp/math-book-test
 typst compile /tmp/math-book-test/main.typ /tmp/math-book-test.pdf
 ```
 
-## Repository Layout
-
-```text
-local/
-  text-utils/0.1.0/
-  math-blocks/0.1.0/
-  scoped-annotations/0.1.0/
-  cetz-helpers/0.1.0/
-  math-book/0.1.0/
-scripts/
-tests/
-```
