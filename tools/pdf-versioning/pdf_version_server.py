@@ -98,18 +98,7 @@ def write_version_files(root: Path, built_at: str | None = None, pdf_name: str =
     return version_id
 
 
-def ensure_browser_helper(root: Path) -> None:
-    target = root / "pdf-version-check.js"
-    if target.exists():
-        return
-
-    source = Path(__file__).resolve().with_name("pdf-version-check.js")
-    target.write_text(source.read_text(encoding="utf-8"), encoding="utf-8")
-    print(f"Initialized browser helper: {target.name}", flush=True)
-
-
 def ensure_version_files(root: Path, pdf_name: str) -> None:
-    ensure_browser_helper(root)
     if not (root / "build-info.typ").exists() or not (root / "version.json").exists():
         version_id = write_version_files(root, pdf_name=pdf_name)
         print(f"Initialized version metadata: {version_id}", flush=True)
@@ -164,7 +153,6 @@ def main() -> None:
         return
 
     if args.write_version_once:
-        ensure_browser_helper(serve_dir)
         print(write_version_files(serve_dir, pdf_name=args.pdf_name))
         return
 
@@ -176,9 +164,26 @@ def main() -> None:
         )
         watcher.start()
 
-    handler = functools.partial(http.server.SimpleHTTPRequestHandler, directory=str(serve_dir))
+    helper_path = Path(__file__).resolve().with_name("pdf-version-check.js")
 
-    with socketserver.TCPServer((args.host, args.port), handler) as httpd:
+    class VersioningHandler(http.server.SimpleHTTPRequestHandler):
+        def __init__(self, *handler_args, **handler_kwargs):
+            super().__init__(*handler_args, directory=str(serve_dir), **handler_kwargs)
+
+        def do_GET(self) -> None:
+            request_path = urllib.parse.urlparse(self.path).path
+            if request_path == "/pdf-version-check.js":
+                self.send_response(200)
+                self.send_header("Content-Type", "application/javascript; charset=utf-8")
+                self.send_header("Content-Length", str(helper_path.stat().st_size))
+                self.end_headers()
+                with helper_path.open("rb") as helper_file:
+                    self.wfile.write(helper_file.read())
+                return
+
+            super().do_GET()
+
+    with socketserver.TCPServer((args.host, args.port), VersioningHandler) as httpd:
         print(f"Serving {serve_dir} on http://{args.host}:{args.port}")
         print("Press Ctrl+C to stop")
         httpd.serve_forever()
