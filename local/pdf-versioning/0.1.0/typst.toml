@@ -1,0 +1,7 @@
+[package]
+name = "pdf-versioning"
+version = "0.1.0"
+entrypoint = "lib.typ"
+authors = ["Kim Taeyoung"]
+license = "MIT"
+description = "PDF version-check links for branch and timestamp based published Typst documents."

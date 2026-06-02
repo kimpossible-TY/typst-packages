@@ -2,6 +2,7 @@
 #import "@local/math-blocks:0.1.0": *
 #import "@local/scoped-annotations:0.1.0": local-scope-annotations
 #import "@local/cetz-helpers:0.1.0": legend_box, description_box
+#import "@local/pdf-versioning:0.1.0": pdf-version-links, version-check-url
 #import "@preview/cetz:0.4.2": *
 
 // Setup page theme, text color and page background for testing
@@ -61,3 +62,18 @@ this paragraph should be indented and capitalized.
   description_box(x: 0, y: -1.2, width: 4cm, body: [Description])
 })
 
+// Verify PDF versioning links compile and expose the expected branch/time URL.
+#let check-url = version-check-url(
+  "https://example.com/notes",
+  "main",
+  "2026-06-02T00:00:00Z",
+)
+#link(check-url)[Version URL]
+
+#pdf-version-links(
+  "main",
+  "2026-06-02T00:00:00Z",
+  "https://example.com/notes",
+  "https://example.com/source",
+  fill: theme.muted-text,
+)

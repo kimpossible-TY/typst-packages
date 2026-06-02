@@ -12,7 +12,9 @@ local/
   math-blocks/0.1.0/         # Theorem, Lemma, Definition environments & callout styles
   scoped-annotations/0.1.0/  # Local-scope reference targets and CeTZ drawing overlays
   cetz-helpers/0.1.0/        # Reusable legend and description boxes for CeTZ diagrams
+  pdf-versioning/0.1.0/      # PDF version-check links for static publishing workflows
   math-book/0.1.0/           # Mathematical book/lecture-note document template
+tools/pdf-versioning/         # Python server and browser helper for PDF freshness checks
 scripts/                     # Utility installation and test scripts
 tests/                       # Smoke tests for verifying package compilation
 ```
@@ -38,6 +40,7 @@ Once installed, they can be imported into any Typst project via:
 #import "@local/math-blocks:0.1.0": *
 #import "@local/scoped-annotations:0.1.0": *
 #import "@local/cetz-helpers:0.1.0": *
+#import "@local/pdf-versioning:0.1.0": *
 ```
 
 ---
@@ -189,6 +192,35 @@ A document template designed for mathematics lecture notes, books, and thesis do
 
 ---
 
+### 6. `@local/pdf-versioning:0.1.0`
+Provides Typst helpers for rendering version-check links in PDFs that are
+published through a static site.
+
+```typst
+#import "@local/pdf-versioning:0.1.0": pdf-version-links
+#import "build-info.typ": *
+
+#pdf-version-links(
+  document-branch,
+  document-built-at,
+  document-base-url,
+  document-source-url,
+)
+```
+
+The companion Python and JavaScript tools live under `tools/pdf-versioning/`.
+Use the Python server in a consuming project to generate `build-info.typ` and
+`version.json`:
+
+```sh
+python3 typst-packages/tools/pdf-versioning/pdf_version_server.py --root . --watch-version
+```
+
+Use `pdf-version-check.js` from the HTML page to compare a PDF's
+`pdfBranch`/`pdfBuiltAt` query parameters with the current `version.json`.
+
+---
+
 ## Tests
 
 ### Smoke Test
@@ -205,4 +237,3 @@ Verifies initializing a new project from the math-book template works:
 typst init @local/math-book:0.1.0 /tmp/math-book-test
 typst compile /tmp/math-book-test/main.typ /tmp/math-book-test.pdf
 ```
-
