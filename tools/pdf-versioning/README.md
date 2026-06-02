@@ -11,7 +11,7 @@ static site such as GitHub Pages.
 ## Local Server
 
 ```sh
-python3 tools/pdf-versioning/pdf_version_server.py --root . --port 8767 --watch-version
+pdf-versioning --root . --port 8767 --watch-version
 ```
 
 The server creates `build-info.typ` and `version.json` if they are missing. Once
@@ -20,15 +20,27 @@ running, it updates both files only when a tracked `.typ` source changes.
 ## One-Time Metadata Write
 
 ```sh
-python3 tools/pdf-versioning/pdf_version_server.py --root . --write-version-once
+pdf-versioning --root . --write-version-once
 ```
 
 Use this in CI before compiling, then run it again after compiling so
 `version.json` records the final PDF hash and size.
 
+## Install CLI
+
+From the `typst-packages` repo:
+
+```sh
+./scripts/install-tools.sh
+```
+
+This installs a `pdf-versioning` command into `~/.local/bin` by default. Set
+`PDF_VERSIONING_BIN_DIR` to choose another install directory.
+
 ## HTML Helper
 
-Copy or serve `pdf-version-check.js`, then mount it from the page:
+Serve `pdf-version-check.js` through `pdf-versioning`, then mount it from the
+page:
 
 ```html
 <script src="pdf-version-check.js"></script>

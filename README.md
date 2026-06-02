@@ -212,8 +212,16 @@ The companion Python and JavaScript tools live under `tools/pdf-versioning/`.
 Use the Python server in a consuming project to generate `build-info.typ` and
 `version.json`:
 
+Install the CLI once from this repo:
+
 ```sh
-python3 typst-packages/tools/pdf-versioning/pdf_version_server.py --root . --watch-version
+./scripts/install-tools.sh
+```
+
+Then run it from a consuming project:
+
+```sh
+pdf-versioning --root . --watch-version
 ```
 
 Use `pdf-version-check.js` from the HTML page to compare a PDF's
