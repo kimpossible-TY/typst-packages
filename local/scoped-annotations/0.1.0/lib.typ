@@ -1,4 +1,4 @@
-#import "@preview/mannot:0.3.3": *
+#import "@preview/mannot:0.4.0": *
 
 // Counter to ensure unique IDs for auto-generated local scopes.
 #let _local-scope-counter = counter("_local-scope-counter")
@@ -82,18 +82,20 @@
     // Define the overlay callback expected by the mannot package.
     // `markers` contains details about the target element positions.
     let overlay(markers) = {
-      let origin = markers.first()
+      let origin = markers.first().anchor-bounds
 
       // Define standard dummy bounding box rectangles for the target elements.
       let preamble = markers
-        .map(info => {
+        .map(data => {
+          let bounds = data.anchor-bounds
+
           cetz.draw.rect(
-            (info.x - origin.x, -(info.y - origin.y)),
+            (bounds.x - origin.x, -(bounds.y - origin.y)),
             (
-              info.x + info.width - origin.x,
-              -(info.y + info.height - origin.y),
+              bounds.x + bounds.width - origin.x,
+              -(bounds.y + bounds.height - origin.y),
             ),
-            name: str(info.tag),
+            name: str(data.tag),
             stroke: none,
             fill: none,
           )
@@ -197,4 +199,3 @@
     ))
   }, prefix: scope-prefix, namespace: namespace)
 }
-

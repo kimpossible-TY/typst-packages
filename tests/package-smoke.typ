@@ -3,7 +3,9 @@
 #import "@local/scoped-annotations:0.1.0": local-scope-annotations
 #import "@local/cetz-helpers:0.1.0": legend_box, description_box
 #import "@local/pdf-versioning:0.1.0": pdf-version-links, version-check-url
+#import "@preview/cetz:0.4.2"
 #import "@preview/cetz:0.4.2": *
+#import "@preview/mannot:0.4.0": mark
 
 // Setup page theme, text color and page background for testing
 #let theme = light-theme
@@ -44,9 +46,15 @@ this paragraph should be indented and capitalized.
 // It assigns a unique local reference to a label/node and verifies
 // that references link properly within that localized block.
 #local-scope-annotations(s => [
-  #heading(level: 2)[Local Target] #(s.tag)("target")
+  #heading(level: 2)[Local Target]
 
-  Local reference target: #(s.ref)("target").
+  #let target-tag = (s.tag)("target")
+  Local reference target: $ mark(x, tag: #target-tag) $.
+
+  #(s.annot)("target", cetz, {
+    import cetz.draw: *
+    line((s.anchor)("target", "south"), (0, -0.25), stroke: red + 0.5pt)
+  })
 ])
 
 // Verify CeTZ legend and description drawings
