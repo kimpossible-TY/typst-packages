@@ -1,11 +1,10 @@
 #import "@local/text-utils:0.1.0": *
 #import "@local/math-blocks:0.1.0": *
-#import "@local/scoped-annotations:0.1.0": local-scope-annotations
+#import "@local/scoped-annotations:0.2.0": local-scope-annotations
 #import "@local/cetz-helpers:0.1.0": legend_box, description_box
 #import "@local/pdf-versioning:0.1.0": pdf-version-links, version-check-url
 #import "@preview/cetz:0.4.2"
 #import "@preview/cetz:0.4.2": *
-#import "@preview/mannot:0.4.0": mark
 
 // Setup page theme, text color and page background for testing
 #let theme = light-theme
@@ -48,8 +47,8 @@ this paragraph should be indented and capitalized.
 #local-scope-annotations(s => [
   #heading(level: 2)[Local Target]
 
-  #let target-tag = (s.tag)("target")
-  Local reference target: $ mark(x, tag: #target-tag) $.
+  #let marktarget = (s.mark)("target")
+  Local reference target: $ marktarget(x) $.
 
   #(s.annot)("target", cetz, {
     import cetz.draw: *

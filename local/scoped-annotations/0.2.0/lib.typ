@@ -82,6 +82,12 @@
     // Define the overlay callback expected by the mannot package.
     // `markers` contains details about the target element positions.
     let overlay(markers) = {
+      for data in markers {
+        if not data.keys().contains("anchor-bounds") {
+          panic("s.annot targets must be marked with s.mark(...) or mannot mark(..., tag: ...); plain Typst labels from s.tag(...) do not include annotation bounds")
+        }
+      }
+
       let origin = markers.first().anchor-bounds
 
       // Define standard dummy bounding box rectangles for the target elements.
@@ -171,6 +177,9 @@
   }
 
   _local-scope(scope => {
+    // Create a mannot marker with a scoped tag.
+    let scoped-mark(name, ..args) = mark.with(tag: (scope.tag)(name), ..args)
+
     // Helper function inside the scope to annotate elements
     let annot = (names, cetz, drawable) => {
       let annotation-tags = if type(names) == array {
@@ -192,6 +201,7 @@
       tags: scope.tags,
       name: scope.name,
       names: scope.names,
+      mark: scoped-mark,
       node: scope.anchor,
       anchor: scope.anchor,
       ref: scope.ref,

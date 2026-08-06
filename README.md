@@ -10,7 +10,7 @@ These packages provide a unified design system, mathematical note templates, the
 local/
   text-utils/0.1.0/          # Text manipulation & paragraph indentation helpers
   math-blocks/0.1.0/         # Theorem, Lemma, Definition environments & callout styles
-  scoped-annotations/0.1.0/  # Local-scope reference targets and CeTZ drawing overlays
+  scoped-annotations/0.2.0/  # Local-scope reference targets and CeTZ drawing overlays
   cetz-helpers/0.1.0/        # Reusable legend and description boxes for CeTZ diagrams
   pdf-versioning/0.1.0/      # PDF version-check links for static publishing workflows
   math-book/0.1.0/           # Mathematical book/lecture-note document template
@@ -38,7 +38,7 @@ Once installed, they can be imported into any Typst project via:
 ```typst
 #import "@local/text-utils:0.1.0": *
 #import "@local/math-blocks:0.1.0": *
-#import "@local/scoped-annotations:0.1.0": *
+#import "@local/scoped-annotations:0.2.0": *
 #import "@local/cetz-helpers:0.1.0": *
 #import "@local/pdf-versioning:0.1.0": *
 ```
@@ -101,20 +101,22 @@ Provides beautiful, themeable, numbered theorem-like blocks, proofs, and general
 
 ---
 
-### 3. `@local/scoped-annotations:0.1.0`
+### 3. `@local/scoped-annotations:0.2.0`
 Allows you to create a localized reference scope. This prevents name clashes in labels and lets you draw overlay annotations (lines, arrows, shapes) on top of target document elements using CeTZ.
 
 * **Usage**: Wrap sections in `local-scope-annotations(s => [ ... ])`.
 * **`s.tag(name)`**: Defines a label locally in the scope.
+* **`s.mark(name)`**: Creates a `mannot` marker with the scoped label and geometry metadata.
 * **`s.ref(name)`**: References a label defined in the scope.
 * **`s.annot(targets, cetz, canvas-drawings)`**: Draws custom shapes/lines overlaying the targeted elements.
 
 ```typst
-#import "@local/scoped-annotations:0.1.0": local-scope-annotations
+#import "@local/scoped-annotations:0.2.0": local-scope-annotations
 #import "@preview/cetz:0.4.2": *
 
 #local-scope-annotations(s => [
-  We label this term #(s.tag)("term1") $x^2$. 
+  #let termone = (s.mark)("term1")
+  We label this term $ termone(x^2) $.
   Later, we can refer to #(s.ref)("term1").
 
   // Draw an annotation arrow overlaying the term
