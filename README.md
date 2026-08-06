@@ -43,6 +43,29 @@ Once installed, they can be imported into any Typst project via:
 #import "@local/pdf-versioning:0.1.0": *
 ```
 
+### Updating an installed package
+
+After pulling changes from this repository, run the installer again to refresh
+the packages available to Typst:
+
+```sh
+git pull --ff-only
+./scripts/install-local.sh
+```
+
+The installer replaces the installed directory for each package in `local/`,
+so it also picks up source changes and new package versions. If the package
+version changed, update the import in your Typst project as well—for example,
+use `@local/scoped-annotations:0.2.0` after upgrading from `0.1.0`.
+
+By default, the installer uses
+`~/Library/Application Support/typst/packages`. If Typst uses a different
+package root, set `TYPST_PACKAGE_PATH` when running it:
+
+```sh
+TYPST_PACKAGE_PATH="$HOME/.local/share/typst/packages" ./scripts/install-local.sh
+```
+
 ---
 
 ## Packages Usage Guide
