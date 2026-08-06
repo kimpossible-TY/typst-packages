@@ -1,4 +1,4 @@
-#import "@local/text-utils:0.1.0": *
+#import "@local/text-utils:0.1.1": *
 #import "@local/math-blocks:0.1.0": *
 #import "@local/scoped-annotations:0.2.0": local-scope-annotations
 #import "@local/cetz-helpers:0.1.0": legend_box, description_box
@@ -39,6 +39,11 @@ this paragraph should be indented and capitalized.
 // Verify highlighted math block
 #highlighted[
   $ a^2 + b^2 = c^2 $
+]
+
+// Verify highlighted text without an equation
+#highlighted[
+  This is highlighted text without an equation.
 ]
 
 // Verify local scoped annotations.

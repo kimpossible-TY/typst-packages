@@ -33,14 +33,22 @@
     (highlight: rgb("#FFFE80")) // Light mode highlight color (bright yellow)
   }
 
-  for child in body.children {
-    if repr(child.func()) == "equation" {
-      box(
-        fill: theme.highlight,
-        outset: (y: 0.25em),
-      )[$#child.at("body")$]
-    } else {
-      highlight(child)
+  let children = body.children
+
+  // A plain-text body can be highlighted as a single unit. This also avoids
+  // trying to inspect and rebuild content when there is no equation to handle.
+  if not children.any(child => repr(child.func()) == "equation") {
+    highlight(body, fill: theme.highlight)
+  } else {
+    for child in children {
+      if repr(child.func()) == "equation" {
+        box(
+          fill: theme.highlight,
+          outset: (y: 0.25em),
+        )[$#child.at("body")$]
+      } else {
+        highlight(child, fill: theme.highlight)
+      }
     }
   }
 }
@@ -90,4 +98,3 @@
 
   text.match(regex("^[0-9.]+$")) != none
 }
-
