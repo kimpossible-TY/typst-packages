@@ -9,7 +9,7 @@ These packages provide a unified design system, mathematical note templates, the
 ```text
 local/
   text-utils/0.1.1/          # Text manipulation & paragraph indentation helpers
-  math-blocks/0.1.0/         # Theorem, Lemma, Definition environments & callout styles
+  math-blocks/0.2.0/         # Theorem, Lemma, Definition environments & callout styles
   scoped-annotations/0.2.0/  # Local-scope reference targets and CeTZ drawing overlays
   cetz-helpers/0.1.0/        # Reusable legend and description boxes for CeTZ diagrams
   pdf-versioning/0.1.0/      # PDF version-check links for static publishing workflows
@@ -37,7 +37,7 @@ Once installed, they can be imported into any Typst project via:
 
 ```typst
 #import "@local/text-utils:0.1.1": *
-#import "@local/math-blocks:0.1.0": *
+#import "@local/math-blocks:0.2.0": *
 #import "@local/scoped-annotations:0.2.0": *
 #import "@local/cetz-helpers:0.1.0": *
 #import "@local/pdf-versioning:0.1.0": *
@@ -93,20 +93,21 @@ We can highlight text and inline formulas:
 
 ---
 
-### 2. `@local/math-blocks:0.1.0`
+### 2. `@local/math-blocks:0.2.0`
 Provides beautiful, themeable, numbered theorem-like blocks, proofs, and general callouts.
 
 * **Environments**: `#theorem`, `#proposition`, `#lemma`, `#definition`, `#note`, `#emphasis`, and `#proof`.
-* **Counter resets**: Calling `#show: apply-math-block-reset` will reset block numbering counters automatically at each level-1 heading (e.g. Chapter).
+* **Counter resets**: Calling `#show: apply-math-block-reset` will reset block numbering counters automatically at each level-1 or level-2 heading (chapter or section). Numbers follow the `chapter.section.order` pattern.
 * **Themes**: Comes with predefined `light-theme` and `dark-theme` colors.
 
 ```typst
-#import "@local/math-blocks:0.1.0": *
+#import "@local/math-blocks:0.2.0": *
 
-// Reset math blocks numbers at every Chapter (= level 1 heading)
+// Reset math block numbers at every Chapter or Section.
 #show: apply-math-block-reset
 
 = Chapter 1
+== Section 1
 
 #definition(title: "Vector Space")[
   A vector space is a set of objects called vectors...
