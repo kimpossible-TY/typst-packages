@@ -33,23 +33,37 @@
     (highlight: rgb("#FFFE80")) // Light mode highlight color (bright yellow)
   }
 
-  let children = body.children
+  // Keep adjacent text in one highlight element so its background geometry is
+  // calculated consistently instead of once per child (or character).
+  // Equations are emitted separately because they need extra vertical room.
+  let parts = ()
+  let text = []
+  let has-text = false
 
-  // A plain-text body can be highlighted as a single unit. This also avoids
-  // trying to inspect and rebuild content when there is no equation to handle.
-  if not children.any(child => repr(child.func()) == "equation") {
-    highlight(body, fill: theme.highlight)
-  } else {
-    for child in children {
-      if repr(child.func()) == "equation" {
-        box(
-          fill: theme.highlight,
-          outset: (y: 0.25em),
-        )[$#child.at("body")$]
-      } else {
-        highlight(child, fill: theme.highlight)
+  for child in body.children {
+    if repr(child.func()) == "equation" {
+      if has-text {
+        parts.push(highlight(text, fill: theme.highlight))
+        text = []
+        has-text = false
       }
+
+      parts.push(box(
+        fill: theme.highlight,
+        outset: (y: 0.25em),
+      )[$#child.at("body")$])
+    } else {
+      text = text + child
+      has-text = true
     }
+  }
+
+  if has-text {
+    parts.push(highlight(text, fill: theme.highlight))
+  }
+
+  for part in parts {
+    part
   }
 }
 

@@ -8,7 +8,7 @@ These packages provide a unified design system, mathematical note templates, the
 
 ```text
 local/
-  text-utils/0.1.1/          # Text manipulation & paragraph indentation helpers
+  text-utils/0.1.2/          # Text manipulation & paragraph indentation helpers
   math-blocks/0.2.0/         # Theorem, Lemma, Definition environments & callout styles
   scoped-annotations/0.2.0/  # Local-scope reference targets and CeTZ drawing overlays
   cetz-helpers/0.1.0/        # Reusable legend and description boxes for CeTZ diagrams
@@ -36,7 +36,7 @@ This copies the packages under `local/*` into Typst's local package directory:
 Once installed, they can be imported into any Typst project via:
 
 ```typst
-#import "@local/text-utils:0.1.1": *
+#import "@local/text-utils:0.1.2": *
 #import "@local/math-blocks:0.2.0": *
 #import "@local/scoped-annotations:0.2.0": *
 #import "@local/cetz-helpers:0.1.0": *
@@ -70,14 +70,14 @@ TYPST_PACKAGE_PATH="$HOME/.local/share/typst/packages" ./scripts/install-local.s
 
 ## Packages Usage Guide
 
-### 1. `@local/text-utils:0.1.1`
+### 1. `@local/text-utils:0.1.2`
 Provides text helpers, title capitalization, and custom paragraph markers.
 
 * **Paragraph Tabs (`apply-paragraph-tabs`)**: Renders custom paragraph markers. If `#paragraph-tab` is followed by a lowercase letter, it automatically capitalizes the letter and indents by `1.5em`.
 * **Highlighter (`highlighted`)**: Intelligently highlights background colors for both inline text and mathematical equations, automatically adjusting color based on whether light or dark theme is active.
 
 ```typst
-#import "@local/text-utils:0.1.1": *
+#import "@local/text-utils:0.1.2": *
 
 // Apply the indentation rule to the document
 #show: apply-paragraph-tabs

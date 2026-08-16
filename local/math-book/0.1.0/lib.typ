@@ -1,5 +1,5 @@
 #import "@local/math-blocks:0.1.0": *
-#import "@local/text-utils:0.1.1": apply-paragraph-tabs
+#import "@local/text-utils:0.1.2": apply-paragraph-tabs
 
 // Sets up standard book-style configurations and themes for mathematical documents.
 // It configures page margins, background, running footers, default typography (Times New Roman),
