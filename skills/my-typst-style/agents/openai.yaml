@@ -1,0 +1,4 @@
+interface:
+  display_name: "My Typst Style"
+  short_description: "Reusable personal Typst writing style"
+  default_prompt: "Use $my-typst-style to edit this Typst document with my mathematical writing style."
