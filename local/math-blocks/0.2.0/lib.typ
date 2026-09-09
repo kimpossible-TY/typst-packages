@@ -115,15 +115,13 @@
 // (levels 1 and 2 headings) numbers.
 #let scoped-figure-numbering(..nums) = {
   let n = nums.pos().first()
-  context {
-    let headings = counter(heading).get()
-    numbering(
-      heading-numbering-style.get(),
-      headings.at(0, default: 0),
-      headings.at(1, default: 0),
-      n,
-    )
-  }
+  let headings = counter(heading).get()
+  numbering(
+    heading-numbering-style.get(),
+    headings.at(0, default: 0),
+    headings.at(1, default: 0),
+    n,
+  )
 }
 
 // Computes the formatted title string for mathematical blocks.
