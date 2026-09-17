@@ -10,10 +10,11 @@ These packages provide a unified design system, mathematical note templates, the
 local/
   text-utils/0.1.2/          # Text manipulation & paragraph indentation helpers
   math-blocks/0.2.0/         # Theorem, Lemma, Definition environments & callout styles
-  scoped-annotations/0.2.0/  # Local-scope reference targets and CeTZ drawing overlays
-  cetz-helpers/0.1.0/        # Reusable legend and description boxes for CeTZ diagrams
+  scoped-annotations/0.3.0/  # Local-scope reference targets and CeTZ drawing overlays
+  cetz-helpers/0.2.0/        # Reusable legend and description boxes for CeTZ diagrams
   pdf-versioning/0.1.0/      # PDF version-check links for static publishing workflows
-  math-book/0.1.0/           # Mathematical book/lecture-note document template
+  fletcher-helpers/0.1.0/   # Theme-aware Fletcher diagram defaults
+  math-book/0.2.0/           # Mathematical book/lecture-note document template
 tools/pdf-versioning/         # Python server and browser helper for PDF freshness checks
 scripts/                     # Utility installation and test scripts
 tests/                       # Smoke tests for verifying package compilation
@@ -38,8 +39,8 @@ Once installed, they can be imported into any Typst project via:
 ```typst
 #import "@local/text-utils:0.1.2": *
 #import "@local/math-blocks:0.2.0": *
-#import "@local/scoped-annotations:0.2.0": *
-#import "@local/cetz-helpers:0.1.0": *
+#import "@local/scoped-annotations:0.3.0": *
+#import "@local/cetz-helpers:0.2.0": *
 #import "@local/pdf-versioning:0.1.0": *
 ```
 
@@ -56,7 +57,7 @@ git pull --ff-only
 The installer replaces the installed directory for each package in `local/`,
 so it also picks up source changes and new package versions. If the package
 version changed, update the import in your Typst project as well—for example,
-use `@local/scoped-annotations:0.2.0` after upgrading from `0.1.0`.
+use `@local/scoped-annotations:0.3.0` after upgrading from `0.1.0`.
 
 By default, the installer uses
 `~/Library/Application Support/typst/packages`. If Typst uses a different
@@ -125,44 +126,44 @@ Provides beautiful, themeable, numbered theorem-like blocks, proofs, and general
 
 ---
 
-### 3. `@local/scoped-annotations:0.2.0`
-Allows you to create a localized reference scope. This prevents name clashes in labels and lets you draw overlay annotations (lines, arrows, shapes) on top of target document elements using CeTZ.
+### 3. `@local/scoped-annotations:0.3.0`
 
-* **Usage**: Wrap sections in `local-scope-annotations(s => [ ... ])`.
-* **`s.tag(name)`**: Defines a label locally in the scope.
-* **`s.mark(name)`**: Creates a `mannot` marker with the scoped label and geometry metadata.
-* **`s.ref(name)`**: References a label defined in the scope.
-* **`s.annot(targets, cetz, canvas-drawings)`**: Draws custom shapes/lines overlaying the targeted elements.
+One implementation provides ordinary scoped labels (`local-tag-scope`) and
+marker-based annotations (`local-scope-annotations`). `mannot-scope` is a
+compatibility wrapper; `annot-cetz-local` is the low-level overlay function.
+Existing `prefix`, `parent`, and `name` arguments remain available. Automatic
+scopes share a counter; explicit prefixes must be unique within a document.
+
+A plain `(s.tag)("name")` labels an equation or figure for `(s.ref)("name")`.
+An annotation requires a mannot marker with bounds: use `(s.mark)("name")` or
+`mark(..., tag: #(s.tag)("name"))`. Keep the annotation inside that equation.
+Dictionary functions are called with parentheses around the field access.
 
 ```typst
-#import "@local/scoped-annotations:0.2.0": local-scope-annotations
-#import "@preview/cetz:0.4.2": *
+#import "@local/scoped-annotations:0.3.0": local-scope-annotations
+#import "@preview/cetz:0.4.2"
 
 #local-scope-annotations(s => [
-  #let termone = (s.mark)("term1")
-  We label this term $ termone(x^2) $.
-  Later, we can refer to #(s.ref)("term1").
-
-  // Draw an annotation arrow overlaying the term
-  #s.annot("term1", cetz, {
-    import cetz.draw: *
-    // "term1" maps to coordinates matching the location of the label
-    line("term1.south", (0, -0.5), mark: (end: "stealth"), stroke: red + 1pt)
-    content((0, -0.7), [Target Term], anchor: "north")
-  })
+  #let term = (s.mark)("term")
+  $ term(x^2)
+    #(s.annot)("term", cetz, {
+      import cetz.draw: *
+      line((s.node)("term", "south"), (rel: (0, -0.3)), stroke: red)
+    })
+  $
 ])
 ```
 
 ---
 
-### 4. `@local/cetz-helpers:0.1.0`
+### 4. `@local/cetz-helpers:0.2.0`
 Provides helpers for drawing legend boxes and description boxes inside CeTZ canvas drawings.
 
 * **`legend_box`**: Draws a legend at the specified coordinates containing series names, line strokes, and line marks.
 * **`description_box`**: Places a styled text info box on the canvas.
 
 ```typst
-#import "@local/cetz-helpers:0.1.0": legend_box, description_box
+#import "@local/cetz-helpers:0.2.0": legend_box, description_box
 #import "@preview/cetz:0.4.2": *
 
 #canvas({
@@ -192,29 +193,51 @@ Provides helpers for drawing legend boxes and description boxes inside CeTZ canv
 
 ---
 
-### 5. `@local/math-book:0.1.0`
-A document template designed for mathematics lecture notes, books, and thesis documents. It sets up page dimensions, clean margins, fonts (Times New Roman), custom running headers/footers, and integrates text/math block styling.
+### 5. `@local/math-book:0.2.0`
+
+`apply-math-book` configures typography, theme, paragraph markers, stable
+cross-part theorem references, and counter resets. Chapter opening pages and
+section running headers are opt-in. Defaults reset equations at heading levels
+1 and 2, footnotes at level 2, and mathematical blocks at levels 1 and 2.
 
 ```typst
-#import "@local/math-book:0.1.0": *
-#import "@local/math-blocks:0.1.0": *
+#import "@local/math-book:0.2.0": apply-math-book, book-part, book-cover
+#import "@local/math-blocks:0.2.0": *
 
-// Setup entry point with document metadata
 #show: apply-math-book.with(
-  title: "Advanced Real Analysis",
-  author: "Isaac Newton",
-  description: "Lecture notes covering measure theory and integration."
+  title: "Advanced Real Analysis", author: "Author",
+  theme: light-theme, chapter-pages: true, running-header: true,
 )
-
-// Include a cover page and Table of Contents
-#include "template/cover.typ"
-
-= Measure Theory
-
-#definition[
-  A sigma-algebra on a set $X$ is a collection of subsets...
+#book-cover(title: [Advanced Real Analysis], author: [Author])
+#outline(title: "Contents")
+#book-part(prefix: "P", center-sections: true)[
+  = Preliminaries
+  == Notation
+  #definition[A prefixed definition.] <prelim-definition>
+]
+#book-part[
+  = Measure Theory
+  == Measures
+  See @prelim-definition.
 ]
 ```
+
+Use `font`, `size`, `margin`, `header`, `footer`, `chapter-font`, `chapter-size`,
+`equation-numbering`, `equation-reset-levels`, `footnote-reset-levels`, and
+`reset-math-blocks` to customize the layout. `header`/`footer: none` hides them;
+`auto` selects package defaults. When `reset-math-blocks: false`, the caller
+owns both resets and mathematical-block reference formatting.
+
+`book-part` scopes heading styles, resets headings by default, and restores the
+previous mathematical-block numbering style afterward. Numbers are
+`chapter.section.order`, optionally preceded by one literal prefix (for example
+`P.1.2.3`). `reset-heading: false` continues the previous heading counter.
+
+`book-cover` accepts `title`, `subtitle`, `author`, `affiliation`, `year`,
+`back-content`, `back-footer`, `theme`, `margin`, and `font`. A back page is
+created when back content, affiliation, or a footer is supplied. Pass version
+links as `back-footer`. Include project files, notation lists, and outlines in
+the caller, never inside the package.
 
 ---
 
@@ -268,6 +291,37 @@ Runs local installation and verifies general syntax compliance:
 Verifies initializing a new project from the math-book template works:
 
 ```sh
-typst init @local/math-book:0.1.0 /tmp/math-book-test
+typst init @local/math-book:0.2.0 /tmp/math-book-test
 typst compile /tmp/math-book-test/main.typ /tmp/math-book-test.pdf
 ```
+
+### Drawing helpers
+
+`@local/cetz-helpers:0.2.0` retains the existing legend/description API and adds
+`sample-curve(point, start, end, segments: 60)` and
+`sample-function(f, start, end, segments: 60)`. Both return coordinates including
+both endpoints; `segments` must be a positive integer. They do not render figures.
+
+`@local/fletcher-helpers:0.1.0` exports `themed-diagram`. It forwards positional
+nodes/edges and named Fletcher options, providing theme-aware stroke/fill defaults.
+Explicit options override defaults. Pass `theme:` to override the contextual
+light/dark theme. Keep mathematical content and figure captions in the project.
+
+### Migration from project-local styles
+
+- Use `text-utils:0.1.2`, `math-blocks:0.2.0`, `scoped-annotations:0.3.0`,
+  `cetz-helpers:0.2.0`, and `math-book:0.2.0` consistently.
+- Replace copied helper implementations with imports. Old project filenames may
+  remain as small compatibility modules.
+- Replace manual paragraph regex rules with `apply-paragraph-tabs`, or apply
+  `apply-math-book`, which includes it.
+- Replace raw `"P.1"` numbering patterns with `book-part(prefix: "P")`. The latter
+  avoids repeating the literal prefix when formatting multiple counter levels.
+- Do not add a second reset show rule around `apply-math-book`; it installs the
+  mathematical-block reset/reference rules itself.
+- Existing package versions remain in the repository. Install the packages before
+  switching imports; publish the package changes before updating downstream CI.
+
+`tests/book-integration.typ` asserts counter resets, prefix formatting, state
+restoration, and sampling endpoints, and exercises cross-part references, repeated
+local names, nested annotation scopes, and diagram overrides in both themes.
