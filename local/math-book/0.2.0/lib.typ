@@ -3,29 +3,32 @@
 #import "cover.typ": book-cover
 
 // Keep prefixes outside Typst's repeating numbering patterns.
-#let prefixed-numbering(prefix, ..nums) = {
-  prefix + "." + nums.pos().map(str).join(".")
+#let prefixed-numbering(prefix, single-chapter: false, ..nums) = {
+  let levels = if single-chapter { nums.pos().slice(1) } else { nums.pos() }
+  ((prefix,) + levels.map(str)).join(".")
 }
 
-#let prefixed-heading-numbering(prefix, ..nums) = {
+#let prefixed-heading-numbering(prefix, single-chapter: false, ..nums) = {
   if nums.pos().len() == 0 { [#prefix :] }
-  else { [#prefixed-numbering(prefix, ..nums) :] }
+  else { [#prefixed-numbering(prefix, single-chapter: single-chapter, ..nums) :] }
 }
 
 // A document part owns its heading style and restores the caller's block style.
 // Include files inside the body; package code never resolves project file paths.
-#let book-part(body, prefix: none, center-sections: false, reset-heading: true) = context {
+#let book-part(body, prefix: none, single-chapter: false, center-sections: false, reset-heading: true) = context {
+  assert(not single-chapter or prefix != none, message: "single-chapter requires a prefix")
   let previous = heading-numbering-style.get()
-  heading-numbering-style.update(
-    if prefix == none { "1.1.1" } else { prefixed-numbering.with(prefix) },
+  // update treats a function as a state transition; return the formatter itself.
+  heading-numbering-style.update(_ =>
+    if prefix == none { "1.1.1" } else { prefixed-numbering.with(prefix, single-chapter: single-chapter) },
   )
-  set heading(numbering: if prefix == none { "1.1 :" } else { prefixed-heading-numbering.with(prefix) })
+  set heading(numbering: if prefix == none { "1.1 :" } else { prefixed-heading-numbering.with(prefix, single-chapter: single-chapter) })
   show heading.where(level: 2): it => {
     if center-sections { align(center, it) } else { it }
   }
   if reset-heading { counter(heading).update(0) }
   body
-  heading-numbering-style.update(previous)
+  heading-numbering-style.update(_ => previous)
 }
 
 // Show the first section on this page, or the latest section in this chapter.

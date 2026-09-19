@@ -232,6 +232,9 @@ owns both resets and mathematical-block reference formatting.
 previous mathematical-block numbering style afterward. Numbers are
 `chapter.section.order`, optionally preceded by one literal prefix (for example
 `P.1.2.3`). `reset-heading: false` continues the previous heading counter.
+For a part containing one chapter, use `single-chapter: true` with a prefix.
+The prefix replaces the chapter number: headings are `P`, `P.1`, `P.1.1`,
+and mathematical blocks and equations use `P.section.order`.
 
 `book-cover` accepts `title`, `subtitle`, `author`, `affiliation`, `year`,
 `back-content`, `back-footer`, `theme`, `margin`, and `font`. A back page is

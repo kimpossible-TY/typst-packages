@@ -12,6 +12,30 @@
 
 #assert.eq(sample-function(x => x * x, -1, 1, segments: 2), ((-1.0, 1.0), (0.0, 0.0), (1.0, 1.0)))
 
+#assert.eq(prefixed-numbering("P", single-chapter: true, 1), "P")
+#assert.eq(prefixed-numbering("S", single-chapter: true, 1, 2, 3), "S.2.3")
+
+#book-part(prefix: "P", single-chapter: true)[
+  = Single Preliminaries
+  == First Section
+  #definition[Single chapter definition.] <single-prelim>
+  $ x = 1 $ <single-equation>
+  #book-part(prefix: "N")[
+    = Nested Part
+    == Nested Section
+    #definition[Nested definition.] <nested-definition>
+  ]
+  #definition[Restored function formatter.] <restored-definition>
+]
+#book-part(prefix: "S", single-chapter: true)[
+  = Single Supplement
+  == First Section
+  #definition[Single supplement definition.] <single-supplement>
+  == Second Section
+  #definition[Reset supplement definition.] <single-supplement-second>
+  References: @single-prelim; @single-equation; @single-supplement.
+]
+
 #book-part(prefix: "P", center-sections: true)[
   = Preliminaries
   == First Section
@@ -45,6 +69,9 @@
 // Check counters at their targets, including resets and restored part state.
 #context {
   for (tag, expected) in (
+    (<single-prelim>, "P.1.1"), (<nested-definition>, "N.1.1.1"),
+    (<restored-definition>, "P.1.2"), (<single-supplement>, "S.1.1"),
+    (<single-supplement-second>, "S.2.1"),
     (<prefixed-first>, "P.1.1.1"), (<prefixed-second>, "P.1.2.1"),
     (<supplement-first>, "S.1.1.1"), (<main-first>, "1.1.1"), (<main-second>, "1.2.1"),
   ) {
