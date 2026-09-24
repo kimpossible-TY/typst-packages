@@ -108,28 +108,14 @@
         })
         .sum()
 
-      // A reference label to track the offset of the container.
-      let ref-lab = label("_mannot-annot-cetz-ref-" + str(id))
-      let ref-lab-content = cetz.draw.content((0, 0), [#none#ref-lab])
-
-      place([#none#ref-lab])
-      place(hide(cetz.canvas(ref-lab-content + preamble + drawable)))
-
-      context {
-        // Query the position of the reference label relative to this point in the page.
-        let ref-pos-array = query(selector(ref-lab).before(here()))
-          .map(e => e.location().position())
-
-        let ref-pos1 = ref-pos-array.at(ref-pos-array.len() - 2)
-        let ref-pos2 = ref-pos-array.last()
-
-        // Place the canvas overlay shifted by the computed positional offset.
-        place(
-          dx: origin.x + ref-pos1.x - ref-pos2.x,
-          dy: origin.y + ref-pos1.y - ref-pos2.y,
-          cetz.canvas(preamble + drawable),
-        )
-      }
+      // Keep the canvas origin at (0, 0). Drawing outside these zero-size
+      // bounds remains visible without querying a second layout's position.
+      let origin-bounds = cetz.draw.content((0, 0), [])
+      place(
+        dx: origin.x,
+        dy: origin.y,
+        cetz.canvas(origin-bounds + cetz.draw.floating(preamble + drawable)),
+      )
     }
 
     // Call mannot's core-annot to register the annotations.
