@@ -1,0 +1,1340 @@
+{
+  "projects": {
+    "pde": {
+      "ambiguous_labels": [
+        "wave_equation"
+      ],
+      "pdf_url": "https://kimpossible-ty.github.io/Partial-Differential-Equations/main.pdf",
+      "references": {
+        "1D_example_of_laplacian": {
+          "page": 108,
+          "text": "Equation (2.3.1)",
+          "x": 70.86614173228347,
+          "y": 270.2857042322835
+        },
+        "Ampere_Maxwell_law": {
+          "page": 185,
+          "text": "Equation (2.10.4)",
+          "x": 85.26614173228346,
+          "y": 244.64222923228346
+        },
+        "Basic_formula_of_functional_evaluation": {
+          "page": 17,
+          "text": "Lemma P.2.2",
+          "x": 70.86614173228347,
+          "y": 475.33596673228345
+        },
+        "Basic_formula_of_tensor_field": {
+          "page": 18,
+          "text": "Lemma P.2.3",
+          "x": 70.86614173228347,
+          "y": 434.47465423228346
+        },
+        "Definition_of_Levi-Civita_connection": {
+          "page": 42,
+          "text": "Definition P.2.19",
+          "x": 70.86614173228347,
+          "y": 261.14099173228345
+        },
+        "Definition_of_functional_evaluation": {
+          "page": 17,
+          "text": "Definition P.2.5",
+          "x": 70.86614173228347,
+          "y": 142.39945423228346
+        },
+        "Dirichlet_condition": {
+          "page": 126,
+          "text": "Definition 2.4.2",
+          "x": 70.86614173228347,
+          "y": 135.32076673228346
+        },
+        "Eikonal_Equation_constant": {
+          "page": 78,
+          "text": "Section 1.2.1",
+          "x": 70.86614173228347,
+          "y": 291.5354542322834
+        },
+        "Euler-Lagrange_equation_for_wave_equation": {
+          "page": 122,
+          "text": "Equation (2.4.26)",
+          "x": 82.86614173228347,
+          "y": 622.5039667322835
+        },
+        "Euler-Lagrange_equation_of_Lagrangian_density_wave_eq": {
+          "page": 123,
+          "text": "Equation (2.4.27)",
+          "x": 82.86614173228347,
+          "y": 106.06814173228346
+        },
+        "Faraday_law": {
+          "page": 185,
+          "text": "Equation (2.10.2)",
+          "x": 85.26614173228346,
+          "y": 179.71022923228347
+        },
+        "Fourier_transform_of_constant_coefficient_differential_operator": {
+          "page": 226,
+          "text": "Equation (3.1.9)",
+          "x": 70.86614173228347,
+          "y": 381.12516673228345
+        },
+        "Fundamental_theorem_of_Riemannian_geometry": {
+          "page": 39,
+          "text": "Theorem P.2.6",
+          "x": 70.86614173228347,
+          "y": 622.4586115157481
+        },
+        "Gauss_electricity": {
+          "page": 185,
+          "text": "Equation (2.10.3)",
+          "x": 85.26614173228346,
+          "y": 219.32222923228346
+        },
+        "Gauss_magnetism": {
+          "page": 185,
+          "text": "Equation (2.10.1)",
+          "x": 85.26614173228346,
+          "y": 156.71822923228348
+        },
+        "Greens_First_Identity": {
+          "page": 114,
+          "text": "Definition 2.3.5",
+          "x": 70.86614173228347,
+          "y": 70.86614173228347
+        },
+        "Greens_Identities_with_boundaries": {
+          "page": 114,
+          "text": "Section 2.3.5",
+          "x": 70.86614173228347,
+          "y": 179.66654173228346
+        },
+        "Greens_first_identity_with_boundaries": {
+          "page": 116,
+          "text": "Equation (2.3.44)",
+          "x": 85.26614173228346,
+          "y": 138.43454173228346
+        },
+        "Greens_identities": {
+          "page": 116,
+          "text": "Proposition 2.3.1",
+          "x": 70.86614173228347,
+          "y": 70.86614173228347
+        },
+        "Greens_second_identity_with_boundaries": {
+          "page": 116,
+          "text": "Equation (2.3.45)",
+          "x": 85.26614173228346,
+          "y": 183.08654173228345
+        },
+        "Hamiltonian_first_step": {
+          "page": 71,
+          "text": "Equation (1.1.45)",
+          "x": 70.86614173228347,
+          "y": 302.9679667322834
+        },
+        "Jacobis_formula": {
+          "page": 10,
+          "text": "Proposition P.1.1",
+          "x": 70.86614173228347,
+          "y": 125.90207923228347
+        },
+        "Killing_field_is_more_stronger_condition_than_divergence-free": {
+          "page": 107,
+          "text": "Note 2.2.4",
+          "x": 70.86614173228347,
+          "y": 70.86614173228347
+        },
+        "Koszul_formula": {
+          "page": 40,
+          "text": "Equation (P.2.100)",
+          "x": 70.86614173228347,
+          "y": 395.84207923228354
+        },
+        "L-2_norm_of_1-form": {
+          "page": 112,
+          "text": "Definition 2.3.4",
+          "x": 70.86614173228347,
+          "y": 70.86614173228347
+        },
+        "Laplace-Beltrami_Operator": {
+          "page": 124,
+          "text": "Lemma 2.4.3",
+          "x": 70.86614173228347,
+          "y": 526.3986532480315
+        },
+        "Laplace-Beltrami_operator_of_metric_h": {
+          "page": 142,
+          "text": "Equation (2.6.21)",
+          "x": 70.86614173228347,
+          "y": 512.0359703740156
+        },
+        "Laplacian_identity_1-D": {
+          "page": 110,
+          "text": "Equation (2.3.16)",
+          "x": 70.86614173228347,
+          "y": 536.0131042322836
+        },
+        "Lemma4.1": {
+          "page": 13,
+          "text": "Lemma P.2.1",
+          "x": 70.86614173228347,
+          "y": 70.86614173228347
+        },
+        "Lie_derivative_of_metric_when_torsion_free": {
+          "page": 101,
+          "text": "Equation (2.2.25)",
+          "x": 70.86614173228347,
+          "y": 188.77585423228345
+        },
+        "Linear_ODE_of_parallelism": {
+          "page": 27,
+          "text": "Equation (P.2.56)",
+          "x": 85.26614173228346,
+          "y": 480.10961511023623
+        },
+        "Lorentizan_style_wave_equation": {
+          "page": 143,
+          "text": "Equation (2.6.26)",
+          "x": 70.86614173228347,
+          "y": 258.0955042322834
+        },
+        "Maxwells_equations": {
+          "page": 185,
+          "text": "Definition 2.10.1",
+          "x": 70.86614173228347,
+          "y": 127.74182923228346
+        },
+        "Simultaneous_Linear_ODE_of_parallelism": {
+          "page": 28,
+          "text": "Equation (P.2.57)",
+          "x": 85.26614173228346,
+          "y": 247.10916673228348
+        },
+        "Stress-energy_tensor_and_energy_flux": {
+          "page": 149,
+          "text": "Note 2.6.1",
+          "x": 70.86614173228347,
+          "y": 93.15014173228346
+        },
+        "The_metric_on_k-forms": {
+          "page": 179,
+          "text": "Definition 2.9.2",
+          "x": 70.86614173228347,
+          "y": 295.37054173228347
+        },
+        "adjoint_and_diveregence": {
+          "page": 95,
+          "text": "Proposition 2.1.2",
+          "x": 70.86614173228347,
+          "y": 142.66214173228343
+        },
+        "adjoint_relationship_between_divergence_and_gradient": {
+          "page": 94,
+          "text": "Proposition 2.1.1",
+          "x": 70.86614173228347,
+          "y": 238.83985423228344
+        },
+        "apply_divergence_theorem_to_integral_of_divergence_of_product": {
+          "page": 116,
+          "text": "Equation (2.3.48)",
+          "x": 70.86614173228347,
+          "y": 494.9811667322835
+        },
+        "basic_formula_of_connection_in_tangent_bundle": {
+          "page": 16,
+          "text": "Equation (P.2.14)",
+          "x": 85.26614173228346,
+          "y": 193.69574173228347
+        },
+        "basic_properties_of_connection": {
+          "page": 12,
+          "text": "Definition P.2.1",
+          "x": 70.86614173228347,
+          "y": 114.62582923228346
+        },
+        "beyond_1D_example_of_laplacian": {
+          "page": 108,
+          "text": "Equation (2.3.3)",
+          "x": 82.86614173228347,
+          "y": 498.35181673228345
+        },
+        "combination_first_second": {
+          "page": 72,
+          "text": "Equation (1.1.54)",
+          "x": 70.86614173228347,
+          "y": 514.9949917322836
+        },
+        "complexification": {
+          "page": 176,
+          "text": "Definition 2.8.5",
+          "x": 70.86614173228347,
+          "y": 70.86614173228347
+        },
+        "condition_of_necessary_and_sufficient_condition_of_Killing_field": {
+          "page": 102,
+          "text": "Equation (2.2.32)",
+          "x": 85.26614173228346,
+          "y": 359.3770717322834
+        },
+        "conditions_of_exterior_derivative": {
+          "page": 179,
+          "text": "Equation (2.9.1)",
+          "x": 85.26614173228346,
+          "y": 163.86974173228347
+        },
+        "conformal_Killing_vector_field_with_divergence": {
+          "page": 105,
+          "text": "Lemma 2.2.1",
+          "x": 70.86614173228347,
+          "y": 349.39727923228344
+        },
+        "coordinate-free_definition_of_principal_symbol": {
+          "page": 161,
+          "text": "Equation (2.8.12)",
+          "x": 82.86614173228347,
+          "y": 105.46214173228346
+        },
+        "coordinate_conformal_killing": {
+          "page": 104,
+          "text": "Equation (2.2.39)",
+          "x": 82.86614173228347,
+          "y": 512.305492519685
+        },
+        "covector_semi-colon_convention": {
+          "page": 22,
+          "text": "Equation (P.2.48)",
+          "x": 70.86614173228347,
+          "y": 570.6953917322836
+        },
+        "covector_version_of_D_in_differential_operator": {
+          "page": 159,
+          "text": "Equation (2.8.5)",
+          "x": 82.86614173228347,
+          "y": 562.8878542322836
+        },
+        "d_xi_proposition_3.3": {
+          "page": 103,
+          "text": "Equation (2.2.36)",
+          "x": 70.86614173228347,
+          "y": 70.86614173228347
+        },
+        "defining_X_k_and_X_j": {
+          "page": 101,
+          "text": "Equation (2.2.27)",
+          "x": 82.86614173228347,
+          "y": 470.4843667322835
+        },
+        "defining_X_semicolon_j_k_and_X_semicolon_k_j": {
+          "page": 102,
+          "text": "Equation (2.2.29)",
+          "x": 70.86614173228347,
+          "y": 109.20745423228348
+        },
+        "definitino_of_Lorentz_force": {
+          "page": 188,
+          "text": "Definition 2.10.4",
+          "x": 70.86614173228347,
+          "y": 521.3647042322834
+        },
+        "definition_of_4-momentum": {
+          "page": 188,
+          "text": "Equation (2.10.23)",
+          "x": 70.86614173228347,
+          "y": 335.3513917322834
+        },
+        "definition_of_Hodge_Laplacian": {
+          "page": 180,
+          "text": "Definition 2.9.4",
+          "x": 70.86614173228347,
+          "y": 291.3433417322834
+        },
+        "definition_of_L-2_norm_on_k-forms": {
+          "page": 179,
+          "text": "Equation (2.9.5)",
+          "x": 70.86614173228347,
+          "y": 597.0469417322835
+        },
+        "definition_of_Laplacian": {
+          "page": 109,
+          "text": "Definition 2.3.3",
+          "x": 70.86614173228347,
+          "y": 584.5193917322836
+        },
+        "definition_of_Lorentizan_Laplacian_2": {
+          "page": 143,
+          "text": "Equation (2.6.25)",
+          "x": 70.86614173228347,
+          "y": 174.99636673228346
+        },
+        "definition_of_Lorentz_metric": {
+          "page": 138,
+          "text": "Definition 2.6.1",
+          "x": 70.86614173228347,
+          "y": 382.73470127952754
+        },
+        "definition_of_adjoint_of_A": {
+          "page": 119,
+          "text": "Equation (2.4.8)",
+          "x": 70.86614173228347,
+          "y": 482.4482542322835
+        },
+        "definition_of_bundle_metric": {
+          "page": 161,
+          "text": "Definition 2.8.1",
+          "x": 70.86614173228347,
+          "y": 356.38739173228345
+        },
+        "definition_of_christoffel_symbol": {
+          "page": 15,
+          "text": "Definition P.2.4",
+          "x": 70.86614173228347,
+          "y": 70.86614173228347
+        },
+        "definition_of_conformal_killing_field": {
+          "page": 103,
+          "text": "Definition 2.2.2",
+          "x": 70.86614173228347,
+          "y": 463.64207923228344
+        },
+        "definition_of_covariant_derivative_of_scalar_function": {
+          "page": 12,
+          "text": "Note P.2.1",
+          "x": 70.86614173228347,
+          "y": 413.1486292322835
+        },
+        "definition_of_deformation_tensor": {
+          "page": 120,
+          "text": "Equation (2.4.11)",
+          "x": 70.86614173228347,
+          "y": 501.76057145669296
+        },
+        "definition_of_dirac_distribution": {
+          "page": 234,
+          "text": "Definition 3.1.8",
+          "x": 70.86614173228347,
+          "y": 70.86614173228347
+        },
+        "definition_of_distribution": {
+          "page": 229,
+          "text": "Definition 3.1.5",
+          "x": 70.86614173228347,
+          "y": 453.31401673228345
+        },
+        "definition_of_distributional_derivative": {
+          "page": 232,
+          "text": "Definition 3.1.7",
+          "x": 70.86614173228347,
+          "y": 108.95676673228346
+        },
+        "definition_of_exterior_derivative": {
+          "page": 179,
+          "text": "Definition 2.9.1",
+          "x": 70.86614173228347,
+          "y": 112.29734173228346
+        },
+        "definition_of_fourier_transform_on_tempered_distributions": {
+          "page": 238,
+          "text": "Definition 3.1.11",
+          "x": 70.86614173228347,
+          "y": 402.53305423228346
+        },
+        "definition_of_fundamental_solution": {
+          "page": 243,
+          "text": "Definition 3.1.12",
+          "x": 70.86614173228347,
+          "y": 70.86614173228347
+        },
+        "definition_of_general_differential_operator": {
+          "page": 159,
+          "text": "Equation (2.8.1)",
+          "x": 70.86614173228347,
+          "y": 203.60282923228348
+        },
+        "definition_of_geodesics": {
+          "page": 25,
+          "text": "Definition P.2.10",
+          "x": 70.86614173228347,
+          "y": 166.39945423228346
+        },
+        "definition_of_killing_vector_field": {
+          "page": 101,
+          "text": "Definition 2.2.1",
+          "x": 70.86614173228347,
+          "y": 70.86614173228347
+        },
+        "definition_of_normal_derivative": {
+          "page": 115,
+          "text": "Definition 2.3.7",
+          "x": 70.86614173228347,
+          "y": 70.86614173228347
+        },
+        "definition_of_outward_normal_vector": {
+          "page": 114,
+          "text": "Definition 2.3.6",
+          "x": 70.86614173228347,
+          "y": 266.94516673228344
+        },
+        "definition_of_potential_energy_density_Riemannian_tensor_version": {
+          "page": 120,
+          "text": "Equation (2.4.13)",
+          "x": 70.86614173228347,
+          "y": 657.7355964566931
+        },
+        "definition_of_singular_distribution": {
+          "page": 235,
+          "text": "Definition 3.1.9",
+          "x": 70.86614173228347,
+          "y": 317.1486094672736
+        },
+        "definition_of_stress-energy_tensor": {
+          "page": 142,
+          "text": "Definition 2.6.2",
+          "x": 70.86614173228347,
+          "y": 70.86614173228347
+        },
+        "definition_of_tempered_distribution": {
+          "page": 238,
+          "text": "Definition 3.1.10",
+          "x": 70.86614173228347,
+          "y": 70.86614173228347
+        },
+        "definition_of_torsion_tensor": {
+          "page": 37,
+          "text": "Definition P.2.17",
+          "x": 70.86614173228347,
+          "y": 520.0379453149607
+        },
+        "definition_of_total_covariant_derivative": {
+          "page": 21,
+          "text": "Definition P.2.6",
+          "x": 70.86614173228347,
+          "y": 309.9818542322834
+        },
+        "definitions_of_spatial_and_time_differential": {
+          "page": 119,
+          "text": "Definition 2.4.1",
+          "x": 70.86614173228347,
+          "y": 70.86614173228347
+        },
+        "detailed_definition_of_Hodge_Laplacian": {
+          "page": 180,
+          "text": "Equation (2.9.9)",
+          "x": 85.26614173228346,
+          "y": 393.07334173228344
+        },
+        "differential_operator": {
+          "page": 159,
+          "text": "Section 2.8",
+          "x": 70.86614173228347,
+          "y": 70.86614173228347
+        },
+        "differential_operator_plane_wave_eigenfunction": {
+          "page": 159,
+          "text": "Equation (2.8.3)",
+          "x": 70.86614173228347,
+          "y": 381.72494173228347
+        },
+        "dirac_distribution_is_singular": {
+          "page": 235,
+          "text": "Proposition 3.1.1",
+          "x": 70.86614173228347,
+          "y": 412.71300946727365
+        },
+        "direct_computation_of_interior_multiplication_of_identity_of_1-form_and_volume_form": {
+          "page": 92,
+          "text": "Equation (2.1.21)",
+          "x": 70.86614173228347,
+          "y": 564.0785917322836
+        },
+        "distributional_derivatives_are_distributions": {
+          "page": 232,
+          "text": "Lemma 3.1.3",
+          "x": 70.86614173228347,
+          "y": 317.9067667322835
+        },
+        "divergence_and_semi_colon": {
+          "page": 97,
+          "text": "Equation (2.2.6)",
+          "x": 85.26614173228346,
+          "y": 627.1042792322835
+        },
+        "divergence_and_trace": {
+          "page": 97,
+          "text": "Proposition 2.2.1",
+          "x": 70.86614173228347,
+          "y": 575.5318792322835
+        },
+        "divergence_free_non_killing_visualization": {
+          "page": 107,
+          "text": "Figure 24",
+          "x": 85.26614173228346,
+          "y": 368.9101417322834
+        },
+        "divergence_free_of_stress-energy_tensor": {
+          "page": 143,
+          "text": "Proposition 2.6.1",
+          "x": 70.86614173228347,
+          "y": 281.6875042322834
+        },
+        "easy_definition_of_semi-colon_convention": {
+          "page": 97,
+          "text": "Equation (2.2.2)",
+          "x": 70.86614173228347,
+          "y": 196.62554173228344
+        },
+        "eletromagnetric_field": {
+          "page": 189,
+          "text": "Equation (2.10.31)",
+          "x": 70.86614173228347,
+          "y": 392.0402542322835
+        },
+        "energy_conservation": {
+          "page": 126,
+          "text": "Section 2.4.2",
+          "x": 70.86614173228347,
+          "y": 96.03014173228345
+        },
+        "energy_conservation_derivation": {
+          "page": 128,
+          "text": "Equation (2.4.50)",
+          "x": 70.86614173228347,
+          "y": 196.68745423228344
+        },
+        "energy_flux_identity": {
+          "page": 132,
+          "text": "Equation (2.5.12)",
+          "x": 70.86614173228347,
+          "y": 70.86614173228347
+        },
+        "figure_of_conformal_Killing_field": {
+          "page": 104,
+          "text": "Figure 22",
+          "x": 85.26614173228346,
+          "y": 138.43454173228346
+        },
+        "finite_propagation_open_set_visualization_1": {
+          "page": 135,
+          "text": "Figure 32",
+          "x": 70.86614173228347,
+          "y": 420.33745423228345
+        },
+        "finite_propagation_speed": {
+          "page": 129,
+          "text": "Section 2.5",
+          "x": 70.86614173228347,
+          "y": 70.86614173228347
+        },
+        "first_condition_of_hypoerbolic_equations": {
+          "page": 150,
+          "text": "Equation (2.7.1)",
+          "x": 70.86614173228347,
+          "y": 127.49114173228347
+        },
+        "first_lemma_for_one_D_string_vibration": {
+          "page": 122,
+          "text": "Lemma 2.4.2",
+          "x": 70.86614173228347,
+          "y": 70.86614173228347
+        },
+        "first_version_of_principal_symbol_of_Hodge_Laplacian": {
+          "page": 182,
+          "text": "Equation (2.9.28)",
+          "x": 70.86614173228347,
+          "y": 562.8915667322835
+        },
+        "formal_adjoint_formula_on_metric_k-forms": {
+          "page": 182,
+          "text": "Equation (2.9.26)",
+          "x": 82.86614173228347,
+          "y": 422.28145423228347
+        },
+        "formal_adjoint_of_differential_operator": {
+          "page": 162,
+          "text": "Definition 2.8.2",
+          "x": 70.86614173228347,
+          "y": 70.86614173228347
+        },
+        "formal_adjoint_of_exterior_derivative": {
+          "page": 180,
+          "text": "Definition 2.9.3",
+          "x": 70.86614173228347,
+          "y": 70.86614173228347
+        },
+        "formal_adjoint_of_vector_field": {
+          "page": 94,
+          "text": "Definition 2.1.1",
+          "x": 70.86614173228347,
+          "y": 70.86614173228347
+        },
+        "formal_adjoint_symbols_table": {
+          "page": 173,
+          "text": "Table 5",
+          "x": 70.86614173228347,
+          "y": 221.01854173228347
+        },
+        "formal_conformal_killing_equation": {
+          "page": 105,
+          "text": "Equation (2.2.44)",
+          "x": 85.26614173228346,
+          "y": 416.96567923228343
+        },
+        "formula_of_divergence": {
+          "page": 91,
+          "text": "Equation (2.1.10)",
+          "x": 70.86614173228347,
+          "y": 305.15894173228344
+        },
+        "fourier_algebraic_problem": {
+          "page": 228,
+          "text": "Definition 3.1.4",
+          "x": 70.86614173228347,
+          "y": 410.89956673228346
+        },
+        "fourier_inversion_on_tempered_distributions": {
+          "page": 238,
+          "text": "Proposition 3.1.2",
+          "x": 70.86614173228347,
+          "y": 551.8310542322835
+        },
+        "fourier_multiplier_identity_on_tempered_distributions": {
+          "page": 239,
+          "text": "Proposition 3.1.3",
+          "x": 70.86614173228347,
+          "y": 487.7138542322835
+        },
+        "fourier_transform_of_derivatives": {
+          "page": 225,
+          "text": "Lemma 3.1.1",
+          "x": 70.86614173228347,
+          "y": 422.2320667322835
+        },
+        "fundamental_solution_of_laplacian": {
+          "page": 243,
+          "text": "Theorem 3.1.1",
+          "x": 70.86614173228347,
+          "y": 199.53854173228345
+        },
+        "general_Green-Stokes_formula": {
+          "page": 169,
+          "text": "Proposition 2.8.1",
+          "x": 70.86614173228347,
+          "y": 70.86614173228347
+        },
+        "general_integral_version_of_the_product_rule_of_Riemmanian_divergence": {
+          "page": 95,
+          "text": "Lemma 2.1.3",
+          "x": 70.86614173228347,
+          "y": 573.2641417322834
+        },
+        "geodesics_equation_with_metric": {
+          "page": 62,
+          "text": "Equation (1.1.22)",
+          "x": 70.86614173228347,
+          "y": 420.98545423228353
+        },
+        "geometric_form_of_parallelism": {
+          "page": 27,
+          "text": "Lemma P.2.5",
+          "x": 70.86614173228347,
+          "y": 428.5372151102362
+        },
+        "global_L-2_Lorentzian_pairing": {
+          "page": 202,
+          "text": "Definition 2.10.7",
+          "x": 70.86614173228347,
+          "y": 243.42145423228345
+        },
+        "grad_u_laplacian_on_Riemannian_manifold": {
+          "page": 110,
+          "text": "Equation (2.3.14)",
+          "x": 70.86614173228347,
+          "y": 265.6946542322834
+        },
+        "hamiltonian_represented_by_xi": {
+          "page": 71,
+          "text": "Equation (1.1.47)",
+          "x": 70.86614173228347,
+          "y": 510.07739173228344
+        },
+        "hamiltonian_second_step": {
+          "page": 72,
+          "text": "Equation (1.1.52)",
+          "x": 70.86614173228347,
+          "y": 361.2435667322835
+        },
+        "identitiy_of_Lie_derivative_of_metric_when_torsion_free": {
+          "page": 101,
+          "text": "Equation (2.2.26)",
+          "x": 70.86614173228347,
+          "y": 297.4358542322834
+        },
+        "identitiy_of_Lie_derivative_of_metric_when_torsion_free_2": {
+          "page": 102,
+          "text": "Equation (2.2.31)",
+          "x": 70.86614173228347,
+          "y": 256.2177592322834
+        },
+        "identity_of_1-form_and_volume_form": {
+          "page": 92,
+          "text": "Equation (2.1.17)",
+          "x": 70.86614173228347,
+          "y": 331.26876673228344
+        },
+        "identity_of_L2_inner_product_of_differentials": {
+          "page": 117,
+          "text": "Equation (2.3.50)",
+          "x": 70.86614173228347,
+          "y": 219.07007923228343
+        },
+        "induced_equation_of_outward_normal_vector": {
+          "page": 115,
+          "text": "Equation (2.3.42)",
+          "x": 70.86614173228347,
+          "y": 401.5765417322835
+        },
+        "initial_condition_geometrization": {
+          "page": 28,
+          "text": "Equation (P.2.59)",
+          "x": 70.86614173228347,
+          "y": 482.2108792322835
+        },
+        "initial_conditions_of_finite_propagation_speed": {
+          "page": 129,
+          "text": "Equation (2.5.2)",
+          "x": 70.86614173228347,
+          "y": 175.29542923228345
+        },
+        "integral_of_divergence_of_product": {
+          "page": 116,
+          "text": "Equation (2.3.47)",
+          "x": 82.86614173228347,
+          "y": 417.1718542322834
+        },
+        "integral_version_of_the_product_rule_of_Riemmanian_divergence": {
+          "page": 93,
+          "text": "Lemma 2.1.2",
+          "x": 70.86614173228347,
+          "y": 490.9661917322836
+        },
+        "interpretation_of_geodesics_equation": {
+          "page": 58,
+          "text": "Section 1.1.2",
+          "x": 70.86614173228347,
+          "y": 293.71814173228347
+        },
+        "intuition_of_Riemannian_trace": {
+          "page": 47,
+          "text": "Figure 15",
+          "x": 70.86614173228347,
+          "y": 70.86614173228347
+        },
+        "intuitive_explanation_of_conformal_killing_field": {
+          "page": 104,
+          "text": "Note 2.2.2",
+          "x": 70.86614173228347,
+          "y": 70.86614173228347
+        },
+        "investigate_L2_norm_of_1-form": {
+          "page": 112,
+          "text": "Equation (2.3.24)",
+          "x": 82.86614173228347,
+          "y": 527.3599042322835
+        },
+        "killing_field_visualization": {
+          "page": 106,
+          "text": "Figure 23",
+          "x": 85.26614173228346,
+          "y": 431.7214417322834
+        },
+        "kinetic_energy_for_wave_equation": {
+          "page": 118,
+          "text": "Equation (2.4.3)",
+          "x": 70.86614173228347,
+          "y": 483.8455553149607
+        },
+        "lambda_derivation": {
+          "page": 105,
+          "text": "Equation (2.2.43)",
+          "x": 82.86614173228347,
+          "y": 244.43065423228347
+        },
+        "lemma_relationship_of_laplacian_and_hessian": {
+          "page": 110,
+          "text": "Lemma 2.3.1",
+          "x": 70.86614173228347,
+          "y": 70.86614173228347
+        },
+        "linear_endomorphism_is_tensor": {
+          "page": 9,
+          "text": "Lemma P.1.3",
+          "x": 70.86614173228347,
+          "y": 70.86614173228347
+        },
+        "linearity_and_homomorphism": {
+          "page": 8,
+          "text": "Lemma P.1.1",
+          "x": 70.86614173228347,
+          "y": 114.62582923228346
+        },
+        "linearlied_Hamiltonian_vector_field": {
+          "page": 83,
+          "text": "Equation (1.3.14)",
+          "x": 82.86614173228347,
+          "y": 429.4383667322835
+        },
+        "meaning_of_timelike_and_spacelike": {
+          "page": 137,
+          "text": "Table 3",
+          "x": 70.86614173228347,
+          "y": 70.86614173228347
+        },
+        "metric_derivative_to_x_l_from_identity": {
+          "page": 72,
+          "text": "Equation (1.1.49)",
+          "x": 82.86614173228347,
+          "y": 82.86614173228347
+        },
+        "modeified_definition_of_1_form_Hessian": {
+          "page": 109,
+          "text": "Equation (2.3.7)",
+          "x": 70.86614173228347,
+          "y": 166.41014173228342
+        },
+        "naturally_induced_divergence-free_vector_field_from_stress-energy_tensor": {
+          "page": 145,
+          "text": "Lemma 2.6.1",
+          "x": 70.86614173228347,
+          "y": 365.67670423228344
+        },
+        "necessary_and_sufficient_condition_of_Killing_field": {
+          "page": 102,
+          "text": "Proposition 2.2.2",
+          "x": 70.86614173228347,
+          "y": 307.80467173228345
+        },
+        "neumann_condition": {
+          "page": 126,
+          "text": "Definition 2.4.3",
+          "x": 70.86614173228347,
+          "y": 459.528676894685
+        },
+        "norm_AX_2_h": {
+          "page": 119,
+          "text": "Equation (2.4.9)",
+          "x": 70.86614173228347,
+          "y": 581.7436792322835
+        },
+        "normal_derivative_on_Riemannian_manifold": {
+          "page": 115,
+          "text": "Lemma 2.3.3",
+          "x": 70.86614173228347,
+          "y": 258.81854173228345
+        },
+        "normal_vector_inequality": {
+          "page": 133,
+          "text": "Equation (2.5.16)",
+          "x": 70.86614173228347,
+          "y": 262.72009423228343
+        },
+        "orthogonality_and_skew-symmetry": {
+          "page": 8,
+          "text": "Lemma P.1.2",
+          "x": 70.86614173228347,
+          "y": 223.07822923228346
+        },
+        "parallel_frame_transport": {
+          "page": 32,
+          "text": "Equation (P.2.70)",
+          "x": 70.86614173228347,
+          "y": 291.69562185039365
+        },
+        "parallel_transport_determines_covariant_differentiation": {
+          "page": 32,
+          "text": "Equation (P.2.71)",
+          "x": 85.26614173228346,
+          "y": 684.4661866141731
+        },
+        "parallel_transport_determines_covariant_differentiation_2": {
+          "page": 33,
+          "text": "Equation (P.2.73)",
+          "x": 82.86614173228347,
+          "y": 226.45934173228346
+        },
+        "parallel_vector_components": {
+          "page": 27,
+          "text": "Figure 5",
+          "x": 70.86614173228347,
+          "y": 560.5751276102362
+        },
+        "parallelism_of_chart": {
+          "page": 40,
+          "text": "Equation (P.2.101)",
+          "x": 70.86614173228347,
+          "y": 642.2926417322838
+        },
+        "perspective_represening_norm_to_interior_multplication": {
+          "page": 124,
+          "text": "Equation (2.4.35)",
+          "x": 70.86614173228347,
+          "y": 70.86614173228347
+        },
+        "perspective_to_symplectic": {
+          "page": 76,
+          "text": "Note 1.2.1",
+          "x": 70.86614173228347,
+          "y": 140.94876673228345
+        },
+        "potential_energy_density": {
+          "page": 119,
+          "text": "Equation (2.4.7)",
+          "x": 70.86614173228347,
+          "y": 433.50025423228345
+        },
+        "potential_energy_for_wave_equation": {
+          "page": 119,
+          "text": "Equation (2.4.5)",
+          "x": 70.86614173228347,
+          "y": 277.01065423228346
+        },
+        "principal_symbol_coordinate_formula": {
+          "page": 159,
+          "text": "Equation (2.8.4)",
+          "x": 70.86614173228347,
+          "y": 486.68785423228354
+        },
+        "principal_symbol_of_adjoint_of_exterior_derivative": {
+          "page": 182,
+          "text": "Equation (2.9.27)",
+          "x": 70.86614173228347,
+          "y": 512.4926542322835
+        },
+        "principal_symbol_of_divergence": {
+          "page": 176,
+          "text": "Proposition 2.8.2",
+          "x": 70.86614173228347,
+          "y": 263.7733417322834
+        },
+        "principal_symbol_of_exterior_derivative": {
+          "page": 181,
+          "text": "Equation (2.9.21)",
+          "x": 82.86614173228347,
+          "y": 580.9783042322834
+        },
+        "principal_symbol_of_gradient": {
+          "page": 177,
+          "text": "Proposition 2.8.3",
+          "x": 70.86614173228347,
+          "y": 314.3725417322835
+        },
+        "product_rule_for_covector_omega": {
+          "page": 22,
+          "text": "Equation (P.2.43)",
+          "x": 70.86614173228347,
+          "y": 115.80745423228346
+        },
+        "product_rule_of_Euclidean_connection": {
+          "page": 34,
+          "text": "Lemma P.2.6",
+          "x": 70.86614173228347,
+          "y": 253.80767923228345
+        },
+        "product_rule_of_covariant_derivative_with_tensor": {
+          "page": 19,
+          "text": "Equation (P.2.27)",
+          "x": 107.27414173228345,
+          "y": 379.74614173228343
+        },
+        "properties_of_principal_symbol": {
+          "page": 174,
+          "text": "Lemma 2.8.2",
+          "x": 70.86614173228347,
+          "y": 70.86614173228347
+        },
+        "proposition4.15_b": {
+          "page": 19,
+          "text": "Equation (P.2.28)",
+          "x": 85.26614173228346,
+          "y": 438.13814173228343
+        },
+        "proposition4.3": {
+          "page": 14,
+          "text": "Proposition P.2.1",
+          "x": 70.86614173228347,
+          "y": 171.79945423228347
+        },
+        "proposition5.5_c": {
+          "page": 35,
+          "text": "Equation (P.2.80)",
+          "x": 85.26614173228346,
+          "y": 507.14819173228346
+        },
+        "quadratic_potential_energy_density_visualization": {
+          "page": 124,
+          "text": "Figure 27",
+          "x": 70.86614173228347,
+          "y": 308.3885917322834
+        },
+        "quandratic_potential_energy_density": {
+          "page": 124,
+          "text": "Equation (2.4.36)",
+          "x": 70.86614173228347,
+          "y": 123.24625423228346
+        },
+        "regular_distribution_induced_by_locally_integrable_function": {
+          "page": 230,
+          "text": "Definition 3.1.6",
+          "x": 70.86614173228347,
+          "y": 329.90470423228345
+        },
+        "relationship_between_divergence_and_gradient": {
+          "page": 95,
+          "text": "Note 2.1.2",
+          "x": 70.86614173228347,
+          "y": 70.86614173228347
+        },
+        "relationship_between_x_and_xi_in_differential_operator": {
+          "page": 160,
+          "text": "Equation (2.8.6)",
+          "x": 82.86614173228347,
+          "y": 82.86614173228347
+        },
+        "relationship_of_laplacian_and_hessian": {
+          "page": 110,
+          "text": "Equation (2.3.12)",
+          "x": 85.26614173228346,
+          "y": 121.45814173228348
+        },
+        "result_of_Cauchy_Schwarz_inequality": {
+          "page": 29,
+          "text": "Equation (P.2.63)",
+          "x": 82.86614173228347,
+          "y": 549.5123917322835
+        },
+        "result_of_comparing_with_exponential": {
+          "page": 30,
+          "text": "Equation (P.2.65)",
+          "x": 82.86614173228347,
+          "y": 189.87014173228349
+        },
+        "result_of_compatibility_theorem5.10": {
+          "page": 42,
+          "text": "Equation (P.2.108)",
+          "x": 70.86614173228347,
+          "y": 140.69807923228345
+        },
+        "result_of_product_rule_of_connection_covector": {
+          "page": 22,
+          "text": "Equation (P.2.46)",
+          "x": 82.86614173228347,
+          "y": 324.35087923228343
+        },
+        "result_of_theorem_5.10": {
+          "page": 41,
+          "text": "Equation (P.2.105)",
+          "x": 82.86614173228347,
+          "y": 422.0380792322835
+        },
+        "schwartz-kernel-theorem": {
+          "page": 53,
+          "text": "Theorem S.2.1",
+          "x": 70.86614173228347,
+          "y": 141.64739173228347
+        },
+        "schwartz-kernel-theorem-supplement": {
+          "page": 48,
+          "text": "Section S.2 :",
+          "x": 70.86614173228347,
+          "y": 70.86614173228347
+        },
+        "second_condition_of_hypoerbolic_equations": {
+          "page": 150,
+          "text": "Equation (2.7.3)",
+          "x": 70.86614173228347,
+          "y": 259.0076542322834
+        },
+        "second_condition_of_killing_vector_field": {
+          "page": 100,
+          "text": "Equation (2.2.24)",
+          "x": 70.86614173228347,
+          "y": 661.14441476378
+        },
+        "semi_colon_concention_and_covariant_derivative": {
+          "page": 97,
+          "text": "Equation (2.2.5)",
+          "x": 70.86614173228347,
+          "y": 506.4602542322835
+        },
+        "semicolon_convention_is_related_to_nabla": {
+          "page": 22,
+          "text": "Note P.2.10",
+          "x": 70.86614173228347,
+          "y": 600.1697917322836
+        },
+        "semicolon_standard_practice": {
+          "page": 21,
+          "text": "Equation (P.2.42)",
+          "x": 70.86614173228347,
+          "y": 706.5449917322837
+        },
+        "simple_wave_equation": {
+          "page": 129,
+          "text": "Equation (2.5.1)",
+          "x": 70.86614173228347,
+          "y": 111.99651673228348
+        },
+        "simplist_principal_symbol_of_Hodge_Laplacian": {
+          "page": 183,
+          "text": "Lemma 2.9.1",
+          "x": 70.86614173228347,
+          "y": 70.86614173228347
+        },
+        "spacelike_boundary_decomposition_visualization": {
+          "page": 131,
+          "text": "Figure 31",
+          "x": 70.86614173228347,
+          "y": 511.4704792322834
+        },
+        "specific_version_of_Lorentz_factor": {
+          "page": 187,
+          "text": "Equation (2.10.17)",
+          "x": 85.26614173228346,
+          "y": 258.54254173228344
+        },
+        "stress-energy_tensor_and_energy_flux_lemma": {
+          "page": 147,
+          "text": "Lemma 2.6.2",
+          "x": 70.86614173228347,
+          "y": 515.9571667322834
+        },
+        "stress-energy_tensor_applied_divergence_theorem": {
+          "page": 147,
+          "text": "Equation (2.6.45)",
+          "x": 70.86614173228347,
+          "y": 234.75865423228345
+        },
+        "stress-energy_tensor_flux_identity": {
+          "page": 147,
+          "text": "Equation (2.6.47)",
+          "x": 82.86614173228347,
+          "y": 420.07705423228344
+        },
+        "stress_energy_tensor_name_fig": {
+          "page": 142,
+          "text": "Figure 35",
+          "x": 70.86614173228347,
+          "y": 282.11185423228335
+        },
+        "subsection_Greens_First_Identity": {
+          "page": 112,
+          "text": "Section 2.3.4",
+          "x": 70.86614173228347,
+          "y": 444.57865423228344
+        },
+        "symmetry_of_christoffel_symbols": {
+          "page": 39,
+          "text": "Lemma P.2.7",
+          "x": 70.86614173228347,
+          "y": 245.11718651574805
+        },
+        "the_product_rule_of_Riemmanian_divergence": {
+          "page": 91,
+          "text": "Lemma 2.1.1",
+          "x": 70.86614173228347,
+          "y": 471.37487923228343
+        },
+        "the_total_covariant_derivative_is_a_tensor_field": {
+          "page": 21,
+          "text": "Note P.2.9",
+          "x": 70.86614173228347,
+          "y": 521.2886542322833
+        },
+        "theorem5.10_2": {
+          "page": 41,
+          "text": "Equation (P.2.104)",
+          "x": 82.86614173228347,
+          "y": 360.6940792322835
+        },
+        "total_energy_of_wave": {
+          "page": 127,
+          "text": "Equation (2.4.47)",
+          "x": 70.86614173228347,
+          "y": 303.238389394685
+        },
+        "trace_characterization_of_potential_energy_density": {
+          "page": 121,
+          "text": "Lemma 2.4.1",
+          "x": 70.86614173228347,
+          "y": 70.86614173228347
+        },
+        "unitary_fourier_convolution_formulas": {
+          "page": 227,
+          "text": "Lemma 3.1.2",
+          "x": 70.86614173228347,
+          "y": 140.69807923228345
+        },
+        "unpacked_relationship_of_laplacian_and_hessian": {
+          "page": 110,
+          "text": "Equation (2.3.13)",
+          "x": 70.86614173228347,
+          "y": 199.46905423228347
+        },
+        "vanishing_lemma_of_wave": {
+          "page": 133,
+          "text": "Lemma 2.5.1",
+          "x": 70.86614173228347,
+          "y": 397.98671923228346
+        },
+        "variation_formula": {
+          "page": 67,
+          "text": "Equation (1.1.33)",
+          "x": 85.26614173228346,
+          "y": 420.3080392322835
+        },
+        "vis_dirichlet": {
+          "page": 126,
+          "text": "Figure 28",
+          "x": 70.86614173228347,
+          "y": 264.99636673228343
+        },
+        "vis_neumann": {
+          "page": 127,
+          "text": "Figure 29",
+          "x": 70.86614173228347,
+          "y": 70.86614173228347
+        },
+        "wave-action": {
+          "page": 139,
+          "text": "Equation (2.6.3)",
+          "x": 70.86614173228347,
+          "y": 70.86614173228347
+        },
+        "wave-like_equation": {
+          "page": 123,
+          "text": "Equation (2.4.32)",
+          "x": 70.86614173228347,
+          "y": 541.0323667322834
+        },
+        "wave_operator_packaging_fig": {
+          "page": 138,
+          "text": "Figure 34",
+          "x": 70.86614173228347,
+          "y": 213.31907923228346
+        },
+        "where_does_the_Killing_field_came_from": {
+          "page": 106,
+          "text": "Equation (2.2.45)",
+          "x": 70.86614173228347,
+          "y": 108.95676673228346
+        },
+        "zero_acceleration": {
+          "page": 57,
+          "text": "Equation (1.1.1)",
+          "x": 70.86614173228347,
+          "y": 136.97114173228346
+        }
+      },
+      "title": "Partial Differential Equations"
+    }
+  },
+  "schema": 1
+}

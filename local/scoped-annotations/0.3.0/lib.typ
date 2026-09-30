@@ -31,6 +31,9 @@
     // Create a reference (ref element) to a local label
     let reference = local-name => ref(label((name)(local-name)))
 
+    // Exporters use this invisible marker to exclude explicit and automatic
+    // local scopes from the cross-project global-reference catalog.
+    metadata((kind: "project-reference-local-scope", prefix: prefix + "-"))
     body((
       prefix: prefix,
       name: name,

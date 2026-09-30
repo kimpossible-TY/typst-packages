@@ -15,7 +15,9 @@ local/
   pdf-versioning/0.1.0/      # PDF version-check links for static publishing workflows
   fletcher-helpers/0.1.0/   # Theme-aware Fletcher diagram defaults
   math-book/0.2.0/           # Mathematical book/lecture-note document template
+  project-references/0.1.0/ # Global references between independently compiled projects
 tools/pdf-versioning/         # Python server and browser helper for PDF freshness checks
+tools/project-references/     # Export rendered source references into the shared catalog
 scripts/                     # Utility installation and test scripts
 tests/                       # Smoke tests for verifying package compilation
 ```
@@ -42,6 +44,7 @@ Once installed, they can be imported into any Typst project via:
 #import "@local/scoped-annotations:0.3.0": *
 #import "@local/cetz-helpers:0.2.0": *
 #import "@local/pdf-versioning:0.1.0": *
+#import "@local/project-references:0.1.0": project-ref
 ```
 
 ### Updating an installed package
@@ -281,6 +284,75 @@ Use `pdf-version-check.js` from the HTML page to compare a PDF's
 
 ---
 
+### 7. `@local/project-references:0.1.0`
+
+Use a source project's global label from another independently compiled project:
+
+```typst
+#import "@local/project-references:0.1.0": project-ref
+
+See #project-ref("pde", <zero_acceleration>).
+```
+
+Compile `examples/project-references.typ` for a complete consumer example.
+
+The only mentioning function is `project-ref(project, global-label)`. It uses
+the source's exported reference text and appends ` of ` plus its project title.
+For example, a source rule producing `eq.1.2.3` produces
+`eq.1.2.3 of Partial Differential Equations`. The complete text links to the
+source PDF's physical page via `#page=N`; opening at that page depends on the PDF
+viewer. The source's supplement, punctuation, and `P`/`S` prefixes are preserved.
+`math-blocks:0.2.0` also re-exports the function, so existing project style facades
+that import all of `math-blocks` already expose `project-ref`.
+
+The package bundles `projects.json`. This keeps consuming documents independent
+of sibling source folders, network access during compilation, and Typst's project
+root restrictions. The `pde` catalog is included. Unknown projects, missing labels,
+ambiguous labels, and local scope labels produce compile errors. Only numbered global headings,
+figures, equations, and footnotes are exported; local annotation anchors and
+`local-tag-scope` labels (including explicit prefixes) are excluded. Public
+references need stable global labels.
+
+Labels attached to multiple targets are excluded with an export warning and
+recorded as ambiguous. Give those targets unique labels before referencing them
+across projects. The current PDE source uses `<wave_equation>` twice, so that
+label remains unavailable until it is disambiguated.
+
+Export and refresh a project from this repository:
+
+```sh
+python3 tools/project-references/export_references.py \
+  ../Department_of_Defense_Typst/Partial_Differential_Equations/main.typ \
+  --project pde \
+  --title "Partial Differential Equations" \
+  --pdf-url https://kimpossible-ty.github.io/Partial-Differential-Equations/main.pdf \
+  --font-path ../Department_of_Defense_Typst/Partial_Differential_Equations/fonts
+./scripts/install-local.sh
+```
+
+The exporter realizes synthetic references under the source entrypoint's existing
+show/set rules, rather than reconstructing its numbering rules. Its temporary
+sibling source is deleted afterward, and it checks exported positions against
+the unmodified source layout before updating the catalog atomically. Plain-text
+reference formatting, custom `show ref` rules, and ordinary styling such as
+`strong` are supported; visual styling is applied by the consuming document.
+Return transformed strings (for example, `upper("eq.")`) when capitalization
+must travel with a custom reference; layout-time casing such as `upper[eq.]`
+is visual styling rather than an exported string transformation.
+Compile-time inputs and fonts must match the source PDF build; pass the same
+`--input`, `--font-path`, `--root`, or `--package-path` options when exporting.
+
+Refresh the catalog after source numbering or layout changes, then reinstall the
+packages and compile the consuming document again. Publish the matching source
+PDF so its page links and the catalog stay in sync. This is a build snapshot;
+`project-ref` does not silently download or compile another project's sources.
+For CI, run the export after compiling the source PDF, using `--catalog` to select
+the catalog to update, and publish the refreshed shared package catalog before
+building dependent documents. `scripts/install-tools.sh` optionally installs the
+same exporter as the `project-references` CLI.
+
+---
+
 ## Tests
 
 ### Smoke Test
@@ -328,3 +400,8 @@ light/dark theme. Keep mathematical content and figure captions in the project.
 `tests/book-integration.typ` asserts counter resets, prefix formatting, state
 restoration, and sampling endpoints, and exercises cross-part references, repeated
 local names, nested annotation scopes, and diagram overrides in both themes.
+
+`tests/test_project_references.py` compiles independent source and consumer
+documents. It checks source-specific reference rules, prefixed numbering,
+automatic/explicit local scope exclusion, PDF destinations, failed lookups, and
+catalog refreshes after an equation is inserted.

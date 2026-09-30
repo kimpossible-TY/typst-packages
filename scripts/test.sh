@@ -4,6 +4,7 @@ set -eu
 repo_root=$(CDPATH= cd -- "$(dirname -- "$0")/.." && pwd)
 
 "$repo_root/scripts/install-local.sh"
+python3 "$repo_root/tests/test_project_references.py"
 typst compile "$repo_root/tests/package-smoke.typ" /tmp/custom-typst-package-smoke.pdf
 typst compile "$repo_root/tests/math-block-numbering.typ" /tmp/custom-typst-package-math-block-numbering.pdf
 typst compile "$repo_root/tests/book-integration.typ" /tmp/custom-typst-book-integration-light.pdf

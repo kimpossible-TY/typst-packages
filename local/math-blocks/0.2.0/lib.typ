@@ -1,4 +1,5 @@
 #import "@local/text-utils:0.1.2": capitalize-title, is-numeric-title
+#import "@local/project-references:0.1.0": project-ref
 
 // Standard fonts and sizes used for mathematical blocks.
 #let math_font = "New Computer Modern Math"
