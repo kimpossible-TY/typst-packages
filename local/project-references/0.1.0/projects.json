@@ -1,9 +1,7 @@
 {
   "projects": {
     "pde": {
-      "ambiguous_labels": [
-        "wave_equation"
-      ],
+      "ambiguous_labels": [],
       "pdf_url": "https://kimpossible-ty.github.io/Partial-Differential-Equations/main.pdf",
       "references": {
         "1D_example_of_laplacian": {
@@ -1313,6 +1311,12 @@
           "text": "Equation (2.4.32)",
           "x": 70.86614173228347,
           "y": 541.0323667322834
+        },
+        "wave_equation": {
+          "page": 125,
+          "text": "Equation (2.4.39)",
+          "x": 85.26614173228346,
+          "y": 248.39534173228347
         },
         "wave_operator_packaging_fig": {
           "page": 138,
