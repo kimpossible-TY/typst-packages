@@ -3,6 +3,31 @@
 The Typst package exposes only `project-ref("pde", <global-label>)`. This tool
 prepares the shared catalog used by that function.
 
+For CI consumers, verify_references.py checks literal calls in a source tree,
+the installed catalog SHA-256, matching published PDF bytes/pages, and optionally
+the compiled consumer's reference text and PDF link destinations. It requires
+pypdf (CI currently pins 6.10.0). Each verified project's published_pdf
+entry records sha256, pages, and an HTTPS download_url returning PDF bytes.
+After re-exporting a project, verify the matching published PDF and renew this
+entry; the exporter replaces the old project snapshot. Compile and export with
+identical source/build options before publication. A successful export alone
+does not establish that the URL serves that build.
+
+~~~sh
+python3 tools/project-references/verify_references.py \
+  --catalog /path/to/packages/local/project-references/0.1.0/projects.json \
+  --catalog-sha256 VERIFIED_CATALOG_SHA256 \
+  --source-root /path/to/consumer \
+  --published-dir /tmp/verified-source-pdfs \
+  --consumer-pdf /path/to/consumer/main.pdf
+~~~
+
+Use a fresh published-PDF directory for each CI run. The first invocation
+downloads and verifies the sources; later checks in the same run reuse those
+verified bytes. This does not change the two-argument Typst API or make Typst
+fetch external sources during compilation. PDF page-fragment support still
+depends on the destination viewer.
+
 Run `export_references.py SOURCE --project KEY --title TITLE --pdf-url URL` from
 any directory. It updates the repository's
 `local/project-references/0.1.0/projects.json` by default. `--catalog PATH` can
