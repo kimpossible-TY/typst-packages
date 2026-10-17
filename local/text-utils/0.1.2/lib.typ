@@ -40,7 +40,8 @@
   let text = []
   let has-text = false
 
-  for child in body.children {
+  let children = if body.has("children") { body.children } else { (body,) }
+  for child in children {
     if repr(child.func()) == "equation" {
       if has-text {
         parts.push(highlight(text, fill: theme.highlight))
