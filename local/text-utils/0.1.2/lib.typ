@@ -33,34 +33,84 @@
     (highlight: rgb("#FFFE80")) // Light mode highlight color (bright yellow)
   }
 
+  // Plain strings have no `.has`, so normalize them to content first.
+  let body = if type(body) == str { [#body] } else { body }
+  let children = if body.has("children") { body.children } else { (body,) }
+  let is-eq(child) = repr(child.func()) == "equation"
+
+  // The highlight uses one common extent above and below the baseline: the
+  // plain-text ascender/descender, grown to the tallest equation in the body.
+  // Every piece then gets the same background height. The background is only
+  // painted; it does not change line spacing.
+  let base-ascent = measure(text(top-edge: "ascender", bottom-edge: "baseline")[x]).height
+  let base-descent = measure(text(top-edge: "baseline", bottom-edge: "descender")[x]).height
+  let ascent = base-ascent
+  let descent = base-descent
+  for child in children.filter(is-eq) {
+    let eq = box($#child.at("body")$)
+    ascent = calc.max(ascent, measure({
+      set text(top-edge: "bounds", bottom-edge: "baseline")
+      eq
+    }).height)
+    descent = calc.max(descent, measure({
+      set text(top-edge: "baseline", bottom-edge: "bounds")
+      eq
+    }).height)
+  }
+
+  // Backgrounds of adjacent lines are painted line by line, so a later line
+  // would paint over the previous line's equation. Never let the extent exceed
+  // the line pitch: backgrounds then at most touch, so the colour stays
+  // consistent with no overlap. Extra room beyond the text is shared in
+  // proportion to what the equations need.
+  let pitch = base-ascent + base-descent + par.leading.to-absolute()
+  let extra = (ascent - base-ascent) + (descent - base-descent)
+  let room = pitch - base-ascent - base-descent
+  if extra > room and extra > 0pt {
+    let ratio = room / extra
+    ascent = base-ascent + (ascent - base-ascent) * ratio
+    descent = base-descent + (descent - base-descent) * ratio
+  }
+
   // Keep adjacent text in one highlight element so its background geometry is
   // calculated consistently instead of once per child (or character).
-  // Equations are emitted separately because they need extra vertical room.
+  // Equations are emitted separately as boxes pinned to the common extent.
   let parts = ()
-  let text = []
+  let buf = []
   let has-text = false
 
-  let children = if body.has("children") { body.children } else { (body,) }
+  let fill-text(content) = highlight(
+    content,
+    fill: theme.highlight,
+    top-edge: ascent,
+    bottom-edge: -descent,
+  )
+
   for child in children {
-    if repr(child.func()) == "equation" {
+    if is-eq(child) {
       if has-text {
-        parts.push(highlight(text, fill: theme.highlight))
-        text = []
+        parts.push(fill-text(buf))
+        buf = []
         has-text = false
       }
 
+      // The frame keeps the normal line height (so line spacing is unchanged);
+      // only the background is extended with `outset`.
       parts.push(box(
         fill: theme.highlight,
-        outset: (y: 0.25em),
-      )[$#child.at("body")$])
+        outset: (top: ascent - base-ascent, bottom: descent - base-descent),
+      )[
+        #set text(top-edge: base-ascent, bottom-edge: -base-descent)
+        #box($#child.at("body")$)
+      ])
     } else {
-      text = text + child
+      buf = buf + child
       has-text = true
     }
   }
 
   if has-text {
-    parts.push(highlight(text, fill: theme.highlight))
+    parts.push(fill-text(buf))
   }
 
   for part in parts {

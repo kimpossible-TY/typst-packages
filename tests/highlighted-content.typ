@@ -6,3 +6,6 @@
 // Preserve support for mixed content and a single inline equation.
 #highlighted[The variable $x$ is positive.]
 #highlighted[$x > 0$]
+
+// A plain string body must also work.
+#highlighted("A plain string.")
