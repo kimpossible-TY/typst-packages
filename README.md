@@ -22,6 +22,23 @@ scripts/                     # Utility installation and test scripts
 tests/                       # Smoke tests for verifying package compilation
 ```
 
+## Agent Guidance
+
+The authoritative `my-typst-style` skill is maintained in
+[`agent_skills/my-typst-style`](https://github.com/kimpossible-TY/agent_skills/tree/main/my-typst-style).
+Update agent instructions there, including package usage and project references.
+This repository does not keep a separate skill copy.
+
+For local discovery, link the central checkout instead of copying it:
+
+```sh
+mkdir -p .agents/skills
+ln -s "$HOME/Developer/agent_skills/my-typst-style" .agents/skills/my-typst-style
+```
+
+Keep this machine-specific link out of Git with a local `/.agents/` entry in
+`.git/info/exclude`.
+
 ---
 
 ## Install Locally
