@@ -1,5 +1,2981 @@
 {
   "projects": {
+    "complex-analysis": {
+      "ambiguous_labels": [],
+      "pdf_url": "https://drive.google.com/file/d/1S5lbXD-0oAaHDAKzHiMGn8gEXbqECDto/view?usp=drivesdk",
+      "references": {
+        "ch-analytic-continuation": {
+          "page": 139,
+          "text": "Section 11",
+          "x": 62.36220472440945,
+          "y": 65.19685039370079
+        },
+        "ch-cauchy-applications": {
+          "page": 68,
+          "text": "Section 5",
+          "x": 62.36220472440945,
+          "y": 65.19685039370079
+        },
+        "ch-cauchy-first": {
+          "page": 37,
+          "text": "Section 3",
+          "x": 62.36220472440945,
+          "y": 65.19685039370079
+        },
+        "ch-complex-numbers": {
+          "page": 6,
+          "text": "Section 1",
+          "x": 62.36220472440945,
+          "y": 65.19685039370079
+        },
+        "ch-conformal-mappings": {
+          "page": 92,
+          "text": "Section 7",
+          "x": 62.36220472440945,
+          "y": 65.19685039370079
+        },
+        "ch-elliptic-functions": {
+          "page": 150,
+          "text": "Section 14",
+          "x": 62.36220472440945,
+          "y": 65.19685039370079
+        },
+        "ch-entire-meromorphic": {
+          "page": 142,
+          "text": "Section 13",
+          "x": 62.36220472440945,
+          "y": 65.19685039370079
+        },
+        "ch-gamma-zeta": {
+          "page": 156,
+          "text": "Section 15",
+          "x": 62.36220472440945,
+          "y": 65.19685039370079
+        },
+        "ch-harmonic-functions": {
+          "page": 105,
+          "text": "Section 8",
+          "x": 62.36220472440945,
+          "y": 65.19685039370079
+        },
+        "ch-introduction-supplement": {
+          "page": 157,
+          "text": "Section A :",
+          "x": 62.36220472440945,
+          "y": 65.19685039370079
+        },
+        "ch-power-series": {
+          "page": 16,
+          "text": "Section 2",
+          "x": 62.36220472440945,
+          "y": 65.19685039370079
+        },
+        "ch-residues": {
+          "page": 80,
+          "text": "Section 6",
+          "x": 62.36220472440945,
+          "y": 65.19685039370079
+        },
+        "ch-riemann-mapping": {
+          "page": 131,
+          "text": "Section 10",
+          "x": 62.36220472440945,
+          "y": 65.19685039370079
+        },
+        "ch-schwarz-reflection": {
+          "page": 120,
+          "text": "Section 9",
+          "x": 62.36220472440945,
+          "y": 65.19685039370079
+        },
+        "ch-winding-cauchy": {
+          "page": 60,
+          "text": "Section 4",
+          "x": 62.36220472440945,
+          "y": 65.19685039370079
+        },
+        "def-analytic-automorphism": {
+          "page": 77,
+          "text": "Definition 5.3.4",
+          "x": 62.36220472440945,
+          "y": 539.2672503937009
+        },
+        "def-analytic-function": {
+          "page": 25,
+          "text": "Definition 2.4.1",
+          "x": 62.36220472440945,
+          "y": 82.88485039370079
+        },
+        "def-complex-field": {
+          "page": 7,
+          "text": "Definition 1.1.1",
+          "x": 62.36220472440945,
+          "y": 82.88485039370079
+        },
+        "def-complex-power-branch": {
+          "page": 53,
+          "text": "Definition 3.6.3",
+          "x": 62.36220472440945,
+          "y": 189.96765039370078
+        },
+        "def-conjugate-modulus": {
+          "page": 7,
+          "text": "Definition 1.1.2",
+          "x": 62.36220472440945,
+          "y": 333.4036503937008
+        },
+        "def-continuous-path-integral": {
+          "page": 46,
+          "text": "Definition 3.4.1",
+          "x": 62.36220472440945,
+          "y": 343.6394503937009
+        },
+        "def-convex-set": {
+          "page": 50,
+          "text": "Definition 3.5.2",
+          "x": 62.36220472440945,
+          "y": 282.3384503937008
+        },
+        "def-cross-ratio": {
+          "page": 96,
+          "text": "Definition 7.2.2",
+          "x": 62.36220472440945,
+          "y": 434.8185066437009
+        },
+        "def-disk-involution": {
+          "page": 97,
+          "text": "Definition 7.2.3",
+          "x": 62.36220472440945,
+          "y": 65.19685039370079
+        },
+        "def-elliptic-function": {
+          "page": 151,
+          "text": "Definition 14.1.2",
+          "x": 62.36220472440945,
+          "y": 489.674053543307
+        },
+        "def-entire-function": {
+          "page": 57,
+          "text": "Definition 3.7.1",
+          "x": 62.36220472440945,
+          "y": 446.50305039370085
+        },
+        "def-formal-multiplicative-inverse": {
+          "page": 18,
+          "text": "Definition 2.1.3",
+          "x": 62.36220472440945,
+          "y": 178.4676503937008
+        },
+        "def-formal-series": {
+          "page": 17,
+          "text": "Definition 2.1.1",
+          "x": 62.36220472440945,
+          "y": 82.88485039370079
+        },
+        "def-harmonic-function": {
+          "page": 106,
+          "text": "Definition 8.1.1",
+          "x": 62.36220472440945,
+          "y": 82.88485039370079
+        },
+        "def-hol-compact-convergence": {
+          "page": 132,
+          "text": "Definition 10.2.1",
+          "x": 62.36220472440945,
+          "y": 118.63485039370079
+        },
+        "def-holomorphic": {
+          "page": 9,
+          "text": "Definition 1.5.1",
+          "x": 62.36220472440945,
+          "y": 82.88485039370079
+        },
+        "def-infinite-product": {
+          "page": 143,
+          "text": "Definition 13.1.1",
+          "x": 62.36220472440945,
+          "y": 82.88485039370079
+        },
+        "def-intro-ball-domain": {
+          "page": 158,
+          "text": "Definition A.2.1",
+          "x": 62.36220472440945,
+          "y": 133.48485039370078
+        },
+        "def-isolated-singularity": {
+          "page": 73,
+          "text": "Definition 5.3.1",
+          "x": 62.36220472440945,
+          "y": 82.88485039370079
+        },
+        "def-lattice-cell": {
+          "page": 151,
+          "text": "Definition 14.1.1",
+          "x": 62.36220472440945,
+          "y": 82.88485039370079
+        },
+        "def-laurent-series": {
+          "page": 69,
+          "text": "Definition 5.2.1",
+          "x": 62.36220472440945,
+          "y": 191.45565039370078
+        },
+        "def-local-analytic-isomorphism": {
+          "page": 28,
+          "text": "Definition 2.6.1",
+          "x": 62.36220472440945,
+          "y": 82.88485039370079
+        },
+        "def-logarithm-branch": {
+          "page": 52,
+          "text": "Definition 3.6.2",
+          "x": 62.36220472440945,
+          "y": 327.5384503937009
+        },
+        "def-meromorphic-function": {
+          "page": 75,
+          "text": "Definition 5.3.3",
+          "x": 62.36220472440945,
+          "y": 65.19685039370079
+        },
+        "def-mobius-transformation": {
+          "page": 95,
+          "text": "Definition 7.2.1",
+          "x": 62.36220472440945,
+          "y": 82.88485039370079
+        },
+        "def-normal-family-conditions": {
+          "page": 132,
+          "text": "Definition 10.2.2",
+          "x": 62.36220472440945,
+          "y": 267.8160503937008
+        },
+        "def-null-homologous": {
+          "page": 63,
+          "text": "Definition 4.2.2",
+          "x": 62.36220472440945,
+          "y": 460.4652503937008
+        },
+        "def-path-chain": {
+          "page": 63,
+          "text": "Definition 4.2.1",
+          "x": 62.36220472440945,
+          "y": 82.88485039370079
+        },
+        "def-path-homotopy": {
+          "page": 49,
+          "text": "Definition 3.5.1",
+          "x": 62.36220472440945,
+          "y": 82.88485039370079
+        },
+        "def-path-length-bound": {
+          "page": 42,
+          "text": "Definition 3.2.2",
+          "x": 62.36220472440945,
+          "y": 135.2358818897638
+        },
+        "def-pole-essential": {
+          "page": 74,
+          "text": "Definition 5.3.2",
+          "x": 62.36220472440945,
+          "y": 173.7676503937008
+        },
+        "def-primitive": {
+          "page": 40,
+          "text": "Definition 3.2.1",
+          "x": 62.36220472440945,
+          "y": 198.46845039370078
+        },
+        "def-proper-analytic-arc": {
+          "page": 125,
+          "text": "Definition 9.2.1",
+          "x": 62.36220472440945,
+          "y": 82.88485039370079
+        },
+        "def-proper-map": {
+          "page": 127,
+          "text": "Definition 9.2.2",
+          "x": 62.36220472440945,
+          "y": 230.23065039370078
+        },
+        "def-rational-domain": {
+          "page": 158,
+          "text": "Definition A.2.2",
+          "x": 62.36220472440945,
+          "y": 502.6142661417324
+        },
+        "def-residue": {
+          "page": 81,
+          "text": "Definition 6.1.1",
+          "x": 62.36220472440945,
+          "y": 175.25565039370082
+        },
+        "def-series-congruence": {
+          "page": 19,
+          "text": "Definition 2.1.4",
+          "x": 62.36220472440945,
+          "y": 65.19685039370079
+        },
+        "def-series-order": {
+          "page": 17,
+          "text": "Definition 2.1.2",
+          "x": 62.36220472440945,
+          "y": 322.41165039370077
+        },
+        "def-simply-connected-domain": {
+          "page": 52,
+          "text": "Definition 3.6.1",
+          "x": 62.36220472440945,
+          "y": 82.88485039370079
+        },
+        "def-stereographic-projection": {
+          "page": 159,
+          "text": "Definition A.2.3",
+          "x": 62.36220472440945,
+          "y": 81.31185039370078
+        },
+        "def-stream-function": {
+          "page": 109,
+          "text": "Definition 8.1.3",
+          "x": 62.36220472440945,
+          "y": 260.9464503937008
+        },
+        "def-weierstrass-elliptic": {
+          "page": 154,
+          "text": "Definition 14.2.1",
+          "x": 62.36220472440945,
+          "y": 311.1683503937009
+        },
+        "def-weierstrass-factor": {
+          "page": 145,
+          "text": "Definition 13.2.1",
+          "x": 62.36220472440945,
+          "y": 472.6556503937008
+        },
+        "def-winding-interior": {
+          "page": 102,
+          "text": "Definition 7.4.1",
+          "x": 62.36220472440945,
+          "y": 508.4012503937008
+        },
+        "def-winding-number": {
+          "page": 61,
+          "text": "Definition 4.1.1",
+          "x": 62.36220472440945,
+          "y": 82.88485039370079
+        },
+        "def-wirtinger-operators": {
+          "page": 106,
+          "text": "Definition 8.1.2",
+          "x": 62.36220472440945,
+          "y": 269.4960503937008
+        },
+        "fig-annulus-inversion": {
+          "page": 69,
+          "text": "그림 17",
+          "x": 62.36220472440945,
+          "y": 493.99285039370073
+        },
+        "fig-barrier-comparison": {
+          "page": 108,
+          "text": "그림 30",
+          "x": 62.36220472440945,
+          "y": 446.2892503937008
+        },
+        "fig-boundary-preimages": {
+          "page": 124,
+          "text": "그림 38",
+          "x": 62.36220472440945,
+          "y": 668.7258503937009
+        },
+        "fig-cauchy-circles": {
+          "page": 55,
+          "text": "그림 11",
+          "x": 62.36220472440945,
+          "y": 298.53845039370077
+        },
+        "fig-cayley-map": {
+          "page": 99,
+          "text": "그림 27",
+          "x": 62.36220472440945,
+          "y": 539.830050393701
+        },
+        "fig-connected-propagation": {
+          "page": 38,
+          "text": "그림 5",
+          "x": 62.36220472440945,
+          "y": 517.7894503937009
+        },
+        "fig-convex-comparison": {
+          "page": 50,
+          "text": "그림 10",
+          "x": 62.36220472440945,
+          "y": 391.50925039370077
+        },
+        "fig-cotangent-contour": {
+          "page": 148,
+          "text": "그림 43",
+          "x": 62.36220472440945,
+          "y": 162.92745039370078
+        },
+        "fig-cube-comparison": {
+          "page": 78,
+          "text": "그림 20",
+          "x": 62.36220472440945,
+          "y": 511.779250393701
+        },
+        "fig-diagonal-selection": {
+          "page": 134,
+          "text": "그림 41",
+          "x": 62.36220472440945,
+          "y": 167.7498503937008
+        },
+        "fig-disk-normalization": {
+          "page": 97,
+          "text": "그림 26",
+          "x": 62.36220472440945,
+          "y": 455.69985039370084
+        },
+        "fig-disk-power-map": {
+          "page": 32,
+          "text": "그림 3",
+          "x": 62.36220472440945,
+          "y": 65.19685039370079
+        },
+        "fig-extremal-factorization": {
+          "page": 137,
+          "text": "그림 42",
+          "x": 62.36220472440945,
+          "y": 643.1902157480316
+        },
+        "fig-fourier-projection": {
+          "page": 72,
+          "text": "그림 18",
+          "x": 62.36220472440945,
+          "y": 368.5008503937008
+        },
+        "fig-fourier-rectangle": {
+          "page": 88,
+          "text": "그림 23",
+          "x": 62.36220472440945,
+          "y": 65.19685039370079
+        },
+        "fig-goursat-subdivision": {
+          "page": 44,
+          "text": "그림 7",
+          "x": 62.36220472440945,
+          "y": 65.19685039370079
+        },
+        "fig-grid-cancellation": {
+          "page": 66,
+          "text": "그림 14",
+          "x": 62.36220472440945,
+          "y": 65.19685039370079
+        },
+        "fig-harmonic-reflection": {
+          "page": 123,
+          "text": "그림 37",
+          "x": 62.36220472440945,
+          "y": 340.5894503937009
+        },
+        "fig-harmonic-zero-sets": {
+          "page": 116,
+          "text": "그림 33",
+          "x": 62.36220472440945,
+          "y": 386.31845039370074
+        },
+        "fig-homotopy-grid": {
+          "page": 49,
+          "text": "그림 9",
+          "x": 62.36220472440945,
+          "y": 632.2102503937009
+        },
+        "fig-indented-contour": {
+          "page": 89,
+          "text": "그림 24",
+          "x": 62.36220472440945,
+          "y": 446.30175039370096
+        },
+        "fig-inverse-coefficient-chain": {
+          "page": 29,
+          "text": "그림 2",
+          "x": 62.36220472440945,
+          "y": 173.7676503937008
+        },
+        "fig-joining-contours": {
+          "page": 121,
+          "text": "그림 36",
+          "x": 62.36220472440945,
+          "y": 616.0840937007877
+        },
+        "fig-lattice-cell": {
+          "page": 151,
+          "text": "그림 44",
+          "x": 62.36220472440945,
+          "y": 258.4384503937008
+        },
+        "fig-logarithmic-period": {
+          "page": 114,
+          "text": "그림 32",
+          "x": 62.36220472440945,
+          "y": 619.3067157480315
+        },
+        "fig-mobius-decomposition": {
+          "page": 95,
+          "text": "그림 25",
+          "x": 62.36220472440945,
+          "y": 528.9270503937008
+        },
+        "fig-null-cycle": {
+          "page": 64,
+          "text": "그림 13",
+          "x": 62.36220472440945,
+          "y": 366.30745039370083
+        },
+        "fig-path-disk-chain": {
+          "page": 47,
+          "text": "그림 8",
+          "x": 62.36220472440945,
+          "y": 214.0306503937008
+        },
+        "fig-periodic-boundary": {
+          "page": 152,
+          "text": "그림 45",
+          "x": 62.36220472440945,
+          "y": 428.6020503937009
+        },
+        "fig-poisson-comparison": {
+          "page": 118,
+          "text": "그림 34",
+          "x": 62.36220472440945,
+          "y": 578.8519503937011
+        },
+        "fig-pole-profiles": {
+          "page": 74,
+          "text": "그림 19",
+          "x": 62.36220472440945,
+          "y": 656.0830503937009
+        },
+        "fig-polygonal-domain": {
+          "page": 158,
+          "text": "그림 46",
+          "x": 62.36220472440945,
+          "y": 401.0902503937009
+        },
+        "fig-proper-sequences": {
+          "page": 128,
+          "text": "그림 40",
+          "x": 62.36220472440945,
+          "y": 400.90145039370077
+        },
+        "fig-quadrant-square": {
+          "page": 101,
+          "text": "그림 28",
+          "x": 62.36220472440945,
+          "y": 309.7042503937008
+        },
+        "fig-reciprocal-maximum": {
+          "page": 36,
+          "text": "그림 4",
+          "x": 62.36220472440945,
+          "y": 65.19685039370079
+        },
+        "fig-reflection-domain": {
+          "page": 121,
+          "text": "그림 35",
+          "x": 62.36220472440945,
+          "y": 149.1169503937008
+        },
+        "fig-rouche-disk": {
+          "page": 84,
+          "text": "그림 21",
+          "x": 62.36220472440945,
+          "y": 581.6317503937009
+        },
+        "fig-split-boundary": {
+          "page": 67,
+          "text": "그림 16",
+          "x": 62.36220472440945,
+          "y": 294.6861570866142
+        },
+        "fig-stereographic-circles": {
+          "page": 160,
+          "text": "그림 48",
+          "x": 62.36220472440945,
+          "y": 147.2326503937008
+        },
+        "fig-stereographic-section": {
+          "page": 159,
+          "text": "그림 47",
+          "x": 62.36220472440945,
+          "y": 173.6826503937008
+        },
+        "fig-straightening-arcs": {
+          "page": 126,
+          "text": "그림 39",
+          "x": 62.36220472440945,
+          "y": 320.38445039370083
+        },
+        "fig-stream-orthogonality": {
+          "page": 109,
+          "text": "그림 31",
+          "x": 62.36220472440945,
+          "y": 399.13325039370085
+        },
+        "fig-tangent-angle": {
+          "page": 14,
+          "text": "그림 1",
+          "x": 62.36220472440945,
+          "y": 133.48485039370078
+        },
+        "fig-translated-path": {
+          "page": 42,
+          "text": "그림 6",
+          "x": 62.36220472440945,
+          "y": 65.19685039370079
+        },
+        "fig-upper-semicircle": {
+          "page": 86,
+          "text": "그림 22",
+          "x": 62.36220472440945,
+          "y": 522.4330503937009
+        },
+        "fig-weighted-cycles": {
+          "page": 67,
+          "text": "그림 15",
+          "x": 62.36220472440945,
+          "y": 65.19685039370079
+        },
+        "fig-winding-overlap": {
+          "page": 104,
+          "text": "그림 29",
+          "x": 62.36220472440945,
+          "y": 173.7676503937008
+        },
+        "fig-winding-regions": {
+          "page": 62,
+          "text": "그림 12",
+          "x": 62.36220472440945,
+          "y": 583.085250393701
+        },
+        "lem-absolute-product": {
+          "page": 143,
+          "text": "Lemma 13.1.1",
+          "x": 62.36220472440945,
+          "y": 215.3044503937008
+        },
+        "lem-canonical-factor-bound": {
+          "page": 146,
+          "text": "Lemma 13.2.1",
+          "x": 62.36220472440945,
+          "y": 65.19685039370079
+        },
+        "lem-close-paths": {
+          "page": 48,
+          "text": "Lemma 3.4.3",
+          "x": 62.36220472440945,
+          "y": 65.19685039370079
+        },
+        "lem-convex-homotopy": {
+          "page": 51,
+          "text": "Lemma 3.5.1",
+          "x": 62.36220472440945,
+          "y": 65.19685039370079
+        },
+        "lem-cotangent-partial-fractions": {
+          "page": 147,
+          "text": "Lemma 13.2.2",
+          "x": 62.36220472440945,
+          "y": 407.6894503937008
+        },
+        "lem-disk-embedding": {
+          "page": 135,
+          "text": "Lemma 10.3.1",
+          "x": 62.36220472440945,
+          "y": 382.08145039370083
+        },
+        "lem-grid-filling": {
+          "page": 64,
+          "text": "Lemma 4.2.1",
+          "x": 62.36220472440945,
+          "y": 466.9075122047244
+        },
+        "lem-harmonic-unique-continuation": {
+          "page": 115,
+          "text": "Lemma 8.3.1",
+          "x": 62.36220472440945,
+          "y": 578.597350393701
+        },
+        "lem-interior-compactness": {
+          "page": 103,
+          "text": "Lemma 7.4.1",
+          "x": 62.36220472440945,
+          "y": 65.19685039370079
+        },
+        "lem-lattice-summability": {
+          "page": 154,
+          "text": "Lemma 14.2.1",
+          "x": 62.36220472440945,
+          "y": 82.88485039370079
+        },
+        "lem-local-binomial-root": {
+          "page": 29,
+          "text": "Lemma 2.6.1",
+          "x": 62.36220472440945,
+          "y": 387.0219299212599
+        },
+        "lem-mean-value-maximum": {
+          "page": 117,
+          "text": "Lemma 8.5.1",
+          "x": 62.36220472440945,
+          "y": 352.83605039370076
+        },
+        "lem-path-clearance": {
+          "page": 46,
+          "text": "Lemma 3.4.1",
+          "x": 62.36220472440945,
+          "y": 118.63485039370079
+        },
+        "lem-poisson-extension": {
+          "page": 118,
+          "text": "Lemma 8.5.2",
+          "x": 62.36220472440945,
+          "y": 65.19685039370079
+        },
+        "lem-primitive-sum-independent": {
+          "page": 46,
+          "text": "Lemma 3.4.2",
+          "x": 62.36220472440945,
+          "y": 559.5202503937008
+        },
+        "lem-proper-escape": {
+          "page": 127,
+          "text": "Lemma 9.2.2",
+          "x": 62.36220472440945,
+          "y": 563.9860503937009
+        },
+        "lem-simple-pole-residue": {
+          "page": 82,
+          "text": "Lemma 6.1.1",
+          "x": 62.36220472440945,
+          "y": 598.6255503937008
+        },
+        "lem-straightening-analytic-arc": {
+          "page": 125,
+          "text": "Lemma 9.2.1",
+          "x": 62.36220472440945,
+          "y": 259.3936503937008
+        },
+        "lem-univalent-limit": {
+          "page": 136,
+          "text": "Lemma 10.3.2",
+          "x": 62.36220472440945,
+          "y": 81.31185039370078
+        },
+        "lem-winding-components": {
+          "page": 62,
+          "text": "Lemma 4.1.2",
+          "x": 62.36220472440945,
+          "y": 173.7676503937008
+        },
+        "lem-winding-integer": {
+          "page": 61,
+          "text": "Lemma 4.1.1",
+          "x": 62.36220472440945,
+          "y": 463.8600503937007
+        },
+        "note-all-small-radii": {
+          "page": 117,
+          "text": "Note 8.5.2",
+          "x": 62.36220472440945,
+          "y": 546.2198503937009
+        },
+        "note-analytic-differentiability": {
+          "page": 26,
+          "text": "Note 2.5.1",
+          "x": 62.36220472440945,
+          "y": 82.88485039370079
+        },
+        "note-analytic-isomorphism-language": {
+          "page": 31,
+          "text": "Note 2.6.6",
+          "x": 62.36220472440945,
+          "y": 173.7676503937008
+        },
+        "note-analytic-locality": {
+          "page": 25,
+          "text": "Note 2.4.1",
+          "x": 62.36220472440945,
+          "y": 226.99365039370082
+        },
+        "note-angle-question": {
+          "page": 14,
+          "text": "Note 1.7.1",
+          "x": 62.36220472440945,
+          "y": 242.67859055118112
+        },
+        "note-angle-sine-cosine": {
+          "page": 15,
+          "text": "Note 1.7.2",
+          "x": 62.36220472440945,
+          "y": 423.9224503937009
+        },
+        "note-annular-gears": {
+          "page": 66,
+          "text": "Note 4.2.5",
+          "x": 62.36220472440945,
+          "y": 303.9232677165354
+        },
+        "note-arc-bound": {
+          "page": 86,
+          "text": "Note 6.2.2",
+          "x": 62.36220472440945,
+          "y": 636.2818102362205
+        },
+        "note-arc-endpoints": {
+          "page": 126,
+          "text": "Note 9.2.2",
+          "x": 62.36220472440945,
+          "y": 463.4456629921261
+        },
+        "note-black-box-strategy": {
+          "page": 138,
+          "text": "Note 10.3.5",
+          "x": 62.36220472440945,
+          "y": 65.19685039370079
+        },
+        "note-boundary-comparison-strategy": {
+          "page": 117,
+          "text": "Note 8.5.1",
+          "x": 62.36220472440945,
+          "y": 228.06525039370078
+        },
+        "note-cancel-logarithm-terms": {
+          "page": 146,
+          "text": "Note 13.2.2",
+          "x": 62.36220472440945,
+          "y": 646.9711157480315
+        },
+        "note-cartesian-test": {
+          "page": 100,
+          "text": "Note 7.3.2",
+          "x": 62.36220472440945,
+          "y": 65.19685039370079
+        },
+        "note-cauchy-boundary-intuition": {
+          "page": 55,
+          "text": "Note 3.7.1",
+          "x": 62.36220472440945,
+          "y": 65.19685039370079
+        },
+        "note-cauchy-coefficients": {
+          "page": 57,
+          "text": "Note 3.7.6",
+          "x": 62.36220472440945,
+          "y": 173.7676503937008
+        },
+        "note-cauchy-equicontinuity": {
+          "page": 133,
+          "text": "Note 10.2.2",
+          "x": 62.36220472440945,
+          "y": 239.98685039370082
+        },
+        "note-cauchy-generality": {
+          "page": 57,
+          "text": "Note 3.7.7",
+          "x": 62.36220472440945,
+          "y": 335.37725039370076
+        },
+        "note-cauchy-identity-interpretation": {
+          "page": 55,
+          "text": "Note 3.7.3",
+          "x": 62.36220472440945,
+          "y": 414.6766334645669
+        },
+        "note-cauchy-projection-intuition": {
+          "page": 72,
+          "text": "Note 5.2.6",
+          "x": 62.36220472440945,
+          "y": 227.5300503937008
+        },
+        "note-cauchy-shrink-error": {
+          "page": 55,
+          "text": "Note 3.7.2",
+          "x": 62.36220472440945,
+          "y": 189.96765039370078
+        },
+        "note-cauchy-singularity": {
+          "page": 59,
+          "text": "Note 3.7.12",
+          "x": 62.36220472440945,
+          "y": 386.2484503937009
+        },
+        "note-cauchy-uniform-exchange": {
+          "page": 57,
+          "text": "Note 3.7.5",
+          "x": 62.36220472440945,
+          "y": 65.19685039370079
+        },
+        "note-chain-intersections": {
+          "page": 63,
+          "text": "Note 4.2.1",
+          "x": 62.36220472440945,
+          "y": 368.0944503937007
+        },
+        "note-chain-rule-primitive": {
+          "page": 40,
+          "text": "Note 3.2.1",
+          "x": 62.36220472440945,
+          "y": 491.4974503937008
+        },
+        "note-chain-rule-strategy": {
+          "page": 10,
+          "text": "Note 1.5.2",
+          "x": 62.36220472440945,
+          "y": 65.19685039370079
+        },
+        "note-change-of-coordinates": {
+          "page": 100,
+          "text": "Note 7.3.4",
+          "x": 62.36220472440945,
+          "y": 464.72785039370086
+        },
+        "note-close-path-telescoping": {
+          "page": 48,
+          "text": "Note 3.4.3",
+          "x": 62.36220472440945,
+          "y": 430.11125039370097
+        },
+        "note-compactness-completeness": {
+          "page": 104,
+          "text": "Note 7.4.8",
+          "x": 62.36220472440945,
+          "y": 411.9763754874016
+        },
+        "note-compactness-homotopy": {
+          "page": 50,
+          "text": "Note 3.5.3",
+          "x": 62.36220472440945,
+          "y": 157.56765039370077
+        },
+        "note-compactness-not-completeness": {
+          "page": 128,
+          "text": "Note 9.2.5",
+          "x": 62.36220472440945,
+          "y": 151.35985039370078
+        },
+        "note-complex-coordinate-operators": {
+          "page": 106,
+          "text": "Note 8.1.2",
+          "x": 62.36220472440945,
+          "y": 452.5988503937008
+        },
+        "note-complex-extension-integrals": {
+          "page": 86,
+          "text": "Note 6.2.1",
+          "x": 62.36220472440945,
+          "y": 82.88485039370079
+        },
+        "note-complex-limit-directions": {
+          "page": 9,
+          "text": "Note 1.5.1",
+          "x": 62.36220472440945,
+          "y": 221.7196503937008
+        },
+        "note-complex-series-comparison": {
+          "page": 20,
+          "text": "Note 2.2.1",
+          "x": 62.36220472440945,
+          "y": 82.88485039370079
+        },
+        "note-complex-versus-real-derivative": {
+          "page": 161,
+          "text": "Note A.3.1",
+          "x": 62.36220472440945,
+          "y": 118.63485039370079
+        },
+        "note-conjugate-modulus": {
+          "page": 161,
+          "text": "Note A.3.2",
+          "x": 62.36220472440945,
+          "y": 378.75145039370085
+        },
+        "note-construct-derivative-first": {
+          "page": 111,
+          "text": "Note 8.3.1",
+          "x": 62.36220472440945,
+          "y": 333.05145039370086
+        },
+        "note-continuity-across-interface": {
+          "page": 122,
+          "text": "Note 9.1.2",
+          "x": 62.36220472440945,
+          "y": 189.96765039370078
+        },
+        "note-continuous-integer": {
+          "page": 62,
+          "text": "Note 4.1.3",
+          "x": 62.36220472440945,
+          "y": 474.514450393701
+        },
+        "note-contractible-loop": {
+          "page": 64,
+          "text": "Note 4.2.3",
+          "x": 62.36220472440945,
+          "y": 257.7366503937008
+        },
+        "note-contradiction-blueprint": {
+          "page": 102,
+          "text": "Note 7.4.2",
+          "x": 62.36220472440945,
+          "y": 147.5538503937008
+        },
+        "note-contradiction-strategy": {
+          "page": 77,
+          "text": "Note 5.3.11",
+          "x": 62.36220472440945,
+          "y": 189.96765039370078
+        },
+        "note-convex-interpolation": {
+          "page": 51,
+          "text": "Note 3.5.4",
+          "x": 62.36220472440945,
+          "y": 246.98265039370082
+        },
+        "note-copy-periodic-cell": {
+          "page": 152,
+          "text": "Note 14.1.2",
+          "x": 62.36220472440945,
+          "y": 65.19685039370079
+        },
+        "note-counting-for-injectivity": {
+          "page": 103,
+          "text": "Note 7.4.5",
+          "x": 62.36220472440945,
+          "y": 645.3570503937009
+        },
+        "note-covering-map-memo": {
+          "page": 130,
+          "text": "Note 9.3.1",
+          "x": 62.36220472440945,
+          "y": 82.88485039370079
+        },
+        "note-cr-directions": {
+          "page": 12,
+          "text": "Note 1.6.3",
+          "x": 62.36220472440945,
+          "y": 561.2712503937009
+        },
+        "note-cr-jacobian-invertibility": {
+          "page": 12,
+          "text": "Note 1.6.2",
+          "x": 62.36220472440945,
+          "y": 468.90045039370085
+        },
+        "note-cr-jacobian-mnemonic": {
+          "page": 13,
+          "text": "Note 1.6.4",
+          "x": 62.36220472440945,
+          "y": 157.03365039370078
+        },
+        "note-cr-linear-parts": {
+          "page": 11,
+          "text": "Note 1.6.1",
+          "x": 62.36220472440945,
+          "y": 354.73665039370087
+        },
+        "note-difference-and-squeeze": {
+          "page": 108,
+          "text": "Note 8.1.4",
+          "x": 62.36220472440945,
+          "y": 65.19685039370079
+        },
+        "note-differentiation-strategy": {
+          "page": 27,
+          "text": "Note 2.5.2",
+          "x": 62.36220472440945,
+          "y": 65.19685039370079
+        },
+        "note-disk-automorphism-motivation": {
+          "page": 97,
+          "text": "Note 7.2.4",
+          "x": 62.36220472440945,
+          "y": 572.545720472441
+        },
+        "note-double-conjugation": {
+          "page": 122,
+          "text": "Note 9.1.3",
+          "x": 62.36220472440945,
+          "y": 627.5752503937008
+        },
+        "note-entire-degree-strategy": {
+          "page": 58,
+          "text": "Note 3.7.8",
+          "x": 62.36220472440945,
+          "y": 65.19685039370079
+        },
+        "note-entire-not-polynomial": {
+          "page": 79,
+          "text": "Note 5.3.16",
+          "x": 62.36220472440945,
+          "y": 65.19685039370079
+        },
+        "note-entire-to-disk": {
+          "page": 58,
+          "text": "Note 3.7.10",
+          "x": 62.36220472440945,
+          "y": 398.7722503937009
+        },
+        "note-essential-behavior": {
+          "page": 76,
+          "text": "Note 5.3.8",
+          "x": 62.36220472440945,
+          "y": 65.19685039370079
+        },
+        "note-essential-infinite-order": {
+          "page": 76,
+          "text": "Note 5.3.9",
+          "x": 62.36220472440945,
+          "y": 556.6154503937008
+        },
+        "note-euler-connected": {
+          "page": 38,
+          "text": "Note 3.1.1",
+          "x": 62.36220472440945,
+          "y": 343.86665039370087
+        },
+        "note-exponential-locality": {
+          "page": 129,
+          "text": "Note 9.2.8",
+          "x": 62.36220472440945,
+          "y": 472.48065039370084
+        },
+        "note-exponential-trick": {
+          "page": 113,
+          "text": "Note 8.3.5",
+          "x": 62.36220472440945,
+          "y": 136.5098503937008
+        },
+        "note-extremal-roadmap": {
+          "page": 135,
+          "text": "Note 10.3.1",
+          "x": 62.36220472440945,
+          "y": 254.7556503937008
+        },
+        "note-extremum-compactness": {
+          "page": 137,
+          "text": "Note 10.3.4",
+          "x": 62.36220472440945,
+          "y": 65.19685039370079
+        },
+        "note-factorization-strategy": {
+          "page": 79,
+          "text": "Note 5.3.17",
+          "x": 62.36220472440945,
+          "y": 173.9476503937008
+        },
+        "note-family-topology": {
+          "page": 132,
+          "text": "Note 10.2.1",
+          "x": 62.36220472440945,
+          "y": 465.12685039370086
+        },
+        "note-forced-subsequence": {
+          "page": 134,
+          "text": "Note 10.2.3",
+          "x": 62.36220472440945,
+          "y": 334.72721653543306
+        },
+        "note-formal-geometric": {
+          "page": 18,
+          "text": "Note 2.1.2",
+          "x": 62.36220472440945,
+          "y": 86.09685039370078
+        },
+        "note-fourier-coefficients": {
+          "page": 71,
+          "text": "Note 5.2.4",
+          "x": 62.36220472440945,
+          "y": 500.78905039370085
+        },
+        "note-fourier-contour-choice": {
+          "page": 88,
+          "text": "Note 6.2.3",
+          "x": 62.36220472440945,
+          "y": 181.93288582677164
+        },
+        "note-fourier-zero-mode": {
+          "page": 113,
+          "text": "Note 8.3.6",
+          "x": 62.36220472440945,
+          "y": 575.363550393701
+        },
+        "note-fta-contradiction-strategy": {
+          "page": 35,
+          "text": "Note 2.7.2",
+          "x": 62.36220472440945,
+          "y": 65.19685039370079
+        },
+        "note-fta-inverse-distinction": {
+          "page": 35,
+          "text": "Note 2.7.4",
+          "x": 62.36220472440945,
+          "y": 489.01145039370107
+        },
+        "note-fta-local-maximum-step": {
+          "page": 36,
+          "text": "Note 2.7.8",
+          "x": 62.36220472440945,
+          "y": 290.73106771653545
+        },
+        "note-fta-modulus-continuity": {
+          "page": 36,
+          "text": "Note 2.7.7",
+          "x": 62.36220472440945,
+          "y": 182.16026771653543
+        },
+        "note-fta-modulus-direction": {
+          "page": 35,
+          "text": "Note 2.7.6",
+          "x": 62.36220472440945,
+          "y": 690.7402503937011
+        },
+        "note-fta-reciprocal": {
+          "page": 35,
+          "text": "Note 2.7.3",
+          "x": 62.36220472440945,
+          "y": 157.56765039370077
+        },
+        "note-fta-unused-hypothesis": {
+          "page": 35,
+          "text": "Note 2.7.5",
+          "x": 62.36220472440945,
+          "y": 581.7758503937011
+        },
+        "note-geometric-inverse-strategy": {
+          "page": 18,
+          "text": "Note 2.1.4",
+          "x": 62.36220472440945,
+          "y": 573.243850393701
+        },
+        "note-geometric-kernel": {
+          "page": 56,
+          "text": "Note 3.7.4",
+          "x": 62.36220472440945,
+          "y": 566.190250393701
+        },
+        "note-geometric-proof-reading": {
+          "page": 138,
+          "text": "Note 10.3.7",
+          "x": 62.36220472440945,
+          "y": 649.0429503937007
+        },
+        "note-goursat-linear-approximation": {
+          "page": 44,
+          "text": "Note 3.3.2",
+          "x": 62.36220472440945,
+          "y": 277.9162307086614
+        },
+        "note-goursat-localization": {
+          "page": 44,
+          "text": "Note 3.3.1",
+          "x": 62.36220472440945,
+          "y": 169.34543070866138
+        },
+        "note-goursat-scaling": {
+          "page": 44,
+          "text": "Note 3.3.3",
+          "x": 62.36220472440945,
+          "y": 386.4870307086614
+        },
+        "note-grid-cancellation": {
+          "page": 65,
+          "text": "Note 4.2.4",
+          "x": 62.36220472440945,
+          "y": 521.420350393701
+        },
+        "note-half-plane-reading": {
+          "page": 99,
+          "text": "Note 7.3.1",
+          "x": 62.36220472440945,
+          "y": 82.88485039370079
+        },
+        "note-harmonic-arc-condition": {
+          "page": 127,
+          "text": "Note 9.2.3",
+          "x": 62.36220472440945,
+          "y": 121.65985039370078
+        },
+        "note-harmonic-dirichlet-attempt": {
+          "page": 138,
+          "text": "Note 10.3.6",
+          "x": 62.36220472440945,
+          "y": 385.52095039370084
+        },
+        "note-harmonic-two-variables": {
+          "page": 106,
+          "text": "Note 8.1.1",
+          "x": 62.36220472440945,
+          "y": 193.32525039370077
+        },
+        "note-homology-domain": {
+          "page": 63,
+          "text": "Note 4.2.2",
+          "x": 62.36220472440945,
+          "y": 603.6704503937008
+        },
+        "note-identity-strategy": {
+          "page": 39,
+          "text": "Note 3.1.2",
+          "x": 62.36220472440945,
+          "y": 267.9818503937008
+        },
+        "note-image-preimage-count": {
+          "page": 85,
+          "text": "Note 6.1.7",
+          "x": 62.36220472440945,
+          "y": 432.4980503937009
+        },
+        "note-imaginary-odd-reflection": {
+          "page": 123,
+          "text": "Note 9.1.4",
+          "x": 62.36220472440945,
+          "y": 455.40164985298
+        },
+        "note-imaginary-potential": {
+          "page": 108,
+          "text": "Note 8.1.7",
+          "x": 62.36220472440945,
+          "y": 581.0530299212598
+        },
+        "note-improper-convergence": {
+          "page": 88,
+          "text": "Note 6.2.4",
+          "x": 62.36220472440945,
+          "y": 290.50368582677163
+        },
+        "note-integer-exponential": {
+          "page": 62,
+          "text": "Note 4.1.2",
+          "x": 62.36220472440945,
+          "y": 65.19685039370079
+        },
+        "note-integration-constants": {
+          "page": 47,
+          "text": "Note 3.4.2",
+          "x": 62.36220472440945,
+          "y": 121.65985039370078
+        },
+        "note-interior-winding": {
+          "page": 104,
+          "text": "Note 7.4.6",
+          "x": 62.36220472440945,
+          "y": 65.19685039370079
+        },
+        "note-intro-open-ball": {
+          "page": 158,
+          "text": "Note A.2.1",
+          "x": 62.36220472440945,
+          "y": 209.83565039370077
+        },
+        "note-inverse-coefficient-chain": {
+          "page": 29,
+          "text": "Note 2.6.3",
+          "x": 62.36220472440945,
+          "y": 223.19132992125986
+        },
+        "note-inverse-coefficient-uniqueness": {
+          "page": 29,
+          "text": "Note 2.6.2",
+          "x": 62.36220472440945,
+          "y": 65.19685039370079
+        },
+        "note-inverse-conjugate": {
+          "page": 7,
+          "text": "Note 1.1.1",
+          "x": 62.36220472440945,
+          "y": 446.5512503937008
+        },
+        "note-inverse-constant": {
+          "page": 18,
+          "text": "Note 2.1.3",
+          "x": 62.36220472440945,
+          "y": 238.4384503937008
+        },
+        "note-inverse-majorant-strategy": {
+          "page": 30,
+          "text": "Note 2.6.4",
+          "x": 62.36220472440945,
+          "y": 365.6739503937008
+        },
+        "note-inverse-types": {
+          "page": 78,
+          "text": "Note 5.3.15",
+          "x": 62.36220472440945,
+          "y": 629.3136440944884
+        },
+        "note-inversion-radius": {
+          "page": 69,
+          "text": "Note 5.2.2",
+          "x": 62.36220472440945,
+          "y": 384.7644503937007
+        },
+        "note-isolated-motivation": {
+          "page": 73,
+          "text": "Note 5.3.1",
+          "x": 62.36220472440945,
+          "y": 175.25565039370082
+        },
+        "note-jacobian-factor": {
+          "page": 90,
+          "text": "Note 6.2.9",
+          "x": 62.36220472440945,
+          "y": 475.47186141732294
+        },
+        "note-laplacian-and-extrema": {
+          "page": 108,
+          "text": "Note 8.1.6",
+          "x": 62.36220472440945,
+          "y": 266.1384503937008
+        },
+        "note-large-arc-estimate": {
+          "page": 89,
+          "text": "Note 6.2.6",
+          "x": 62.36220472440945,
+          "y": 569.7883055118112
+        },
+        "note-lattice-and-cell": {
+          "page": 151,
+          "text": "Note 14.1.1",
+          "x": 62.36220472440945,
+          "y": 348.7032535433071
+        },
+        "note-laurent-construction": {
+          "page": 71,
+          "text": "Note 5.2.3",
+          "x": 62.36220472440945,
+          "y": 65.19685039370079
+        },
+        "note-laurent-distinction": {
+          "page": 18,
+          "text": "Note 2.1.5",
+          "x": 62.36220472440945,
+          "y": 665.614650393701
+        },
+        "note-laurent-motivation": {
+          "page": 69,
+          "text": "Note 5.2.1",
+          "x": 62.36220472440945,
+          "y": 82.88485039370079
+        },
+        "note-leading-term-angle": {
+          "page": 124,
+          "text": "Note 9.1.6",
+          "x": 62.36220472440945,
+          "y": 419.18425039370084
+        },
+        "note-level-change": {
+          "page": 77,
+          "text": "Note 5.3.12",
+          "x": 62.36220472440945,
+          "y": 282.3384503937008
+        },
+        "note-liouville-maximum-caution": {
+          "page": 58,
+          "text": "Note 3.7.9",
+          "x": 62.36220472440945,
+          "y": 290.2014503937009
+        },
+        "note-local-cauchy-strategy": {
+          "page": 122,
+          "text": "Note 9.1.1",
+          "x": 62.36220472440945,
+          "y": 65.19685039370079
+        },
+        "note-local-compact-neighborhood": {
+          "page": 128,
+          "text": "Note 9.2.6",
+          "x": 62.36220472440945,
+          "y": 276.1306503937008
+        },
+        "note-local-global-inverse": {
+          "page": 124,
+          "text": "Note 9.1.5",
+          "x": 62.36220472440945,
+          "y": 310.6134503937008
+        },
+        "note-local-global-maximum": {
+          "page": 39,
+          "text": "Note 3.1.4",
+          "x": 62.36220472440945,
+          "y": 650.8892503937006
+        },
+        "note-local-global-primitive": {
+          "page": 45,
+          "text": "Note 3.3.4",
+          "x": 62.36220472440945,
+          "y": 327.3808503937009
+        },
+        "note-local-homotopy": {
+          "page": 50,
+          "text": "Note 3.5.2",
+          "x": 62.36220472440945,
+          "y": 65.19685039370079
+        },
+        "note-log-and-hole": {
+          "page": 115,
+          "text": "Note 8.3.8",
+          "x": 62.36220472440945,
+          "y": 65.19685039370079
+        },
+        "note-log-derivation": {
+          "page": 52,
+          "text": "Note 3.6.1",
+          "x": 62.36220472440945,
+          "y": 602.9894503937008
+        },
+        "note-log-derivative-comparison": {
+          "page": 148,
+          "text": "Note 13.2.4",
+          "x": 62.36220472440945,
+          "y": 524.6217330708663
+        },
+        "note-log-derivative-multiplicity": {
+          "page": 83,
+          "text": "Note 6.1.4",
+          "x": 62.36220472440945,
+          "y": 447.00161574803167
+        },
+        "note-log-winding": {
+          "page": 53,
+          "text": "Note 3.6.2",
+          "x": 62.36220472440945,
+          "y": 65.19685039370079
+        },
+        "note-logarithm-embedding": {
+          "page": 135,
+          "text": "Note 10.3.2",
+          "x": 62.36220472440945,
+          "y": 620.6482503937009
+        },
+        "note-logarithmic-differentiation": {
+          "page": 144,
+          "text": "Note 13.1.1",
+          "x": 62.36220472440945,
+          "y": 431.5001503937009
+        },
+        "note-logs-and-ascoli": {
+          "page": 144,
+          "text": "Note 13.1.2",
+          "x": 62.36220472440945,
+          "y": 556.450950393701
+        },
+        "note-mean-value-reading": {
+          "page": 112,
+          "text": "Note 8.3.4",
+          "x": 62.36220472440945,
+          "y": 453.5198503937009
+        },
+        "note-meromorphic-quotient": {
+          "page": 75,
+          "text": "Note 5.3.6",
+          "x": 62.36220472440945,
+          "y": 157.56765039370077
+        },
+        "note-minimum-modulus-zero": {
+          "page": 34,
+          "text": "Note 2.7.1",
+          "x": 62.36220472440945,
+          "y": 457.4242503937009
+        },
+        "note-ml-strategy": {
+          "page": 42,
+          "text": "Note 3.2.4",
+          "x": 62.36220472440945,
+          "y": 499.1228818897639
+        },
+        "note-mobius-boundaries": {
+          "page": 96,
+          "text": "Note 7.2.2",
+          "x": 62.36220472440945,
+          "y": 65.19685039370079
+        },
+        "note-mobius-level": {
+          "page": 100,
+          "text": "Note 7.3.3",
+          "x": 62.36220472440945,
+          "y": 174.12765039370078
+        },
+        "note-mobius-sphere": {
+          "page": 95,
+          "text": "Note 7.2.1",
+          "x": 62.36220472440945,
+          "y": 604.780381496063
+        },
+        "note-modulus-and-infinity": {
+          "page": 159,
+          "text": "Note A.2.4",
+          "x": 62.36220472440945,
+          "y": 595.4033413196851
+        },
+        "note-morera-locality": {
+          "page": 59,
+          "text": "Note 3.7.11",
+          "x": 62.36220472440945,
+          "y": 293.8776503937009
+        },
+        "note-multiplicative-compositional-inverse": {
+          "page": 28,
+          "text": "Note 2.6.1",
+          "x": 62.36220472440945,
+          "y": 175.25565039370082
+        },
+        "note-nonzero-derivative-inverse": {
+          "page": 31,
+          "text": "Note 2.6.5",
+          "x": 62.36220472440945,
+          "y": 65.19685039370079
+        },
+        "note-normalization-at-zero": {
+          "page": 149,
+          "text": "Note 13.2.5",
+          "x": 62.36220472440945,
+          "y": 65.19685039370079
+        },
+        "note-omitted-value-not-singularity": {
+          "page": 102,
+          "text": "Note 7.4.3",
+          "x": 62.36220472440945,
+          "y": 256.1246503937008
+        },
+        "note-one-and-two-periods": {
+          "page": 155,
+          "text": "Note 14.2.1",
+          "x": 62.36220472440945,
+          "y": 212.84105039370078
+        },
+        "note-open-closed-strategy": {
+          "page": 104,
+          "text": "Note 7.4.7",
+          "x": 62.36220472440945,
+          "y": 303.40557548740156
+        },
+        "note-open-mapping-reduction": {
+          "page": 32,
+          "text": "Note 2.6.8",
+          "x": 62.36220472440945,
+          "y": 157.32798031496063
+        },
+        "note-order-degree": {
+          "page": 17,
+          "text": "Note 2.1.1",
+          "x": 62.36220472440945,
+          "y": 614.9630503937008
+        },
+        "note-orthogonal-projection": {
+          "page": 72,
+          "text": "Note 5.2.5",
+          "x": 62.36220472440945,
+          "y": 65.19685039370079
+        },
+        "note-overlapping-images": {
+          "page": 124,
+          "text": "Note 9.1.7",
+          "x": 62.36220472440945,
+          "y": 543.955050393701
+        },
+        "note-part-determines-whole": {
+          "page": 116,
+          "text": "Note 8.3.9",
+          "x": 62.36220472440945,
+          "y": 65.19685039370079
+        },
+        "note-partial-integration": {
+          "page": 112,
+          "text": "Note 8.3.3",
+          "x": 62.36220472440945,
+          "y": 65.19685039370079
+        },
+        "note-path-independence": {
+          "page": 41,
+          "text": "Note 3.2.2",
+          "x": 62.36220472440945,
+          "y": 524.223650393701
+        },
+        "note-path-uniform-neighborhood": {
+          "page": 46,
+          "text": "Note 3.4.1",
+          "x": 62.36220472440945,
+          "y": 251.26865039370085
+        },
+        "note-perturbation-intuition": {
+          "page": 83,
+          "text": "Note 6.1.5",
+          "x": 62.36220472440945,
+          "y": 555.9660157480315
+        },
+        "note-polar-and-composition": {
+          "page": 101,
+          "text": "Note 7.4.1",
+          "x": 62.36220472440945,
+          "y": 416.67849862992136
+        },
+        "note-polar-powers": {
+          "page": 8,
+          "text": "Note 1.3.1",
+          "x": 62.36220472440945,
+          "y": 275.9051503937008
+        },
+        "note-pole-shape": {
+          "page": 74,
+          "text": "Note 5.3.5",
+          "x": 62.36220472440945,
+          "y": 514.5122503937009
+        },
+        "note-potential-field": {
+          "page": 107,
+          "text": "Note 8.1.3",
+          "x": 62.36220472440945,
+          "y": 245.32065039370082
+        },
+        "note-potential-restriction": {
+          "page": 111,
+          "text": "Note 8.3.2",
+          "x": 62.36220472440945,
+          "y": 441.6222503937009
+        },
+        "note-power-map-polar": {
+          "page": 32,
+          "text": "Note 2.6.9",
+          "x": 62.36220472440945,
+          "y": 249.69878031496063
+        },
+        "note-principal-part-caution": {
+          "page": 74,
+          "text": "Note 5.3.4",
+          "x": 62.36220472440945,
+          "y": 65.19685039370079
+        },
+        "note-product-series-strategy": {
+          "page": 22,
+          "text": "Note 2.3.1",
+          "x": 62.36220472440945,
+          "y": 629.9465503937008
+        },
+        "note-projection-vector": {
+          "page": 159,
+          "text": "Note A.2.3",
+          "x": 62.36220472440945,
+          "y": 273.14024131968506
+        },
+        "note-proper-direction": {
+          "page": 127,
+          "text": "Note 9.2.4",
+          "x": 62.36220472440945,
+          "y": 439.0352503937009
+        },
+        "note-purposeful-transformations": {
+          "page": 31,
+          "text": "Note 2.6.7",
+          "x": 62.36220472440945,
+          "y": 266.1384503937008
+        },
+        "note-quadratic-perturbation": {
+          "page": 108,
+          "text": "Note 8.1.5",
+          "x": 62.36220472440945,
+          "y": 157.56765039370077
+        },
+        "note-rational-density-analogy": {
+          "page": 77,
+          "text": "Note 5.3.10",
+          "x": 62.36220472440945,
+          "y": 65.19685039370079
+        },
+        "note-rational-domain": {
+          "page": 158,
+          "text": "Note A.2.2",
+          "x": 62.36220472440945,
+          "y": 596.6386661417324
+        },
+        "note-real-and-complex-log": {
+          "page": 114,
+          "text": "Note 8.3.7",
+          "x": 62.36220472440945,
+          "y": 65.19685039370079
+        },
+        "note-real-complex-cube": {
+          "page": 78,
+          "text": "Note 5.3.14",
+          "x": 62.36220472440945,
+          "y": 419.4084503937009
+        },
+        "note-recenter-strategy": {
+          "page": 25,
+          "text": "Note 2.4.2",
+          "x": 62.36220472440945,
+          "y": 592.378750393701
+        },
+        "note-removable-limit": {
+          "page": 73,
+          "text": "Note 5.3.2",
+          "x": 62.36220472440945,
+          "y": 482.53035039370087
+        },
+        "note-removable-two-cases": {
+          "page": 77,
+          "text": "Note 5.3.13",
+          "x": 62.36220472440945,
+          "y": 430.30285039370085
+        },
+        "note-residue-motivation": {
+          "page": 81,
+          "text": "Note 6.1.1",
+          "x": 62.36220472440945,
+          "y": 82.88485039370079
+        },
+        "note-residue-piecewise-strategy": {
+          "page": 82,
+          "text": "Note 6.1.3",
+          "x": 62.36220472440945,
+          "y": 490.0547503937009
+        },
+        "note-residue-surviving-term": {
+          "page": 82,
+          "text": "Note 6.1.2",
+          "x": 62.36220472440945,
+          "y": 65.19685039370079
+        },
+        "note-roots-unity-rotation": {
+          "page": 8,
+          "text": "Note 1.3.2",
+          "x": 62.36220472440945,
+          "y": 477.7432503937009
+        },
+        "note-rotation-reflection": {
+          "page": 98,
+          "text": "Note 7.2.5",
+          "x": 62.36220472440945,
+          "y": 302.79465039370086
+        },
+        "note-rouche-disk": {
+          "page": 84,
+          "text": "Note 6.1.6",
+          "x": 62.36220472440945,
+          "y": 472.6673503937009
+        },
+        "note-schwarz-dominance": {
+          "page": 93,
+          "text": "Note 7.1.2",
+          "x": 62.36220472440945,
+          "y": 500.279450393701
+        },
+        "note-schwarz-reciprocal": {
+          "page": 93,
+          "text": "Note 7.1.3",
+          "x": 62.36220472440945,
+          "y": 608.8502503937009
+        },
+        "note-schwarz-stepping-stone": {
+          "page": 93,
+          "text": "Note 7.1.1",
+          "x": 62.36220472440945,
+          "y": 82.88485039370079
+        },
+        "note-series-holomorphic": {
+          "page": 75,
+          "text": "Note 5.3.7",
+          "x": 62.36220472440945,
+          "y": 563.6572503937009
+        },
+        "note-sinc-example": {
+          "page": 73,
+          "text": "Note 5.3.3",
+          "x": 62.36220472440945,
+          "y": 574.9011503937008
+        },
+        "note-sinc-extension": {
+          "page": 88,
+          "text": "Note 6.2.5",
+          "x": 62.36220472440945,
+          "y": 418.6334858267717
+        },
+        "note-sine-zero-guess": {
+          "page": 147,
+          "text": "Note 13.2.3",
+          "x": 62.36220472440945,
+          "y": 214.3626503937008
+        },
+        "note-small-arc-residue": {
+          "page": 89,
+          "text": "Note 6.2.7",
+          "x": 62.36220472440945,
+          "y": 662.3391055118112
+        },
+        "note-split-chain": {
+          "page": 67,
+          "text": "Note 4.2.7",
+          "x": 62.36220472440945,
+          "y": 186.11535708661415
+        },
+        "note-square-components": {
+          "page": 162,
+          "text": "Note A.3.3",
+          "x": 62.36220472440945,
+          "y": 65.19685039370079
+        },
+        "note-straightening-coordinates": {
+          "page": 125,
+          "text": "Note 9.2.1",
+          "x": 62.36220472440945,
+          "y": 406.8774503937009
+        },
+        "note-stream-meaning": {
+          "page": 110,
+          "text": "Note 8.1.8",
+          "x": 62.36220472440945,
+          "y": 65.19685039370079
+        },
+        "note-subtract-constant": {
+          "page": 41,
+          "text": "Note 3.2.3",
+          "x": 62.36220472440945,
+          "y": 616.5944503937009
+        },
+        "note-testing-log-modulus": {
+          "page": 129,
+          "text": "Note 9.2.7",
+          "x": 62.36220472440945,
+          "y": 347.70985039370083
+        },
+        "note-three-points-matrix": {
+          "page": 96,
+          "text": "Note 7.2.3",
+          "x": 62.36220472440945,
+          "y": 647.8103066437008
+        },
+        "note-trig-calculation": {
+          "page": 91,
+          "text": "Note 6.2.10",
+          "x": 62.36220472440945,
+          "y": 344.9473503937009
+        },
+        "note-trigonometric-motivation": {
+          "page": 90,
+          "text": "Note 6.2.8",
+          "x": 62.36220472440945,
+          "y": 81.31185039370078
+        },
+        "note-unpack-convergence": {
+          "page": 23,
+          "text": "Note 2.3.2",
+          "x": 62.36220472440945,
+          "y": 455.7634503937009
+        },
+        "note-wave-homotopy": {
+          "page": 49,
+          "text": "Note 3.5.1",
+          "x": 62.36220472440945,
+          "y": 247.2556503937008
+        },
+        "note-weighted-winding": {
+          "page": 66,
+          "text": "Note 4.2.6",
+          "x": 62.36220472440945,
+          "y": 496.7556677165354
+        },
+        "note-why-coefficient-bound": {
+          "page": 21,
+          "text": "Note 2.2.2",
+          "x": 62.36220472440945,
+          "y": 65.19685039370079
+        },
+        "note-why-disk-automorphism": {
+          "page": 102,
+          "text": "Note 7.4.4",
+          "x": 62.36220472440945,
+          "y": 381.0754503937008
+        },
+        "note-winding-injectivity": {
+          "page": 33,
+          "text": "Note 2.6.10",
+          "x": 62.36220472440945,
+          "y": 146.83665039370078
+        },
+        "note-winding-logarithm": {
+          "page": 61,
+          "text": "Note 4.1.1",
+          "x": 62.36220472440945,
+          "y": 227.1172503937008
+        },
+        "note-work-backward-inverse": {
+          "page": 33,
+          "text": "Note 2.6.11",
+          "x": 62.36220472440945,
+          "y": 239.20745039370078
+        },
+        "note-zero-factor-strategy": {
+          "page": 145,
+          "text": "Note 13.2.1",
+          "x": 62.36220472440945,
+          "y": 347.8848503937008
+        },
+        "note-zero-network-attempt": {
+          "page": 116,
+          "text": "Note 8.3.10",
+          "x": 62.36220472440945,
+          "y": 173.7676503937008
+        },
+        "note-zero-set-caution": {
+          "page": 39,
+          "text": "Note 3.1.3",
+          "x": 62.36220472440945,
+          "y": 376.55265039370084
+        },
+        "note-zeros-and-limit": {
+          "page": 136,
+          "text": "Note 10.3.3",
+          "x": 62.36220472440945,
+          "y": 366.24805039370085
+        },
+        "prop-cauchy-riemann": {
+          "page": 12,
+          "text": "Proposition 1.6.1",
+          "x": 62.36220472440945,
+          "y": 65.19685039370079
+        },
+        "prop-coefficient-exponential-bound": {
+          "page": 20,
+          "text": "Proposition 2.2.1",
+          "x": 62.36220472440945,
+          "y": 482.66945039370097
+        },
+        "prop-component-continuity": {
+          "page": 161,
+          "text": "Proposition A.3.2",
+          "x": 62.36220472440945,
+          "y": 471.1222503937009
+        },
+        "prop-conjugate-continuity": {
+          "page": 161,
+          "text": "Proposition A.3.1",
+          "x": 62.36220472440945,
+          "y": 227.2056503937008
+        },
+        "prop-dirichlet-integral": {
+          "page": 88,
+          "text": "Proposition 6.2.2",
+          "x": 62.36220472440945,
+          "y": 543.4042858267717
+        },
+        "prop-disk-involution": {
+          "page": 97,
+          "text": "Proposition 7.2.3",
+          "x": 62.36220472440945,
+          "y": 200.35965039370078
+        },
+        "prop-domain-polygonal": {
+          "page": 158,
+          "text": "Proposition A.2.1",
+          "x": 62.36220472440945,
+          "y": 269.8064503937008
+        },
+        "prop-entire-elliptic-constant": {
+          "page": 151,
+          "text": "Proposition 14.1.1",
+          "x": 62.36220472440945,
+          "y": 565.8448535433071
+        },
+        "prop-extremal-existence": {
+          "page": 136,
+          "text": "Proposition 10.3.1",
+          "x": 62.36220472440945,
+          "y": 542.1738503937007
+        },
+        "prop-half-plane-conjugation": {
+          "page": 100,
+          "text": "Proposition 7.3.1",
+          "x": 62.36220472440945,
+          "y": 266.4984503937008
+        },
+        "prop-homologous-integrals": {
+          "page": 66,
+          "text": "Proposition 4.2.1",
+          "x": 62.36220472440945,
+          "y": 176.8472677165354
+        },
+        "prop-laplacian-factorization": {
+          "page": 107,
+          "text": "Proposition 8.1.1",
+          "x": 62.36220472440945,
+          "y": 65.19685039370079
+        },
+        "prop-laurent-fourier": {
+          "page": 71,
+          "text": "Proposition 5.2.1",
+          "x": 62.36220472440945,
+          "y": 189.96765039370078
+        },
+        "prop-local-minimum-modulus": {
+          "page": 34,
+          "text": "Proposition 2.7.1",
+          "x": 62.36220472440945,
+          "y": 323.69265039370083
+        },
+        "prop-meromorphic-series-example": {
+          "page": 75,
+          "text": "Proposition 5.3.2",
+          "x": 62.36220472440945,
+          "y": 251.01845039370082
+        },
+        "prop-mobius-circles": {
+          "page": 96,
+          "text": "Proposition 7.2.2",
+          "x": 62.36220472440945,
+          "y": 174.96530664370079
+        },
+        "prop-mobius-matrix": {
+          "page": 95,
+          "text": "Proposition 7.2.1",
+          "x": 62.36220472440945,
+          "y": 221.9356503937008
+        },
+        "prop-order-product": {
+          "page": 17,
+          "text": "Proposition 2.1.1",
+          "x": 62.36220472440945,
+          "y": 449.37725039370076
+        },
+        "prop-pole-factorization": {
+          "page": 74,
+          "text": "Proposition 5.3.1",
+          "x": 62.36220472440945,
+          "y": 317.8764503937008
+        },
+        "prop-polynomial-growth-entire": {
+          "page": 57,
+          "text": "Proposition 3.7.1",
+          "x": 62.36220472440945,
+          "y": 506.4738503937009
+        },
+        "prop-proper-isomorphism-composition": {
+          "page": 127,
+          "text": "Proposition 9.2.1",
+          "x": 62.36220472440945,
+          "y": 306.4014503937008
+        },
+        "prop-quadrant-isomorphism": {
+          "page": 101,
+          "text": "Proposition 7.4.1",
+          "x": 62.36220472440945,
+          "y": 82.88485039370079
+        },
+        "prop-quartic-integral": {
+          "page": 87,
+          "text": "Proposition 6.2.1",
+          "x": 62.36220472440945,
+          "y": 65.19685039370079
+        },
+        "prop-reflection-isomorphism": {
+          "page": 123,
+          "text": "Proposition 9.1.1",
+          "x": 62.36220472440945,
+          "y": 619.1724498529799
+        },
+        "prop-rouche-polynomial-example": {
+          "page": 85,
+          "text": "Proposition 6.1.1",
+          "x": 62.36220472440945,
+          "y": 65.19685039370079
+        },
+        "prop-same-zero-divisor": {
+          "page": 145,
+          "text": "Proposition 13.2.1",
+          "x": 62.36220472440945,
+          "y": 214.52945039370076
+        },
+        "prop-simply-connected-primitive": {
+          "page": 52,
+          "text": "Proposition 3.6.1",
+          "x": 62.36220472440945,
+          "y": 175.25565039370082
+        },
+        "prop-stereographic-circles": {
+          "page": 159,
+          "text": "Proposition A.2.3",
+          "x": 62.36220472440945,
+          "y": 687.774141319685
+        },
+        "prop-stereographic-coordinates": {
+          "page": 159,
+          "text": "Proposition A.2.2",
+          "x": 62.36220472440945,
+          "y": 365.51104131968503
+        },
+        "prop-trigonometric-integral-example": {
+          "page": 91,
+          "text": "Proposition 6.2.3",
+          "x": 62.36220472440945,
+          "y": 65.19685039370079
+        },
+        "prop-weierstrass-periodicity": {
+          "page": 154,
+          "text": "Proposition 14.2.1",
+          "x": 62.36220472440945,
+          "y": 576.836150393701
+        },
+        "sec-analytic-arc-reflection": {
+          "page": 125,
+          "text": "Section 9.2",
+          "x": 62.36220472440945,
+          "y": 65.19685039370079
+        },
+        "sec-analytic-functions": {
+          "page": 25,
+          "text": "Section 2.4",
+          "x": 62.36220472440945,
+          "y": 65.19685039370079
+        },
+        "sec-cauchy-riemann": {
+          "page": 11,
+          "text": "Section 1.6",
+          "x": 62.36220472440945,
+          "y": 65.19685039370079
+        },
+        "sec-complex-definition": {
+          "page": 7,
+          "text": "Section 1.1",
+          "x": 62.36220472440945,
+          "y": 65.19685039370079
+        },
+        "sec-complex-differentiability": {
+          "page": 9,
+          "text": "Section 1.5",
+          "x": 62.36220472440945,
+          "y": 65.19685039370079
+        },
+        "sec-complex-valued-functions": {
+          "page": 8,
+          "text": "Section 1.3",
+          "x": 62.36220472440945,
+          "y": 65.19685039370079
+        },
+        "sec-conformal-angles": {
+          "page": 14,
+          "text": "Section 1.7",
+          "x": 62.36220472440945,
+          "y": 65.19685039370079
+        },
+        "sec-connected-holomorphic": {
+          "page": 38,
+          "text": "Section 3.1",
+          "x": 62.36220472440945,
+          "y": 65.19685039370079
+        },
+        "sec-convergent-power-series": {
+          "page": 20,
+          "text": "Section 2.2",
+          "x": 62.36220472440945,
+          "y": 65.19685039370079
+        },
+        "sec-disk-automorphisms": {
+          "page": 95,
+          "text": "Section 7.2",
+          "x": 62.36220472440945,
+          "y": 65.19685039370079
+        },
+        "sec-elliptic-liouville": {
+          "page": 151,
+          "text": "Section 14.1",
+          "x": 62.36220472440945,
+          "y": 65.19685039370079
+        },
+        "sec-formal-convergent-relations": {
+          "page": 22,
+          "text": "Section 2.3",
+          "x": 62.36220472440945,
+          "y": 65.19685039370079
+        },
+        "sec-formal-power-series": {
+          "page": 17,
+          "text": "Section 2.1",
+          "x": 62.36220472440945,
+          "y": 65.19685039370079
+        },
+        "sec-global-cauchy": {
+          "page": 63,
+          "text": "Section 4.2",
+          "x": 62.36220472440945,
+          "y": 65.19685039370079
+        },
+        "sec-global-primitives-log": {
+          "page": 52,
+          "text": "Section 3.6",
+          "x": 62.36220472440945,
+          "y": 65.19685039370079
+        },
+        "sec-harmonic-construction": {
+          "page": 117,
+          "text": "Section 8.5",
+          "x": 62.36220472440945,
+          "y": 65.19685039370079
+        },
+        "sec-harmonic-definition": {
+          "page": 106,
+          "text": "Section 8.1",
+          "x": 62.36220472440945,
+          "y": 65.19685039370079
+        },
+        "sec-harmonic-properties": {
+          "page": 111,
+          "text": "Section 8.3",
+          "x": 62.36220472440945,
+          "y": 65.19685039370079
+        },
+        "sec-holomorphic-compactness": {
+          "page": 132,
+          "text": "Section 10.2",
+          "x": 62.36220472440945,
+          "y": 65.19685039370079
+        },
+        "sec-homotopy-cauchy": {
+          "page": 49,
+          "text": "Section 3.5",
+          "x": 62.36220472440945,
+          "y": 65.19685039370079
+        },
+        "sec-infinite-products": {
+          "page": 143,
+          "text": "Section 13.1",
+          "x": 62.36220472440945,
+          "y": 65.19685039370079
+        },
+        "sec-integral-local-primitives": {
+          "page": 46,
+          "text": "Section 3.4",
+          "x": 62.36220472440945,
+          "y": 65.19685039370079
+        },
+        "sec-intro-continuity": {
+          "page": 161,
+          "text": "Section A.3 :",
+          "x": 62.36220472440945,
+          "y": 65.19685039370079
+        },
+        "sec-intro-stereographic": {
+          "page": 158,
+          "text": "Section A.2 :",
+          "x": 62.36220472440945,
+          "y": 65.19685039370079
+        },
+        "sec-inverse-open-mapping": {
+          "page": 28,
+          "text": "Section 2.6",
+          "x": 62.36220472440945,
+          "y": 65.19685039370079
+        },
+        "sec-isolated-singularities": {
+          "page": 73,
+          "text": "Section 5.3",
+          "x": 62.36220472440945,
+          "y": 65.19685039370079
+        },
+        "sec-laurent-series": {
+          "page": 69,
+          "text": "Section 5.2",
+          "x": 62.36220472440945,
+          "y": 65.19685039370079
+        },
+        "sec-little-picard": {
+          "page": 140,
+          "text": "Section 11.3",
+          "x": 62.36220472440945,
+          "y": 65.19685039370079
+        },
+        "sec-local-cauchy-formula": {
+          "page": 54,
+          "text": "Section 3.7",
+          "x": 62.36220472440945,
+          "y": 65.19685039370079
+        },
+        "sec-local-maximum-modulus": {
+          "page": 34,
+          "text": "Section 2.7",
+          "x": 62.36220472440945,
+          "y": 65.19685039370079
+        },
+        "sec-local-primitives": {
+          "page": 43,
+          "text": "Section 3.3",
+          "x": 62.36220472440945,
+          "y": 65.19685039370079
+        },
+        "sec-other-conformal-examples": {
+          "page": 101,
+          "text": "Section 7.4",
+          "x": 62.36220472440945,
+          "y": 65.19685039370079
+        },
+        "sec-path-integrals": {
+          "page": 40,
+          "text": "Section 3.2",
+          "x": 62.36220472440945,
+          "y": 65.19685039370079
+        },
+        "sec-power-series-differentiation": {
+          "page": 26,
+          "text": "Section 2.5",
+          "x": 62.36220472440945,
+          "y": 65.19685039370079
+        },
+        "sec-residue-definite-integrals": {
+          "page": 86,
+          "text": "Section 6.2",
+          "x": 62.36220472440945,
+          "y": 65.19685039370079
+        },
+        "sec-residue-formula": {
+          "page": 81,
+          "text": "Section 6.1",
+          "x": 62.36220472440945,
+          "y": 65.19685039370079
+        },
+        "sec-riemann-mapping-proof": {
+          "page": 135,
+          "text": "Section 10.3",
+          "x": 62.36220472440945,
+          "y": 65.19685039370079
+        },
+        "sec-schwarz-lemma": {
+          "page": 93,
+          "text": "Section 7.1",
+          "x": 62.36220472440945,
+          "y": 65.19685039370079
+        },
+        "sec-schwarz-reflection": {
+          "page": 121,
+          "text": "Section 9.1",
+          "x": 62.36220472440945,
+          "y": 65.19685039370079
+        },
+        "sec-schwarz-reflection-application": {
+          "page": 130,
+          "text": "Section 9.3",
+          "x": 62.36220472440945,
+          "y": 65.19685039370079
+        },
+        "sec-upper-half-plane": {
+          "page": 99,
+          "text": "Section 7.3",
+          "x": 62.36220472440945,
+          "y": 65.19685039370079
+        },
+        "sec-weierstrass-elliptic": {
+          "page": 154,
+          "text": "Section 14.2",
+          "x": 62.36220472440945,
+          "y": 65.19685039370079
+        },
+        "sec-weierstrass-products": {
+          "page": 145,
+          "text": "Section 13.2",
+          "x": 62.36220472440945,
+          "y": 65.19685039370079
+        },
+        "sec-winding-number": {
+          "page": 61,
+          "text": "Section 4.1",
+          "x": 62.36220472440945,
+          "y": 65.19685039370079
+        },
+        "thm-analytic-inverse": {
+          "page": 28,
+          "text": "Theorem 2.6.1",
+          "x": 62.36220472440945,
+          "y": 267.6264503937008
+        },
+        "thm-angle-preservation": {
+          "page": 15,
+          "text": "Theorem 1.7.1",
+          "x": 62.36220472440945,
+          "y": 65.19685039370079
+        },
+        "thm-annular-log-decomposition": {
+          "page": 114,
+          "text": "Theorem 8.3.6",
+          "x": 62.36220472440945,
+          "y": 235.4476503937008
+        },
+        "thm-annular-mean": {
+          "page": 113,
+          "text": "Theorem 8.3.5",
+          "x": 62.36220472440945,
+          "y": 261.2806503937008
+        },
+        "thm-arc-coordinate-reflection": {
+          "page": 125,
+          "text": "Theorem 9.2.1",
+          "x": 62.36220472440945,
+          "y": 515.4482503937008
+        },
+        "thm-argument-principle": {
+          "page": 83,
+          "text": "Theorem 6.1.3",
+          "x": 62.36220472440945,
+          "y": 65.19685039370079
+        },
+        "thm-boundary-circle-surjection": {
+          "page": 101,
+          "text": "Theorem 7.4.1",
+          "x": 62.36220472440945,
+          "y": 525.2492986299213
+        },
+        "thm-boundary-conformal-criterion": {
+          "page": 103,
+          "text": "Theorem 7.4.2",
+          "x": 62.36220472440945,
+          "y": 213.5218503937008
+        },
+        "thm-casorati-weierstrass": {
+          "page": 76,
+          "text": "Theorem 5.3.2",
+          "x": 62.36220472440945,
+          "y": 263.9676503937008
+        },
+        "thm-cayley-transform": {
+          "page": 99,
+          "text": "Theorem 7.3.1",
+          "x": 62.36220472440945,
+          "y": 175.25565039370082
+        },
+        "thm-complex-chain-rule": {
+          "page": 9,
+          "text": "Theorem 1.5.1",
+          "x": 62.36220472440945,
+          "y": 297.8904503937008
+        },
+        "thm-convergent-reciprocal": {
+          "page": 23,
+          "text": "Theorem 2.3.2",
+          "x": 62.36220472440945,
+          "y": 81.31185039370078
+        },
+        "thm-disk-automorphisms": {
+          "page": 98,
+          "text": "Theorem 7.2.1",
+          "x": 62.36220472440945,
+          "y": 65.19685039370079
+        },
+        "thm-disk-map-boundary-extension": {
+          "page": 128,
+          "text": "Theorem 9.2.4",
+          "x": 62.36220472440945,
+          "y": 543.4937417322834
+        },
+        "thm-elliptic-residue-sum": {
+          "page": 152,
+          "text": "Theorem 14.1.1",
+          "x": 62.36220472440945,
+          "y": 173.7676503937008
+        },
+        "thm-elliptic-zero-pole-count": {
+          "page": 152,
+          "text": "Theorem 14.1.2",
+          "x": 62.36220472440945,
+          "y": 536.3308692913387
+        },
+        "thm-formal-multiplicative-inverse": {
+          "page": 18,
+          "text": "Theorem 2.1.1",
+          "x": 62.36220472440945,
+          "y": 330.80925039370084
+        },
+        "thm-fourier-residue-integral": {
+          "page": 87,
+          "text": "Theorem 6.2.2",
+          "x": 62.36220472440945,
+          "y": 279.4934503937008
+        },
+        "thm-fundamental-algebra-root": {
+          "page": 34,
+          "text": "Theorem 2.7.2",
+          "x": 62.36220472440945,
+          "y": 584.7500503937009
+        },
+        "thm-global-cauchy": {
+          "page": 65,
+          "text": "Theorem 4.2.2",
+          "x": 62.36220472440945,
+          "y": 65.19685039370079
+        },
+        "thm-global-maximum-modulus": {
+          "page": 39,
+          "text": "Theorem 3.1.3",
+          "x": 62.36220472440945,
+          "y": 485.12345039370086
+        },
+        "thm-goursat-rectangle": {
+          "page": 43,
+          "text": "Theorem 3.3.1",
+          "x": 62.36220472440945,
+          "y": 118.63485039370079
+        },
+        "thm-harmonic-arc-reflection": {
+          "page": 126,
+          "text": "Theorem 9.2.3",
+          "x": 62.36220472440945,
+          "y": 604.4164629921261
+        },
+        "thm-harmonic-boundary-uniqueness": {
+          "page": 107,
+          "text": "Theorem 8.1.3",
+          "x": 62.36220472440945,
+          "y": 502.7252503937009
+        },
+        "thm-harmonic-conjugate": {
+          "page": 111,
+          "text": "Theorem 8.3.1",
+          "x": 62.36220472440945,
+          "y": 82.88485039370079
+        },
+        "thm-harmonic-imaginary-part": {
+          "page": 111,
+          "text": "Theorem 8.3.2",
+          "x": 62.36220472440945,
+          "y": 533.993050393701
+        },
+        "thm-harmonic-maximum": {
+          "page": 112,
+          "text": "Theorem 8.3.4",
+          "x": 62.36220472440945,
+          "y": 578.2906503937008
+        },
+        "thm-harmonic-mean-value": {
+          "page": 112,
+          "text": "Theorem 8.3.3",
+          "x": 62.36220472440945,
+          "y": 189.96765039370078
+        },
+        "thm-harmonic-odd-reflection": {
+          "page": 123,
+          "text": "Theorem 9.1.3",
+          "x": 62.36220472440945,
+          "y": 65.19685039370079
+        },
+        "thm-harmonic-orthogonality": {
+          "page": 109,
+          "text": "Theorem 8.1.4",
+          "x": 62.36220472440945,
+          "y": 65.19685039370079
+        },
+        "thm-holomorphic-analytic-cauchy-estimates": {
+          "page": 56,
+          "text": "Theorem 3.7.2",
+          "x": 62.36220472440945,
+          "y": 65.19685039370079
+        },
+        "thm-holomorphic-gluing": {
+          "page": 121,
+          "text": "Theorem 9.1.1",
+          "x": 62.36220472440945,
+          "y": 238.8204937007874
+        },
+        "thm-holomorphic-product": {
+          "page": 143,
+          "text": "Theorem 13.1.1",
+          "x": 62.36220472440945,
+          "y": 396.3608503937009
+        },
+        "thm-homotopy-cauchy": {
+          "page": 49,
+          "text": "Theorem 3.5.1",
+          "x": 62.36220472440945,
+          "y": 355.82645039370084
+        },
+        "thm-homotopy-homology": {
+          "page": 64,
+          "text": "Theorem 4.2.1",
+          "x": 62.36220472440945,
+          "y": 65.19685039370079
+        },
+        "thm-identity-analytic": {
+          "page": 38,
+          "text": "Theorem 3.1.2",
+          "x": 62.36220472440945,
+          "y": 638.4980527559056
+        },
+        "thm-image-winding-preimages": {
+          "page": 85,
+          "text": "Theorem 6.1.5",
+          "x": 62.36220472440945,
+          "y": 245.15265039370084
+        },
+        "thm-injective-analytic-isomorphism": {
+          "page": 32,
+          "text": "Theorem 2.6.4",
+          "x": 62.36220472440945,
+          "y": 592.8129803149607
+        },
+        "thm-laurent-expansion": {
+          "page": 70,
+          "text": "Theorem 5.2.1",
+          "x": 62.36220472440945,
+          "y": 65.19685039370079
+        },
+        "thm-liouville": {
+          "page": 58,
+          "text": "Theorem 3.7.3",
+          "x": 62.36220472440945,
+          "y": 173.7676503937008
+        },
+        "thm-little-picard": {
+          "page": 140,
+          "text": "Theorem 11.3.1",
+          "x": 62.36220472440945,
+          "y": 82.88485039370079
+        },
+        "thm-local-cauchy-formula": {
+          "page": 54,
+          "text": "Theorem 3.7.1",
+          "x": 62.36220472440945,
+          "y": 118.63485039370079
+        },
+        "thm-local-maximum-modulus": {
+          "page": 34,
+          "text": "Theorem 2.7.1",
+          "x": 62.36220472440945,
+          "y": 82.88485039370079
+        },
+        "thm-local-normal-form": {
+          "page": 32,
+          "text": "Theorem 2.6.3",
+          "x": 62.36220472440945,
+          "y": 358.26958031496065
+        },
+        "thm-local-primitive": {
+          "page": 45,
+          "text": "Theorem 3.3.2",
+          "x": 62.36220472440945,
+          "y": 65.19685039370079
+        },
+        "thm-local-residue": {
+          "page": 81,
+          "text": "Theorem 6.1.1",
+          "x": 62.36220472440945,
+          "y": 351.9228503937008
+        },
+        "thm-mean-value-implies-harmonic": {
+          "page": 117,
+          "text": "Theorem 8.5.1",
+          "x": 62.36220472440945,
+          "y": 82.88485039370079
+        },
+        "thm-ml-estimate": {
+          "page": 42,
+          "text": "Theorem 3.2.3",
+          "x": 62.36220472440945,
+          "y": 264.38428188976377
+        },
+        "thm-montel-compactness": {
+          "page": 132,
+          "text": "Theorem 10.2.1",
+          "x": 62.36220472440945,
+          "y": 606.0976503937007
+        },
+        "thm-morera-rectangle": {
+          "page": 59,
+          "text": "Theorem 3.7.4",
+          "x": 62.36220472440945,
+          "y": 81.31185039370078
+        },
+        "thm-open-mapping": {
+          "page": 31,
+          "text": "Theorem 2.6.2",
+          "x": 62.36220472440945,
+          "y": 377.2642503937008
+        },
+        "thm-path-fundamental": {
+          "page": 40,
+          "text": "Theorem 3.2.1",
+          "x": 62.36220472440945,
+          "y": 258.4392503937007
+        },
+        "thm-plane-automorphism": {
+          "page": 78,
+          "text": "Theorem 5.3.3",
+          "x": 62.36220472440945,
+          "y": 65.19685039370079
+        },
+        "thm-power-series-differentiation": {
+          "page": 26,
+          "text": "Theorem 2.5.1",
+          "x": 62.36220472440945,
+          "y": 159.0556503937008
+        },
+        "thm-primitive-potential": {
+          "page": 107,
+          "text": "Theorem 8.1.2",
+          "x": 62.36220472440945,
+          "y": 370.0914503937008
+        },
+        "thm-punctured-log-decomposition": {
+          "page": 115,
+          "text": "Theorem 8.3.7",
+          "x": 62.36220472440945,
+          "y": 189.96765039370078
+        },
+        "thm-removable-singularity": {
+          "page": 73,
+          "text": "Theorem 5.3.1",
+          "x": 62.36220472440945,
+          "y": 267.6264503937008
+        },
+        "thm-residue-formula": {
+          "page": 82,
+          "text": "Theorem 6.1.2",
+          "x": 62.36220472440945,
+          "y": 189.96765039370078
+        },
+        "thm-riemann-extremal": {
+          "page": 135,
+          "text": "Theorem 10.3.1",
+          "x": 62.36220472440945,
+          "y": 178.58485039370078
+        },
+        "thm-riemann-mapping": {
+          "page": 138,
+          "text": "Theorem 10.3.2",
+          "x": 62.36220472440945,
+          "y": 222.36765039370079
+        },
+        "thm-rouche": {
+          "page": 84,
+          "text": "Theorem 6.1.4",
+          "x": 62.36220472440945,
+          "y": 65.19685039370079
+        },
+        "thm-schwarz-derivative": {
+          "page": 94,
+          "text": "Theorem 7.1.2",
+          "x": 62.36220472440945,
+          "y": 65.19685039370079
+        },
+        "thm-schwarz-lemma": {
+          "page": 93,
+          "text": "Theorem 7.1.1",
+          "x": 62.36220472440945,
+          "y": 175.25565039370082
+        },
+        "thm-schwarz-reflection": {
+          "page": 122,
+          "text": "Theorem 9.1.2",
+          "x": 62.36220472440945,
+          "y": 282.3384503937008
+        },
+        "thm-series-algebra": {
+          "page": 22,
+          "text": "Theorem 2.3.1",
+          "x": 62.36220472440945,
+          "y": 106.58985039370079
+        },
+        "thm-series-analytic": {
+          "page": 25,
+          "text": "Theorem 2.4.1",
+          "x": 62.36220472440945,
+          "y": 303.1644503937008
+        },
+        "thm-series-composition": {
+          "page": 24,
+          "text": "Theorem 2.3.3",
+          "x": 62.36220472440945,
+          "y": 81.31185039370078
+        },
+        "thm-series-uniform-convergence": {
+          "page": 20,
+          "text": "Theorem 2.2.1",
+          "x": 62.36220472440945,
+          "y": 159.0556503937008
+        },
+        "thm-sine-product": {
+          "page": 147,
+          "text": "Theorem 13.2.3",
+          "x": 62.36220472440945,
+          "y": 81.31185039370078
+        },
+        "thm-two-arc-reflection": {
+          "page": 126,
+          "text": "Theorem 9.2.2",
+          "x": 62.36220472440945,
+          "y": 65.19685039370079
+        },
+        "thm-unit-circle-substitution": {
+          "page": 90,
+          "text": "Theorem 6.2.3",
+          "x": 62.36220472440945,
+          "y": 173.6826503937008
+        },
+        "thm-upper-semicircle-integral": {
+          "page": 86,
+          "text": "Theorem 6.2.1",
+          "x": 62.36220472440945,
+          "y": 175.25565039370082
+        },
+        "thm-weierstrass-factorization": {
+          "page": 146,
+          "text": "Theorem 13.2.2",
+          "x": 62.36220472440945,
+          "y": 274.70261574803146
+        },
+        "thm-wirtinger-holomorphic": {
+          "page": 106,
+          "text": "Theorem 8.1.1",
+          "x": 62.36220472440945,
+          "y": 544.9696503937007
+        },
+        "thm-zero-derivative-constant": {
+          "page": 38,
+          "text": "Theorem 3.1.1",
+          "x": 62.36220472440945,
+          "y": 118.63485039370079
+        },
+        "thm-zero-free-entire-exponential": {
+          "page": 145,
+          "text": "Theorem 13.2.1",
+          "x": 62.36220472440945,
+          "y": 82.88485039370079
+        },
+        "thm-zero-periods-primitive": {
+          "page": 41,
+          "text": "Theorem 3.2.2",
+          "x": 62.36220472440945,
+          "y": 65.19685039370079
+        },
+        "topic-boundary-injectivity": {
+          "page": 102,
+          "text": "Section 7.4.1",
+          "x": 62.36220472440945,
+          "y": 492.2862503937008
+        },
+        "topic-sinc-integral": {
+          "page": 88,
+          "text": "Section 6.2.1",
+          "x": 62.36220472440945,
+          "y": 402.51848582677167
+        },
+        "topic-trigonometric-integrals": {
+          "page": 90,
+          "text": "Section 6.2.2",
+          "x": 62.36220472440945,
+          "y": 65.19685039370079
+        }
+      },
+      "title": "Complex Analysis",
+      "published_pdf": {
+        "download_url": "https://drive.google.com/uc?export=download&id=1S5lbXD-0oAaHDAKzHiMGn8gEXbqECDto",
+        "sha256": "d34da528042afaf14748e5d787eaf2cacdfd3ffb8dd02fc124076ecba705fde1",
+        "pages": 162
+      }
+    },
     "fourier-analysis": {
       "ambiguous_labels": [],
       "pdf_url": "https://drive.google.com/file/d/19T1bn30UfoYlALJLQfWfD1rzd8ruhtyE/view?usp=drivesdk",
