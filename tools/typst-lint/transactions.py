@@ -893,7 +893,7 @@ class ProtectedTransaction:
                 self._hit('before_replace', p)
                 self._revalidate(expected)
                 # Stage ownership/content is checked, not trusted merely by its name.
-                staged = _read(self._namespace / journal / entry['stage'])
+                staged = _read(self._namespace / journal / entry['stage'], utf8=True)
                 _fail(staged.fingerprint == stages[p], f'Stage changed: {p}')
                 parent_fd = _directory((self.root / p).parent)
                 try:
@@ -993,7 +993,7 @@ class ProtectedTransaction:
                             try:
                                 _fail(_identity(os.fstat(parent_fd)) == current.parent,
                                       f'Source parent changed during recovery: {p}')
-                                stage = _read(self._namespace / journal / name)
+                                stage = _read(self._namespace / journal / name, utf8=True)
                                 _fail(stage.fingerprint == fp, f'Recovery stage changed: {p}')
                                 os.replace(name, Path(p).name, src_dir_fd=fd, dst_dir_fd=parent_fd)
                                 self._hit('after_restore', p)

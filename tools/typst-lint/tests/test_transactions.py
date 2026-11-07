@@ -8,6 +8,7 @@ import json
 import os
 from pathlib import Path
 import stat
+import subprocess
 import sys
 import tempfile
 import unittest
@@ -388,6 +389,87 @@ class TransactionTests(unittest.TestCase):
         self.assertEqual((self.a.read_bytes(), self.a.stat().st_ino), postimage)
         self.assertTrue(self.recover(journal).complete)
 
+    def require_stage_metadata(self, kind):
+        if sys.platform != 'darwin' or (kind == 'flags' and not hasattr(os, 'chflags')):
+            self.skipTest(f'macOS {kind} test')
+        probe = self.base / 'metadata-probe'
+        probe.write_bytes(b'probe')
+        try:
+            if kind == 'flags':
+                try:
+                    os.chflags(probe, stat.UF_NODUMP)
+                except OSError as error:
+                    self.skipTest(f'Cannot create test flags: {error}')
+            else:
+                result = subprocess.run(['/bin/chmod', '+a', 'everyone allow read', str(probe)],
+                                        capture_output=True, text=True)
+                if result.returncode:
+                    self.skipTest(f'Cannot create test ACL: {result.stderr.strip()}')
+        finally:
+            probe.unlink()
+
+    def mutate_stage_metadata(self, stage, kind):
+        if kind == 'flags':
+            os.chflags(stage, stat.UF_NODUMP)
+            self.assertTrue(stage.stat().st_flags & stat.UF_NODUMP)
+        elif kind == 'acl':
+            result = subprocess.run(['/bin/chmod', '+a', 'everyone allow read', str(stage)],
+                                    capture_output=True, text=True)
+            self.assertEqual(result.returncode, 0, result.stderr)
+            import transactions
+            fd = os.open(stage, os.O_RDONLY)
+            try:
+                with self.assertRaisesRegex(TransactionError, 'ACL'):
+                    transactions._plain_metadata(fd, stage)
+            finally:
+                os.close(fd)
+
+    def verify_apply_stage_metadata_refused(self, kind):
+        self.require_stage_metadata(kind)
+        before = self.a.read_bytes(), self.a.stat().st_ino
+        def fault(point, path):
+            if point == 'before_replace' and path == 'a.typ':
+                self.mutate_stage_metadata(next(self.store.glob('root-*/*/stage-0.bin')), kind)
+        with self.assertRaises(TransactionFailure) as caught:
+            self.apply(fault=fault)
+        self.assertIn('flags' if kind == 'flags' else 'ACL', str(caught.exception))
+        self.assertEqual((self.a.read_bytes(), self.a.stat().st_ino), before)
+        self.assertEqual(caught.exception.report.restored, ())
+        self.assertTrue(self.recover(caught.exception.report.journal).complete)
+
+    def verify_restore_stage_metadata_refused(self, kind):
+        self.require_stage_metadata(kind)
+        def crash(point, path):
+            if point == 'after_replace' and path == 'a.typ':
+                raise SimulatedCrash()
+        with self.assertRaises(SimulatedCrash):
+            self.apply(fault=crash)
+        journal = next(next(self.store.glob('root-*')).iterdir()).name
+        postimage = self.a.read_bytes(), self.a.stat().st_ino
+        def fault(point, path):
+            if point == 'before_restore' and path == 'a.typ':
+                self.mutate_stage_metadata(next(self.journal_path(journal).glob('restore-*.bin')), kind)
+        with self.context(recovery_only=True, fault=fault) as tx:
+            report = tx.recover(journal)
+        self.assertFalse(report.complete)
+        self.assertEqual(report.unresolved, ('a.typ',))
+        self.assertIn('flags' if kind == 'flags' else 'ACL', report.errors[0])
+        self.assertEqual((self.a.read_bytes(), self.a.stat().st_ino), postimage)
+        self.assertTrue(self.recover(journal).complete)
+        self.assertEqual(self.a.read_bytes(), b'// existing dirty user edit\nbad KEEP\n')
+
+    def test_apply_rejects_flags_changed_after_stage_fsync(self):
+        self.verify_apply_stage_metadata_refused('flags')
+
+    def test_apply_rejects_acl_changed_after_stage_fsync(self):
+        self.verify_apply_stage_metadata_refused('acl')
+
+    def test_restore_rejects_flags_changed_after_stage_fsync(self):
+        self.verify_restore_stage_metadata_refused('flags')
+
+    def test_restore_rejects_acl_changed_after_stage_fsync(self):
+        self.verify_restore_stage_metadata_refused('acl')
+
     def test_readonly_source_target_refused_without_changing_it(self):
         self.a.chmod(0o444)
         before = self.a.read_bytes(), self.a.stat().st_ino, stat.S_IMODE(self.a.stat().st_mode)
@@ -422,6 +504,8 @@ class TransactionTests(unittest.TestCase):
 
     def test_special_permission_bits_refused(self):
         self.a.chmod(0o4644)
+        if not self.a.stat().st_mode & stat.S_ISUID:
+            self.skipTest('Filesystem did not retain the requested setuid bit')
         with self.assertRaisesRegex(TransactionError, 'Special permission'):
             with self.context():
                 pass
