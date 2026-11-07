@@ -54,7 +54,11 @@ def analyze(tree, path, resolution):
         if call.kind != 'FuncCall' or not _supported(resolution.binding_for(index)):
             continue
         descendants_ids = tuple(descendants(index))
-        if not any(nodes[c].kind == 'Equation' for c in descendants_ids):
+        children = call.children
+        args = nodes[children[1]] if len(children) == 2 and nodes[children[1]].kind == 'Args' else None
+        # An equation used as an option is not highlighted body content.
+        content_args = [c for c in args.children if nodes[c].kind == 'ContentBlock'] if args else []
+        if not any(nodes[c].kind == 'Equation' for body_id in content_args for c in descendants(body_id)):
             continue
         line = source[:call.start].count(b'\n') + 1
         column = len(source[source.rfind(b'\n', 0, call.start) + 1:call.start].decode('utf-8')) + 1
@@ -73,8 +77,6 @@ def analyze(tree, path, resolution):
         elif any(nodes[c].kind in ('LineComment', 'BlockComment', 'Label', 'Hash', 'FuncCall',
                                   'SetRule', 'ShowRule', 'LetBinding') for c in descendants_ids):
             reason = 'Comments, labels, nested calls or executable content prevent extraction'
-        children = call.children
-        args = nodes[children[1]] if len(children) == 2 and nodes[children[1]].kind == 'Args' else None
         significant = [c for c in args.children if nodes[c].kind not in ('Space', 'LeftParen', 'RightParen', 'Comma')] if args else []
         body = nodes[significant[0]] if len(significant) == 1 and nodes[significant[0]].kind == 'ContentBlock' else None
         markup = nodes[body.children[1]] if body and len(body.children) == 3 and nodes[body.children[1]].kind == 'Markup' else None

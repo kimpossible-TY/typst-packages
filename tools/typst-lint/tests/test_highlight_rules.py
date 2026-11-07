@@ -57,7 +57,7 @@ class HighlightRules(unittest.TestCase):
 
     def test_unknown_and_shadowed_are_not_guessed(self):
         for source in (b'#highlighted[$x$]', b'#let highlight(x) = x\n#highlight[$x$]',
-                       b'#import "unknown.typ": *\n#highlight[$x$]', b'#foo[$x$]', b'#highlight[plain]', b'#let f() = [#highlight[$x$]]'):
+                       b'#import "unknown.typ": *\n#highlight[$x$]', b'#foo[$x$]', b'#highlight[plain]', b'#highlight(fill: $x$)[plain]', b'#let f() = [#highlight[$x$]]'):
             result = self.run_source(source)
             self.assertFalse(result.diagnostics)
             self.assertFalse(result.edits)
