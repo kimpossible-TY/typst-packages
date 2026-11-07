@@ -1,6 +1,6 @@
 {
   "schema": 1,
-  "scope": "Representative real-CLI probes, never full acceptance coverage. Source text is synthetic and never evaluated or compiled.",
+  "scope": "Representative real-CLI probes, never full acceptance coverage. Source text is synthetic and never evaluated or compiled. Expected parser/catalog refusals are distinct from semantic rule results.",
   "fixtures": [
     {
       "id": "core.parenthesized-scripts--positive",
@@ -245,13 +245,15 @@
       "kind": "positive",
       "files": {
         "main.typ": "#import \"@local/project-references:0.1.0\": project-ref\n#project-ref(\"pde\", \"1.1.1\")\n",
-        "catalog.json": "{\"schema\": 1, \"projects\": {\"pde\": {\"references\": {\"energy\": {\"page\": 1, \"text\": \"1.1\"}, \"zero_acceleration\": {\"page\": 2, \"text\": \"1.2\"}}, \"ambiguous_labels\": [\"duplicate\"]}}}"
+        "catalog.json": "{\"schema\": 1, \"projects\": {\"pde\": {\"references\": {\"energy\": {\"page\": 1, \"text\": \"1.1\"}, \"zero_acceleration\": {\"page\": 2, \"text\": \"1.2\"}, \"에너지\": {\"page\": 3, \"text\": \"1.3\"}, \"duplicate\": {\"page\": 4, \"text\": \"1.4\"}}, \"ambiguous_labels\": [\"duplicate\"]}}}"
       },
       "config": "rule-set=\"pde\"\ninclude=[\"**/*.typ\",\"**/*.md\"]\ncatalog=\"catalog.json\"\n",
       "normative_diagnostics": 1,
-      "note": "Catalog is an isolated valid snapshot, not a claim about the published PDF. Syntax-valid string-target violation; the bare @energy repair spelling is audited separately as a spec conflict.",
+      "note": "Syntax-valid string-target violation. Exact content-reference repair and malformed bare-reference refusal are separate probes.",
       "intentional_parse_error": false,
-      "scenario_heading": "Violation with extra or wrong arguments"
+      "scenario_heading": "Violation with extra or wrong arguments",
+      "assert_normative_count": true,
+      "expected_no_target_edits": true
     },
     {
       "id": "core.project-ref-arguments--negative",
@@ -259,13 +261,15 @@
       "kind": "negative",
       "files": {
         "main.typ": "#import \"@local/project-references:0.1.0\": project-ref\n#project-ref(\"pde\", <energy>)\n",
-        "catalog.json": "{\"schema\": 1, \"projects\": {\"pde\": {\"references\": {\"energy\": {\"page\": 1, \"text\": \"1.1\"}, \"zero_acceleration\": {\"page\": 2, \"text\": \"1.2\"}}, \"ambiguous_labels\": [\"duplicate\"]}}}"
+        "catalog.json": "{\"schema\": 1, \"projects\": {\"pde\": {\"references\": {\"energy\": {\"page\": 1, \"text\": \"1.1\"}, \"zero_acceleration\": {\"page\": 2, \"text\": \"1.2\"}, \"에너지\": {\"page\": 3, \"text\": \"1.3\"}, \"duplicate\": {\"page\": 4, \"text\": \"1.4\"}}, \"ambiguous_labels\": [\"duplicate\"]}}}"
       },
       "config": "rule-set=\"pde\"\ninclude=[\"**/*.typ\",\"**/*.md\"]\ncatalog=\"catalog.json\"\n",
       "normative_diagnostics": 0,
       "note": "Catalog is an isolated valid snapshot, not a claim about the published PDF.",
       "intentional_parse_error": false,
-      "scenario_heading": "Non-violation with a global label"
+      "scenario_heading": "Non-violation with a global label",
+      "assert_normative_count": true,
+      "expected_no_target_edits": true
     },
     {
       "id": "core.project-ref-catalog-target--positive",
@@ -273,13 +277,15 @@
       "kind": "positive",
       "files": {
         "main.typ": "#import \"@local/project-references:0.1.0\": project-ref\n#project-ref(\"pde\", <missing>)\n#project-ref(\"pde\", <duplicate>)\n#project-ref(\"absent\", <energy>)\n",
-        "catalog.json": "{\"schema\": 1, \"projects\": {\"pde\": {\"references\": {\"energy\": {\"page\": 1, \"text\": \"1.1\"}, \"zero_acceleration\": {\"page\": 2, \"text\": \"1.2\"}}, \"ambiguous_labels\": [\"duplicate\"]}}}"
+        "catalog.json": "{\"schema\": 1, \"projects\": {\"pde\": {\"references\": {\"energy\": {\"page\": 1, \"text\": \"1.1\"}, \"zero_acceleration\": {\"page\": 2, \"text\": \"1.2\"}, \"에너지\": {\"page\": 3, \"text\": \"1.3\"}, \"duplicate\": {\"page\": 4, \"text\": \"1.4\"}}, \"ambiguous_labels\": [\"duplicate\"]}}}"
       },
       "config": "rule-set=\"pde\"\ninclude=[\"**/*.typ\",\"**/*.md\"]\ncatalog=\"catalog.json\"\n",
       "normative_diagnostics": 3,
       "note": "",
       "intentional_parse_error": false,
-      "scenario_heading": "Violation against a supplied snapshot"
+      "scenario_heading": "Violation against a supplied snapshot",
+      "assert_normative_count": true,
+      "expected_no_target_edits": true
     },
     {
       "id": "core.project-ref-catalog-target--negative",
@@ -287,13 +293,15 @@
       "kind": "negative",
       "files": {
         "main.typ": "#import \"@local/project-references:0.1.0\": project-ref\n#project-ref(\"pde\", <energy>)\n",
-        "catalog.json": "{\"schema\": 1, \"projects\": {\"pde\": {\"references\": {\"energy\": {\"page\": 1, \"text\": \"1.1\"}, \"zero_acceleration\": {\"page\": 2, \"text\": \"1.2\"}}, \"ambiguous_labels\": [\"duplicate\"]}}}"
+        "catalog.json": "{\"schema\": 1, \"projects\": {\"pde\": {\"references\": {\"energy\": {\"page\": 1, \"text\": \"1.1\"}, \"zero_acceleration\": {\"page\": 2, \"text\": \"1.2\"}, \"에너지\": {\"page\": 3, \"text\": \"1.3\"}, \"duplicate\": {\"page\": 4, \"text\": \"1.4\"}}, \"ambiguous_labels\": [\"duplicate\"]}}}"
       },
       "config": "rule-set=\"pde\"\ninclude=[\"**/*.typ\",\"**/*.md\"]\ncatalog=\"catalog.json\"\n",
       "normative_diagnostics": 0,
       "note": "",
       "intentional_parse_error": false,
-      "scenario_heading": "Non-violation against a supplied snapshot"
+      "scenario_heading": "Non-violation against a supplied snapshot",
+      "assert_normative_count": true,
+      "expected_no_target_edits": true
     },
     {
       "id": "core.single-book-show--positive",
@@ -581,7 +589,11 @@
       "normative_diagnostics": 1,
       "note": "",
       "intentional_parse_error": false,
-      "scenario_heading": "Violation with an unmarked gap"
+      "scenario_heading": "Violation with an unmarked gap",
+      "expected_candidate": {
+        "main.typ": "$ A = B $\nHence the identity holds.\n"
+      },
+      "assert_normative_count": true
     },
     {
       "id": "pde.display-continuation-gap--negative",
@@ -763,7 +775,11 @@
       "normative_diagnostics": 1,
       "note": "",
       "intentional_parse_error": false,
-      "scenario_heading": "Violation with prose on the display line"
+      "scenario_heading": "Violation with prose on the display line",
+      "expected_candidate": {
+        "main.typ": "Thus\n$ A = B $\nand the claim follows.\n"
+      },
+      "assert_normative_count": true
     },
     {
       "id": "pde.standalone-display--negative",
@@ -1304,18 +1320,650 @@
       "scenario_heading": null
     },
     {
-      "id": "core.project-ref-arguments--spec-conflict-ref-recovery",
+      "id": "core.project-ref-arguments--malformed-bare-reference",
       "rule_id": "core.project-ref-arguments",
-      "kind": "spec-conflict-ref-recovery",
+      "kind": "malformed-bare-reference",
       "files": {
         "main.typ": "#import \"@local/project-references:0.1.0\": project-ref\n#project-ref(\"pde\", @energy)\n",
         "catalog.json": "{\"schema\": 1, \"projects\": {\"pde\": {\"references\": {\"energy\": {\"page\": 1, \"text\": \"1.1\"}, \"zero_acceleration\": {\"page\": 2, \"text\": \"1.2\"}}, \"ambiguous_labels\": [\"duplicate\"]}}}"
       },
       "config": "rule-set=\"pde\"\ninclude=[\"**/*.typ\",\"**/*.md\"]\ncatalog=\"catalog.json\"\n",
       "normative_diagnostics": null,
-      "note": "Normative repair row uses bare @energy in code arguments. Official syntax reports Error(@); global recovery policy allows only dictionary field calls, so this repair contract conflicts with the parse policy. No recovery or semantic success is claimed.",
+      "note": "The corrected normative policy explicitly reports the bare @ parser error and forbids reference recovery. This is an expected parser refusal, not a semantic rule pass or unresolved specification conflict.",
       "intentional_parse_error": true,
-      "scenario_heading": "Violation with extra or wrong arguments"
+      "scenario_heading": "Malformed bare reference is not repaired"
+    },
+    {
+      "id": "core.project-ref-arguments--exact-content-reference",
+      "rule_id": "core.project-ref-arguments",
+      "kind": "exact-content-reference",
+      "files": {
+        "main.typ": "#import \"@local/project-references:0.1.0\": project-ref\n#project-ref(\"pde\", [@energy])\n",
+        "catalog.json": "{\"schema\": 1, \"projects\": {\"pde\": {\"references\": {\"energy\": {\"page\": 1, \"text\": \"1.1\"}, \"zero_acceleration\": {\"page\": 2, \"text\": \"1.2\"}, \"에너지\": {\"page\": 3, \"text\": \"1.3\"}, \"duplicate\": {\"page\": 4, \"text\": \"1.4\"}}, \"ambiguous_labels\": [\"duplicate\"]}}}"
+      },
+      "config": "rule-set=\"pde\"\ninclude=[\"**/*.typ\",\"**/*.md\"]\ncatalog=\"catalog.json\"\n",
+      "normative_diagnostics": 1,
+      "note": "",
+      "intentional_parse_error": false,
+      "scenario_heading": "Exact content-reference repair",
+      "assert_normative_count": true,
+      "expected_no_target_edits": false,
+      "expected_candidate": {
+        "main.typ": "#import \"@local/project-references:0.1.0\": project-ref\n#project-ref(\"pde\", <energy>)\n"
+      }
+    },
+    {
+      "id": "core.project-ref-arguments--renamed-import",
+      "rule_id": "core.project-ref-arguments",
+      "kind": "renamed-import",
+      "files": {
+        "main.typ": "#import \"@local/project-references:0.1.0\": project-ref as pr\n#pr(\"pde\", [@energy])\n",
+        "catalog.json": "{\"schema\": 1, \"projects\": {\"pde\": {\"references\": {\"energy\": {\"page\": 1, \"text\": \"1.1\"}, \"zero_acceleration\": {\"page\": 2, \"text\": \"1.2\"}, \"에너지\": {\"page\": 3, \"text\": \"1.3\"}, \"duplicate\": {\"page\": 4, \"text\": \"1.4\"}}, \"ambiguous_labels\": [\"duplicate\"]}}}"
+      },
+      "config": "rule-set=\"pde\"\ninclude=[\"**/*.typ\",\"**/*.md\"]\ncatalog=\"catalog.json\"\n",
+      "normative_diagnostics": 1,
+      "note": "Verified direct-package alias subset; not general facade/import-graph acceptance.",
+      "intentional_parse_error": false,
+      "scenario_heading": "Exact content-reference repair",
+      "assert_normative_count": true,
+      "expected_no_target_edits": false,
+      "expected_candidate": {
+        "main.typ": "#import \"@local/project-references:0.1.0\": project-ref as pr\n#pr(\"pde\", <energy>)\n"
+      }
+    },
+    {
+      "id": "core.project-ref-arguments--module-alias",
+      "rule_id": "core.project-ref-arguments",
+      "kind": "module-alias",
+      "files": {
+        "main.typ": "#import \"@local/project-references:0.1.0\" as refs\n#refs.project-ref(\"pde\", [@energy])\n",
+        "catalog.json": "{\"schema\": 1, \"projects\": {\"pde\": {\"references\": {\"energy\": {\"page\": 1, \"text\": \"1.1\"}, \"zero_acceleration\": {\"page\": 2, \"text\": \"1.2\"}, \"에너지\": {\"page\": 3, \"text\": \"1.3\"}, \"duplicate\": {\"page\": 4, \"text\": \"1.4\"}}, \"ambiguous_labels\": [\"duplicate\"]}}}"
+      },
+      "config": "rule-set=\"pde\"\ninclude=[\"**/*.typ\",\"**/*.md\"]\ncatalog=\"catalog.json\"\n",
+      "normative_diagnostics": 1,
+      "note": "Verified direct-package alias subset; not general facade/import-graph acceptance.",
+      "intentional_parse_error": false,
+      "scenario_heading": "Exact content-reference repair",
+      "assert_normative_count": true,
+      "expected_no_target_edits": false,
+      "expected_candidate": {
+        "main.typ": "#import \"@local/project-references:0.1.0\" as refs\n#refs.project-ref(\"pde\", <energy>)\n"
+      }
+    },
+    {
+      "id": "core.project-ref-arguments--callee-alias",
+      "rule_id": "core.project-ref-arguments",
+      "kind": "callee-alias",
+      "files": {
+        "main.typ": "#import \"@local/project-references:0.1.0\": project-ref\n#let pr = project-ref\n#pr(\"pde\", [@energy])\n",
+        "catalog.json": "{\"schema\": 1, \"projects\": {\"pde\": {\"references\": {\"energy\": {\"page\": 1, \"text\": \"1.1\"}, \"zero_acceleration\": {\"page\": 2, \"text\": \"1.2\"}, \"에너지\": {\"page\": 3, \"text\": \"1.3\"}, \"duplicate\": {\"page\": 4, \"text\": \"1.4\"}}, \"ambiguous_labels\": [\"duplicate\"]}}}"
+      },
+      "config": "rule-set=\"pde\"\ninclude=[\"**/*.typ\",\"**/*.md\"]\ncatalog=\"catalog.json\"\n",
+      "normative_diagnostics": 1,
+      "note": "Verified direct-package alias subset; not general facade/import-graph acceptance.",
+      "intentional_parse_error": false,
+      "scenario_heading": "Exact content-reference repair",
+      "assert_normative_count": true,
+      "expected_no_target_edits": false,
+      "expected_candidate": {
+        "main.typ": "#import \"@local/project-references:0.1.0\": project-ref\n#let pr = project-ref\n#pr(\"pde\", <energy>)\n"
+      }
+    },
+    {
+      "id": "core.project-ref-arguments--content-whitespace",
+      "rule_id": "core.project-ref-arguments",
+      "kind": "content-whitespace",
+      "files": {
+        "main.typ": "#import \"@local/project-references:0.1.0\": project-ref\n#project-ref(\"pde\", [ @energy])\n",
+        "catalog.json": "{\"schema\": 1, \"projects\": {\"pde\": {\"references\": {\"energy\": {\"page\": 1, \"text\": \"1.1\"}, \"zero_acceleration\": {\"page\": 2, \"text\": \"1.2\"}, \"에너지\": {\"page\": 3, \"text\": \"1.3\"}, \"duplicate\": {\"page\": 4, \"text\": \"1.4\"}}, \"ambiguous_labels\": [\"duplicate\"]}}}"
+      },
+      "config": "rule-set=\"pde\"\ninclude=[\"**/*.typ\",\"**/*.md\"]\ncatalog=\"catalog.json\"\n",
+      "normative_diagnostics": 1,
+      "note": "Known content is diagnosed but the exact-repair preconditions do not hold; no label is guessed.",
+      "intentional_parse_error": false,
+      "scenario_heading": "Exact content-reference repair",
+      "assert_normative_count": true,
+      "expected_no_target_edits": true
+    },
+    {
+      "id": "core.project-ref-arguments--content-comment",
+      "rule_id": "core.project-ref-arguments",
+      "kind": "content-comment",
+      "files": {
+        "main.typ": "#import \"@local/project-references:0.1.0\": project-ref\n#project-ref(\"pde\", [@energy /* preserve */])\n",
+        "catalog.json": "{\"schema\": 1, \"projects\": {\"pde\": {\"references\": {\"energy\": {\"page\": 1, \"text\": \"1.1\"}, \"zero_acceleration\": {\"page\": 2, \"text\": \"1.2\"}, \"에너지\": {\"page\": 3, \"text\": \"1.3\"}, \"duplicate\": {\"page\": 4, \"text\": \"1.4\"}}, \"ambiguous_labels\": [\"duplicate\"]}}}"
+      },
+      "config": "rule-set=\"pde\"\ninclude=[\"**/*.typ\",\"**/*.md\"]\ncatalog=\"catalog.json\"\n",
+      "normative_diagnostics": 1,
+      "note": "Known content is diagnosed but the exact-repair preconditions do not hold; no label is guessed.",
+      "intentional_parse_error": false,
+      "scenario_heading": "Exact content-reference repair",
+      "assert_normative_count": true,
+      "expected_no_target_edits": true
+    },
+    {
+      "id": "core.project-ref-arguments--content-supplement",
+      "rule_id": "core.project-ref-arguments",
+      "kind": "content-supplement",
+      "files": {
+        "main.typ": "#import \"@local/project-references:0.1.0\": project-ref\n#project-ref(\"pde\", [@energy[Supplement]])\n",
+        "catalog.json": "{\"schema\": 1, \"projects\": {\"pde\": {\"references\": {\"energy\": {\"page\": 1, \"text\": \"1.1\"}, \"zero_acceleration\": {\"page\": 2, \"text\": \"1.2\"}, \"에너지\": {\"page\": 3, \"text\": \"1.3\"}, \"duplicate\": {\"page\": 4, \"text\": \"1.4\"}}, \"ambiguous_labels\": [\"duplicate\"]}}}"
+      },
+      "config": "rule-set=\"pde\"\ninclude=[\"**/*.typ\",\"**/*.md\"]\ncatalog=\"catalog.json\"\n",
+      "normative_diagnostics": 1,
+      "note": "Known content is diagnosed but the exact-repair preconditions do not hold; no label is guessed.",
+      "intentional_parse_error": false,
+      "scenario_heading": "Exact content-reference repair",
+      "assert_normative_count": true,
+      "expected_no_target_edits": true
+    },
+    {
+      "id": "core.project-ref-arguments--extra-content",
+      "rule_id": "core.project-ref-arguments",
+      "kind": "extra-content",
+      "files": {
+        "main.typ": "#import \"@local/project-references:0.1.0\": project-ref\n#project-ref(\"pde\", [Theorem @energy])\n",
+        "catalog.json": "{\"schema\": 1, \"projects\": {\"pde\": {\"references\": {\"energy\": {\"page\": 1, \"text\": \"1.1\"}, \"zero_acceleration\": {\"page\": 2, \"text\": \"1.2\"}, \"에너지\": {\"page\": 3, \"text\": \"1.3\"}, \"duplicate\": {\"page\": 4, \"text\": \"1.4\"}}, \"ambiguous_labels\": [\"duplicate\"]}}}"
+      },
+      "config": "rule-set=\"pde\"\ninclude=[\"**/*.typ\",\"**/*.md\"]\ncatalog=\"catalog.json\"\n",
+      "normative_diagnostics": 1,
+      "note": "Known content is diagnosed but the exact-repair preconditions do not hold; no label is guessed.",
+      "intentional_parse_error": false,
+      "scenario_heading": "Exact content-reference repair",
+      "assert_normative_count": true,
+      "expected_no_target_edits": true
+    },
+    {
+      "id": "core.project-ref-arguments--missing-target",
+      "rule_id": "core.project-ref-arguments",
+      "kind": "missing-target",
+      "files": {
+        "main.typ": "#import \"@local/project-references:0.1.0\": project-ref\n#project-ref(\"pde\", [@missing])\n",
+        "catalog.json": "{\"schema\": 1, \"projects\": {\"pde\": {\"references\": {\"energy\": {\"page\": 1, \"text\": \"1.1\"}, \"zero_acceleration\": {\"page\": 2, \"text\": \"1.2\"}, \"에너지\": {\"page\": 3, \"text\": \"1.3\"}, \"duplicate\": {\"page\": 4, \"text\": \"1.4\"}}, \"ambiguous_labels\": [\"duplicate\"]}}}"
+      },
+      "config": "rule-set=\"pde\"\ninclude=[\"**/*.typ\",\"**/*.md\"]\ncatalog=\"catalog.json\"\n",
+      "normative_diagnostics": 1,
+      "note": "Known content is diagnosed but the exact-repair preconditions do not hold; no label is guessed.",
+      "intentional_parse_error": false,
+      "scenario_heading": "Exact content-reference repair",
+      "assert_normative_count": true,
+      "expected_no_target_edits": true
+    },
+    {
+      "id": "core.project-ref-arguments--ambiguous-target",
+      "rule_id": "core.project-ref-arguments",
+      "kind": "ambiguous-target",
+      "files": {
+        "main.typ": "#import \"@local/project-references:0.1.0\": project-ref\n#project-ref(\"pde\", [@duplicate])\n",
+        "catalog.json": "{\"schema\": 1, \"projects\": {\"pde\": {\"references\": {\"energy\": {\"page\": 1, \"text\": \"1.1\"}, \"zero_acceleration\": {\"page\": 2, \"text\": \"1.2\"}, \"에너지\": {\"page\": 3, \"text\": \"1.3\"}, \"duplicate\": {\"page\": 4, \"text\": \"1.4\"}}, \"ambiguous_labels\": [\"duplicate\"]}}}"
+      },
+      "config": "rule-set=\"pde\"\ninclude=[\"**/*.typ\",\"**/*.md\"]\ncatalog=\"catalog.json\"\n",
+      "normative_diagnostics": 1,
+      "note": "Known content is diagnosed but the exact-repair preconditions do not hold; no label is guessed.",
+      "intentional_parse_error": false,
+      "scenario_heading": "Exact content-reference repair",
+      "assert_normative_count": true,
+      "expected_no_target_edits": true
+    },
+    {
+      "id": "core.project-ref-arguments--local-target",
+      "rule_id": "core.project-ref-arguments",
+      "kind": "local-target",
+      "files": {
+        "main.typ": "#import \"@local/project-references:0.1.0\": project-ref\n#project-ref(\"pde\", [@local-scope-energy])\n",
+        "catalog.json": "{\"schema\": 1, \"projects\": {\"pde\": {\"references\": {\"energy\": {\"page\": 1, \"text\": \"1.1\"}, \"zero_acceleration\": {\"page\": 2, \"text\": \"1.2\"}, \"에너지\": {\"page\": 3, \"text\": \"1.3\"}, \"duplicate\": {\"page\": 4, \"text\": \"1.4\"}}, \"ambiguous_labels\": [\"duplicate\"]}}}"
+      },
+      "config": "rule-set=\"pde\"\ninclude=[\"**/*.typ\",\"**/*.md\"]\ncatalog=\"catalog.json\"\n",
+      "normative_diagnostics": 1,
+      "note": "Known content is diagnosed but the exact-repair preconditions do not hold; no label is guessed.",
+      "intentional_parse_error": false,
+      "scenario_heading": "Exact content-reference repair",
+      "assert_normative_count": true,
+      "expected_no_target_edits": true
+    },
+    {
+      "id": "core.project-ref-arguments--extra-argument",
+      "rule_id": "core.project-ref-arguments",
+      "kind": "extra-argument",
+      "files": {
+        "main.typ": "#import \"@local/project-references:0.1.0\": project-ref\n#project-ref(\"pde\", <energy>, 3)\n",
+        "catalog.json": "{\"schema\": 1, \"projects\": {\"pde\": {\"references\": {\"energy\": {\"page\": 1, \"text\": \"1.1\"}, \"zero_acceleration\": {\"page\": 2, \"text\": \"1.2\"}, \"에너지\": {\"page\": 3, \"text\": \"1.3\"}, \"duplicate\": {\"page\": 4, \"text\": \"1.4\"}}, \"ambiguous_labels\": [\"duplicate\"]}}}"
+      },
+      "config": "rule-set=\"pde\"\ninclude=[\"**/*.typ\",\"**/*.md\"]\ncatalog=\"catalog.json\"\n",
+      "normative_diagnostics": 1,
+      "note": "Only proven invalid shape/type is diagnosed; unresolved values remain explicit partial coverage.",
+      "intentional_parse_error": false,
+      "scenario_heading": "Violation with extra or wrong arguments",
+      "assert_normative_count": true,
+      "expected_no_target_edits": true
+    },
+    {
+      "id": "core.project-ref-arguments--named-arguments",
+      "rule_id": "core.project-ref-arguments",
+      "kind": "named-arguments",
+      "files": {
+        "main.typ": "#import \"@local/project-references:0.1.0\": project-ref\n#project-ref(project: \"pde\", target: <energy>)\n",
+        "catalog.json": "{\"schema\": 1, \"projects\": {\"pde\": {\"references\": {\"energy\": {\"page\": 1, \"text\": \"1.1\"}, \"zero_acceleration\": {\"page\": 2, \"text\": \"1.2\"}, \"에너지\": {\"page\": 3, \"text\": \"1.3\"}, \"duplicate\": {\"page\": 4, \"text\": \"1.4\"}}, \"ambiguous_labels\": [\"duplicate\"]}}}"
+      },
+      "config": "rule-set=\"pde\"\ninclude=[\"**/*.typ\",\"**/*.md\"]\ncatalog=\"catalog.json\"\n",
+      "normative_diagnostics": 1,
+      "note": "Only proven invalid shape/type is diagnosed; unresolved values remain explicit partial coverage.",
+      "intentional_parse_error": false,
+      "scenario_heading": "Violation with extra or wrong arguments",
+      "assert_normative_count": true,
+      "expected_no_target_edits": true
+    },
+    {
+      "id": "core.project-ref-arguments--wrong-project-type",
+      "rule_id": "core.project-ref-arguments",
+      "kind": "wrong-project-type",
+      "files": {
+        "main.typ": "#import \"@local/project-references:0.1.0\": project-ref\n#project-ref(42, <energy>)\n",
+        "catalog.json": "{\"schema\": 1, \"projects\": {\"pde\": {\"references\": {\"energy\": {\"page\": 1, \"text\": \"1.1\"}, \"zero_acceleration\": {\"page\": 2, \"text\": \"1.2\"}, \"에너지\": {\"page\": 3, \"text\": \"1.3\"}, \"duplicate\": {\"page\": 4, \"text\": \"1.4\"}}, \"ambiguous_labels\": [\"duplicate\"]}}}"
+      },
+      "config": "rule-set=\"pde\"\ninclude=[\"**/*.typ\",\"**/*.md\"]\ncatalog=\"catalog.json\"\n",
+      "normative_diagnostics": 1,
+      "note": "Only proven invalid shape/type is diagnosed; unresolved values remain explicit partial coverage.",
+      "intentional_parse_error": false,
+      "scenario_heading": "Violation with extra or wrong arguments",
+      "assert_normative_count": true,
+      "expected_no_target_edits": true
+    },
+    {
+      "id": "core.project-ref-arguments--dynamic-target",
+      "rule_id": "core.project-ref-arguments",
+      "kind": "dynamic-target",
+      "files": {
+        "main.typ": "#import \"@local/project-references:0.1.0\": project-ref\n#project-ref(\"pde\", target)\n",
+        "catalog.json": "{\"schema\": 1, \"projects\": {\"pde\": {\"references\": {\"energy\": {\"page\": 1, \"text\": \"1.1\"}, \"zero_acceleration\": {\"page\": 2, \"text\": \"1.2\"}, \"에너지\": {\"page\": 3, \"text\": \"1.3\"}, \"duplicate\": {\"page\": 4, \"text\": \"1.4\"}}, \"ambiguous_labels\": [\"duplicate\"]}}}"
+      },
+      "config": "rule-set=\"pde\"\ninclude=[\"**/*.typ\",\"**/*.md\"]\ncatalog=\"catalog.json\"\n",
+      "normative_diagnostics": 0,
+      "note": "Only proven invalid shape/type is diagnosed; unresolved values remain explicit partial coverage.",
+      "intentional_parse_error": false,
+      "scenario_heading": null,
+      "assert_normative_count": true,
+      "expected_no_target_edits": true
+    },
+    {
+      "id": "core.project-ref-arguments--spread-arguments",
+      "rule_id": "core.project-ref-arguments",
+      "kind": "spread-arguments",
+      "files": {
+        "main.typ": "#import \"@local/project-references:0.1.0\": project-ref\n#project-ref(..args)\n",
+        "catalog.json": "{\"schema\": 1, \"projects\": {\"pde\": {\"references\": {\"energy\": {\"page\": 1, \"text\": \"1.1\"}, \"zero_acceleration\": {\"page\": 2, \"text\": \"1.2\"}, \"에너지\": {\"page\": 3, \"text\": \"1.3\"}, \"duplicate\": {\"page\": 4, \"text\": \"1.4\"}}, \"ambiguous_labels\": [\"duplicate\"]}}}"
+      },
+      "config": "rule-set=\"pde\"\ninclude=[\"**/*.typ\",\"**/*.md\"]\ncatalog=\"catalog.json\"\n",
+      "normative_diagnostics": 0,
+      "note": "Only proven invalid shape/type is diagnosed; unresolved values remain explicit partial coverage.",
+      "intentional_parse_error": false,
+      "scenario_heading": null,
+      "assert_normative_count": true,
+      "expected_no_target_edits": true
+    },
+    {
+      "id": "core.project-ref-arguments--local-prefix-label",
+      "rule_id": "core.project-ref-arguments",
+      "kind": "local-prefix-label",
+      "files": {
+        "main.typ": "#import \"@local/project-references:0.1.0\": project-ref\n#project-ref(\"pde\", <local-scope-energy>)\n",
+        "catalog.json": "{\"schema\": 1, \"projects\": {\"pde\": {\"references\": {\"energy\": {\"page\": 1, \"text\": \"1.1\"}, \"zero_acceleration\": {\"page\": 2, \"text\": \"1.2\"}, \"에너지\": {\"page\": 3, \"text\": \"1.3\"}, \"duplicate\": {\"page\": 4, \"text\": \"1.4\"}}, \"ambiguous_labels\": [\"duplicate\"]}}}"
+      },
+      "config": "rule-set=\"pde\"\ninclude=[\"**/*.typ\",\"**/*.md\"]\ncatalog=\"catalog.json\"\n",
+      "normative_diagnostics": 1,
+      "note": "Only proven invalid shape/type is diagnosed; unresolved values remain explicit partial coverage.",
+      "intentional_parse_error": false,
+      "scenario_heading": "Violation with extra or wrong arguments",
+      "assert_normative_count": true,
+      "expected_no_target_edits": true
+    },
+    {
+      "id": "core.project-ref-arguments--no-catalog-repair-refusal",
+      "rule_id": "core.project-ref-arguments",
+      "kind": "no-catalog-repair-refusal",
+      "files": {
+        "main.typ": "#import \"@local/project-references:0.1.0\": project-ref\n#project-ref(\"pde\", [@energy])\n"
+      },
+      "config": "rule-set=\"pde\"\ninclude=[\"**/*.typ\",\"**/*.md\"]\n",
+      "normative_diagnostics": 1,
+      "note": "No explicit catalog means no content-to-label repair. Optional absence is not missing-backend acceptance.",
+      "intentional_parse_error": false,
+      "scenario_heading": "Exact content-reference repair",
+      "assert_normative_count": true,
+      "expected_no_target_edits": true
+    },
+    {
+      "id": "core.project-ref-catalog-target--no-catalog-membership-skip",
+      "rule_id": "core.project-ref-catalog-target",
+      "kind": "no-catalog-membership-skip",
+      "files": {
+        "main.typ": "#import \"@local/project-references:0.1.0\": project-ref\n#project-ref(\"absent\", <missing>)\n"
+      },
+      "config": "rule-set=\"pde\"\ninclude=[\"**/*.typ\",\"**/*.md\"]\n",
+      "normative_diagnostics": 0,
+      "note": "The catalog membership check is an explicit optional skip with a backend present. Zero findings do not establish target validity.",
+      "intentional_parse_error": false,
+      "scenario_heading": null,
+      "assert_normative_count": true,
+      "expected_no_target_edits": true
+    },
+    {
+      "id": "core.project-ref-arguments--shadowed-callee",
+      "rule_id": "core.project-ref-arguments",
+      "kind": "shadowed-callee",
+      "files": {
+        "main.typ": "#import \"@local/project-references:0.1.0\": project-ref\n#let project-ref = (a, b) => b\n#project-ref(\"pde\", [@energy])\n",
+        "catalog.json": "{\"schema\": 1, \"projects\": {\"pde\": {\"references\": {\"energy\": {\"page\": 1, \"text\": \"1.1\"}, \"zero_acceleration\": {\"page\": 2, \"text\": \"1.2\"}, \"에너지\": {\"page\": 3, \"text\": \"1.3\"}, \"duplicate\": {\"page\": 4, \"text\": \"1.4\"}}, \"ambiguous_labels\": [\"duplicate\"]}}}"
+      },
+      "config": "rule-set=\"pde\"\ninclude=[\"**/*.typ\",\"**/*.md\"]\ncatalog=\"catalog.json\"\n",
+      "normative_diagnostics": 0,
+      "note": "Unknown or unrelated callee provenance must not trigger reference repairs.",
+      "intentional_parse_error": false,
+      "scenario_heading": null,
+      "assert_normative_count": true,
+      "expected_no_target_edits": true
+    },
+    {
+      "id": "core.project-ref-arguments--unreviewed-version",
+      "rule_id": "core.project-ref-arguments",
+      "kind": "unreviewed-version",
+      "files": {
+        "main.typ": "#import \"@local/project-references:0.1.1\": project-ref\n#project-ref(\"pde\", [@energy])\n",
+        "catalog.json": "{\"schema\": 1, \"projects\": {\"pde\": {\"references\": {\"energy\": {\"page\": 1, \"text\": \"1.1\"}, \"zero_acceleration\": {\"page\": 2, \"text\": \"1.2\"}, \"에너지\": {\"page\": 3, \"text\": \"1.3\"}, \"duplicate\": {\"page\": 4, \"text\": \"1.4\"}}, \"ambiguous_labels\": [\"duplicate\"]}}}"
+      },
+      "config": "rule-set=\"pde\"\ninclude=[\"**/*.typ\",\"**/*.md\"]\ncatalog=\"catalog.json\"\n",
+      "normative_diagnostics": 0,
+      "note": "Unknown or unrelated callee provenance must not trigger reference repairs.",
+      "intentional_parse_error": false,
+      "scenario_heading": null,
+      "assert_normative_count": true,
+      "expected_no_target_edits": true
+    },
+    {
+      "id": "core.project-ref-arguments--nested-call-refusal",
+      "rule_id": "core.project-ref-arguments",
+      "kind": "nested-call-refusal",
+      "files": {
+        "main.typ": "#import \"@local/project-references:0.1.0\": project-ref\n#let captured = [#project-ref(\"pde\", [@energy])]\n",
+        "catalog.json": "{\"schema\": 1, \"projects\": {\"pde\": {\"references\": {\"energy\": {\"page\": 1, \"text\": \"1.1\"}, \"zero_acceleration\": {\"page\": 2, \"text\": \"1.2\"}, \"에너지\": {\"page\": 3, \"text\": \"1.3\"}, \"duplicate\": {\"page\": 4, \"text\": \"1.4\"}}, \"ambiguous_labels\": [\"duplicate\"]}}}"
+      },
+      "config": "rule-set=\"pde\"\ninclude=[\"**/*.typ\",\"**/*.md\"]\ncatalog=\"catalog.json\"\n",
+      "normative_diagnostics": 0,
+      "note": "Captured content is outside the verified direct-root subset and must remain explicit partial coverage.",
+      "intentional_parse_error": false,
+      "scenario_heading": null,
+      "assert_normative_count": true,
+      "expected_no_target_edits": true
+    },
+    {
+      "id": "core.project-ref-arguments--unicode-bom-crlf",
+      "rule_id": "core.project-ref-arguments",
+      "kind": "unicode-bom-crlf",
+      "files": {
+        "main.typ": "﻿#import \"@local/project-references:0.1.0\": project-ref\r\n앞 #project-ref(\"pde\", [@에너지])\r\n",
+        "catalog.json": "{\"schema\": 1, \"projects\": {\"pde\": {\"references\": {\"energy\": {\"page\": 1, \"text\": \"1.1\"}, \"zero_acceleration\": {\"page\": 2, \"text\": \"1.2\"}, \"에너지\": {\"page\": 3, \"text\": \"1.3\"}, \"duplicate\": {\"page\": 4, \"text\": \"1.4\"}}, \"ambiguous_labels\": [\"duplicate\"]}}}"
+      },
+      "config": "rule-set=\"pde\"\ninclude=[\"**/*.typ\",\"**/*.md\"]\ncatalog=\"catalog.json\"\n",
+      "normative_diagnostics": 1,
+      "note": "Preserve all other UTF-8/BOM/CRLF bytes and Unicode target identity.",
+      "intentional_parse_error": false,
+      "scenario_heading": "Exact content-reference repair",
+      "assert_normative_count": true,
+      "expected_no_target_edits": false,
+      "expected_candidate": {
+        "main.typ": "﻿#import \"@local/project-references:0.1.0\": project-ref\r\n앞 #project-ref(\"pde\", <에너지>)\r\n"
+      }
+    },
+    {
+      "id": "core.project-ref-arguments--unicode-project",
+      "rule_id": "core.project-ref-arguments",
+      "kind": "unicode-project",
+      "files": {
+        "main.typ": "#import \"@local/project-references:0.1.0\": project-ref\n#project-ref(\"해석\", [@에너지])\n",
+        "catalog.json": "{\"schema\": 1, \"projects\": {\"해석\": {\"references\": {\"energy\": {\"page\": 1, \"text\": \"1.1\"}, \"zero_acceleration\": {\"page\": 2, \"text\": \"1.2\"}, \"에너지\": {\"page\": 3, \"text\": \"1.3\"}, \"duplicate\": {\"page\": 4, \"text\": \"1.4\"}}, \"ambiguous_labels\": [\"duplicate\"]}}}"
+      },
+      "config": "rule-set=\"pde\"\ninclude=[\"**/*.typ\",\"**/*.md\"]\ncatalog=\"catalog.json\"\n",
+      "normative_diagnostics": 1,
+      "note": "",
+      "intentional_parse_error": false,
+      "scenario_heading": "Exact content-reference repair",
+      "assert_normative_count": true,
+      "expected_no_target_edits": false,
+      "expected_candidate": {
+        "main.typ": "#import \"@local/project-references:0.1.0\": project-ref\n#project-ref(\"해석\", <에너지>)\n"
+      }
+    },
+    {
+      "id": "core.project-ref-arguments--suppressed-repair",
+      "rule_id": "core.project-ref-arguments",
+      "kind": "suppressed-repair",
+      "files": {
+        "main.typ": "#import \"@local/project-references:0.1.0\": project-ref\n// typst-lint: ignore-next core.project-ref-arguments -- intentional content\n#project-ref(\"pde\", [@energy])\n",
+        "catalog.json": "{\"schema\": 1, \"projects\": {\"pde\": {\"references\": {\"energy\": {\"page\": 1, \"text\": \"1.1\"}, \"zero_acceleration\": {\"page\": 2, \"text\": \"1.2\"}, \"에너지\": {\"page\": 3, \"text\": \"1.3\"}, \"duplicate\": {\"page\": 4, \"text\": \"1.4\"}}, \"ambiguous_labels\": [\"duplicate\"]}}}"
+      },
+      "config": "rule-set=\"pde\"\ninclude=[\"**/*.typ\",\"**/*.md\"]\ncatalog=\"catalog.json\"\n",
+      "normative_diagnostics": 0,
+      "note": "The directive must suppress the owned diagnostic and edit.",
+      "intentional_parse_error": false,
+      "scenario_heading": null,
+      "assert_normative_count": true,
+      "expected_no_target_edits": true
+    },
+    {
+      "id": "core.project-ref-arguments--repair-with-unresolved-catalog-finding",
+      "rule_id": "core.project-ref-arguments",
+      "kind": "repair-with-unresolved-catalog-finding",
+      "files": {
+        "main.typ": "#import \"@local/project-references:0.1.0\": project-ref\n$x^i$\n#project-ref(\"pde\", [@energy])\n#project-ref(\"pde\", <missing>)\n",
+        "catalog.json": "{\"schema\": 1, \"projects\": {\"pde\": {\"references\": {\"energy\": {\"page\": 1, \"text\": \"1.1\"}, \"zero_acceleration\": {\"page\": 2, \"text\": \"1.2\"}, \"에너지\": {\"page\": 3, \"text\": \"1.3\"}, \"duplicate\": {\"page\": 4, \"text\": \"1.4\"}}, \"ambiguous_labels\": [\"duplicate\"]}}}"
+      },
+      "config": "rule-set=\"pde\"\ninclude=[\"**/*.typ\",\"**/*.md\"]\ncatalog=\"catalog.json\"\n",
+      "normative_diagnostics": 1,
+      "note": "Verify the known missing-label diagnostic survives shifted offsets without being mistaken for a new finding.",
+      "intentional_parse_error": false,
+      "scenario_heading": "Exact content-reference repair",
+      "assert_normative_count": true,
+      "expected_no_target_edits": false,
+      "expected_candidate": {
+        "main.typ": "#import \"@local/project-references:0.1.0\": project-ref\n$x^(i)$\n#project-ref(\"pde\", <energy>)\n#project-ref(\"pde\", <missing>)\n"
+      }
+    },
+    {
+      "id": "core.project-ref-catalog-target--duplicate-catalog-key",
+      "rule_id": "core.project-ref-catalog-target",
+      "kind": "duplicate-catalog-key",
+      "files": {
+        "main.typ": "#import \"@local/project-references:0.1.0\": project-ref\n#project-ref(\"pde\", <energy>)\n",
+        "catalog.json": "{\"schema\":1,\"schema\":1,\"projects\":{}}"
+      },
+      "config": "rule-set=\"pde\"\ninclude=[\"**/*.typ\",\"**/*.md\"]\ncatalog=\"catalog.json\"\n",
+      "normative_diagnostics": null,
+      "note": "Expected input-stage rejection. Not a semantic rule test, not supported clean coverage.",
+      "intentional_parse_error": false,
+      "scenario_heading": null,
+      "assert_normative_count": true,
+      "expected_no_target_edits": true,
+      "expected_input_error": "Duplicate reference catalog key"
+    },
+    {
+      "id": "core.project-ref-catalog-target--duplicate-catalog-target",
+      "rule_id": "core.project-ref-catalog-target",
+      "kind": "duplicate-catalog-target",
+      "files": {
+        "main.typ": "#import \"@local/project-references:0.1.0\": project-ref\n#project-ref(\"pde\", <energy>)\n",
+        "catalog.json": "{\"schema\":1,\"projects\":{\"pde\":{\"references\":{\"energy\":{\"page\":1,\"text\":\"A\"},\"energy\":{\"page\":2,\"text\":\"B\"}}}}}"
+      },
+      "config": "rule-set=\"pde\"\ninclude=[\"**/*.typ\",\"**/*.md\"]\ncatalog=\"catalog.json\"\n",
+      "normative_diagnostics": null,
+      "note": "Expected input-stage rejection. Not a semantic rule test, not supported clean coverage.",
+      "intentional_parse_error": false,
+      "scenario_heading": null,
+      "assert_normative_count": true,
+      "expected_no_target_edits": true,
+      "expected_input_error": "Duplicate reference catalog key"
+    },
+    {
+      "id": "core.project-ref-catalog-target--nan-catalog-metadata",
+      "rule_id": "core.project-ref-catalog-target",
+      "kind": "nan-catalog-metadata",
+      "files": {
+        "main.typ": "#import \"@local/project-references:0.1.0\": project-ref\n#project-ref(\"pde\", <energy>)\n",
+        "catalog.json": "{\"schema\":1,\"projects\":{},\"extra\":NaN}"
+      },
+      "config": "rule-set=\"pde\"\ninclude=[\"**/*.typ\",\"**/*.md\"]\ncatalog=\"catalog.json\"\n",
+      "normative_diagnostics": null,
+      "note": "Expected input-stage rejection. Not a semantic rule test, not supported clean coverage.",
+      "intentional_parse_error": false,
+      "scenario_heading": null,
+      "assert_normative_count": true,
+      "expected_no_target_edits": true,
+      "expected_input_error": "Non-standard JSON numeric constant"
+    },
+    {
+      "id": "core.project-ref-catalog-target--infinite-catalog-coordinate",
+      "rule_id": "core.project-ref-catalog-target",
+      "kind": "infinite-catalog-coordinate",
+      "files": {
+        "main.typ": "#import \"@local/project-references:0.1.0\": project-ref\n#project-ref(\"pde\", <energy>)\n",
+        "catalog.json": "{\"schema\":1,\"projects\":{\"pde\":{\"references\":{\"energy\":{\"page\":1,\"text\":\"A\",\"x\":Infinity}}}}}"
+      },
+      "config": "rule-set=\"pde\"\ninclude=[\"**/*.typ\",\"**/*.md\"]\ncatalog=\"catalog.json\"\n",
+      "normative_diagnostics": null,
+      "note": "Expected input-stage rejection. Not a semantic rule test, not supported clean coverage.",
+      "intentional_parse_error": false,
+      "scenario_heading": null,
+      "assert_normative_count": true,
+      "expected_no_target_edits": true,
+      "expected_input_error": "Invalid coordinate"
+    },
+    {
+      "id": "pde.standalone-display--inline-not-display",
+      "rule_id": "pde.standalone-display",
+      "kind": "inline-not-display",
+      "files": {
+        "main.typ": "Thus $A=B$ and the claim follows.\n"
+      },
+      "config": "rule-set=\"pde\"\ninclude=[\"**/*.typ\",\"**/*.md\"]\n",
+      "normative_diagnostics": 0,
+      "note": "",
+      "intentional_parse_error": false,
+      "scenario_heading": "Non-violation with separate source lines",
+      "assert_normative_count": true,
+      "expected_no_target_edits": true
+    },
+    {
+      "id": "pde.standalone-display--attached-label",
+      "rule_id": "pde.standalone-display",
+      "kind": "attached-label",
+      "files": {
+        "main.typ": "Thus $ A = B $ <identity> and the claim follows.\n"
+      },
+      "config": "rule-set=\"pde\"\ninclude=[\"**/*.typ\",\"**/*.md\"]\n",
+      "normative_diagnostics": 1,
+      "note": "",
+      "intentional_parse_error": false,
+      "scenario_heading": "Violation with prose on the display line",
+      "assert_normative_count": true,
+      "expected_no_target_edits": false,
+      "expected_candidate": {
+        "main.typ": "Thus\n$ A = B $ <identity>\nand the claim follows.\n"
+      }
+    },
+    {
+      "id": "pde.standalone-display--bom-crlf",
+      "rule_id": "pde.standalone-display",
+      "kind": "bom-crlf",
+      "files": {
+        "main.typ": "﻿Thus $ A = B $ and the claim follows.\r\n"
+      },
+      "config": "rule-set=\"pde\"\ninclude=[\"**/*.typ\",\"**/*.md\"]\n",
+      "normative_diagnostics": 1,
+      "note": "",
+      "intentional_parse_error": false,
+      "scenario_heading": null,
+      "assert_normative_count": true,
+      "expected_no_target_edits": false,
+      "expected_candidate": {
+        "main.typ": "﻿Thus\r\n$ A = B $\r\nand the claim follows.\r\n"
+      }
+    },
+    {
+      "id": "pde.standalone-display--nested-body-refusal",
+      "rule_id": "pde.standalone-display",
+      "kind": "nested-body-refusal",
+      "files": {
+        "main.typ": "#block[Thus $ A = B $ and the claim follows.]\n"
+      },
+      "config": "rule-set=\"pde\"\ninclude=[\"**/*.typ\",\"**/*.md\"]\n",
+      "normative_diagnostics": 0,
+      "note": "Nested effective context is not yet proven; explicit partial coverage is required.",
+      "intentional_parse_error": false,
+      "scenario_heading": null,
+      "assert_normative_count": true,
+      "expected_no_target_edits": true
+    },
+    {
+      "id": "pde.display-continuation-gap--attached-label-gap",
+      "rule_id": "pde.display-continuation-gap",
+      "kind": "attached-label-gap",
+      "files": {
+        "main.typ": "$ A = B $ <identity>\n\nHence the identity holds.\n"
+      },
+      "config": "rule-set=\"pde\"\ninclude=[\"**/*.typ\",\"**/*.md\"]\n",
+      "normative_diagnostics": 1,
+      "note": "",
+      "intentional_parse_error": false,
+      "scenario_heading": "Violation with an unmarked gap",
+      "assert_normative_count": true,
+      "expected_no_target_edits": false,
+      "expected_candidate": {
+        "main.typ": "$ A = B $ <identity>\nHence the identity holds.\n"
+      }
+    },
+    {
+      "id": "pde.display-continuation-gap--marked-new-paragraph",
+      "rule_id": "pde.display-continuation-gap",
+      "kind": "marked-new-paragraph",
+      "files": {
+        "main.typ": "#import \"@local/text-utils:0.1.2\": paragraph_tab, apply-paragraph-tabs\n#show: apply-paragraph-tabs\n#set text(lang: \"en\")\n$ A = B $\n\n#paragraph_tab\nTherefore a new idea follows.\n"
+      },
+      "config": "rule-set=\"pde\"\ninclude=[\"**/*.typ\",\"**/*.md\"]\n",
+      "normative_diagnostics": 0,
+      "note": "",
+      "intentional_parse_error": false,
+      "scenario_heading": "Non-violation for continuation or a new marked idea",
+      "assert_normative_count": true,
+      "expected_no_target_edits": true
+    },
+    {
+      "id": "pde.display-continuation-gap--comment-boundary-refusal",
+      "rule_id": "pde.display-continuation-gap",
+      "kind": "comment-boundary-refusal",
+      "files": {
+        "main.typ": "$ A = B $\n// retain ownership\n\nHence the identity holds.\n"
+      },
+      "config": "rule-set=\"pde\"\ninclude=[\"**/*.typ\",\"**/*.md\"]\n",
+      "normative_diagnostics": 0,
+      "note": "Do not cross a comment or guess which prose belongs to the display.",
+      "intentional_parse_error": false,
+      "scenario_heading": null,
+      "assert_normative_count": true,
+      "expected_no_target_edits": true
+    },
+    {
+      "id": "pde.display-continuation-gap--suppressed-gap",
+      "rule_id": "pde.display-continuation-gap",
+      "kind": "suppressed-gap",
+      "files": {
+        "main.typ": "// typst-lint: ignore-next pde.display-continuation-gap -- intentional separation\n$ A = B $\n\nHence the identity holds.\n"
+      },
+      "config": "rule-set=\"pde\"\ninclude=[\"**/*.typ\",\"**/*.md\"]\n",
+      "normative_diagnostics": 0,
+      "note": "Suppression is owned by the display opener, not following prose.",
+      "intentional_parse_error": false,
+      "scenario_heading": null,
+      "assert_normative_count": true,
+      "expected_no_target_edits": true
     }
   ]
 }

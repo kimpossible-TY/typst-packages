@@ -25,6 +25,14 @@ TEXT_UTILS_EXPORTS = (
     ('apply-paragraph-tabs', 'apply-paragraph-tabs'), ('highlighted', 'highlighted'),
     ('capitalize-title', 'capitalize-title'), ('is-numeric-title', 'is-numeric-title'),
 )
+PROJECT_REFERENCES = '@local/project-references:0.1.0'
+PROJECT_REFERENCES_SOURCE_SHA256 = '94b5f60db26e97faa511285fecd92a0f2afed708c8d56b1ed252cce3458a1720'
+PROJECT_REFERENCES_EXPORTS = (('project-ref', 'project-ref'),)
+# These literal prefixes are rejected by the exact reviewed project-ref body.
+# They are not a general inference about arbitrary label-generating functions.
+PROJECT_REFERENCE_LOCAL_PREFIXES = (
+    'local-scope-', 'local-scope-annotations-', 'mannot-scope-', '_mannot-',
+)
 
 
 @dataclass(frozen=True)
@@ -39,9 +47,20 @@ class ReviewedPackage:
     import_path: str
     source_sha256: str
     exports: tuple[tuple[str, str], ...]
+    namespace: str
+    name: str
+    version: str
+    entrypoint: str
 
 
-REVIEWED_PACKAGES = (ReviewedPackage(TEXT_UTILS, TEXT_UTILS_SOURCE_SHA256, TEXT_UTILS_EXPORTS),)
+REVIEWED_PACKAGES = (
+    ReviewedPackage(TEXT_UTILS, TEXT_UTILS_SOURCE_SHA256, TEXT_UTILS_EXPORTS,
+                    'local', 'text-utils', '0.1.2', 'lib.typ'),
+    # The module only defines a function. Its runtime json("projects.json")
+    # operation is never executed or followed by the static package loader.
+    ReviewedPackage(PROJECT_REFERENCES, PROJECT_REFERENCES_SOURCE_SHA256,
+                    PROJECT_REFERENCES_EXPORTS, 'local', 'project-references', '0.1.0', 'lib.typ'),
+)
 
 
 @dataclass(frozen=True)

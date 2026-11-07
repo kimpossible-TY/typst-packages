@@ -1,6 +1,6 @@
 {
   "schema": 1,
-  "version": "0.3.0-provenance",
+  "version": "0.4.0-rules",
   "packs": {
     "core": [
       "core"
@@ -98,8 +98,8 @@
       "source": "My / References between projects; Projects / Mention an existing target.",
       "description": "The linter SHALL require exactly two positional arguments and no named arguments for resolved `project-ref`: a string project key and a global Typst label. Known strings, reference content, displayed numbers, or scope-generated labels in the second slot SHALL be rejected. Unresolved values SHALL not be guessed.",
       "repair": "conditional",
-      "rewrite": "Conditional: exactly `project-ref(\"pde\", @energy)` → `project-ref(\"pde\", <energy>)`.",
-      "preconditions": "Only a simple global reference with no supplements/options and exactly two arguments; matching literal project/label must be unique in a configured valid catalog. Preserve project and label identity; intended effect is passing a label rather than rendered reference content. Extra/named args, strings containing numbers, dynamic/scoped targets remain diagnostic; do not drop arguments or guess labels."
+      "rewrite": "Conditional: exactly `project-ref(\"pde\", [@energy])` → `project-ref(\"pde\", <energy>)`.",
+      "preconditions": "Resolve the shared API and require exactly two positional arguments: a literal project key and a literal content block containing exactly one unsupplemented global reference, with no whitespace, comments, options or additional content. The matching literal project/label must be unique and nonambiguous in a configured valid catalog. Replace only the second argument, preserve project/label identity and reparse; intended effect is passing a label rather than rendered reference content. Extra/named args, strings containing numbers and dynamic/scoped targets remain diagnostic without guessed repairs. Bare `@energy` in a code argument is a parse failure and remains unchanged; this rule grants no malformed-syntax recovery."
     },
     {
       "id": "core.project-ref-catalog-target",

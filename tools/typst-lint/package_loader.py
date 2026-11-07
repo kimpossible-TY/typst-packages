@@ -17,7 +17,7 @@ import stat
 import tomllib
 from typing import Iterable
 
-from static_resolver import PackageSource, TEXT_UTILS, TEXT_UTILS_SOURCE_SHA256
+from static_resolver import PackageSource, REVIEWED_PACKAGES
 
 MAX_MANIFEST_BYTES = 64 * 1024
 MAX_SOURCE_BYTES = 1024 * 1024
@@ -244,6 +244,21 @@ def _requested_paths(import_paths):
     return tuple(sorted(result))
 
 
+def read_snapshot_file(path: str | os.PathLike[str], limit: int) -> tuple[str, bytes]:
+    """Read one explicit file with the same retained-descriptor safeguards.
+
+    Used by the optional reference catalog loader, not package dependency
+    discovery. Verification rereads the retained descriptor, never reopens an
+    unchecked path. No evaluator, cache or sibling-file lookup is involved.
+    """
+    _require(type(limit) is int and limit > 0, 'Invalid snapshot file byte limit')
+    target = _absolute_root(path)
+    with _Snapshot(target.parent) as snapshot:
+        source = snapshot.read(snapshot.directory_root, target.name, limit)
+        snapshot.verify()
+    return str(target), source
+
+
 def _manifest(source, path):
     try:
         data = tomllib.loads(source.decode('utf-8'))
@@ -282,37 +297,38 @@ def load_packages(package_path: str | os.PathLike[str],
     try:
         with _Snapshot(root) as snapshot:
             for import_path in requested:
-                if import_path != TEXT_UTILS:
+                contract = next((p for p in REVIEWED_PACKAGES if p.import_path == import_path), None)
+                if contract is None:
                     unavailable.append(PackageUnavailable(
                         import_path, 'unreviewed-package',
                         'No reviewed static contract exists for this import; its files were not read'))
                     continue
                 directory = snapshot.directory_root
-                for component in ('local', 'text-utils', '0.1.2'):
+                for component in (contract.namespace, contract.name, contract.version):
                     directory = snapshot.directory(directory, component)
                 manifest_path = str(directory.path / 'typst.toml')
                 manifest = snapshot.read(directory, 'typst.toml', MAX_MANIFEST_BYTES)
                 package = _manifest(manifest, manifest_path)
                 metadata = dict(
                     import_path=import_path, manifest_identity=manifest_path,
-                    manifest_sha256=_digest(manifest), namespace='local',
+                    manifest_sha256=_digest(manifest), namespace=contract.namespace,
                     name=package['name'], version=package['version'], entrypoint=package['entrypoint'])
-                if (package['name'] != 'text-utils' or package['version'] != '0.1.2'
-                        or package['entrypoint'] != 'lib.typ'
-                        or package.get('namespace', 'local') != 'local'):
+                if (package['name'] != contract.name or package['version'] != contract.version
+                        or package['entrypoint'] != contract.entrypoint
+                        or package.get('namespace', contract.namespace) != contract.namespace):
                     evidence.append(PackageEvidence(source_identity=None, source_sha256=None, **metadata))
                     unavailable.append(PackageUnavailable(
                         import_path, 'unreviewed-package-metadata',
-                        'Package metadata does not match the reviewed local/text-utils/0.1.2 lib.typ artifact'))
+                        f'Package metadata does not match the reviewed {contract.namespace}/{contract.name}/{contract.version} {contract.entrypoint} artifact'))
                     continue
-                source_path = str(directory.path / 'lib.typ')
-                source = snapshot.read(directory, 'lib.typ', MAX_SOURCE_BYTES)
+                source_path = str(directory.path / contract.entrypoint)
+                source = snapshot.read(directory, contract.entrypoint, MAX_SOURCE_BYTES)
                 source_hash = _digest(source)
                 evidence.append(PackageEvidence(source_identity=source_path, source_sha256=source_hash, **metadata))
-                if source_hash != TEXT_UTILS_SOURCE_SHA256:
+                if source_hash != contract.source_sha256:
                     unavailable.append(PackageUnavailable(
                         import_path, 'unreviewed-package-source',
-                        'Package source bytes do not match the reviewed text-utils 0.1.2 artifact'))
+                        f'Package source bytes do not match the reviewed {contract.name} {contract.version} artifact'))
                     continue
                 sources.append(PackageSource(import_path, source_path, source))
             snapshot.verify()

@@ -90,4 +90,31 @@ The design follow-up is reviewed and merged first. Groups 2–7 are authorized i
 - [x] 12.2 Add explicit read-only `--package-path` loading with manifest/source hashes, bounded reads, no-follow paths and concurrent-replacement checks. Never discover or install packages implicitly.
 - [x] 12.3 Connect root-prose capitalization and paragraph-marker-gap to those proofs, including source-language precedence, suppression-anchor expiration, LF/CRLF/BOM preservation and unresolved combined footnote repairs.
 - [x] 12.4 Verify combined script/paragraph proposals by reparsing and repeated analysis; run real source-to-render fixtures proving uppercase, indentation and protected names. Preserve status 2/no CLI writes/compiler while required coverage is incomplete. Independent final suite: 183 tests including both real-render tests passed.
-- [ ] 12.5 Independently review the implementation and exact pushed-commit Linux matrix; document remaining facade/graph, nested-body and rule coverage without claiming all-project enforcement.
+- [x] 12.5 Independently review the implementation and exact pushed-commit Linux matrix; both Python 3.11/3.15 jobs passed for 9d82fed (run 42339489217). Document remaining facade/graph, nested-body and rule coverage without claiming all-project enforcement.
+
+## 13. Audit every rule without hiding missing implementation
+
+- [x] 13.1 Index all 33 IDs and 70 then-current normative scenarios, with representative positive/negative fixtures, implementation links and explicit missing acceptance work.
+- [x] 13.2 Run 98 isolated fixtures through 109 actual CLI calls at runtime baseline 9d82fed; retain portable hashes/reports and verify no source/config/catalog changes or compiler invocation. Report 30 NOT_IMPLEMENTED, 3 PARTIAL and 0 COMPLETE rather than count unsupported negatives as passes.
+- [x] 13.3 Independently review candidate reanalysis classification; require retained per-file/rule coverage, no new refusal or finding, and zero subsequent edits. Ten harness regressions plus the full 193-test suite passed; audit commit 58111d8 passed both Linux jobs (run 42340126288).
+- [x] 13.4 Record and independently verify the project-ref bare-@ syntax conflict. Correct the repair contract to the exact valid `[@label]` content form, with unique catalog proof; leave malformed bare references as parse failures.
+
+## 14. Implement the project-reference rules
+
+- [x] 14.1 Add explicitly verified project-references package provenance and a single immutable validated catalog snapshot, retaining bounded read-only behavior and digest compatibility. Reject duplicate keys and nonstandard NaN/Infinity, including unused metadata.
+- [x] 14.2 Implement bounded root argument shape/type and catalog membership checks without guessing unresolved aliases, missing/ambiguous labels or external destinations; broader graph/capture coverage remains partial.
+- [x] 14.3 Implement only the corrected exact content-reference-to-label repair, its refusal cases, candidate reparse/idempotence and suppression ownership. An isolated actual-CLI-to-render/query fixture verifies the exact reference URL/page/text and unchanged target identity.
+- [x] 14.4 Independently review, run the complete suite and regenerate the all-rule audit before publishing the next implementation checkpoint. No consumer rollout or compiler gate enablement.
+
+## 15. Add typed display analysis and safe source-layout proposals
+
+- [x] 15.1 Extend the pinned parser bridge to schema 2 / adapter 0.2.0 with typed Equation.block display flags and strict field validation. Preserve dependency versions; pass rustfmt, Clippy and four Rust tests.
+- [x] 15.2 Implement bounded root standalone-display and display-continuation-gap backends. Preserve same-line semantic labels, formula/text bytes, comments, BOM/Unicode and newline style; refuse ambiguous/nested ownership.
+- [x] 15.3 Reparse and verify retained literal prose remains prose, refusing newline-induced heading/list/term reinterpretation. Preserve directive ownership and explicitly refuse combinations that require an unsupported second repair pass.
+- [x] 15.4 Independently review and verify seven-backend composition through the real read-only CLI. Isolated display compilation/query preserves the equation's semantic label and text order. Final local suite: 262 tests, including four opt-in render tests, passed.
+
+## 16. Refresh the complete rule audit for the checkpoint
+
+- [x] 16.1 Run 136 isolated fixtures through 159 real CLI invocations, indexing all 72 current normative scenario headings. Report 26 NOT_IMPLEMENTED, 7 PARTIAL and 0 COMPLETE, with no unsupported negative case counted as a semantic pass.
+- [x] 16.2 Separate four expected invalid-catalog input refusals and two expected parser refusals. The corrected reference contract removes the earlier SPEC_CONFLICT classification; no destination or malformed repair is guessed.
+- [x] 16.3 Retain immutable candidate-proof checks, all package artifact fingerprints, available-backend versus evaluated-coverage distinctions, and no source writes or compiler invocation. Regenerate final evidence after this status update before committing the checkpoint.

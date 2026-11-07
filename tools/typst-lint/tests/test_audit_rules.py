@@ -1,12 +1,14 @@
 """The audit harness must not equate missing analysis with idempotence."""
 import copy
+import json
 from pathlib import Path
 import sys
 import unittest
+from unittest.mock import patch
 
 TOOL = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(TOOL))
-from audit_rules import candidate_verdict
+from audit_rules import candidate_verdict, expected_input_refusal, observe, snapshot, spec_index
 
 SCRIPT = 'core.parenthesized-scripts'
 CAP = 'pde.paragraph-capitalization'
@@ -106,6 +108,70 @@ class CandidateCoverageTests(unittest.TestCase):
                 if change == 'no-repairs': baseline['proposed_edits'] = []
                 else: baseline['coverage']['files'][0]['status'] = 'unsupported'
                 self.assertFalse(self.verdict(baseline, candidate)['verified'])
+
+
+class AuditInventoryTests(unittest.TestCase):
+    def test_expected_catalog_refusal_requires_matching_phase_and_reason(self):
+        fixture = {'expected_input_error': 'Duplicate reference catalog key'}
+        report = {'phase': 'input', 'error': 'Duplicate reference catalog key: energy'}
+        self.assertTrue(expected_input_refusal(fixture, report))
+        self.assertFalse(expected_input_refusal(fixture, dict(report, phase='analysis')))
+        self.assertFalse(expected_input_refusal(fixture, dict(report, error='Unrelated failure')))
+        self.assertFalse(expected_input_refusal({}, report))
+
+    def test_expected_input_refusal_is_not_a_semantic_rule_result(self):
+        fixture = {'id': 'core.project-ref-catalog-target--invalid',
+                   'rule_id': 'core.project-ref-catalog-target', 'kind': 'invalid',
+                   'normative_diagnostics': None, 'intentional_parse_error': False,
+                   'expected_input_error': 'Duplicate reference catalog key'}
+        report = {'phase': 'input', 'error': 'Duplicate reference catalog key: energy'}
+        with patch('audit_rules.run_cli', return_value={'report': report}):
+            result = observe(fixture)
+        self.assertEqual(result['observation'], 'EXPECTED_INPUT_REFUSAL')
+        self.assertFalse(result['backend_observed'])
+        self.assertIsNone(result['candidate_idempotence_verified'])
+
+    def test_wrong_input_failure_is_not_accepted_as_expected_refusal(self):
+        fixture = {'id': 'core.project-ref-catalog-target--invalid',
+                   'rule_id': 'core.project-ref-catalog-target', 'kind': 'invalid',
+                   'normative_diagnostics': None, 'intentional_parse_error': False,
+                   'expected_input_error': 'Duplicate reference catalog key'}
+        with patch('audit_rules.run_cli', return_value={'report': {'phase': 'input', 'error': 'Unrelated failure'}}):
+            result = observe(fixture)
+        self.assertEqual(result['observation'], 'MISMATCH')
+
+    def test_bounded_reference_diagnostic_expectation_is_enforced_despite_partial_coverage(self):
+        rid = 'core.project-ref-arguments'
+        fixture = {'id': rid + '--exact', 'rule_id': rid, 'kind': 'exact',
+                   'normative_diagnostics': 1, 'intentional_parse_error': False,
+                   'assert_normative_count': True}
+        report = {'phase': 'analysis', 'coverage': {'files': [
+            {'path': 'main.typ', 'rule_id': rid, 'status': 'partial', 'reasons': ['Bounded root subset']}]},
+            'diagnostics': [], 'proposed_edits': []}
+        with patch('audit_rules.run_cli', return_value={'report': report}):
+            result = observe(fixture)
+        self.assertEqual(result['observation'], 'MISMATCH')
+
+    def test_snapshot_covers_all_current_reviewed_artifacts_and_catalog_type(self):
+        files = snapshot()['files']
+        for path in ('local/text-utils/0.1.2/lib.typ', 'local/text-utils/0.1.2/typst.toml',
+                     'local/project-references/0.1.0/lib.typ', 'local/project-references/0.1.0/typst.toml',
+                     'tools/typst-lint/reference_catalog.py'):
+            self.assertIn(path, files)
+
+    def test_current_normative_scenarios_are_mapped_without_completion_claims(self):
+        fixtures = json.loads((TOOL / 'audit/fixtures.json').read_text())['fixtures']
+        specs = spec_index()
+        self.assertEqual(len(specs), 33)
+        self.assertEqual(len({f['id'] for f in fixtures}), len(fixtures))
+        for rid, definition in specs.items():
+            for scenario in definition['scenarios']:
+                with self.subTest(rule=rid, heading=scenario['heading']):
+                    self.assertTrue(any(f['rule_id'] == rid and f['scenario_heading'] == scenario['heading']
+                                        for f in fixtures))
+        bare = next(f for f in fixtures if f['kind'] == 'malformed-bare-reference')
+        self.assertTrue(bare['intentional_parse_error'])
+        self.assertEqual(bare['scenario_heading'], 'Malformed bare reference is not repaired')
 
 
 if __name__ == '__main__':

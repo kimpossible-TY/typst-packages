@@ -42,7 +42,12 @@ def snapshot():
     paths |= set((TOOL / 'syntax-adapter/src').glob('*.rs'))
     paths |= {TOOL / 'typst-lint', TOOL / 'typst-style',
               TOOL / 'syntax-adapter/Cargo.toml', TOOL / 'syntax-adapter/Cargo.lock',
-              REPO / 'local/text-utils/0.1.2/lib.typ', REPO / 'local/text-utils/0.1.2/typst.toml', INVENTORY}
+              INVENTORY}
+    # Hash the repository package source/manifest inventory, not a hardcoded
+    # singleton. This covers every currently reviewed package and future additions
+    # without executing its imports or reading runtime JSON catalogs.
+    paths |= set((REPO / 'local').rglob('*.typ'))
+    paths |= set((REPO / 'local').rglob('typst.toml'))
     files = {p.relative_to(REPO).as_posix(): digest(p.read_bytes()) for p in sorted(paths) if p.is_file()}
     return {'commit': git('rev-parse', 'HEAD'), 'branch': git('branch', '--show-current'),
             'files': files, 'working_tree_sha256': digest(json.dumps(files, sort_keys=True).encode()),
@@ -74,6 +79,12 @@ def spec_index():
     for rid, item in requirements.items():
         item['repair_line'] = next(i for i, line in enumerate(repair_lines, 1) if line.startswith(f'| `{rid}` |'))
     return requirements
+
+
+def expected_input_refusal(fixture, report):
+    expected = fixture.get('expected_input_error')
+    return bool(expected and report.get('phase') == 'input' and
+                expected in report.get('error', ''))
 
 
 def run_cli(fixture, mode='dry-run', source_files=None):
@@ -130,10 +141,17 @@ def run_cli(fixture, mode='dry-run', source_files=None):
         else:
             if process.returncode != 2 or report.get('status') != 2:
                 issues.append('Expected current partial runtime status/exit 2')
-            if report.get('compiler_invoked') is not False or report.get('applied_fixes') != []:
+            expected_refusal = expected_input_refusal(fixture, report)
+            record['expected_input_refusal_matched'] = expected_refusal
+            if fixture.get('expected_input_error') and not expected_refusal:
+                issues.append('Expected explicit input refusal was not observed')
+            if report.get('compiler_invoked') is not False or report.get('applied_fixes', [] if expected_refusal else None) != []:
                 issues.append('CLI did not affirm no compiler/no source applications')
-            if report.get('coverage', {}).get('complete') is not False:
+            if not expected_refusal and report.get('coverage', {}).get('complete') is not False:
                 issues.append('Incomplete runtime incorrectly reports complete coverage')
+            if report.get('phase') == 'analysis' and 'catalog.json' in before:
+                if report.get('hashes', {}).get('reference_catalog') != before['catalog.json']:
+                    issues.append('Validated catalog hash differs from independent fixture hash')
             for item in report.get('inputs', []):
                 if before.get(item['path']) != item['sha256']:
                     issues.append('Input hash differs from independently read fixture hash')
@@ -264,8 +282,9 @@ def observe(fixture):
                   backend_observed=bool(rows), expected_candidate_verified=None,
                   candidate_idempotence_verified=None)
     if report.get('parse_failures'):
-        result['observation'] = ('SPEC_CONFLICT' if fixture['kind'] == 'spec-conflict-ref-recovery' else
-                                 'EXPECTED_PARSE_REFUSAL' if fixture['intentional_parse_error'] else 'PARSE_BLOCKED')
+        result['observation'] = 'EXPECTED_PARSE_REFUSAL' if fixture['intentional_parse_error'] else 'PARSE_BLOCKED'
+    elif expected_input_refusal(fixture, report):
+        result['observation'] = 'EXPECTED_INPUT_REFUSAL'
     elif report.get('configuration_failures') or report.get('phase') != 'analysis':
         result['observation'] = 'INPUT_OR_CONFIG_BLOCKED'
     elif not rows:
@@ -282,6 +301,12 @@ def observe(fixture):
     result['diagnostic_count_comparison'] = ('NOT_ASSERTED' if expected is None else
                                             'MATCH' if len(findings) == expected else 'DIFFERENT')
     if expected == 0 and findings:
+        result['observation'] = 'MISMATCH'
+    if fixture.get('assert_normative_count') and expected is not None and rows and len(findings) != expected:
+        result['observation'] = 'MISMATCH'
+    if fixture.get('expected_no_target_edits') and edits:
+        result['observation'] = 'MISMATCH'
+    if fixture.get('expected_input_error') and not expected_input_refusal(fixture, report):
         result['observation'] = 'MISMATCH'
     if fixture['kind'] == 'new-marker-convergence':
         result['observation'] = 'BLOCKED_COMPOSITION'
@@ -308,14 +333,26 @@ def observe(fixture):
 MODULES = {
     'core.parenthesized-scripts': ['script_rule.py', 'syntax_client.py', 'source_analysis.py'],
     'pde.paragraph-marker-gap': ['paragraph_rules.py', 'static_resolver.py', 'package_loader.py', 'source_analysis.py'],
+    'core.project-ref-arguments': ['reference_rules.py', 'reference_catalog.py', 'static_resolver.py', 'package_loader.py', 'source_analysis.py'],
+    'core.project-ref-catalog-target': ['reference_rules.py', 'reference_catalog.py', 'static_resolver.py', 'package_loader.py', 'source_analysis.py'],
+    'pde.standalone-display': ['display_rules.py', 'syntax_client.py', 'static_resolver.py', 'source_analysis.py'],
+    'pde.display-continuation-gap': ['display_rules.py', 'syntax_client.py', 'static_resolver.py', 'source_analysis.py'],
     'pde.paragraph-capitalization': ['capitalization.py', 'paragraph_rules.py', 'static_resolver.py', 'package_loader.py', 'source_analysis.py'],
 }
 TESTS = {
+    'core.project-ref-arguments': ['tests/test_reference_rules.py', 'tests/test_reference_catalog.py'],
+    'core.project-ref-catalog-target': ['tests/test_reference_rules.py', 'tests/test_reference_catalog.py'],
+    'pde.standalone-display': ['tests/test_display_rules.py'],
+    'pde.display-continuation-gap': ['tests/test_display_rules.py'],
     'core.parenthesized-scripts': ['tests/test_syntax.py', 'tests/test_suppression.py', 'tests/test_source_rules.py'],
     'pde.paragraph-marker-gap': ['tests/test_source_rules.py', 'tests/test_source_rules_render.py'],
     'pde.paragraph-capitalization': ['tests/test_capitalization.py', 'tests/test_source_rules.py', 'tests/test_source_rules_render.py'],
 }
 LIMITS = {
+    'core.project-ref-arguments': 'Only proven direct root calls, reviewed project-references package/aliases and bounded literal types. Exact [@label] repair needs an explicit unique catalog target. Facade graphs, nested/captured calls, dynamic types and generated labels remain unsupported.',
+    'core.project-ref-catalog-target': 'Immutable explicit catalogs and direct literal project/label calls only. No catalog is an optional skip, not a clean target check. Facades, dynamic/global identity proofs and broader document graphs remain unsupported.',
+    'pde.standalone-display': 'Typed Equation.display proof and root ordinary prose only. Nested/captured bodies, unknown inline wrappers, ambiguous labels, comments and general content graphs remain partial.',
+    'pde.display-continuation-gap': 'Root standalone displays, one known attached label, whitespace-only gap and direct unmarked prose only. Nested contexts, comments, unknown wrappers and multi-pass interactions remain incomplete.',
     'core.parenthesized-scripts': 'Markdown extraction/teaching exemption and ambiguous escaped/commented operands are unsupported. Protected runtime apply/compile unavailable.',
     'pde.paragraph-marker-gap': 'Only proven root prose with reviewed direct text-utils binding. Nested/body-start contexts and footnote-combined repair unsupported; comments can make repair unavailable.',
     'pde.paragraph-capitalization': 'Only proven root prose, canonical marker spelling, bounded starter/language policy. Nested/dynamic contexts and marker-insertion convergence unsupported.',
@@ -369,9 +406,10 @@ def write_matrix(evidence, output):
         'The official syntax adapter must already be built as documented in the tool README. This runner never builds, evaluates Typst imports, invokes a real compiler, or edits a consumer. Exit **2** means the audit finished with incomplete rule implementation/acceptance; it is not a success code. Exit 1 indicates an audit invariant failure, parse-blocked representative, or mismatch in claimed supported behavior.', '',
         'The runner creates isolated temporary consumers from [fixtures.json](audit/fixtures.json), supplies the explicit repository package path except in its missing-path refusal case, and captures the full normalized CLI reports in [latest-evidence.json](audit/latest-evidence.json). `<repo>` and `<fixture>` are portable path placeholders, not missing evidence. Every input/config/catalog hash, proposed edit baseline, package hash, runtime/spec fingerprint and report is retained. Negative fixtures with absent/partial coverage are **not semantic passes**.', '',
         'Only proposed-edit bytes are composed in memory and copied into a different temporary consumer for candidate reanalysis. Idempotence is verified only when all repaired rule/file pairs retain supported coverage, baseline-supported pairs have no downgrade or new refusal after mapping byte offsets, no unexpected active findings appear, and no edits remain. Missing/unsupported reanalysis is explicitly CANDIDATE_ANALYSIS_BLOCKED, never verified. This does not exercise protected source application, editor leases, convergence of all 33 rules, or the authoritative compiler gate. A PATH tripwire plus the reported compiler flag/output sentinel checks that these CLI invocations remain inert; it is not a proof about arbitrary external compiler paths.', '',
-        'The fixture inventory contains representative snippets of each normative positive/negative scenario. Most non-text-utils helper provenance cannot yet be resolved, and reports retain the exact unavailable-package reasons. Synthetic facade re-exports and flowbox fragments are not represented as trusted package implementations. No unresolved helper is promoted to a semantic pass.', '',
-        '## Known specification conflict', '',
-        'The repair row for `core.project-ref-arguments` spells `project-ref("pde", @energy)` as repairable. The official 0.15.1 syntax parser reports an error at `@` in that code argument, while the global parse-recovery policy allows only the declared dictionary-field call form. The `spec-conflict-ref-recovery` fixture records **SPEC_CONFLICT** and parser spans separately. The ordinary positive fixture uses the syntax-valid string target `"1.1.1"`; it remains NOT_IMPLEMENTED. A contract correction and its review are required before claiming this repair can run.', '',
+        'The fixture inventory contains representative snippets of each normative positive/negative scenario. Only reviewed direct text-utils and project-references package provenance is supported; other helper provenance cannot yet be resolved, and reports retain the exact unavailable-package reasons. Synthetic facade re-exports and flowbox fragments are not represented as trusted package implementations. No unresolved helper is promoted to a semantic pass.', '',
+        '## Historical baseline and corrected reference contract', '',
+        'The prior 3-PARTIAL / 30-NOT_IMPLEMENTED audit is preserved in Git commit `58111d8c2cd956bfe019869a76571945b22b3671` at `tools/typst-lint/audit/latest-evidence.json` and its matrix. Current counts are derived from this run, never copied forward. That baseline identified a malformed bare-reference repair example.', '',
+        'The current normative contract permits only the exact syntax-valid `project-ref("pde", [@energy])` content-to-label repair with a unique explicit catalog match. Bare `@energy` in code arguments is now an intentional parse-refusal scenario, not an unresolved SPEC_CONFLICT. Invalid duplicate-key/nonfinite catalogs are reported as EXPECTED_INPUT_REFUSAL and never count as semantic rule passes. An absent optional catalog likewise does not establish target validity.', '',
         '## 33-rule matrix', '',
         '| Rule and normative spec | Repair contract | Status / implementation | Actual CLI smoke evidence | Remaining acceptance work |',
         '| --- | --- | --- | --- | --- |']
@@ -393,9 +431,9 @@ def write_matrix(evidence, output):
         tests = ', '.join(f'[{p}]({p})' for p in rule['existing_test_sources_not_rerun_here']) or 'No implementation test module yet.'
         lines += [f'- Existing test sources (not rerun or counted as passes by this audit): {tests}', '']
     lines += ['## Work still required, in priority order', '',
-        '1. Keep fail-closed coverage reporting while implementing the missing 30 detection backends. Establish reviewed facade/import/include, builtin/shadowing, content-context and document-graph proofs before rules that depend on them. Do not count registry metadata or catalog validation as rule execution.',
+        f"1. Keep fail-closed coverage reporting while implementing the missing {counts.get('NOT_IMPLEMENTED', 0)} detection backends. Establish reviewed facade/import/include, builtin/shadowing, content-context and document-graph proofs before rules that depend on them. Do not count registry metadata or catalog validation as rule execution.",
         '2. Complete interacting paragraph/display/proof/footnote rules, including marker insertion, body-start gaps, explicit prose parbreak composition and source-language/context proof. Verify all lowercase/name/math/non-English preservation and multi-pass convergence cases.',
-        '3. Implement annotation scope ownership/marker bounds, namespace graphs, project-reference/catalog lookups, book/reset ownership and theme rules. Diagnostic-only contracts must remain nonmutating; unavailable targets/names must never be invented.',
+        '3. Implement annotation scope ownership/marker bounds, namespace graphs, remaining project-reference/catalog provenance, book/reset ownership and theme rules. Diagnostic-only contracts must remain nonmutating; unavailable targets/names must never be invented.',
         '4. Add Markdown extraction/source mapping and exact teaching-line exemption; complete every listed branch, refusal, suppression, exact edit, byte/newline/BOM/comment preservation and idempotence fixture for each repair row. Add the required combined highlight/display/paragraph and light/dark palette render assertions.',
         '5. Independently verify protected transactions, editor generations, recovery journals and immutable compile snapshots before enabling source application or authoritative builds. Current check, dry-run, fix and compile invocations remain exit 2, source unchanged, compiler not invoked.', '',
         'No consumer documentation, editor settings, actual document sources or real compilation outputs were changed by this audit.', '']
@@ -432,7 +470,7 @@ def main():
                     'observation_counts': dict(Counter(r['observation'] for r in results)),
                     'normative_scenarios': sum(len(r['scenarios']) for r in rules),
                     'complete_scenarios': 0, 'cli_invocations': len(all_runs), 'audit_issues': issues,
-                    'spec_conflicts': [r['fixture_id'] for r in results if r['observation'] == 'SPEC_CONFLICT'],
+                    'expected_input_refusals': sum(r['observation'] == 'EXPECTED_INPUT_REFUSAL' for r in results),
                     'exit_code': 1 if issues else 2}}
     args.output.parent.mkdir(parents=True, exist_ok=True)
     args.output.write_text(json.dumps(evidence, ensure_ascii=False, sort_keys=True, indent=2) + '\n')

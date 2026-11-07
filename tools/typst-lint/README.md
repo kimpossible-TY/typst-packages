@@ -2,9 +2,9 @@
 
 This is the implementation draft for the reviewed
 [`typst-style-linter` design](../../openspec/changes/typst-style-linter/design.md).
-**This is not a production linter or build gate.** Real Typst parsing, script
-analysis and narrowly proven paragraph rules produce diagnostics and partial
-in-memory repair plans.
+**This is not a production linter or build gate.** Selected script, reference,
+paragraph and display rules produce diagnostics and partial in-memory repair
+plans from real Typst parsing and narrowly proven contexts.
 Other required rules, protected runtime writes and compilation remain incomplete.
 Every real CLI run still returns **2**, including an empty selection. No source
 is changed and no compiler is invoked. Help/version return 0.
@@ -28,8 +28,9 @@ consumer copies, global PATH changes or package installation are needed.
 
 The bridge parses immutable UTF-8 bytes in markup/code/math modes without
 Typst evaluation, import execution, package resolution or network access. It
-returns schema/version/mode/source-hash evidence and a tree of SyntaxKind byte
-spans with typed MathAttach operand spans. The client checks the complete tree,
+returns schema 2/adapter 0.2.0/mode/source-hash evidence and a tree of SyntaxKind
+byte spans with typed MathAttach operands and `Equation.block()` display flags.
+The client checks the complete tree,
 UTF-8 boundaries, root partitioning, links, errors and versions before rule use.
 Limits are 1 MiB input, 16 MiB stdout, 64 KiB stderr, 100,000 nodes, depth 256 and
 a default five-second process deadline. Pipes are bounded while streaming.
@@ -55,9 +56,11 @@ resolved and existing outputs are never replaced. There is no fail-open option.
 `--package-path` explicitly supplies Typst's local-package directory layout. The
 bounded resolver reads only AST-requested reviewed artifacts below it. There is
 no implicit lookup in the package owner's checkout, home directory, installed
-packages, caches or environment variable. The initial reviewed contract is the
-exact dependency-free `@local/text-utils:0.1.2` source shipped here; both manifest
-identity and actual source bytes are checked. A matching package name/version
+packages, caches or environment variable. Reviewed contracts cover the exact
+`@local/text-utils:0.1.2` and `@local/project-references:0.1.0` definition sources
+shipped here; both manifest identity and actual source bytes are checked. Neither
+definition source imports another module. The reference function's runtime
+`projects.json` is never loaded or evaluated by this analyzer. A matching package name/version
 alone is insufficient. Other versions, modified source and local facades remain
 unresolved, not version-style violations. Missing/unsafe/malformed requested
 inputs fail; unsupported valid artifacts are reported with reasons. Package
@@ -103,7 +106,10 @@ An entrypoint is currently read and hashed, not followed for imports or ownershi
 The optional read-only reference catalog requires schema 1, a projects object,
 per-project references and optional ambiguous-label lists. Entries require a
 positive integer page and nonempty reference text; optional coordinates must be
-finite representable numbers. URLs are never fetched. Missing/malformed catalogs
+finite representable numbers. One immutable snapshot is shared by all checks and
+candidate reanalysis. Reads are bounded to 16 MiB, descriptor/identity verified,
+and duplicate JSON keys or nonstandard NaN/Infinity values are rejected, including
+in unused metadata. URLs are never fetched. Missing/malformed catalogs
 fail; absence is an explicit optional skip. Validation proves neither reference
 freshness nor published-PDF correspondence.
 
@@ -143,13 +149,19 @@ Limitations remain explicit:
   static resolver. General import/include graphs and local facade exports remain
   unsupported. Unknown wildcard imports, bindings, dynamic language, show/output
   effects and deferred bodies cannot certify paragraph prose or language.
-- Root prose with proven canonical paragraph markers supports the two paragraph
-  rules described below. Other binding/graph-dependent rules remain unavailable.
+- Root prose with proven canonical paragraph markers supports two paragraph
+  rules, reviewed root project-reference calls support two reference rules, and
+  typed displays support two source-layout rules as described below. Other
+  binding/graph-dependent rules remain unavailable.
   Zero diagnostics never implies full rule coverage.
 
 Reports include deterministic findings, suppressions, file-specific coverage,
 parse-failure spans, proposed edits, input/config/catalog hashes, versions and
-actual unmanaged routes. A rule can have evaluated `.typ` inputs while other
+actual unmanaged routes. `coverage.available_backends` lists backends wired for
+the selected pack, which may be partial or unavailable for these inputs. The
+existing `implemented` list contains only backends with at least one evaluated
+input in this run; it does not certify their complete rule contracts. A rule can
+have evaluated `.typ` inputs while other
 selected files remain partial; `coverage.complete` stays false. Overall status 2
 continues to block writes and compilation even when one file's script rule passes.
 
@@ -242,6 +254,41 @@ Typst 0.15.1 indents but does not uppercase as its comments claim, due to show-r
 precedence. No broad package recasing fix was made. The optional real-render test
 verifies explicit `This`, 1.5em indentation and unchanged `iPhone` source/rendering.
 Package/consumer source and installed copies are not changed by the tests.
+
+## Bounded reference and display rules
+
+The two `core.project-ref-*` backends inspect proven direct root calls, including
+verified callee aliases, and literal argument types. Extra/named arguments and
+known nonlabel targets are diagnosed. Configured catalog lookups distinguish
+unknown projects, missing labels and ambiguous labels without guessing another
+target or fetching a URL. Dynamic/captured values and general document graphs
+remain partial. No catalog is an explicit optional membership skip.
+
+The only reference repair replaces an exact literal `[@label]` second argument
+with `<label>` when the resolved API has exactly two positional arguments, the
+project key is literal and the configured catalog proves a unique nonambiguous
+target. Whitespace, supplements, comments, options or extra content defeat the
+repair. Bare `@label` is invalid in a code argument and remains an unrepaired
+parse error. The audit exposed and prompted correction of the original malformed
+repair example. Identity is preserved; no catalog, page or destination is edited.
+An opt-in isolated render/query fixture applies the actual proposed repair to a
+temporary source and verifies the exact link destination and displayed reference
+text against a fabricated catalog, without network lookup or package installation.
+
+`pde.standalone-display` uses the parser's typed display property, never whitespace
+guessing, to separate adjacent proven root literal prose with single newlines.
+`pde.display-continuation-gap` reduces a whitespace-only blank gap after an already
+standalone display and optional same-line semantic label to one source newline.
+Inline equations, comments, markers, explicit breaks, unknown wrappers and
+ambiguous/multiple labels are not crossed. Equation contents, labels and text
+remain unchanged. Candidate AST checks also reject a newline that would reinterpret
+literal prose as a heading, list or term item, despite syntactically valid output.
+
+Full multi-pass cross-rule planning remains pending. If a standalone-display fix
+only exposes a continuation-gap fix on the next pass, current composition refuses
+the entire proposed edit set instead of applying an incompletely checked result.
+The isolated display render/query test verifies text order and that the semantic
+label remains attached to the block equation. No existing consumer document is compiled.
 
 ## Verification
 

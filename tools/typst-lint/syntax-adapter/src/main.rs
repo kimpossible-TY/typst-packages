@@ -4,7 +4,7 @@ use sha2::{Digest, Sha256};
 use std::io::{self, Read, Write};
 use typst_syntax::{
     SyntaxNode,
-    ast::{AstNode, MathAttach},
+    ast::{AstNode, Equation, MathAttach},
 };
 
 const MAX_INPUT: usize = 1_048_576;
@@ -26,6 +26,8 @@ fn flatten(
     let mut children = Vec::new();
     let mut operands = Vec::new();
     let attach = node.cast::<MathAttach>();
+    // This is the official typed equation property, not delimiter/text guessing.
+    let display = node.cast::<Equation>().map(Equation::block);
     let mut offset = start;
     for child in node.children() {
         let child_id = flatten(child, offset, depth + 1, nodes)?;
@@ -41,7 +43,8 @@ fn flatten(
     }
     nodes[id] = json!({"kind": format!("{:?}", node.kind()), "start": start,
                        "end": start + node.len(), "children": children,
-                       "errors": node.diagnosis().errors, "operands": operands});
+                       "errors": node.diagnosis().errors, "operands": operands,
+                       "display": display});
     Ok(id)
 }
 
@@ -67,7 +70,7 @@ fn run() -> Result<(), String> {
     };
     let mut nodes = Vec::new();
     flatten(&root, 0, 0, &mut nodes)?;
-    let result = json!({"schema": 1, "adapter_version": "0.1.0", "syntax_version": "0.15.1",
+    let result = json!({"schema": 2, "adapter_version": "0.2.0", "syntax_version": "0.15.1",
                         "mode": args[0], "source_bytes": raw.len(),
                         "source_sha256": format!("{:x}", Sha256::digest(&raw)), "nodes": nodes});
     let output = serde_json::to_vec(&result).map_err(|e| e.to_string())?;
@@ -108,6 +111,39 @@ mod tests {
         flatten(&typst_syntax::parse("$x^$"), 0, 0, &mut nodes).unwrap();
         assert_eq!(nodes[0]["errors"], true);
         assert!(nodes.iter().any(|n| n["kind"] == "Error"));
+    }
+
+    #[test]
+    fn display_flags_use_typed_equations_only() {
+        for (source, expected) in [
+            ("Thus $x$ follows.", false),
+            ("Thus $ x $ follows.", true),
+            ("$\nx\n$ <energy>", true),
+            ("$ x$", false),
+            ("$x $", false),
+            ("#let x = [$ x $]", true),
+            ("$\r\nx\r\n$", true),
+        ] {
+            let mut nodes = Vec::new();
+            flatten(&typst_syntax::parse(source), 0, 0, &mut nodes).unwrap();
+            let equation = nodes.iter().find(|n| n["kind"] == "Equation").unwrap();
+            assert_eq!(equation["display"], expected, "{source}");
+            assert!(
+                nodes
+                    .iter()
+                    .filter(|n| n["kind"] != "Equation")
+                    .all(|n| n["display"].is_null())
+            );
+        }
+        let mut nodes = Vec::new();
+        flatten(
+            &typst_syntax::parse("`$ x $` // $ x $\n#let s = \"$ x $\""),
+            0,
+            0,
+            &mut nodes,
+        )
+        .unwrap();
+        assert!(nodes.iter().all(|n| n["display"].is_null()));
     }
 
     #[test]

@@ -21,10 +21,10 @@ import typst_lint as lint
 
 
 def payload(raw=b'x'):
-    return dict(schema=1, adapter_version='0.1.0', syntax_version='0.15.1', mode='markup',
+    return dict(schema=2, adapter_version='0.2.0', syntax_version='0.15.1', mode='markup',
                 source_bytes=len(raw), source_sha256=lint.digest(raw),
-                nodes=[dict(kind='Markup', start=0, end=len(raw), children=[1], errors=False, operands=[]),
-                       dict(kind='Text', start=0, end=len(raw), children=[], errors=False, operands=[])])
+                nodes=[dict(kind='Markup', start=0, end=len(raw), children=[1], errors=False, operands=[], display=None),
+                       dict(kind='Text', start=0, end=len(raw), children=[], errors=False, operands=[], display=None)])
 
 
 class ProtocolTests(unittest.TestCase):
@@ -32,9 +32,40 @@ class ProtocolTests(unittest.TestCase):
         tree = client.validate(payload(), b'x', 'markup')
         self.assertEqual(tree.nodes[1].kind, 'Text')
         self.assertIsInstance(tree.nodes, tuple)
+        self.assertIsNone(tree.nodes[1].display)
+
+    def test_equation_display_field_is_required_and_exactly_typed(self):
+        for value in (None, 0, 1, 'true', [], {}):
+            data = payload()
+            data['nodes'][1].update(kind='Equation', display=value)
+            with self.subTest(value=value), self.assertRaisesRegex(client.AdapterError, 'display flag'):
+                client.validate(data, b'x', 'markup')
+        for value in (False, True):
+            data = payload()
+            data['nodes'][1].update(kind='Equation', display=value)
+            self.assertIs(client.validate(data, b'x', 'markup').nodes[1].display, value)
+        for kind in ('Text', 'MathAttach', 'Markup'):
+            for value in (False, True, 0, 'false'):
+                data = payload()
+                data['nodes'][1].update(kind=kind, display=value)
+                with self.subTest(kind=kind, value=value), self.assertRaises(client.AdapterError):
+                    client.validate(data, b'x', 'markup')
+        for change in ('missing', 'extra'):
+            data = payload()
+            if change == 'missing': del data['nodes'][1]['display']
+            else: data['nodes'][1]['block'] = True
+            with self.subTest(change=change), self.assertRaises(client.AdapterError):
+                client.validate(data, b'x', 'markup')
+
+    def test_legacy_protocol_is_rejected_even_without_equations(self):
+        data = payload()
+        data.update(schema=1, adapter_version='0.1.0')
+        for record in data['nodes']: del record['display']
+        with self.assertRaisesRegex(client.AdapterError, 'version/schema mismatch'):
+            client.validate(data, b'x', 'markup')
 
     def test_wrong_protocol_metadata(self):
-        for key, value in [('schema', True), ('schema', 2), ('adapter_version','wrong'),
+        for key, value in [('schema', True), ('schema', 1), ('adapter_version','wrong'),
                            ('syntax_version','0.15.0'), ('source_bytes',2),
                            ('source_sha256','wrong'), ('mode','math'), ('nodes',[])]:
             data = payload(); data[key] = value
@@ -58,7 +89,7 @@ class ProtocolTests(unittest.TestCase):
 
     def test_zero_length_error_is_valid_but_flagged(self):
         data = payload()
-        data['nodes'].append(dict(kind='Error', start=1, end=1, children=[], errors=True, operands=[]))
+        data['nodes'].append(dict(kind='Error', start=1, end=1, children=[], errors=True, operands=[], display=None))
         data['nodes'][0]['children'] = [1,2]
         data['nodes'][0]['errors'] = True
         tree = client.validate(data, b'x', 'markup')
@@ -67,9 +98,9 @@ class ProtocolTests(unittest.TestCase):
 
     def test_depth_limit(self):
         data = payload()
-        data['nodes'] = [dict(kind='Markup', start=0, end=1, children=[i+1], errors=False, operands=[])
+        data['nodes'] = [dict(kind='Markup', start=0, end=1, children=[i+1], errors=False, operands=[], display=None)
                          for i in range(client.MAX_DEPTH+1)]
-        data['nodes'].append(dict(kind='Text', start=0, end=1, children=[], errors=False, operands=[]))
+        data['nodes'].append(dict(kind='Text', start=0, end=1, children=[], errors=False, operands=[], display=None))
         with self.assertRaises(client.AdapterError): client.validate(data,b'x','markup')
 
     def test_path_input_and_mode_fail_before_execution(self):
@@ -89,6 +120,17 @@ class ProtocolTests(unittest.TestCase):
 
 @unittest.skipUnless(client.EXECUTABLE.is_file(), 'Build pinned syntax adapter explicitly first')
 class RealSyntaxTests(unittest.TestCase):
+    def test_typed_display_equations_and_data_exclusions(self):
+        source = ('Text $x$ $ x $ $ x$ $x $ $\r\nx\r\n$\n'
+                  '`$ x $` // $ x $\n#let s = "$ x $"\n#let body = [$ x $]')
+        tree = client.parse(source.encode())
+        equations = [n for n in tree.nodes if n.kind == 'Equation']
+        self.assertEqual([n.display for n in equations], [False, True, False, False, True, True])
+        self.assertTrue(all(n.display is None for n in tree.nodes if n.kind != 'Equation'))
+        payload = json.loads(subprocess.check_output([str(client.EXECUTABLE), 'markup'], input=b'$ x $'))
+        self.assertEqual((payload['schema'], payload['adapter_version'], payload['syntax_version']),
+                         (2, '0.2.0', '0.15.1'))
+
     def check(self, source, expected):
         raw = source.encode('utf-8')
         result = analyze(client.parse(raw), 'fixture.typ')

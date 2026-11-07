@@ -6,7 +6,6 @@ from dataclasses import asdict, dataclass
 from functools import lru_cache
 import hashlib
 import json
-import math
 import os
 from pathlib import Path
 import re
@@ -14,7 +13,7 @@ import stat
 import sys
 import tomllib
 
-VERSION = '0.3.0-provenance'
+VERSION = '0.4.0-rules'
 CATALOG = Path(__file__).with_name('rules') / 'catalog.json'
 
 
@@ -171,27 +170,9 @@ def read_config(root, rules):
 
 
 def read_reference_catalog(path):
-    """Validate static membership data, never fetch URLs or check freshness."""
-    raw = path.read_bytes()
-    data = json.loads(raw)
-    require(isinstance(data, dict) and type(data.get('schema')) is int and data['schema'] == 1
-            and isinstance(data.get('projects'), dict), 'Invalid reference catalog schema')
-    for alias, project in data['projects'].items():
-        require(bool(alias.strip()) and isinstance(project, dict), 'Invalid catalog project')
-        require(isinstance(project.get('references'), dict), f'Missing references: {alias}')
-        strings(project.get('ambiguous_labels', []), 'ambiguous_labels', nonempty=False)
-        for label, ref in project['references'].items():
-            require(bool(label.strip()) and isinstance(ref, dict), f'Invalid reference: {alias}/{label}')
-            require(type(ref.get('page')) is int and ref['page'] > 0, f'Invalid reference page: {label}')
-            require(isinstance(ref.get('text'), str) and bool(ref['text'].strip()), f'Invalid reference text: {label}')
-            for axis in ('x', 'y'):
-                if axis in ref:
-                    try:
-                        valid = type(ref[axis]) in (int, float) and math.isfinite(ref[axis])
-                    except OverflowError:
-                        valid = False
-                    require(valid, f'Invalid coordinate: {label}')
-    return digest(raw)
+    """Digest-compatible wrapper; analysis uses the immutable loader directly."""
+    from reference_catalog import load_reference_catalog
+    return load_reference_catalog(path).sha256
 
 
 def collect(root, config):
@@ -263,7 +244,9 @@ def report(root, mode, *, package_path=None):
         raw = checked_path(root, config.entrypoint).read_bytes()
         raw.decode('utf-8')
         entry_hash = digest(raw)
-    reference_hash = read_reference_catalog(checked_path(root, config.catalog)) if config.catalog else None
+    from reference_catalog import load_reference_catalog
+    reference_catalog = load_reference_catalog(checked_path(root, config.catalog)) if config.catalog else None
+    reference_hash = reference_catalog.sha256 if reference_catalog is not None else None
     # Imported here to keep pure configuration/edit primitives independent of the adapter.
     from syntax_client import AdapterError, parse
     from source_analysis import analyze, rule_ids
@@ -307,7 +290,7 @@ def report(root, mode, *, package_path=None):
         try:
             results = analyze(parsed[name], name, pack=config.pack,
                               fallback_language=config.capitalization_language,
-                              packages=package_sources, ignored=ignored)
+                              packages=package_sources, reference_catalog=reference_catalog, ignored=ignored)
         except SuppressionError as error:
             configuration_failures.append(dict(path=name, error=str(error)))
             file_coverage.extend(dict(path=name, rule_id=rid, status='configuration-failure', reasons=[str(error)])
@@ -343,6 +326,8 @@ def report(root, mode, *, package_path=None):
                                                 else 'Binding/rule backend not implemented'))
                    for r in enabled if r['id'] not in complete_backends]
 
+    # available_backends reports wiring only: each backend can still be partial
+    # or unavailable for a particular input. It never implies evaluated/complete.
     return dict(schema=1, tool_version=VERSION, pack_version=catalog['version'], mode=mode,
                 status=2, phase='analysis', compiler_invoked=False, compiler_status=None,
                 rule_set=config.pack, inputs=inputs,
@@ -353,6 +338,7 @@ def report(root, mode, *, package_path=None):
                 parse_failures=parse_failures, configuration_failures=configuration_failures,
                 suppressed_by_rule=dict(sorted(suppressed_by_rule.items())), recovery=None,
                 coverage=dict(complete=False, enabled=[r['id'] for r in enabled],
+                              available_backends=list(backends),
                               implemented=[rid for rid in backends if any(row['rule_id'] == rid for row in evaluated)], evaluated=evaluated,
                               files=file_coverage, unsupported=unsupported,
                               optional_skips=[] if config.catalog else [dict(check='catalog-membership', reason='No catalog configured')]),

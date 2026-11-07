@@ -29,6 +29,7 @@ class Node:
     children: tuple[int, ...]
     errors: bool
     operands: tuple[tuple[str, int], ...]
+    display: bool | None
 
 
 @dataclass(frozen=True)
@@ -97,8 +98,8 @@ def _run(source, mode, executable, timeout):
 def validate(payload, source, mode):
     """Validate all tree links/spans before any rule consumes adapter data."""
     demand(type(payload) is dict, 'Invalid syntax protocol object')
-    demand(type(payload.get('schema')) is int and payload['schema'] == 1
-           and payload.get('adapter_version') == '0.1.0'
+    demand(type(payload.get('schema')) is int and payload['schema'] == 2
+           and payload.get('adapter_version') == '0.2.0'
            and payload.get('syntax_version') == '0.15.1', 'Syntax adapter version/schema mismatch')
     demand(payload.get('mode') == mode and type(payload.get('source_bytes')) is int
            and payload['source_bytes'] == len(source)
@@ -112,13 +113,15 @@ def validate(payload, source, mode):
         boundaries.add(offset)
     nodes = []
     for record in records:
-        demand(type(record) is dict and set(record) == {'kind', 'start', 'end', 'children', 'errors', 'operands'}, 'Invalid syntax node fields')
+        demand(type(record) is dict and set(record) == {'kind', 'start', 'end', 'children', 'errors', 'operands', 'display'}, 'Invalid syntax node fields')
         kind, start, end = record['kind'], record['start'], record['end']
         demand(type(kind) is str and kind.isascii() and kind.isidentifier() and len(kind) < 80, 'Invalid SyntaxKind')
         demand(type(start) is int and type(end) is int and start in boundaries and end in boundaries and start <= end, 'Invalid UTF-8 syntax span')
         children = record['children']
         demand(type(children) is list and all(type(i) is int and 0 <= i < len(records) for i in children), 'Invalid syntax child')
         demand(type(record['errors']) is bool and type(record['operands']) is list, 'Invalid syntax flags/operands')
+        demand(type(record['display']) is bool if kind == 'Equation' else record['display'] is None,
+               'Invalid typed equation display flag')
         operands = []
         for operand in record['operands']:
             demand(type(operand) is dict and set(operand) == {'role', 'node'}
@@ -126,7 +129,7 @@ def validate(payload, source, mode):
                    and operand['node'] in children and kind == 'MathAttach', 'Invalid attachment operand')
             operands.append((operand['role'], operand['node']))
         demand(len({r for r, _ in operands}) == len(operands), 'Duplicate attachment operand role')
-        nodes.append(Node(kind, start, end, tuple(children), record['errors'], tuple(operands)))
+        nodes.append(Node(kind, start, end, tuple(children), record['errors'], tuple(operands), record['display']))
     demand(nodes[0].kind == {'markup':'Markup', 'code':'Code', 'math':'Math'}[mode]
            and nodes[0].start == 0 and nodes[0].end == len(source), 'Invalid syntax root')
     seen = set()
