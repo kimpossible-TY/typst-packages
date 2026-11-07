@@ -4,6 +4,7 @@ from dataclasses import dataclass
 from edit_plan import Edit, plan
 from syntax_client import AdapterError, parse
 from typst_lint import Diagnostic, load_rules
+from suppression import resolve
 
 RULE_ID = 'core.parenthesized-scripts'
 
@@ -14,18 +15,19 @@ class ScriptResult:
     edits: tuple[Edit, ...] = ()
     skips: tuple[str, ...] = ()
     parse_errors: tuple[tuple[int, int], ...] = ()
+    suppressed: tuple[Diagnostic, ...] = ()
 
 
 def analyze(tree, path, *, _verify=True):
-    """No bindings or import execution. Directives conservatively block the file."""
+    """No bindings/import execution; scoped directives filter exact operands."""
     source, nodes = tree.source, tree.nodes
     if nodes[0].errors:
         errors = tuple((n.start, n.end) for n in nodes if n.kind == 'Error')
         return ScriptResult(skips=('Malformed Typst syntax; no repair proposed',), parse_errors=errors or ((0, len(source)),))
-    if any(n.kind in ('LineComment', 'BlockComment') and b'typst-lint:' in source[n.start:n.end] for n in nodes):
-        return ScriptResult(skips=('Inline directive scoping is unsupported; no findings or edits for this file',))
-    rule = next(r for r in load_rules()[0]['rules'] if r['id'] == RULE_ID)
-    findings, operands, skips = [], [], []
+    catalog = load_rules()[0]['rules']
+    scopes = resolve(tree, {r['id'] for r in catalog})
+    rule = next(r for r in catalog if r['id'] == RULE_ID)
+    findings, operands, skips, suppressed = [], [], [], []
     for attach in nodes:
         for role, operand_id in attach.operands:
             operand = nodes[operand_id]
@@ -46,9 +48,13 @@ def analyze(tree, path, *, _verify=True):
                 continue
             line = source[:operand.start].count(b'\n') + 1
             column = len(source[source.rfind(b'\n', 0, operand.start)+1:operand.start].decode('utf-8')) + 1
-            findings.append(Diagnostic(RULE_ID, rule['grade'], path, line, column,
-                                       'Parenthesize the complete math script operand.', rule['source']))
-            operands.append((operand.start, operand.end))
+            finding = Diagnostic(RULE_ID, rule['grade'], path, line, column,
+                                 'Parenthesize the complete math script operand.', rule['source'])
+            if any(scope.covers(RULE_ID, operand.start) for scope in scopes):
+                suppressed.append(finding)
+            else:
+                findings.append(finding)
+                operands.append((operand.start, operand.end))
     # Coalesce parentheses at shared boundaries, preserving nested operand trees.
     opens, closes = {}, {}
     for start, end in sorted(set(operands)):
@@ -60,6 +66,6 @@ def analyze(tree, path, *, _verify=True):
         candidate = plan(source, edits).candidate()
         checked = parse(candidate, tree.mode)
         final = analyze(checked, path, _verify=False)
-        if checked.nodes[0].errors or final.edits or final.diagnostics:
-            return ScriptResult(tuple(findings), skips=tuple(skips)+('Candidate failed parse/idempotence verification; no edits proposed',))
-    return ScriptResult(tuple(findings), edits, tuple(skips))
+        if checked.nodes[0].errors or final.edits or final.diagnostics or len(final.suppressed) != len(suppressed):
+            return ScriptResult(tuple(findings), skips=tuple(skips)+('Candidate failed parse/idempotence verification; no edits proposed',), suppressed=tuple(suppressed))
+    return ScriptResult(tuple(findings), edits, tuple(skips), suppressed=tuple(suppressed))

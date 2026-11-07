@@ -128,9 +128,8 @@ class RealSyntaxTests(unittest.TestCase):
         tree = client.parse(b'#import "definitely-missing.typ": *\n$x^i$')
         self.assertFalse(tree.nodes[0].errors)  # No import evaluation or filesystem lookup.
 
-    def test_errors_and_directives_block_repairs(self):
-        for raw in (b'$x^$', b'#let = ', b'$x^i', b'// typst-lint: ignore-next core.parenthesized-scripts -- why\n$x^i$',
-                    b'/* typst-lint: anything */\n$x^i$'):
+    def test_errors_block_repairs(self):
+        for raw in (b'$x^$', b'#let = ', b'$x^i'):
             result = analyze(client.parse(raw),'a.typ')
             self.assertTrue(result.skips)
             self.assertEqual(result.edits, ())

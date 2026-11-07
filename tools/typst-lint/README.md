@@ -108,8 +108,16 @@ function operands, Unicode, BOM and CRLF.
 Limitations remain explicit:
 
 - Malformed Typst yields parse failures and no proposed fixes for that file.
-- Any parsed comment containing `typst-lint:` blocks that file until bounded
-  inline-directive scoping is implemented. Directives are never silently ignored.
+- Own-line `// typst-lint: ignore-next <rule-id>[, <rule-id>...] -- <reason>`
+  directives scope to the next complete AST construct in a proven Markup/Code
+  sibling sequence. Blank lines and comments may intervene; a whole multiline
+  display or `#` plus call is one target. The directive expires at that target's
+  end, and suppresses both findings and their operand-specific edits.
+- Unknown/empty IDs, missing reasons, trailing directives, missing targets and
+  unsupported expression-internal ownership are unsuppressible configuration
+  failures with no edits for that file. Strings, raw text and block comments
+  are data, not directive carriers. Leading comments directly under an Equation
+  or CodeBlock wrapper remain unsupported rather than receiving guessed scope.
 - Escaped/comment-interleaved operands are reported as unsupported rather than
   rewritten. Other proven spans may appear only as a partial proposal.
 - Markdown extraction is not implemented; included Markdown cannot count as
@@ -129,6 +137,45 @@ The intended final statuses are 0 clean, 1 active findings (warnings included),
 Pure edit/convergence primitives validate immutable bytes, UTF-8 span boundaries,
 conflicts, cycles, eight-pass limits and idempotence. They do not establish editor
 safety or complete Typst analysis and are not a filesystem writer.
+
+## Protected offline transaction component
+
+`transactions.py` is an independently tested storage component, **not connected
+to CLI writes**. Its trusted-engine API requires an explicit assertion that
+editors, watchers and every other writer are stopped throughout the transaction.
+It cannot inspect unsaved buffers or lock arbitrary editors. A root directory
+lock serializes this library's runs; fingerprint checks narrow races but are not
+an operating-system compare-and-swap guarantee.
+
+The caller provides existing allowlisted, owner-writable source paths, read-only dependency and
+configuration evidence, and one fixed private journal directory outside the root
+on the same filesystem. Missing optional evidence is recorded too. Validation
+invokes a trusted in-process analyzer over immutable graph views and requires
+complete declared rule/source/evidence coverage, no parse/unsupported failures,
+eight-pass bounded convergence, no new findings and idempotence before minting a
+session-bound apply token. Synthetic fixture analyzers test this protocol only;
+they cannot establish coverage for the unfinished real linter. Preexisting
+diagnostic-only findings may remain, but continue to prohibit compilation.
+
+Application rechecks every source and evidence baseline, stages exact bytes and
+supported metadata, fsyncs durable recovery records, then atomically replaces
+each file. A multi-file transaction is not atomic as a whole. Fault tests cover
+partial writes, crashes and later user edits. Explicit recovery restores only
+recognized postimages and preserves conflicting later changes for resolution.
+Missing, corrupt or truncated journal records fail closed for manual investigation.
+Every caller must use the same configured store and retain required journals;
+this library cannot discover deleted journals or ones hidden in a different store.
+
+The component supports tested macOS/Linux metadata paths. It preserves ownership,
+ordinary mode bits and exact extended attributes, and refuses ACLs, special mode
+bits, unsupported filesystem flags, symlinks, hard links and nonregular targets.
+Read-only source modes are refused for normal mutation without chmod; read-only
+evidence and reconciliation of existing recovery journals remain supported.
+Replacement timestamps intentionally change. Staged bytes and metadata are checked
+again after content writes and fsync, including before recovery replacement.
+The original snapshot is a baseline, not a compiler-ready snapshot; validated
+candidate sources describe postimages. Compiler resource capture, output
+publication, editor version integration and production CLI wiring remain absent.
 
 ## Paragraph capitalization component
 
@@ -166,8 +213,9 @@ PYTHONDONTWRITEBYTECODE=1 python3 -m unittest discover -s tools/typst-lint/tests
 
 Tests use temporary consumers. Adapter tests require the explicit build above.
 They include protocol corruption, timeouts/streamed-output limits, tree/spans,
-actual source parsing, diagnostics and suppression refusal, non-mutating CLI
-plans, compiler spies and old-output preservation. Synthetic contexts do not
+actual source parsing, bounded suppressions and explicit unsupported scopes,
+non-mutating CLI plans, protected-storage fault injection, compiler spies and
+old-output preservation. Synthetic contexts do not
 replace real parser coverage. With existing Typst/pdftotext, opt into rendering:
 
 ```sh
@@ -178,7 +226,7 @@ The repository test workflow (PRs and relevant main changes) builds the pinned
 adapter and tests Python 3.11/3.15. It neither builds consumer documents nor
 publishes/deploys anything. Renderer-dependent characterization is separate.
 
-Next work: complete inline suppressions and Markdown/source extraction; establish
+Next work: extend only provable directive scopes and Markdown/source extraction; establish
 static helper/import/language provenance before wiring capitalization; implement
 the remaining rule contracts; validate protected writer/editor transactions and
 immutable compiler snapshots; then verify CI/watch/Tinymist adapters. AGENTS.md

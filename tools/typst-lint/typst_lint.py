@@ -267,8 +267,11 @@ def report(root, mode):
     # Imported here to keep pure configuration/edit primitives independent of the adapter.
     from syntax_client import AdapterError, parse
     from script_rule import RULE_ID, analyze
+    from suppression import SuppressionError
     active_findings, proposals, file_coverage, parse_failures = [], [], [], []
     suppressed_count = 0
+    suppressed_by_rule = {}
+    configuration_failures = []
     evaluated = []
     for item in inputs:
         name = item['path']
@@ -280,12 +283,18 @@ def report(root, mode):
             raw = checked_path(root, name).read_bytes()
             require(digest(raw) == item['sha256'], f'Input changed during analysis: {name}')
             result = analyze(parse(raw), name)
+        except SuppressionError as error:
+            configuration_failures.append(dict(path=name, error=str(error)))
+            file_coverage.append(dict(path=name, rule_id=RULE_ID, status='configuration-failure', reasons=[str(error)]))
+            continue
         except (AdapterError, OSError, InputError) as error:
             file_coverage.append(dict(path=name, rule_id=RULE_ID, status='unsupported', reasons=[str(error)]))
             continue
         active, hidden = diagnostics(result.diagnostics, config, catalog['rules'])
         active_findings.extend(active)
-        suppressed_count += len(hidden)
+        suppressed_count += len(hidden) + len(result.suppressed)
+        for finding in (*hidden, *result.suppressed):
+            suppressed_by_rule[finding.rule_id] = suppressed_by_rule.get(finding.rule_id, 0) + 1
         if result.parse_errors:
             parse_failures.append(dict(path=name, spans=[dict(start=a, end=b) for a, b in result.parse_errors]))
         if result.skips:
@@ -309,12 +318,13 @@ def report(root, mode):
                 hashes=dict(config=config.sha256, rules=rule_hash, entrypoint=entry_hash, reference_catalog=reference_hash),
                 diagnostics=[asdict(d) for d in active_findings], suppressed_count=suppressed_count,
                 applied_fixes=[], proposed_edits=proposals, proposal_status='partial-not-applicable-transaction',
-                parse_failures=parse_failures, recovery=None,
+                parse_failures=parse_failures, configuration_failures=configuration_failures,
+                suppressed_by_rule=dict(sorted(suppressed_by_rule.items())), recovery=None,
                 coverage=dict(complete=False, enabled=[r['id'] for r in enabled],
                               implemented=[RULE_ID] if evaluated else [], evaluated=evaluated,
                               files=file_coverage, unsupported=unsupported,
                               optional_skips=[] if config.catalog else [dict(check='catalog-membership', reason='No catalog configured')]),
-                blockers=['Required rule coverage remains incomplete; Markdown, bindings and inline suppressions are unavailable',
+                blockers=['Required rule coverage remains incomplete; Markdown, bindings and additional rule backends are unavailable',
                           'Protected source transactions and immutable compile snapshots are unavailable'],
                 routes=dict(cli='unmanaged', ci='unmanaged', watch='unmanaged', editor='unmanaged'))
 

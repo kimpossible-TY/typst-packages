@@ -80,5 +80,6 @@ The design follow-up is reviewed and merged first. Groups 2–7 are authorized i
 - [x] 11.2 Analyze real .typ script operands, produce exact reparsed/idempotent partial plans, and test nesting/chains/primes/fractions/Unicode and data-context exclusions. Keep malformed syntax, directives, escaped/commented operands and Markdown limits explicit.
 - [x] 11.3 Preserve status 2/no mutation/no compiler while required rule coverage is incomplete; expose per-file coverage and partial-plan baseline evidence rather than advertise a working all-project gate.
 - [x] 11.4 Pass independent parser review, rustfmt/Clippy, three Rust tests and 51 Python tests including opt-in rendering; preserve all existing consumers.
-- [ ] 11.6 Verify repository-only remote CI on Python 3.11/3.15 for the exact pushed commit.
-- [ ] 11.5 Implement and independently review a protected offline transaction component against isolated fixtures, without exposing writes through incomplete CLI analysis.
+- [x] 11.6 Verify repository-only remote CI on Python 3.11/3.15 for exact commit 452484c; both passed run 42338058080. Retain the Linux Cargo hardlink regression without relaxing writable-source protection.
+- [x] 11.5 Implement and independently review a protected offline transaction component against isolated fixtures, without exposing writes through incomplete CLI analysis. Verify staged metadata after writes/fsync and preserve later edits during recovery; this is not compiler snapshotting or an editor lease implementation.
+- [x] 11.7 Resolve own-line inline suppressions through proven Markup/Code AST sibling scopes; verify full multiline targets, expiration, reasons/IDs, balanced partial fixes and explicit refusal of ambiguous ownership.

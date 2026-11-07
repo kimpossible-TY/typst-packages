@@ -1,0 +1,1055 @@
+"""Offline-only protected file transactions; deliberately NOT wired to the CLI.
+
+This is a trusted-engine API, not a way for a caller's JSON/boolean to certify
+analysis. ``validate`` invokes an in-process analyzer over immutable graph views
+and mints a session-bound token. Production callers must supply the *entire*
+required rule set and a real complete analyzer; fixture analyzers prove only this
+storage protocol. No parser, compiler, editor detection, or editor API lives here.
+
+The POSIX directory flock coordinates this library's runs, even with different
+journal stores. It is NOT a compare-and-swap operation or an arbitrary editor
+lock. OfflineExclusive is the operator's explicit assertion that all editors,
+watchers, and other writers are stopped for the whole context. Violating that
+contract can still race a rename. Every caller for a root MUST use the same
+configured private journal directory so that crash recovery can be discovered.
+Keep that directory (including completed journals) until recovery is no longer
+needed. Missing/deleted/forged journals cannot be detected by this library.
+
+Only existing allowlisted UTF-8 source files are replaced. Dependencies/config
+are read-only evidence, including explicitly absent optional inputs. Original
+bytes and postimages are journaled outside the source tree. Replacement is
+atomic PER FILE, never across files. Recovery replaces only recognized postimage
+inodes/bytes/modes; later changes are preserved and require explicit resolution.
+Successful source fixes are never automatically undone for compiler failures.
+"""
+from __future__ import annotations
+
+import base64
+import ctypes
+import errno
+from functools import lru_cache
+from dataclasses import dataclass, field, replace
+import hashlib
+import json
+import os
+from pathlib import Path
+import re
+import stat
+import sys
+from types import MappingProxyType
+from typing import Callable, Mapping
+import uuid
+
+try:
+    import fcntl
+except ImportError:  # Explicitly unsupported rather than a no-op lock.
+    fcntl = None
+
+from edit_plan import Edit, plan
+from typst_lint import SafetyError
+
+
+class TransactionError(SafetyError):
+    """A protected-source precondition failed; no compilation is authorized."""
+
+
+class RecoveryRequired(TransactionError):
+    def __init__(self, journals: tuple[str, ...]):
+        self.journals = journals
+        super().__init__('Explicit recovery required for journals: ' + ', '.join(journals))
+
+
+class TransactionFailure(TransactionError):
+    def __init__(self, reason: str, report: 'RecoveryReport'):
+        self.report = report
+        super().__init__(f'{reason}; explicit recovery required: {report.journal}')
+
+
+_LEASE_SEAL = object()
+_TOKEN_SEAL = object()
+
+
+@dataclass(frozen=True, init=False)
+class OfflineExclusive:
+    """An assertion, NOT evidence that this process inspected editor buffers."""
+    _seal: object = field(repr=False)
+
+    @classmethod
+    def assert_editors_watchers_closed_and_no_other_writers(cls) -> 'OfflineExclusive':
+        instance = object.__new__(cls)
+        object.__setattr__(instance, '_seal', _LEASE_SEAL)
+        return instance
+
+
+@dataclass(frozen=True)
+class EvidenceInput:
+    path: Path
+    allow_missing: bool = False
+
+
+@dataclass(frozen=True)
+class Fingerprint:
+    device: int
+    inode: int
+    mode: int
+    uid: int
+    gid: int
+    sha256: str
+    metadata_sha256: str
+
+
+@dataclass(frozen=True)
+class _File:
+    path: Path
+    data: bytes | None
+    fingerprint: Fingerprint | None
+    parent: tuple[int, int]
+    times: tuple[int, int] | None
+    xattrs: tuple[tuple[str, bytes], ...] = ()
+
+
+@dataclass(frozen=True)
+class GraphSnapshot:
+    root: Path
+    sources: Mapping[str, bytes]
+    evidence: Mapping[str, bytes | None]
+
+
+@dataclass(frozen=True)
+class SourceEdit:
+    path: str
+    edit: Edit
+
+
+@dataclass(frozen=True)
+class GraphAnalysis:
+    """Trusted analyzer output with explicit coverage, never user attestations.
+
+    ``findings`` are stable semantic IDs, not byte-offset-based identifiers.
+    ``parsed_sources`` must include every selected source, including unchanged
+    files. The trusted engine is responsible for dependency graph completeness,
+    resource interpretation, correct parser results, and accurate rule coverage.
+    An engine that lies cannot be made trustworthy by a filesystem transaction.
+    """
+    implemented_rules: frozenset[str]
+    evaluated_rules: frozenset[str]
+    parsed_sources: frozenset[str]
+    examined_evidence: frozenset[str]
+    parse_errors: tuple[str, ...] = ()
+    unsupported: tuple[str, ...] = ()
+    findings: frozenset[str] = frozenset()
+    edits: tuple[SourceEdit, ...] = ()
+
+
+@dataclass(frozen=True, init=False)
+class ValidatedCandidate:
+    sources: Mapping[str, bytes]
+    findings: frozenset[str]
+    passes: int
+    _owner: object = field(repr=False)
+    _seal: object = field(repr=False)
+
+
+@dataclass(frozen=True)
+class ApplyResult:
+    journal: str | None
+    modified: tuple[str, ...]
+    unresolved_findings: frozenset[str]
+
+
+@dataclass(frozen=True)
+class RecoveryReport:
+    journal: str
+    restored: tuple[str, ...] = ()
+    unchanged: tuple[str, ...] = ()
+    changed: tuple[str, ...] = ()
+    unresolved: tuple[str, ...] = ()
+    preserved: tuple[str, ...] = ()
+    conflicts: Mapping[str, Fingerprint] = field(default_factory=lambda: MappingProxyType({}))
+    errors: tuple[str, ...] = ()
+    complete: bool = False
+
+
+def _fail(condition: bool, message: str) -> None:
+    if not condition:
+        raise TransactionError(message)
+
+
+def _hash(data: bytes) -> str:
+    return hashlib.sha256(data).hexdigest()
+
+
+def _relative(value: str) -> str:
+    _fail(isinstance(value, str) and bool(value) and not value.startswith('/')
+          and '\\' not in value and '\x00' not in value
+          and all(p not in ('', '.', '..') for p in value.split('/')),
+          f'Expected canonical root-relative path: {value!r}')
+    return value
+
+
+def _absolute(value: os.PathLike | str) -> Path:
+    raw = os.fspath(value)
+    _fail(isinstance(raw, str) and raw.startswith('/') and '\x00' not in raw
+          and os.path.normpath(raw) == raw and not raw.startswith('//'),
+          f'Expected canonical absolute path: {raw!r}')
+    return Path(raw)
+
+
+def _directory(path: Path) -> int:
+    """Open every component without following symlinks, including ancestors."""
+    flags = os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW
+    fd = os.open('/', flags)
+    try:
+        for name in path.parts[1:]:
+            next_fd = os.open(name, flags, dir_fd=fd)
+            os.close(fd)
+            fd = next_fd
+        return fd
+    except BaseException:
+        os.close(fd)
+        raise
+
+
+def _identity(s: os.stat_result) -> tuple[int, int]:
+    return s.st_dev, s.st_ino
+
+
+def _stable(s: os.stat_result) -> tuple:
+    return (s.st_dev, s.st_ino, s.st_mode, s.st_nlink, s.st_size,
+            s.st_mtime_ns, s.st_ctime_ns, s.st_uid, s.st_gid, getattr(s, 'st_flags', 0))
+
+
+@lru_cache(maxsize=1)
+def _darwin_metadata_api():
+    # System libc only, via the Python standard library. No installed adapter.
+    libc = ctypes.CDLL(None, use_errno=True)
+    libc.flistxattr.argtypes = [ctypes.c_int, ctypes.c_void_p, ctypes.c_size_t, ctypes.c_int]
+    libc.flistxattr.restype = ctypes.c_ssize_t
+    libc.fgetxattr.argtypes = [ctypes.c_int, ctypes.c_char_p, ctypes.c_void_p, ctypes.c_size_t, ctypes.c_uint32, ctypes.c_int]
+    libc.fgetxattr.restype = ctypes.c_ssize_t
+    libc.fsetxattr.argtypes = [ctypes.c_int, ctypes.c_char_p, ctypes.c_void_p, ctypes.c_size_t, ctypes.c_uint32, ctypes.c_int]
+    libc.fsetxattr.restype = ctypes.c_int
+    libc.fremovexattr.argtypes = [ctypes.c_int, ctypes.c_char_p, ctypes.c_int]
+    libc.fremovexattr.restype = ctypes.c_int
+    libc.acl_get_fd_np.argtypes = [ctypes.c_int, ctypes.c_int]
+    libc.acl_get_fd_np.restype = ctypes.c_void_p
+    libc.acl_get_entry.argtypes = [ctypes.c_void_p, ctypes.c_int, ctypes.POINTER(ctypes.c_void_p)]
+    libc.acl_get_entry.restype = ctypes.c_int
+    libc.acl_free.argtypes = [ctypes.c_void_p]
+    libc.acl_free.restype = ctypes.c_int
+    return libc
+
+
+def _xattrs(fd: int) -> tuple[tuple[str, bytes], ...]:
+    if sys.platform == 'darwin':
+        libc = _darwin_metadata_api()
+        count = libc.flistxattr(fd, None, 0, 0)
+        _fail(count >= 0, 'Cannot inspect extended attributes')
+        names = ctypes.create_string_buffer(count)
+        _fail(libc.flistxattr(fd, names, count, 0) == count, 'Extended attributes changed while reading')
+        result = []
+        for name in names.raw.rstrip(b'\x00').split(b'\x00') if count else ():
+            size = libc.fgetxattr(fd, name, None, 0, 0, 0)
+            _fail(size >= 0, 'Cannot read extended attribute')
+            value = ctypes.create_string_buffer(size)
+            _fail(libc.fgetxattr(fd, name, value, size, 0, 0) == size, 'Extended attribute changed while reading')
+            result.append((os.fsdecode(name), value.raw))
+        return tuple(sorted(result))
+    if sys.platform == 'linux' and hasattr(os, 'listxattr'):
+        return tuple(sorted((name, os.getxattr(fd, name)) for name in os.listxattr(fd)))
+    raise TransactionError('Metadata-safe replacements are supported only on macOS and Linux')
+
+
+def _xattr_hash(values: tuple[tuple[str, bytes], ...]) -> str:
+    return _hash(_json_bytes([[name, base64.b64encode(value).decode()] for name, value in values]))
+
+
+def _copy_xattrs(fd: int, wanted: tuple[tuple[str, bytes], ...]) -> None:
+    """Copy metadata only onto our new staging inode, never change the source."""
+    old, desired = dict(_xattrs(fd)), dict(wanted)
+    for name in old.keys() - desired.keys():
+        if sys.platform == 'darwin':
+            _fail(_darwin_metadata_api().fremovexattr(fd, os.fsencode(name), 0) == 0,
+                  f'Cannot preserve absence of extended attribute: {name}')
+        else:
+            os.removexattr(fd, name)
+    for name, value in desired.items():
+        if old.get(name) == value:
+            continue
+        if sys.platform == 'darwin':
+            _fail(_darwin_metadata_api().fsetxattr(fd, os.fsencode(name), value, len(value), 0, 0) == 0,
+                  f'Cannot preserve extended attribute: {name}')
+        else:
+            os.setxattr(fd, name, value)
+    _fail(_xattrs(fd) == wanted, 'Staged extended attributes differ from the baseline')
+
+
+def _plain_metadata(fd: int, path: Path) -> None:
+    """Refuse ACLs/flags we cannot safely copy; xattrs are copied and checked.
+
+    POSIX mode, UID, GID and extended attributes are preserved. Modification /
+    change timestamps are deliberately new; birth/access times are not preserved.
+    """
+    value = os.fstat(fd)
+    _fail(getattr(value, 'st_flags', 0) == 0, f'Filesystem flags unsupported: {path}')
+    if sys.platform == 'darwin':
+        libc = _darwin_metadata_api()
+        ctypes.set_errno(0)
+        acl = libc.acl_get_fd_np(fd, 0x00000100)  # ACL_TYPE_EXTENDED, sys/acl.h
+        if not acl and ctypes.get_errno() == errno.ENOENT:
+            return  # Existing open descriptor with no extended ACL on macOS.
+        _fail(bool(acl), f'Cannot inspect ACL: {path}')
+        try:
+            entry = ctypes.c_void_p()
+            ctypes.set_errno(0)
+            result = libc.acl_get_entry(acl, 0, ctypes.byref(entry))  # ACL_FIRST_ENTRY
+            _fail(result == -1 and ctypes.get_errno() == errno.EINVAL,
+                  f'Extended ACL unsupported or unreadable: {path}')
+        finally:
+            libc.acl_free(acl)
+    elif sys.platform == 'linux' and hasattr(os, 'listxattr'):
+        _fail(not any(name.startswith('system.posix_acl_') for name in os.listxattr(fd)),
+              f'Extended ACL unsupported: {path}')
+        size = ctypes.sizeof(ctypes.c_ulong)
+        _fail(size in (4, 8), 'Unsupported Linux inode flag ABI')
+        buffer = bytearray(size)
+        try:
+            fcntl.ioctl(fd, 0x80006601 | (size << 16), buffer, True)
+        except OSError as error:
+            raise TransactionError(f'Cannot inspect Linux inode flags: {path}') from error
+        flags = int.from_bytes(buffer, sys.byteorder)
+        _fail(flags & ~(0x00080000 | 0x10000000) == 0, f'Filesystem flags unsupported: {path}')
+    else:
+        raise TransactionError('Metadata-safe replacements are supported only on macOS and Linux')
+
+
+def _read(path: Path, *, missing: bool = False, utf8: bool = False) -> _File:
+    parent_fd = _directory(path.parent)
+    try:
+        parent = _identity(os.fstat(parent_fd))
+        try:
+            fd = os.open(path.name, os.O_RDONLY | os.O_NOFOLLOW | os.O_NONBLOCK,
+                         dir_fd=parent_fd)
+        except FileNotFoundError:
+            if missing:
+                return _File(path, None, None, parent, None)
+            raise
+        try:
+            before = os.fstat(fd)
+            _fail(stat.S_ISREG(before.st_mode), f'Not a regular file: {path}')
+            _fail(before.st_nlink == 1, f'Hard-linked file refused: {path}')
+            if utf8:
+                _fail(before.st_uid == os.geteuid(), f'Source is not owned by the effective user: {path}')
+                _fail(before.st_gid in {*os.getgroups(), os.getegid()}, f'Source group cannot be preserved: {path}')
+                _plain_metadata(fd, path)
+            attributes = _xattrs(fd)
+            parts = []
+            while True:
+                chunk = os.read(fd, 1024 * 1024)
+                if not chunk:
+                    break
+                parts.append(chunk)
+            after = os.fstat(fd)
+            current = os.stat(path.name, dir_fd=parent_fd, follow_symlinks=False)
+            _fail(_stable(before) == _stable(after) == _stable(current),
+                  f'File changed while reading: {path}')
+            data = b''.join(parts)
+            if utf8:
+                try:
+                    data.decode('utf-8')
+                except UnicodeError as error:
+                    raise TransactionError(f'Non-UTF-8 source: {path}') from error
+            fp = Fingerprint(before.st_dev, before.st_ino,
+                             stat.S_IMODE(before.st_mode), before.st_uid, before.st_gid, _hash(data), _xattr_hash(attributes))
+            return _File(path, data, fp, parent, (before.st_mtime_ns, before.st_ctime_ns), attributes)
+        finally:
+            os.close(fd)
+    finally:
+        os.close(parent_fd)
+
+
+def _json_bytes(value: object) -> bytes:
+    return (json.dumps(value, ensure_ascii=True, sort_keys=True, separators=(',', ':')) + '\n').encode()
+
+
+def _fp_json(fp: Fingerprint) -> dict:
+    return dict(device=fp.device, inode=fp.inode, mode=fp.mode, uid=fp.uid, gid=fp.gid, sha256=fp.sha256, metadata_sha256=fp.metadata_sha256)
+
+
+def _fp_load(value: object) -> Fingerprint:
+    _fail(isinstance(value, dict) and set(value) == {'device', 'inode', 'mode', 'uid', 'gid', 'sha256', 'metadata_sha256'},
+          'Malformed journal fingerprint')
+    _fail(all(type(value[k]) is int and value[k] >= 0 for k in ('device', 'inode', 'mode', 'uid', 'gid'))
+          and value['inode'] > 0 and 0 <= value['mode'] <= 0o7777
+          and all(isinstance(value[k], str) and re.fullmatch('[0-9a-f]{64}', value[k]) is not None
+                  for k in ('sha256', 'metadata_sha256')),
+          'Invalid journal fingerprint')
+    return Fingerprint(**value)
+
+
+def _decode(value: object) -> bytes:
+    _fail(isinstance(value, str), 'Malformed journal bytes')
+    try:
+        return base64.b64decode(value, validate=True)
+    except ValueError as error:
+        raise TransactionError('Invalid journal base64') from error
+
+
+def _private_directory(fd: int, path: Path) -> None:
+    s = os.fstat(fd)
+    _fail(stat.S_ISDIR(s.st_mode) and s.st_uid == os.geteuid()
+          and stat.S_IMODE(s.st_mode) & 0o077 == 0,
+          f'Journal directory must be owner-only and owned by this user: {path}')
+    _plain_metadata(fd, path)
+
+
+class ProtectedTransaction:
+    """Hold root lock and offline assertion from baseline through handoff.
+
+    The explicit allowlist is already filtered by the trusted selection engine;
+    this module does not infer excludes, generated files, or packages. Evidence
+    must enumerate every config/dependency/resource on which analysis depends.
+    Journal storage must be an existing canonical owner-only directory outside
+    the root, on the same filesystem as every replacement. Unsupported platforms
+    and cross-device layouts fail rather than weakening the protocol. Sources
+    must be owned by the effective user, with a group this user may preserve.
+    Normal transaction targets must have the owner-write mode bit set; an
+    intentionally read-only source is refused even if rename would be allowed.
+    Recovery remains separate so existing journals can still be reconciled.
+    Extended attributes are preserved. ACLs, special permission bits and
+    nonstructural filesystem flags are refused; timestamp preservation is not promised. Metadata probing currently
+    supports macOS and Linux only, and fails closed if probing is unavailable.
+
+    ``fault`` is an internal testing hook, not a CLI option. A BaseException (as
+    opposed to Exception) simulates abrupt termination and leaves recovery work.
+    Recovery contexts cannot mint candidates or apply new changes. Normal
+    contexts block on any incomplete journal in this root's configured store.
+    """
+    def __init__(self, root: Path, targets, *, journal_directory: Path,
+                 evidence=(), lease: OfflineExclusive | None = None,
+                 recovery_only: bool = False,
+                 fault: Callable[[str, str | None], None] | None = None):
+        self.root = _absolute(root)
+        self.store = _absolute(journal_directory)
+        _fail(self.store != self.root and self.root not in self.store.parents,
+              'Journal storage must be outside the selected root')
+        values = tuple(targets)
+        _fail(len(values) == len(set(values)), 'Duplicate target allowlist entries')
+        self.targets = tuple(sorted(_relative(p) for p in values))
+        _fail(all(Path(p).suffix in ('.typ', '.md') for p in self.targets),
+              'Only selected .typ/.md source files are writable')
+        self.evidence_inputs = tuple(evidence)
+        _fail(all(isinstance(e, EvidenceInput) and type(e.allow_missing) is bool
+                  for e in self.evidence_inputs), 'Invalid evidence input')
+        paths = tuple(_absolute(e.path) for e in self.evidence_inputs)
+        _fail(len(paths) == len(set(paths)), 'Duplicate evidence paths')
+        _fail(not set(paths) & {self.root / p for p in self.targets},
+              'Targets cannot also be read-only evidence')
+        _fail(not any(p == self.store or self.store in p.parents for p in paths),
+              'Transaction storage cannot be an analysis input')
+        self.lease = lease
+        self.recovery_only = recovery_only
+        self.fault = fault
+        self._fds: list[int] = []
+        self._owner = object()
+        self._issued: ValidatedCandidate | None = None
+        self._used = False
+        self._active = False
+        self._files: dict[str, _File] = {}
+        self._evidence: dict[str, _File] = {}
+        self._namespace_name = 'root-' + _hash(os.fsencode(self.root))
+        self._namespace = self.store / self._namespace_name
+        self._event_number = 0
+        self._journal: str | None = None
+        self._tx_fd: int | None = None
+
+    def _hit(self, point: str, path: str | None = None) -> None:
+        if self.fault is not None:
+            self.fault(point, path)
+
+    def _sync(self, fd: int, point: str, path: str | None = None) -> None:
+        self._hit(point, path)
+        os.fsync(fd)
+
+    def __enter__(self) -> 'ProtectedTransaction':
+        _fail(not self._active and not self._used, 'Transaction contexts cannot be reused')
+        _fail(isinstance(self.lease, OfflineExclusive)
+              and getattr(self.lease, '_seal', None) is _LEASE_SEAL,
+              'Explicit offline-exclusive assertion required; editor state is not known')
+        _fail(os.name == 'posix' and fcntl is not None
+              and hasattr(os, 'O_NOFOLLOW') and hasattr(os, 'O_DIRECTORY') and hasattr(os, 'fchown')
+              and os.open in os.supports_dir_fd and os.stat in os.supports_dir_fd
+              and os.rename in os.supports_dir_fd,
+              'Protected transactions require supported POSIX dirfd, nofollow and flock primitives')
+        try:
+            self._root_fd = _directory(self.root)
+            self._fds.append(self._root_fd)
+            try:
+                fcntl.flock(self._root_fd, fcntl.LOCK_EX | fcntl.LOCK_NB)
+            except OSError as error:
+                raise TransactionError(f'Root lock unavailable: {self.root}: {error}') from error
+            self._root_identity = _identity(os.fstat(self._root_fd))
+            self._store_fd = _directory(self.store)
+            self._fds.append(self._store_fd)
+            _private_directory(self._store_fd, self.store)
+            self._store_identity = _identity(os.fstat(self._store_fd))
+            _fail(self._root_identity[0] == self._store_identity[0],
+                  'Journal storage must be on the source filesystem')
+            try:
+                os.mkdir(self._namespace_name, 0o700, dir_fd=self._store_fd)
+                os.fsync(self._store_fd)
+            except FileExistsError:
+                pass
+            self._ns_fd = os.open(self._namespace_name,
+                                  os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW,
+                                  dir_fd=self._store_fd)
+            self._fds.append(self._ns_fd)
+            _private_directory(self._ns_fd, self._namespace)
+            self._namespace_identity = _identity(os.fstat(self._ns_fd))
+            self._active = True
+            self.pending = self._pending()
+            if self.pending and not self.recovery_only:
+                raise RecoveryRequired(self.pending)
+            if not self.recovery_only:
+                self._files = {p: _read(self.root / p, utf8=True) for p in self.targets}
+                self._evidence = {str(_absolute(e.path)): _read(_absolute(e.path), missing=e.allow_missing)
+                                  for e in self.evidence_inputs}
+                for p, value in self._files.items():
+                    _fail(value.fingerprint.device == self._store_identity[0],
+                          f'Cross-device source replacement unsupported: {p}')
+                    _fail(value.fingerprint.mode <= 0o777,
+                          f'Special permission bits unsupported: {p}')
+                    _fail(bool(value.fingerprint.mode & stat.S_IWUSR),
+                          f'Source target is not owner-writable: {p}')
+                self._revalidate()
+            return self
+        except BaseException:
+            self.__exit__(None, None, None)
+            raise
+
+    def __exit__(self, exc_type, exc, tb):
+        self._active = False
+        self._issued = None
+        for fd in reversed(self._fds):
+            os.close(fd)
+        self._fds.clear()
+        self._used = True
+
+    def _check_active(self) -> None:
+        _fail(self._active, 'Active root lock and offline-exclusive context required')
+        for path, expected in ((self.root, self._root_identity),
+                               (self.store, self._store_identity),
+                               (self._namespace, self._namespace_identity)):
+            fd = _directory(path)
+            try:
+                _fail(_identity(os.fstat(fd)) == expected, f'Directory identity changed: {path}')
+                if path != self.root:
+                    _private_directory(fd, path)
+            finally:
+                os.close(fd)
+
+    def _revalidate(self, expected: Mapping[str, _File] | None = None) -> None:
+        self._check_active()
+        for value in list((expected or self._files).values()) + list(self._evidence.values()):
+            now = _read(value.path, missing=value.data is None)
+            _fail(now == value, f'Stale baseline (bytes, identity, mode or metadata): {value.path}')
+
+    @property
+    def snapshot(self) -> GraphSnapshot:
+        """The original analysis baseline, never a post-fix compilation snapshot."""
+        self._check_active()
+        _fail(not self.recovery_only, 'Recovery context has no analysis snapshot')
+        return self._graph({p: value.data for p, value in self._files.items()})
+
+    def _graph(self, sources: Mapping[str, bytes]) -> GraphSnapshot:
+        return GraphSnapshot(self.root, MappingProxyType(dict(sources)),
+                             MappingProxyType({p: f.data for p, f in self._evidence.items()}))
+
+    def validate(self, analyze: Callable[[GraphSnapshot], GraphAnalysis], *,
+                 required_rules: frozenset[str]) -> ValidatedCandidate:
+        """Run complete trusted analysis/convergence twice at the final state.
+
+        This is the sole token issuer. No method accepts a caller-supplied final
+        byte map, parse-valid flag, content hash, or serialized approval token.
+        Immutable views are supplied anew on every pass; no filesystem writes
+        are made by this method. The callback itself must be trusted code.
+        """
+        self._check_active()
+        _fail(not self.recovery_only and not self._used, 'Cannot validate in this context')
+        _fail(isinstance(required_rules, frozenset) and bool(required_rules)
+              and all(isinstance(r, str) and r for r in required_rules),
+              'A nonempty complete required-rule set is mandatory')
+        _fail(callable(analyze), 'Trusted analyzer callback required')
+        self._revalidate()
+        sources = {p: f.data for p, f in self._files.items()}
+
+        def checked(candidate):
+            state = analyze(self._graph(candidate))
+            _fail(isinstance(state, GraphAnalysis), 'Trusted graph analysis required')
+            for name in ('implemented_rules', 'evaluated_rules', 'parsed_sources',
+                         'examined_evidence', 'findings'):
+                value = getattr(state, name)
+                _fail(isinstance(value, frozenset) and all(isinstance(x, str) for x in value),
+                      f'Analysis {name} must be immutable string identities')
+            _fail(required_rules <= state.implemented_rules
+                  and required_rules == state.evaluated_rules,
+                  'Incomplete required-rule coverage')
+            _fail(state.parsed_sources == frozenset(sources)
+                  and state.examined_evidence == frozenset(self._evidence),
+                  'Incomplete source/dependency/config analysis')
+            _fail(type(state.parse_errors) is tuple and not state.parse_errors
+                  and type(state.unsupported) is tuple and not state.unsupported,
+                  'Parse failure or unsupported required analysis')
+            _fail(type(state.edits) is tuple, 'Analysis edits must be immutable')
+            grouped = {p: [] for p in sources}
+            for proposal in state.edits:
+                _fail(isinstance(proposal, SourceEdit) and proposal.path in grouped,
+                      'Repair target is outside the explicit source allowlist')
+                grouped[proposal.path].append(proposal.edit)
+            return state, {p: plan(candidate[p], edits) for p, edits in grouped.items()}
+
+        state, plans = checked(sources)
+        initial_findings = state.findings
+        seen = {tuple(sorted(sources.items()))}
+        for iteration in range(9):
+            edits = any(p.edits for p in plans.values())
+            deferred = any(p.deferred for p in plans.values())
+            if not edits and not deferred:
+                _fail(state.findings <= initial_findings, 'Candidate introduces new findings')
+                again, second = checked(sources)
+                _fail(again.findings == state.findings
+                      and not any(p.edits or p.deferred for p in second.values()),
+                      'Candidate is not idempotent')
+                self._revalidate()
+                token = object.__new__(ValidatedCandidate)
+                for name, value in dict(sources=MappingProxyType(dict(sources)),
+                                        findings=state.findings, passes=iteration,
+                                        _owner=self._owner, _seal=_TOKEN_SEAL).items():
+                    object.__setattr__(token, name, value)
+                self._issued = token
+                return token
+            _fail(iteration < 8, 'Eight-pass convergence limit exceeded')
+            _fail(edits, 'Unresolved conflicting edits')
+            sources = {p: edit_plan.candidate() for p, edit_plan in plans.items()}
+            for p, content in sources.items():
+                _fail(content.startswith(b'\xef\xbb\xbf') == self._files[p].data.startswith(b'\xef\xbb\xbf'),
+                      f'Candidate changes UTF-8 BOM: {p}')
+            key = tuple(sorted(sources.items()))
+            _fail(key not in seen, 'Repeated candidate state')
+            seen.add(key)
+            state, plans = checked(sources)
+        raise AssertionError('Unreachable')
+
+    def _write_new(self, directory_fd: int, name: str, data: bytes, *,
+                   mode: int = 0o600, group: int | None = None, xattrs=None, stage: bool = False,
+                   path: str | None = None) -> Fingerprint:
+        self._hit('stage_create' if stage else 'journal_create', path or name)
+        fd = os.open(name, os.O_RDWR | os.O_CREAT | os.O_EXCL | os.O_NOFOLLOW,
+                     mode, dir_fd=directory_fd)
+        try:
+            created = os.fstat(fd)
+            expected_group = created.st_gid if group is None else group
+            self._hit('stage_write' if stage else 'journal_write', path or name)
+            view = memoryview(data)
+            while view:
+                count = os.write(fd, view)
+                _fail(count > 0, 'Short write made no progress')
+                view = view[count:]
+            # Content writes may themselves affect inode metadata. Apply the
+            # requested ownership/mode/xattrs afterward, on our own inode only.
+            if created.st_gid != expected_group:
+                os.fchown(fd, -1, expected_group)
+            os.fchmod(fd, mode)
+            if xattrs is not None:
+                _copy_xattrs(fd, xattrs)
+            expected_attrs = _xattrs(fd) if xattrs is None else xattrs
+            _plain_metadata(fd, Path(path or name))
+            before_sync = os.fstat(fd)
+            self._sync(fd, 'stage_fsync' if stage else 'journal_fsync', path or name)
+            # Do not turn an observed, possibly corrupted stage into the trusted
+            # postimage. Compare its actual bytes and final metadata to intent.
+            os.lseek(fd, 0, os.SEEK_SET)
+            actual = bytearray()
+            while True:
+                chunk = os.read(fd, 1024 * 1024)
+                if not chunk:
+                    break
+                actual.extend(chunk)
+            attrs = _xattrs(fd)
+            _plain_metadata(fd, Path(path or name))
+            current = os.fstat(fd)
+            named = os.stat(name, dir_fd=directory_fd, follow_symlinks=False)
+            _fail(_stable(before_sync) == _stable(current) == _stable(named)
+                  and stat.S_ISREG(current.st_mode) and current.st_nlink == 1
+                  and current.st_uid == os.geteuid() and current.st_gid == expected_group
+                  and stat.S_IMODE(current.st_mode) == mode and attrs == expected_attrs
+                  and bytes(actual) == data, f'Staged bytes or metadata changed: {path or name}')
+            return Fingerprint(current.st_dev, current.st_ino, mode, current.st_uid, expected_group,
+                               _hash(data), _xattr_hash(expected_attrs))
+        finally:
+            os.close(fd)
+
+    def _event(self, kind: str, **values) -> None:
+        name = f'event-{self._event_number:08d}.json'
+        self._event_number += 1  # Never overwrite even a partially written event.
+        self._write_new(self._tx_fd, name, _json_bytes(dict(kind=kind, **values)))
+        self._sync(self._tx_fd, 'journal_directory_fsync', name)
+
+    def _load_json(self, directory_fd: int, name: str) -> object:
+        fd = os.open(name, os.O_RDONLY | os.O_NOFOLLOW | os.O_NONBLOCK, dir_fd=directory_fd)
+        try:
+            s = os.fstat(fd)
+            _fail(stat.S_ISREG(s.st_mode) and s.st_nlink == 1 and s.st_uid == os.geteuid()
+                  and stat.S_IMODE(s.st_mode) & 0o077 == 0, f'Unsafe journal file: {name}')
+            data = bytearray()
+            while True:
+                block = os.read(fd, 1024 * 1024)
+                if not block:
+                    break
+                data.extend(block)
+            _fail(_stable(s) == _stable(os.fstat(fd)), f'Journal changed while reading: {name}')
+            def unique(pairs):
+                result = {}
+                for key, value in pairs:
+                    _fail(key not in result, f'Duplicate JSON key in journal: {name}')
+                    result[key] = value
+                return result
+            return json.loads(data, object_pairs_hook=unique)
+        finally:
+            os.close(fd)
+
+    def _open_journal(self, journal: str) -> int:
+        _fail(isinstance(journal, str) and re.fullmatch('[0-9a-f]{32}', journal) is not None,
+              'Invalid transaction journal ID')
+        fd = os.open(journal, os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW, dir_fd=self._ns_fd)
+        try:
+            _private_directory(fd, self._namespace / journal)
+            for name in os.listdir(fd):
+                _fail(name == 'manifest.json' or re.fullmatch(r'event-[0-9]{8}\.json', name)
+                      or re.fullmatch(r'(stage-[0-9]+|restore-[0-9a-f]{32})\.bin', name),
+                      f'Unknown journal artifact: {journal}/{name}')
+                s = os.stat(name, dir_fd=fd, follow_symlinks=False)
+                _fail(stat.S_ISREG(s.st_mode) and s.st_nlink == 1 and s.st_uid == os.geteuid(),
+                      f'Unsafe journal artifact: {journal}/{name}')
+            return fd
+        except BaseException:
+            os.close(fd)
+            raise
+
+    def _load_manifest(self, fd: int) -> dict:
+        value = self._load_json(fd, 'manifest.json')
+        _fail(isinstance(value, dict) and set(value) == {'schema', 'root', 'root_identity', 'files', 'evidence'}
+              and value['schema'] == 1 and value['root'] == str(self.root)
+              and value['root_identity'] == list(self._root_identity),
+              'Journal belongs to a different root or has an invalid schema')
+        _fail(type(value['files']) is list and bool(value['files'])
+              and type(value['evidence']) is list, 'Invalid journal manifest entries')
+        paths = set()
+        for index, entry in enumerate(value['files']):
+            _fail(type(entry) is dict and set(entry) == {'path', 'before', 'after', 'fingerprint', 'parent', 'stage', 'xattrs'},
+                  'Invalid journal source entry')
+            path = _relative(entry['path'])
+            _fail(path not in paths and Path(path).suffix in ('.typ', '.md'), 'Invalid or duplicate journal source')
+            paths.add(path)
+            _fail(entry['stage'] == f'stage-{index}.bin', 'Invalid journal stage path')
+            fp = _fp_load(entry['fingerprint'])
+            _fail(fp.uid == os.geteuid() and fp.mode <= 0o777
+                  and fp.device == self._store_identity[0], 'Unsafe journal source ownership/mode/device')
+            _fail(type(entry['parent']) is list and len(entry['parent']) == 2
+                  and all(type(n) is int and n >= 0 for n in entry['parent']),
+                  'Invalid journal parent identity')
+            _fail(type(entry['xattrs']) is list, 'Invalid journal metadata')
+            attrs = []
+            for pair in entry['xattrs']:
+                _fail(type(pair) is list and len(pair) == 2 and isinstance(pair[0], str)
+                      and bool(pair[0]) and '\x00' not in pair[0], 'Invalid journal metadata entry')
+                attrs.append((pair[0], _decode(pair[1])))
+            _fail(attrs == sorted(set(attrs)) and len({name for name, _ in attrs}) == len(attrs)
+                  and _xattr_hash(tuple(attrs)) == fp.metadata_sha256, 'Invalid journal metadata digest')
+            before, after = _decode(entry['before']), _decode(entry['after'])
+            _fail(_hash(before) == fp.sha256 and before != after, 'Invalid original journal bytes')
+            try:
+                before.decode('utf-8')
+                after.decode('utf-8')
+            except UnicodeError as error:
+                raise TransactionError('Invalid UTF-8 journal source') from error
+            _fail(before.startswith(b'\xef\xbb\xbf') == after.startswith(b'\xef\xbb\xbf'),
+                  'Journal changes source BOM')
+        evidence_paths = set()
+        for entry in value['evidence']:
+            _fail(type(entry) is dict and set(entry) == {'path', 'bytes', 'fingerprint'},
+                  'Invalid journal evidence entry')
+            path = _absolute(entry['path'])
+            _fail(str(path) not in evidence_paths, 'Duplicate journal evidence')
+            evidence_paths.add(str(path))
+            if entry['bytes'] is None:
+                _fail(entry['fingerprint'] is None, 'Malformed absent evidence')
+            else:
+                _fail(_hash(_decode(entry['bytes'])) == _fp_load(entry['fingerprint']).sha256,
+                      'Invalid journal evidence bytes')
+        return value
+
+    def _events(self, fd: int, manifest: dict) -> list[dict]:
+        names = sorted(n for n in os.listdir(fd) if n.startswith('event-'))
+        _fail(names == [f'event-{i:08d}.json' for i in range(len(names))], 'Noncontiguous journal events')
+        events = []
+        entries = {e['path']: e for e in manifest['files']}
+        paths = set(entries)
+        terminal = False
+        applied = set()
+        for name in names:
+            event = self._load_json(fd, name)
+            _fail(isinstance(event, dict) and isinstance(event.get('kind'), str),
+                  'Invalid journal event sequence')
+            kind = event['kind']
+            _fail(not terminal or kind == 'recovery_required', 'Events follow completed journal')
+            if kind in ('staged', 'replace_intent', 'applied', 'restore_intent', 'restored'):
+                _fail(set(event) == {'kind', 'path', 'fingerprint'} and event['path'] in paths,
+                      'Invalid journal progress path')
+                fp = _fp_load(event['fingerprint'])
+                original = _fp_load(entries[event['path']]['fingerprint'])
+                content = entries[event['path']]['before' if kind in ('restore_intent', 'restored') else 'after']
+                _fail(fp.sha256 == _hash(_decode(content))
+                      and (fp.device, fp.mode, fp.uid, fp.gid, fp.metadata_sha256) ==
+                      (original.device, original.mode, original.uid, original.gid, original.metadata_sha256),
+                      'Progress fingerprint disagrees with immutable manifest')
+                if kind == 'applied':
+                    applied.add(event['path'])
+            elif kind == 'recovery_required':
+                _fail(set(event) == {'kind'}, 'Invalid recovery-required event')
+                terminal = False
+            elif kind in ('committed', 'recovered'):
+                _fail(set(event) == {'kind'}, 'Invalid journal completion')
+                _fail(kind != 'committed' or applied == paths, 'Commit lacks complete per-file progress')
+                terminal = True
+            else:
+                _fail(False, 'Unknown journal event kind')
+            events.append(event)
+        return events
+
+    def _pending(self) -> tuple[str, ...]:
+        pending = []
+        for journal in sorted(os.listdir(self._ns_fd)):
+            try:
+                fd = self._open_journal(journal)
+                try:
+                    manifest = self._load_manifest(fd)
+                    events = self._events(fd, manifest)
+                    if not events or events[-1]['kind'] not in ('committed', 'recovered'):
+                        pending.append(journal)
+                finally:
+                    os.close(fd)
+            except (OSError, ValueError, TypeError, KeyError):
+                # Corrupt or interrupted journals fail closed, never disappear.
+                pending.append(journal)
+        return tuple(pending)
+
+    def apply(self, candidate: ValidatedCandidate) -> ApplyResult:
+        self._check_active()
+        _fail(not self.recovery_only and not self._used, 'Cannot apply in this context')
+        _fail(candidate is self._issued and isinstance(candidate, ValidatedCandidate)
+              and candidate._owner is self._owner and candidate._seal is _TOKEN_SEAL,
+              'Only this active session\'s validated candidate may be applied')
+        _fail(not self._pending(), 'Incomplete journal blocks source application')
+        self._revalidate()
+        changed = tuple(p for p in self.targets if candidate.sources[p] != self._files[p].data)
+        self._used = True
+        self._issued = None
+        if not changed:
+            return ApplyResult(None, (), candidate.findings)
+        journal = uuid.uuid4().hex
+        self._journal = journal
+        os.mkdir(journal, 0o700, dir_fd=self._ns_fd)
+        self._tx_fd = os.open(journal, os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW, dir_fd=self._ns_fd)
+        self._fds.append(self._tx_fd)
+        manifest = dict(schema=1, root=str(self.root), root_identity=list(self._root_identity), files=[], evidence=[])
+        for index, p in enumerate(changed):
+            before = self._files[p]
+            manifest['files'].append(dict(path=p, before=base64.b64encode(before.data).decode(),
+                                          after=base64.b64encode(candidate.sources[p]).decode(),
+                                          fingerprint=_fp_json(before.fingerprint),
+                                          parent=list(before.parent), stage=f'stage-{index}.bin',
+                                          xattrs=[[name, base64.b64encode(data).decode()] for name, data in before.xattrs]))
+        for p, value in self._evidence.items():
+            manifest['evidence'].append(dict(path=p, bytes=None if value.data is None else base64.b64encode(value.data).decode(),
+                                            fingerprint=None if value.fingerprint is None else _fp_json(value.fingerprint)))
+        expected = dict(self._files)
+        try:
+            self._sync(self._ns_fd, 'journal_parent_fsync', journal)
+            self._write_new(self._tx_fd, 'manifest.json', _json_bytes(manifest))
+            self._sync(self._tx_fd, 'journal_directory_fsync', 'manifest.json')
+            stages = {}
+            for entry in manifest['files']:
+                p = entry['path']
+                stages[p] = self._write_new(self._tx_fd, entry['stage'], candidate.sources[p],
+                                            mode=self._files[p].fingerprint.mode, group=self._files[p].fingerprint.gid,
+                                            xattrs=self._files[p].xattrs, stage=True, path=p)
+                self._event('staged', path=p, fingerprint=_fp_json(stages[p]))
+            self._hit('before_revalidate', None)
+            self._revalidate(expected)
+            for entry in manifest['files']:
+                p = entry['path']
+                self._event('replace_intent', path=p, fingerprint=_fp_json(stages[p]))
+                self._hit('before_replace', p)
+                self._revalidate(expected)
+                # Stage ownership/content is checked, not trusted merely by its name.
+                staged = _read(self._namespace / journal / entry['stage'])
+                _fail(staged.fingerprint == stages[p], f'Stage changed: {p}')
+                parent_fd = _directory((self.root / p).parent)
+                try:
+                    _fail(_identity(os.fstat(parent_fd)) == self._files[p].parent,
+                          f'Source parent changed: {p}')
+                    os.replace(entry['stage'], Path(p).name, src_dir_fd=self._tx_fd, dst_dir_fd=parent_fd)
+                    self._hit('after_replace', p)
+                    self._sync(parent_fd, 'source_directory_fsync', p)
+                    self._sync(self._tx_fd, 'journal_directory_fsync', p)
+                finally:
+                    os.close(parent_fd)
+                expected[p] = _read(self.root / p, utf8=True)
+                _fail(expected[p].fingerprint == stages[p], f'Unexpected replacement identity: {p}')
+                self._event('applied', path=p, fingerprint=_fp_json(stages[p]))
+            self._hit('before_final_validation', None)
+            self._revalidate(expected)
+            self._event('committed')
+            return ApplyResult(journal, changed, candidate.findings)
+        except Exception as error:
+            # Best-effort rollback is not completion: an explicit recovery pass
+            # must reconcile the durable record before another transaction.
+            record_error = None
+            try:
+                self._event('recovery_required')
+            except Exception as marker_error:
+                record_error = f'Recovery marker failed: {type(marker_error).__name__}: {marker_error}'
+            try:
+                report = self._recover(journal, finish=False, preserve_conflicts={})
+                if record_error is not None:
+                    report = replace(report, errors=report.errors + (record_error,))
+            except Exception as recovery_error:
+                report = RecoveryReport(journal, unresolved=changed,
+                                        errors=(f'{type(recovery_error).__name__}: {recovery_error}',))
+            raise TransactionFailure(f'{type(error).__name__}: {error}', report) from error
+
+    def recover(self, journal: str, *,
+                preserve_conflicts: Mapping[str, Fingerprint] | None = None) -> RecoveryReport:
+        """Explicitly reconcile an incomplete journal without compiling.
+
+        A first pass restores recognized postimages only. For a conflict, inspect
+        the preserved file and pass its exact reported Fingerprint in a later
+        ``preserve_conflicts`` call to acknowledge that version without writing
+        it. A missing/unreadable file is never recreated. Corrupt journals need
+        manual investigation; this API does not delete or silently dismiss them.
+        """
+        self._check_active()
+        _fail(self.recovery_only, 'Explicit recovery-only context required')
+        return self._recover(journal, finish=True, preserve_conflicts=preserve_conflicts or {})
+
+    def _recover(self, journal: str, *, finish: bool,
+                 preserve_conflicts: Mapping[str, Fingerprint]) -> RecoveryReport:
+        self._check_active()
+        fd = self._open_journal(journal)
+        try:
+            manifest = self._load_manifest(fd)
+            events = self._events(fd, manifest)
+            entries = manifest['files']
+            _fail({e['path'] for e in entries} <= set(self.targets),
+                  'Recovery journal exceeds explicit target allowlist')
+            _fail(set(preserve_conflicts) <= {e['path'] for e in entries}
+                  and all(isinstance(v, Fingerprint) for v in preserve_conflicts.values()),
+                  'Invalid explicit conflict resolution')
+            if events and events[-1]['kind'] in ('committed', 'recovered'):
+                return RecoveryReport(journal, complete=True)
+            previous_fd, previous_number = self._tx_fd, self._event_number
+            self._tx_fd, self._event_number = fd, len(events)
+            restored, unchanged, changed, unresolved, preserved, errors = [], [], [], [], [], []
+            conflicts = {}
+            reconciled = {}
+            try:
+                for entry in entries:
+                    p = entry['path']
+                    try:
+                        self._check_active()
+                        current = _read(self.root / p, utf8=True)
+                        _fail(current.parent == tuple(entry['parent']), f'Source parent changed: {p}')
+                        before, after = _decode(entry['before']), _decode(entry['after'])
+                        original_fp = _fp_load(entry['fingerprint'])
+                        restored_fps = [_fp_load(e['fingerprint']) for e in events
+                                        if e.get('path') == p and e['kind'] in ('restore_intent', 'restored')]
+                        post_fps = [_fp_load(e['fingerprint']) for e in events
+                                    if e.get('path') == p and e['kind'] in ('replace_intent', 'applied')]
+                        if current.data == before and current.fingerprint in [original_fp, *restored_fps]:
+                            unchanged.append(p)
+                            reconciled[p] = current
+                            continue
+                        if (current.data == after and current.fingerprint in post_fps):
+                            name = 'restore-' + uuid.uuid4().hex + '.bin'
+                            fp = self._write_new(fd, name, before, mode=original_fp.mode, group=original_fp.gid,
+                                                 xattrs=tuple((k, _decode(v)) for k, v in entry['xattrs']),
+                                                 stage=True, path=p)
+                            self._event('restore_intent', path=p, fingerprint=_fp_json(fp))
+                            self._hit('before_restore', p)
+                            now = _read(self.root / p, utf8=True)
+                            _fail(now == current, f'Postimage changed during recovery: {p}')
+                            parent_fd = _directory((self.root / p).parent)
+                            try:
+                                _fail(_identity(os.fstat(parent_fd)) == current.parent,
+                                      f'Source parent changed during recovery: {p}')
+                                stage = _read(self._namespace / journal / name)
+                                _fail(stage.fingerprint == fp, f'Recovery stage changed: {p}')
+                                os.replace(name, Path(p).name, src_dir_fd=fd, dst_dir_fd=parent_fd)
+                                self._hit('after_restore', p)
+                                self._sync(parent_fd, 'source_directory_fsync', p)
+                                self._sync(fd, 'journal_directory_fsync', p)
+                            finally:
+                                os.close(parent_fd)
+                            reconciled[p] = _read(self.root / p, utf8=True)
+                            _fail(reconciled[p].fingerprint == fp, f'Restored file changed: {p}')
+                            restored.append(p)
+                            self._event('restored', path=p, fingerprint=_fp_json(fp))
+                        elif preserve_conflicts.get(p) == current.fingerprint:
+                            preserved.append(p)
+                            reconciled[p] = current
+                        else:
+                            changed.append(p)
+                            unresolved.append(p)
+                            conflicts[p] = current.fingerprint
+                    except Exception as error:
+                        unresolved.append(p)
+                        errors.append(f'{p}: {type(error).__name__}: {error}')
+                # A crash may have occurred between a restore rename and its
+                # directory fsync. Flush all reconciled files/parents again,
+                # then validate exact identities before recording completion.
+                if not unresolved and finish:
+                    try:
+                        for entry in entries:
+                            p = entry['path']
+                            now = _read(self.root / p, utf8=True)
+                            _fail(now == reconciled[p], f'Reconciled file changed: {p}')
+                            parent_fd = _directory((self.root / p).parent)
+                            try:
+                                source_fd = os.open(Path(p).name, os.O_RDONLY | os.O_NOFOLLOW | os.O_NONBLOCK,
+                                                    dir_fd=parent_fd)
+                                try:
+                                    self._sync(source_fd, 'recovery_source_fsync', p)
+                                finally:
+                                    os.close(source_fd)
+                                self._sync(parent_fd, 'recovery_directory_fsync', p)
+                            finally:
+                                os.close(parent_fd)
+                        for p, expected in reconciled.items():
+                            _fail(_read(self.root / p, utf8=True) == expected,
+                                  f'Reconciled file changed: {p}')
+                        self._event('recovered')
+                    except Exception as completion_error:
+                        unresolved.extend(entry['path'] for entry in entries)
+                        errors.append(f'Recovery completion failed: {type(completion_error).__name__}: {completion_error}')
+                        try:
+                            self._event('recovery_required')
+                        except Exception as marker_error:
+                            errors.append(f'Recovery marker failed: {type(marker_error).__name__}: {marker_error}')
+                return RecoveryReport(journal, tuple(restored), tuple(unchanged), tuple(changed),
+                                      tuple(sorted(set(unresolved))), tuple(preserved), MappingProxyType(conflicts),
+                                      tuple(errors), not unresolved and finish)
+            finally:
+                self._tx_fd, self._event_number = previous_fd, previous_number
+        finally:
+            os.close(fd)
