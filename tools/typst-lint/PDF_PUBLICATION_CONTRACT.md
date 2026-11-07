@@ -2,10 +2,12 @@
 
 `closed_core_publish.py` composes the existing protected closed-core source fix
 and committed-source compiler with a separate bounded PDF journal. This is an
-internal trusted Python engine API. No CLI dispatch, existing status/recover
-command, project configuration, consumer, wrapper, editor, watch route, shared
-package, installation or deployment changes. Ordinary CLI compilation remains
-inert. Tests publish only inside owned temporary consumers.
+internal trusted Python engine API. The separately selected CLI in
+[EXPLICIT_COMPILE_CLI_CONTRACT.md](EXPLICIT_COMPILE_CLI_CONTRACT.md) calls it.
+Existing source-only status/recover commands, project configuration, consumers,
+wrappers, editor/watch routes, shared packages, installation and deployment remain
+unchanged. Ordinary unprofiled compilation remains inert. Tests publish only
+inside owned temporary consumers.
 
 ## Ordering, authority and explicit exclusivity
 
@@ -93,7 +95,8 @@ The fixed private sibling namespace is:
 
 The schema is independently discriminated by `kind='typst-pdf-publication'` and
 integer `schema=1`. It is **not** the source transaction's schema 1. Source
-transaction/bridge/CLI implementations and their original journals are unchanged.
+transaction/bridge implementations, source-only CLI routes and their original
+journals are unchanged.
 The existing standalone offline CLI does not discover PDF journals.
 
 Each attempt retains a strict manifest, ordered exclusive-create event JSON,

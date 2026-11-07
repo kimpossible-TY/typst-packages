@@ -1,8 +1,10 @@
 # Internal committed-source compiler experiment
 
-`closed_core_compile.py` is an internal prototype. Nothing imports it into CLI
-dispatch, no requested PDF destination is accepted, and no artifact is published.
-Ordinary check/fix/compile behavior and the global partial rule audit are unchanged.
+`closed_core_compile.py` is an internal compiler engine. It accepts no requested
+PDF destination and publishes no artifact itself. The separately selected CLI in
+[EXPLICIT_COMPILE_CLI_CONTRACT.md](EXPLICIT_COMPILE_CLI_CONTRACT.md) reaches it
+through the guarded publication session. Ordinary unprofiled check/fix/compile
+behavior and the global partial rule audit are unchanged.
 A successful compiler exit is not a complete build gate.
 
 ## Authority and lifetime
@@ -175,11 +177,20 @@ The independent `safety_gate` is `passed` after compiler control flow completes
 its safety checks, `refused` for a safety refusal, or `pending` when interrupted
 work did not complete the gate. `passed` does not mean a successful compile or an
 issued artifact. `compiler_failure`, when present, is frozen
-`CompilerFailureInfo(reason, invocation)` retaining the original failure before
-a final guard can supersede it. Existing `CompilerFailure.reason` and
-`CompilerFailure.invocation` remain available. A final guard preserves all probe
-and compile attempts, even when it supersedes a compiler failure or output
-capture/artifact issuance. No artifact is issued on refusal.
+`CompilerFailureInfo(reason, invocation, kind)` retaining the original failure
+before a final guard can supersede it. Its frozen `kind` and the read-only
+`CompilerFailure.kind` use `CompilerFailureKind`: `process_exit` only for an
+observed nonzero or natural signal completion, `cancelled`, `timeout`,
+`stream_limit`, or conservative default `unknown`. Failure sites assign the kind;
+reason text and cleanup-observed returncodes never infer it. A failed version
+probe can have `process_exit` but retains purpose `version-probe`. Existing
+reason/invocation constructors and `CompilerFailure.reason`,
+`CompilerFailure.invocation`, and reports remain available. Late cancellation
+or timeout retains its distinct kind even after compiler status 0. A final guard
+preserves all probe and compile attempts and original failure kind, even when it
+supersedes a compiler failure or output capture/artifact issuance. That retained
+history does not make a safety refusal an immediate compiler failure. No artifact
+is issued on refusal.
 
 Started-process failure and `KeyboardInterrupt` cleanup kill/reap the owned
 process group and retain any observed exit/signal status. An interrupted or

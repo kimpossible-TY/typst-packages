@@ -9,6 +9,7 @@ from __future__ import annotations
 
 from contextlib import ExitStack, contextmanager
 from dataclasses import dataclass, field, fields
+from enum import Enum
 import hashlib
 import math
 import os
@@ -45,13 +46,28 @@ class CompileSafetyError(SafetyError):
         super().__init__(*args)
 
 
+class CompilerFailureKind(str, Enum):
+    """Observed failure cause, distinct from a cleanup-observed process status."""
+    PROCESS_EXIT = 'process_exit'
+    CANCELLED = 'cancelled'
+    TIMEOUT = 'timeout'
+    STREAM_LIMIT = 'stream_limit'
+    UNKNOWN = 'unknown'
+
+
 class CompilerFailure(Exception):
     """A probe/compile failed, was cancelled, exceeded limits, or timed out."""
-    def __init__(self, reason, invocation=None, *, report=None):
+    def __init__(self, reason, invocation=None, *,
+                 kind: CompilerFailureKind = CompilerFailureKind.UNKNOWN, report=None):
         self.reason = reason
         self.invocation = invocation
+        self._kind = kind
         self.report = report if report is not None else CompileReport((), 'pending', None)
         super().__init__(reason)
+
+    @property
+    def kind(self) -> CompilerFailureKind:
+        return self._kind
 
 
 @dataclass(frozen=True, slots=True)
@@ -82,6 +98,7 @@ class Invocation:
 class CompilerFailureInfo:
     reason: str
     invocation: Invocation | None
+    kind: CompilerFailureKind = CompilerFailureKind.UNKNOWN
 
 
 @dataclass(frozen=True, slots=True)
@@ -143,7 +160,7 @@ class _AttemptLedger:
 
     def note_failure(self, failure):
         if isinstance(failure, CompilerFailure) and self.compiler_failure is None:
-            self.compiler_failure = CompilerFailureInfo(failure.reason, failure.invocation)
+            self.compiler_failure = CompilerFailureInfo(failure.reason, failure.invocation, failure.kind)
 
     def snapshot(self, safety_gate):
         return CompileReport(tuple(item.snapshot() for item in self.attempts),
@@ -371,9 +388,9 @@ def _run(argv, *, purpose, cwd, environment, deadline, cancel_event, check_works
 
     try:
         if cancel_event is not None and cancel_event.is_set():
-            raise CompilerFailure('cancelled', report())
+            raise CompilerFailure('cancelled', report(), kind=CompilerFailureKind.CANCELLED)
         if time.monotonic() >= deadline:
-            raise CompilerFailure('timeout', report())
+            raise CompilerFailure('timeout', report(), kind=CompilerFailureKind.TIMEOUT)
         check_workspace()
         # Bound retained text independently of stream bounds. These values are
         # generated internally, not a user-supplied command/environment facility.
@@ -402,10 +419,10 @@ def _run(argv, *, purpose, cwd, environment, deadline, cancel_event, check_works
             while selector.get_map() or process.poll() is None:
                 attempt.observe(process)
                 if cancel_event is not None and cancel_event.is_set():
-                    raise CompilerFailure('cancelled')
+                    raise CompilerFailure('cancelled', kind=CompilerFailureKind.CANCELLED)
                 remaining = deadline - time.monotonic()
                 if remaining <= 0:
-                    raise CompilerFailure('timeout')
+                    raise CompilerFailure('timeout', kind=CompilerFailureKind.TIMEOUT)
                 check_workspace()
                 for key, _ in selector.select(min(remaining, 0.025)):
                     chunk = os.read(key.fileobj.fileno(), 8192)
@@ -414,13 +431,15 @@ def _run(argv, *, purpose, cwd, environment, deadline, cancel_event, check_works
                     else:
                         target = output if key.data == 'stdout' else error
                         if len(target) + len(chunk) > _MAX_STREAM:
-                            raise CompilerFailure(f'{key.data} byte limit exceeded')
+                            raise CompilerFailure(f'{key.data} byte limit exceeded',
+                                                  kind=CompilerFailureKind.STREAM_LIMIT)
                         target.extend(chunk)
         process.wait()
         attempt.observe(process)
         check_workspace()
         if process.returncode != 0:
-            raise CompilerFailure('signal' if process.returncode < 0 else 'nonzero exit', report())
+            raise CompilerFailure('signal' if process.returncode < 0 else 'nonzero exit', report(),
+                                  kind=CompilerFailureKind.PROCESS_EXIT)
         return report()
     except BaseException as failure:
         if attempt is not None and attempt.termination_reason is None:
@@ -655,9 +674,9 @@ def _compile_committed_snapshot(fix, snapshot, *, profile, deadline_seconds, can
 
             def check_request():
                 if cancel_event is not None and cancel_event.is_set():
-                    raise CompilerFailure('cancelled', last_invocation)
+                    raise CompilerFailure('cancelled', last_invocation, kind=CompilerFailureKind.CANCELLED)
                 if time.monotonic() >= deadline:
-                    raise CompilerFailure('timeout', last_invocation)
+                    raise CompilerFailure('timeout', last_invocation, kind=CompilerFailureKind.TIMEOUT)
 
             def revalidate():
                 _guard(fix, snapshot)

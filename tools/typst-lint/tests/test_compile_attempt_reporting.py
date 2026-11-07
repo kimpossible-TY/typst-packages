@@ -4,6 +4,8 @@ Only owned temporary compiler fixtures run. No report authorizes an artifact,
 consumer output, source write, compiler choice, or process after a hard kill.
 """
 from dataclasses import FrozenInstanceError, asdict, replace
+from itertools import product
+import json
 import os
 from pathlib import Path
 import signal
@@ -59,6 +61,8 @@ class CompileAttemptReportingTests(unittest.TestCase):
             self.compile(cancel_event=event)
         report = self.report(caught.exception, (), gate='passed')
         self.assertEqual(report.compiler_failure.reason, 'cancelled')
+        self.assertIs(report.compiler_failure.kind, cc.CompilerFailureKind.CANCELLED)
+        self.assertIs(caught.exception.kind, cc.CompilerFailureKind.CANCELLED)
         self.assertFalse(caught.exception.invocation.launch_attempted)
         run = cc._run
 
@@ -68,8 +72,10 @@ class CompileAttemptReportingTests(unittest.TestCase):
         with mock.patch.object(cc, '_run', side_effect=expired):
             with self.assertRaises(cc.CompilerFailure) as caught:
                 self.compile()
-        self.report(caught.exception, (), gate='passed')
+        report = self.report(caught.exception, (), gate='passed')
         self.assertEqual(caught.exception.reason, 'timeout')
+        self.assertIs(report.compiler_failure.kind, cc.CompilerFailureKind.TIMEOUT)
+        self.assertIs(caught.exception.kind, cc.CompilerFailureKind.TIMEOUT)
 
     def test_probe_success_then_version_mismatch_never_reports_compile(self):
         with mock.patch.object(cc, '_reviewed_native_artifact', return_value=
@@ -97,6 +103,7 @@ class CompileAttemptReportingTests(unittest.TestCase):
         report = self.report(caught.exception, ('version-probe',), gate='passed')
         self.assertEqual(report.attempts[0].returncode, 0)
         self.assertEqual(report.compiler_failure.reason, 'timeout')
+        self.assertIs(report.compiler_failure.kind, cc.CompilerFailureKind.TIMEOUT)
         self.assertEqual(caught.exception.invocation.purpose, 'compile')
         self.assertFalse(caught.exception.invocation.launch_attempted)
 
@@ -140,14 +147,19 @@ class CompileAttemptReportingTests(unittest.TestCase):
                 self.assertEqual(attempt.lifecycle, 'uncertain')
                 self.assertIsNone(attempt.returncode)
                 self.assertEqual(attempt.termination_reason, 'interrupted')
+                self.assertIsNone(report.compiler_failure)
 
     def test_started_nonzero_signal_timeout_and_output_limits_keep_raw_status(self):
-        cases = (('sys.exit(9)', 'nonzero exit', 9),
-                 ('os.kill(os.getpid(), signal.SIGTERM)', 'signal', -signal.SIGTERM),
-                 ('time.sleep(5)', 'timeout', -signal.SIGKILL),
-                 ('os.write(1, b"x" * 1000000); time.sleep(5)', 'stdout byte limit exceeded', -signal.SIGKILL),
-                 ('os.write(2, b"x" * 1000000); time.sleep(5)', 'stderr byte limit exceeded', -signal.SIGKILL))
-        for behavior, reason, status in cases:
+        kinds = cc.CompilerFailureKind
+        cases = (('sys.exit(9)', 'nonzero exit', 9, kinds.PROCESS_EXIT),
+                 ('os.kill(os.getpid(), signal.SIGTERM)', 'signal', -signal.SIGTERM, kinds.PROCESS_EXIT),
+                 ('os.kill(os.getpid(), signal.SIGKILL)', 'signal', -signal.SIGKILL, kinds.PROCESS_EXIT),
+                 ('time.sleep(5)', 'timeout', -signal.SIGKILL, kinds.TIMEOUT),
+                 ('os.write(1, b"x" * 1000000); time.sleep(5)', 'stdout byte limit exceeded',
+                  -signal.SIGKILL, kinds.STREAM_LIMIT),
+                 ('os.write(2, b"x" * 1000000); time.sleep(5)', 'stderr byte limit exceeded',
+                  -signal.SIGKILL, kinds.STREAM_LIMIT))
+        for behavior, reason, status, kind in cases:
             with self.subTest(reason=reason):
                 self.program('os.write(1, b"out"); os.write(2, b"err"); ' + behavior)
                 with self.assertRaises(cc.CompilerFailure) as caught:
@@ -160,9 +172,52 @@ class CompileAttemptReportingTests(unittest.TestCase):
                 self.assertIs(attempt.started, True)
                 self.assertEqual(attempt.lifecycle, 'signaled' if status < 0 else 'exited')
                 self.assertEqual(attempt.termination_reason, reason)
-                self.assertEqual(report.compiler_failure, cc.CompilerFailureInfo(reason, attempt))
+                self.assertEqual(report.compiler_failure, cc.CompilerFailureInfo(reason, attempt, kind))
+                self.assertIs(caught.exception.kind, kind)
+                self.assertEqual(json.loads(json.dumps(asdict(report)['compiler_failure']['kind'])), kind.value)
                 self.assertLessEqual(len(attempt.stdout), cc._MAX_STREAM)
                 self.assertLessEqual(len(attempt.stderr), cc._MAX_STREAM)
+
+    def test_probe_natural_nonzero_and_signal_have_process_exit_kind_without_compile(self):
+        for behavior, status in (('sys.exit(9)', 9),
+                ('os.kill(os.getpid(), signal.SIGTERM)', -signal.SIGTERM)):
+            with self.subTest(status=status):
+                self.program()
+                raw = self.executable.read_bytes().replace(
+                    f'    os.write(1, {cc._VERSION!r}); sys.exit(0)'.encode(),
+                    f'    {behavior}'.encode())
+                self.executable.chmod(0o700)
+                self.executable.write_bytes(raw)
+                self.executable.chmod(0o500)
+                self.reviewed_hash = cc._hash(raw)
+                with self.assertRaises(cc.CompilerFailure) as caught:
+                    self.compile()
+                report = self.report(caught.exception, ('version-probe',), gate='passed')
+                failure = report.compiler_failure
+                self.assertIs(failure.kind, cc.CompilerFailureKind.PROCESS_EXIT)
+                self.assertIs(caught.exception.kind, cc.CompilerFailureKind.PROCESS_EXIT)
+                self.assertEqual(failure.invocation.purpose, 'version-probe')
+                self.assertEqual(failure.invocation.returncode, status)
+                self.assertEqual(failure.invocation, report.attempts[0])
+
+    def test_default_failure_kind_is_unknown_and_independent_of_reason_and_status(self):
+        invocation = cc.Invocation('compile', ('owned',), str(self.base), (),
+                                   -signal.SIGKILL, b'', b'', True, True, 'signaled')
+        for reason in ('nonzero exit', 'signal', 'cancelled', 'timeout', 'stdout byte limit exceeded'):
+            with self.subTest(reason=reason):
+                failure = cc.CompilerFailure(reason, invocation)
+                self.assertEqual(str(failure), reason)
+                self.assertIs(failure.invocation, invocation)
+                self.assertIs(failure.kind, cc.CompilerFailureKind.UNKNOWN)
+                with self.assertRaises(AttributeError):
+                    failure.kind = cc.CompilerFailureKind.PROCESS_EXIT
+                ledger = cc._AttemptLedger()
+                ledger.note_failure(failure)
+                info = ledger.snapshot('pending').compiler_failure
+                self.assertEqual(info, cc.CompilerFailureInfo(reason, invocation))
+                self.assertIs(info.kind, cc.CompilerFailureKind.UNKNOWN)
+                with self.assertRaises(FrozenInstanceError):
+                    info.kind = cc.CompilerFailureKind.PROCESS_EXIT
 
     def test_cancellation_after_launch_reaps_and_records_signal(self):
         event = threading.Event()
@@ -180,6 +235,8 @@ class CompileAttemptReportingTests(unittest.TestCase):
         report = self.report(caught.exception, ('version-probe', 'compile'), gate='passed',
                              invoked=True, status=-signal.SIGKILL)
         self.assertEqual(report.attempts[-1].termination_reason, 'cancelled')
+        self.assertIs(caught.exception.kind, cc.CompilerFailureKind.CANCELLED)
+        self.assertIs(report.compiler_failure.kind, cc.CompilerFailureKind.CANCELLED)
 
     def test_interrupt_after_launch_cleans_up_and_preserves_observed_status(self):
         self.program('time.sleep(5)')
@@ -199,12 +256,14 @@ class CompileAttemptReportingTests(unittest.TestCase):
                              invoked=True, status=-signal.SIGKILL)
         self.assertEqual(report.attempts[-1].lifecycle, 'signaled')
         self.assertEqual(report.attempts[-1].termination_reason, 'interrupted')
+        self.assertIsNone(report.compiler_failure)
 
     def test_final_guard_overrides_nonzero_and_signal_without_losing_failure(self):
         run = cc._run
-        for behavior, reason, status in (('sys.exit(7)', 'nonzero exit', 7),
-                ('os.kill(os.getpid(), signal.SIGTERM)', 'signal', -signal.SIGTERM)):
-            with self.subTest(reason=reason):
+        cases = (('sys.exit(7)', 'nonzero exit', 7),
+                 ('os.kill(os.getpid(), signal.SIGTERM)', 'signal', -signal.SIGTERM))
+        for (behavior, reason, status), drift in product(cases, ('source', 'compiler', 'output')):
+            with self.subTest(reason=reason, drift=drift):
                 self.active = True
                 self.program(behavior)
 
@@ -212,7 +271,12 @@ class CompileAttemptReportingTests(unittest.TestCase):
                     try:
                         return run(argv, **kwargs)
                     except cc.CompilerFailure:
-                        self.active = False
+                        if drift == 'source':
+                            self.active = False
+                        elif drift == 'compiler':
+                            self.executable.chmod(0o700)
+                        else:
+                            Path(argv[-1]).unlink()
                         raise
                 with mock.patch.object(cc, '_run', side_effect=invalidate):
                     with self.assertRaises(cc.CompileSafetyError) as caught:
@@ -220,6 +284,7 @@ class CompileAttemptReportingTests(unittest.TestCase):
                 report = self.report(caught.exception, ('version-probe', 'compile'),
                                      invoked=True, status=status)
                 self.assertEqual(report.compiler_failure.reason, reason)
+                self.assertIs(report.compiler_failure.kind, cc.CompilerFailureKind.PROCESS_EXIT)
                 self.assertEqual(report.compiler_failure.invocation, report.attempts[-1])
 
     def test_success_then_source_compiler_or_output_refusal_keeps_zero_exit(self):
@@ -299,7 +364,52 @@ class CompileAttemptReportingTests(unittest.TestCase):
         report = self.report(caught.exception, ('version-probe', 'compile'), gate='passed',
                              invoked=True, status=0)
         self.assertEqual(report.compiler_failure.reason, 'cancelled')
+        self.assertIs(report.compiler_failure.kind, cc.CompilerFailureKind.CANCELLED)
+        self.assertIs(caught.exception.kind, cc.CompilerFailureKind.CANCELLED)
         self.assertEqual(report.compiler_failure.invocation.returncode, 0)
+
+    def test_final_deadline_preserves_compile_zero_with_timeout_kind(self):
+        run = cc._run
+        monotonic = cc.time.monotonic
+        completed = False
+
+        def observe(argv, **kwargs):
+            nonlocal completed
+            result = run(argv, **kwargs)
+            completed = completed or kwargs['purpose'] == 'compile'
+            return result
+
+        def late_deadline():
+            return monotonic() + (121 if completed else 0)
+        with mock.patch.object(cc, '_run', side_effect=observe), \
+                mock.patch.object(cc.time, 'monotonic', side_effect=late_deadline):
+            with self.assertRaises(cc.CompilerFailure) as caught:
+                self.compile()
+        report = self.report(caught.exception, ('version-probe', 'compile'), gate='passed',
+                             invoked=True, status=0)
+        self.assertIs(caught.exception.kind, cc.CompilerFailureKind.TIMEOUT)
+        self.assertIs(report.compiler_failure.kind, cc.CompilerFailureKind.TIMEOUT)
+        self.assertEqual(report.compiler_failure.reason, 'timeout')
+        self.assertEqual(report.compiler_failure.invocation, report.attempts[-1])
+
+    def test_late_safety_refusal_retains_original_cancellation_kind(self):
+        event = threading.Event()
+        event.set()
+        run = cc._run
+
+        def invalidate(argv, **kwargs):
+            try:
+                return run(argv, **kwargs)
+            except cc.CompilerFailure:
+                self.active = False
+                raise
+        with mock.patch.object(cc, '_run', side_effect=invalidate):
+            with self.assertRaises(cc.CompileSafetyError) as caught:
+                self.compile(cancel_event=event)
+        report = self.report(caught.exception, ())
+        self.assertIs(report.compiler_failure.kind, cc.CompilerFailureKind.CANCELLED)
+        self.assertFalse(report.compiler_failure.invocation.launch_attempted)
+        self.assertFalse(hasattr(caught.exception, 'kind'))
 
     def test_artifact_issuance_failure_does_not_erase_successful_attempts(self):
         class RefuseIssuance(dict):
@@ -331,6 +441,24 @@ class CompileAttemptReportingTests(unittest.TestCase):
     def test_nested_report_tampering_is_detected_by_artifact_seal(self):
         artifact = self.compile()
         object.__setattr__(artifact.report.attempts[-1], 'started', False)
+        with self.assertRaises(cc.CompileSafetyError):
+            cc.assert_artifact_current(self.fix, artifact)
+
+    def test_nested_failure_kind_participates_in_artifact_seal_if_represented(self):
+        # A successful ordinary report has no failure. Patch only the private
+        # reporting seam to represent one, then exercise the real nested seal.
+        snapshot = cc._AttemptLedger.snapshot
+
+        def with_failure(ledger, gate):
+            report = snapshot(ledger, gate)
+            if gate == 'passed':
+                return replace(report, compiler_failure=cc.CompilerFailureInfo(
+                    'owned historical fixture', None, cc.CompilerFailureKind.UNKNOWN))
+            return report
+        with mock.patch.object(cc._AttemptLedger, 'snapshot', with_failure):
+            artifact = self.compile()
+        cc.assert_artifact_current(self.fix, artifact)
+        object.__setattr__(artifact.report.compiler_failure, 'kind', cc.CompilerFailureKind.PROCESS_EXIT)
         with self.assertRaises(cc.CompileSafetyError):
             cc.assert_artifact_current(self.fix, artifact)
 

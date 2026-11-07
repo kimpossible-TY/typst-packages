@@ -8,8 +8,9 @@ plans from real Typst parsing and narrowly proven contexts.
 All 33 rules have bounded backends; full rule acceptance and compilation remain incomplete.
 Ordinary analysis/fix/compile modes return **2**, including an empty selection,
 without changing source or invoking a compiler. A separate explicit offline
-closed-core profile can apply a narrowly proven script repair. It is not an
-all-project writer. Help/version return 0.
+closed-core profile can apply a narrowly proven script repair. With additional
+explicit output/resource opt-ins, it can compile and publish one guarded ASCII
+PDF. These are not all-project writers. Help/version return 0.
 
 ## Build the official syntax adapter
 
@@ -55,7 +56,7 @@ safely rechecked before parsing; no truncated input is accepted. See
 The ordinary modes above remain read-only. Reports may include AST-backed proposed edits
 with baseline hashes, but label them `partial-not-applicable-transaction`.
 They are **not** permission or proof that the complete protected write contract
-has passed. Incomplete required analysis prevents application. The `compile`
+has passed. Incomplete required analysis prevents application. The ordinary `compile`
 interface remains inert: arguments after `--` are never executed, no compiler is
 resolved and existing outputs are never replaced. There is no fail-open option.
 
@@ -86,7 +87,8 @@ subset below is the only current local helper-forwarding exception. Missing/unsa
 inputs fail; unsupported valid artifacts are reported with reasons. Package
 files are never changed, fetched, evaluated or installed. Reports record manifest
 and source identities/hashes. These read snapshots are not proof that a future
-compiler sees the same resources; immutable compiler capture remains pending.
+compiler sees the same imported resources. Their immutable compiler capture
+remains pending; the closed-core compiler excludes imports and packages.
 
 ## Captured helper forwarding through local files
 
@@ -124,7 +126,7 @@ coverage claim. No local file is promoted merely by its spelling. See
 `protected_fix.py` connects actual parser/script analysis to the existing
 protected transaction for a deliberately closed input language. The separately
 selected CLI profile below exposes that engine. Ordinary `check`, dry-run,
-`fix` without the profile, and `compile` remain read-only with exit 2.
+`fix` without the profile, and unprofiled `compile` remain read-only with exit 2.
 
 The profile requires one literal `.typ` target in an explicit core-only config,
 with no broader globs, excludes, ignores, packages or catalogs. An optional
@@ -149,8 +151,9 @@ revalidation, staging and recovery. Existing journals retain schema 1; an
 oversized historical journal refuses rather than truncating, with deliberately
 larger explicit limits available for recovery. This is process-crash recovery,
 not a claim of power-loss durability or arbitrary editor exclusion. The internal
-committed-source compiler experiment below is separate from CLI dispatch. No
-user project, installed package or build route is enabled.
+committed-source compiler below is reached only through the separately selected
+compile route described next. No consumer project, installed package or existing
+build route is changed automatically.
 See [CLOSED_CORE_CONTRACT.md](CLOSED_CORE_CONTRACT.md),
 [PROTECTED_CORE_CONTRACT.md](PROTECTED_CORE_CONTRACT.md) and
 [TRANSACTION_BOUNDS_CONTRACT.md](TRANSACTION_BOUNDS_CONTRACT.md).
@@ -188,8 +191,49 @@ Invalid arguments/profile/config/grammar/parser return 2. Unsafe storage, stale
 identities, ownership/convergence disagreement, write failure, pending/corrupt
 journals or unresolved recovery return 3. Status 1 remains reserved for active
 findings; this profile requires a clean final candidate. Reports distinguish its
-15-rule per-input proof from the global 33 PARTIAL rules. New options are rejected
-with check, dry-run and compile. See [OFFLINE_CLI_CONTRACT.md](OFFLINE_CLI_CONTRACT.md).
+15-rule per-input proof from the global 33 PARTIAL rules. Source-only options do
+not authorize compilation. Check, dry-run and typst-style compile reject these
+opt-ins. See [OFFLINE_CLI_CONTRACT.md](OFFLINE_CLI_CONTRACT.md).
+
+## Explicit closed-core compile and PDF recovery
+
+This route requires the same closed core configuration and source grammar, plus
+ASCII source (optionally one leading UTF-8 BOM), the reviewed Mac arm64 Typst
+0.15.1 binary, and an explicit embedded-font resource profile. It does not support
+imports, packages, broader Unicode/system fonts or general Typst projects.
+Stop all source writers and separately all exporters/output writers for the
+whole operation before making both assertions:
+
+```sh
+tools/typst-lint/typst-lint compile --root /absolute/project --profile closed-core-v1 --resource-profile embedded-ascii-v1 --offline-exclusive --offline-output-exclusive --target main.typ --output build/main.pdf --format json
+tools/typst-lint/typst-lint output-status --root /absolute/project --format json
+tools/typst-lint/typst-lint recover-output --root /absolute/project --offline-output-exclusive --output build/main.pdf --journal-id JOURNAL_ID --format json
+```
+
+The output is one safe root-relative PDF with parents already present. Both
+assertions, both profiles, target and output are explicit; no raw compiler tail,
+custom compiler path, package path, watch/eval, template or extra output is
+accepted. The combined session scans pending source/PDF journals and captures
+the previous output before source application and compilation. Source and PDF
+stores are separate. Existing source-only fix/status/recover commands still do
+not scan PDF journals, and no recovery is automatic.
+
+Successful publication returns 0. Input/unsupported-profile failures return 2;
+unsafe or unresolved work returns 3. A natural compiler exit or fatal signal is
+preserved only after proven-safe cleanup. Timeout, cancellation and stream-limit
+cleanup cannot masquerade as a natural compiler signal. Compiler status 0 followed
+by unsafe publication remains gate 3. Valid committed source fixes remain even
+if compilation fails; missing apply receipts never prove source was untouched.
+
+Output status is genuinely read-only and reports historical journals, not current
+PDF conformance. Output recovery uses the exact named journal and output, without
+needing current source/config/compiler, and preserves later edits. Reports separate
+source recovery, output recovery, actual compiler facts and historical evidence.
+The executable defers received SIGINT/SIGTERM through bounded source application
+and cleanup; safe cleanup can preserve the original signal, while unknown or
+unresolved cleanup remains 3. Imported Python main never changes handlers or
+signals its caller. See
+[EXPLICIT_COMPILE_CLI_CONTRACT.md](EXPLICIT_COMPILE_CLI_CONTRACT.md).
 
 ## Consumer configuration
 
@@ -416,8 +460,8 @@ evidence. It does not accept a user PDF destination or publish a file. Artifact
 access rechecks live authority; valid committed source fixes survive compiler
 failure or later staleness. Actual temporary native fixtures verify ASCII prose
 and math, including nested non-ASCII/space filenames. External-font capture,
-general output publication, CLI compiler dispatch, editor version integration and
-general project writer coverage remain separate work. The separately scoped
+general output publication, editor version integration and general project
+writer coverage remain separate work. The separately scoped
 internal publication session below is the only new output-writing composition.
 See [CLOSED_CORE_COMPILE_CONTRACT.md](CLOSED_CORE_COMPILE_CONTRACT.md).
 
@@ -428,8 +472,8 @@ failure status, and a version probe is not reported as an actual compilation.
 
 ## Internal single-PDF publication and recovery
 
-`closed_core_publish.py` adds a separately entered `PreparedPdfPublication`, not
-a CLI route. It requires its own explicit offline-output assertion in addition
+`closed_core_publish.py` provides the `PreparedPdfPublication` engine used by
+the explicit compile route. It requires its own explicit offline-output assertion in addition
 to the protected source session. It checks pending publication journals and
 captures the previous output or absence before source validation/application
 and compilation. It owns the compiler call and cannot accept an arbitrary
@@ -681,8 +725,8 @@ candidate parser, coverage-retention and idempotence checks. See the
 
 These are partial implementations, not 33 fully accepted rules. Their ordinary
 CLI plans remain unapplied; the separate closed-core profile admits only its
-strict input language. CLI compiler dispatch and all-project rollout remain disabled;
-the internal ASCII compiler experiment above is separately scoped.
+strict input language. General compiler dispatch and all-project rollout remain
+disabled; the explicit ASCII compile route above is separately scoped.
 
 ## Multi-pass proposal evidence
 

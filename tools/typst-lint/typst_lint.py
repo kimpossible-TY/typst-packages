@@ -1,4 +1,4 @@
-"""Partial read-only analysis and an explicit offline closed-core fix profile."""
+"""Partial read-only analysis and explicit offline closed-core source/PDF routes."""
 from __future__ import annotations
 
 import argparse
@@ -486,21 +486,24 @@ def main(argv=None, *, gate=False):
     arguments = list(sys.argv[1:] if argv is None else argv)
     # Import only at dispatch: the trusted bridge imports shared definitions
     # from this module. Existing read-only reports retain their old behavior.
-    from offline_cli import requested, main as offline_main
+    from offline_cli import requested, main as offline_main, _command as offline_command
     if requested(arguments):
         return offline_main(arguments, gate=gate)
     parser = argparse.ArgumentParser(description=__doc__, epilog=None if gate else
         'Explicit offline routes: fix --profile closed-core-v1 --offline-exclusive --target main.typ; '
-        'journal-status; recover --offline-exclusive --target main.typ --journal-id ID. '
+        'compile --profile closed-core-v1 --resource-profile embedded-ascii-v1 '
+        '--offline-exclusive --offline-output-exclusive --target main.typ --output build/main.pdf; '
+        'journal-status; recover --offline-exclusive --target main.typ --journal-id ID; '
+        'output-status; recover-output --offline-output-exclusive --output build/main.pdf --journal-id ID. '
         'Use COMMAND --help for the offline route options.')
     parser.add_argument('--version', action='version', version=VERSION)
-    parser.add_argument('command', choices=['compile'] if gate else ['check', 'fix', 'journal-status', 'recover'])
+    parser.add_argument('command', choices=['compile'] if gate else ['check', 'fix', 'compile', 'journal-status', 'recover'])
     parser.add_argument('--root', required=True, type=Path)
     parser.add_argument('--format', choices=['json', 'text'], default='text')
     parser.add_argument('--package-path', type=Path, help='Explicit Typst package directory for bounded read-only provenance')
     if not gate:
         parser.add_argument('--dry-run', action='store_true')
-    if gate and '--' in arguments:
+    if (gate or offline_command(arguments) == 'compile') and '--' in arguments:
         arguments = arguments[:arguments.index('--')]  # Never execute the remaining compiler argv.
     args = parser.parse_args(arguments)
     if not gate and args.dry_run and args.command != 'fix':
@@ -524,3 +527,8 @@ def main(argv=None, *, gate=False):
             for blocker in result['blockers']:
                 print(blocker)
     return result['status']
+
+
+if __name__ == '__main__':
+    from offline_compile_cli import executable_main
+    executable_main()

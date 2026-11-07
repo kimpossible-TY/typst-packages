@@ -3,7 +3,9 @@
 This is a narrow opt-in writer for one closed literal `.typ` input. It is not a
 general project linter, a compilation gate, a dependency resolver, or consumer
 rollout. Global rule acceptance remains **33 PARTIAL / 0 COMPLETE**. No compiler
-is invoked by any route described here.
+is invoked by any route described here. The separate explicit compile and PDF
+commands are documented in
+[EXPLICIT_COMPILE_CLI_CONTRACT.md](EXPLICIT_COMPILE_CLI_CONTRACT.md).
 
 ## Commands and authority
 

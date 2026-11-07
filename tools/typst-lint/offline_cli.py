@@ -1,7 +1,8 @@
-"""Explicit offline-only closed-core writer and fixed-store recovery routes.
+"""Shared explicit-offline parsing and source-only fix/recovery routes.
 
-Reports are outputs, never candidates or coverage inputs. This module has no
-compiler dispatcher, serialized authority, user-selectable catalog or store.
+Reports are outputs, never candidates or coverage inputs. The separate
+offline_compile_cli module owns compiler/PDF composition. There is no serialized
+authority, user-selectable catalog or store.
 """
 from __future__ import annotations
 
@@ -26,8 +27,9 @@ from transactions import (OfflineExclusive, ProtectedTransaction,
 from typst_lint import InputError, SafetyError, VERSION
 
 PROFILE = 'closed-core-v1'
-_NEW_OPTIONS = frozenset(('--profile', '--offline-exclusive', '--target', '--journal-id'))
-_NEW_COMMANDS = frozenset(('journal-status', 'recover'))
+_NEW_OPTIONS = frozenset(('--profile', '--offline-exclusive', '--target', '--journal-id',
+                          '--resource-profile', '--offline-output-exclusive'))
+_NEW_COMMANDS = frozenset(('journal-status', 'recover', 'output-status', 'recover-output'))
 
 
 class OfflineArgumentsError(InputError):
@@ -49,7 +51,8 @@ class _Parser(argparse.ArgumentParser):
 
 def _command(arguments):
     index = 0
-    value_options = {'--root', '--format', '--package-path', '--profile', '--target', '--journal-id'}
+    value_options = {'--root', '--format', '--package-path', '--profile', '--target', '--journal-id',
+                     '--resource-profile', '--output'}
     while index < len(arguments):
         word = arguments[index]
         if word == '--':
@@ -83,7 +86,7 @@ def _json_requested(arguments):
 
 def _arguments(arguments, gate):
     parser = _Parser(description=__doc__, allow_abbrev=False)
-    parser.add_argument('command', choices=('check', 'fix', 'compile', 'journal-status', 'recover'))
+    parser.add_argument('command', choices=('check', 'fix', 'compile', 'journal-status', 'recover', 'output-status', 'recover-output'))
     parser.add_argument('--root', required=True, type=Path)
     parser.add_argument('--format', choices=('json', 'text'), default='text')
     parser.add_argument('--profile')
@@ -91,6 +94,10 @@ def _arguments(arguments, gate):
                         help='Assert editors, watchers and every other source writer are stopped for the whole operation')
     parser.add_argument('--target')
     parser.add_argument('--journal-id')
+    parser.add_argument('--resource-profile')
+    parser.add_argument('--offline-output-exclusive', action='store_true',
+                        help='Assert exporters, watchers and all output/ancestor/storage writers remain stopped')
+    parser.add_argument('--output')
     parser.add_argument('--dry-run', action='store_true')
     parser.add_argument('--package-path')
     # No last-value-wins opt-ins or silently ignored command-specific options.
@@ -102,10 +109,16 @@ def _arguments(arguments, gate):
                 parser.error(f'Duplicate option: {option}')
             seen.add(option)
     args = parser.parse_args(arguments)
-    if gate or args.command not in ('fix', 'journal-status', 'recover'):
-        parser.error('Offline profile options and recovery commands are unavailable for check/compile')
+    if gate or args.command == 'check':
+        parser.error('Explicit offline routes are unavailable for check/typst-style compile')
     if args.dry_run or args.package_path is not None:
         parser.error('Offline routes do not accept --dry-run or --package-path')
+    if args.command in ('compile', 'output-status', 'recover-output'):
+        from offline_compile_cli import validate_arguments
+        validate_arguments(args, parser)
+        return args
+    if args.resource_profile is not None or args.offline_output_exclusive or args.output is not None:
+        parser.error('Source-only routes do not accept output/resource options')
     if args.command == 'journal-status':
         if args.profile is not None or args.offline_exclusive or args.target is not None or args.journal_id is not None:
             parser.error('journal-status accepts only --root and --format')
@@ -211,34 +224,42 @@ def _print(result, json_format):
         print(f"Journal {result['recovery_report']['journal']}: recovery complete")
 
 
+def _root(path):
+    try:
+        root = path.resolve(strict=True)
+    except OSError as error:
+        if error.errno in (errno.ENOENT, errno.ENOTDIR):
+            raise OfflineRootError(f'Invalid consumer root: {path}: {error}') from error
+        if error.errno == errno.ELOOP:
+            raise OfflineRootResolutionError(f'Unsafe root resolution: {path}: {error}') from error
+        raise
+    except RuntimeError as error:
+        # Python 3.11/3.12 pathlib reports symlink loops as RuntimeError.
+        # Normalize only this resolver operation, never arbitrary runtime
+        # failures from analysis/apply. Do not re-probe a possibly changed
+        # path to decide whether a failed resolution can be trusted.
+        raise OfflineRootResolutionError(f'Unsafe root resolution: {path}: {error}') from error
+    # Resolution admitted this path. Subsequent stat/open disappearance or
+    # permission errors are operational races, not invalid-argument success.
+    root_info = root.stat()
+    if not stat.S_ISDIR(root_info.st_mode):
+        raise OfflineRootError('Consumer root must be a directory')
+    return root
+
+
 def main(arguments=None, *, gate=False):
     arguments = list(sys.argv[1:] if arguments is None else arguments)
     json_format = _json_requested(arguments)
     command = _command(arguments)
+    if command in ('compile', 'output-status', 'recover-output'):
+        from offline_compile_cli import main as compile_main
+        return compile_main(arguments, gate=gate)
     phase = 'arguments'
     try:
         args = _arguments(arguments, gate)
         command, json_format = args.command, args.format == 'json'
         phase = 'root'
-        try:
-            root = args.root.resolve(strict=True)
-        except OSError as error:
-            if error.errno in (errno.ENOENT, errno.ENOTDIR):
-                raise OfflineRootError(f'Invalid consumer root: {args.root}: {error}') from error
-            if error.errno == errno.ELOOP:
-                raise OfflineRootResolutionError(f'Unsafe root resolution: {args.root}: {error}') from error
-            raise
-        except RuntimeError as error:
-            # Python 3.11/3.12 pathlib reports symlink loops as RuntimeError.
-            # Normalize only this resolver operation, never arbitrary runtime
-            # failures from analysis/apply. Do not re-probe a possibly changed
-            # path to decide whether a failed resolution can be trusted.
-            raise OfflineRootResolutionError(f'Unsafe root resolution: {args.root}: {error}') from error
-        # Resolution admitted this path. Subsequent stat/open disappearance or
-        # permission errors are operational races, not invalid-argument success.
-        root_info = root.stat()
-        if not stat.S_ISDIR(root_info.st_mode):
-            raise OfflineRootError('Consumer root must be a directory')
+        root = _root(args.root)
         phase = 'journal-storage'
         store = fixed_journal_directory(root)
         if command == 'journal-status':
@@ -250,7 +271,7 @@ def main(arguments=None, *, gate=False):
             if status:
                 result.update(error_code='incomplete_inventory', error='Incomplete or unreadable journals require explicit recovery')
         else:
-            # This is the only assertion construction in CLI code, after the
+            # Source-only assertion construction happens only after the
             # actual flag and command/profile/target combinations were checked.
             lease = OfflineExclusive.assert_editors_watchers_closed_and_no_other_writers()
             if command == 'fix':
