@@ -674,7 +674,9 @@ class CapturedRelativeScalarBudgetTests(_GraphFixtureMethods, unittest.TestCase)
         declaration = b'#let value = "' + b'x' * 524288 + b'"\n#let zero = 0\n'
         f = self.scalar_fixture(declaration, b'#value #value\n')
         with f.context() as fix, f.resources():
-            artifact = self.compile(fix)
+            # Exercise the scalar budget boundary, not the default deadline;
+            # repeated checks of this large retained source need CI headroom.
+            artifact = self.compile(fix, deadline_seconds=30)
             self.assertEqual(artifact.scalar_budget.total_charge, 1048576)
             self.assertEqual(artifact.scalar_budget.use_count, 2)
         f = self.scalar_fixture(declaration, b'#value #value #zero\n')
