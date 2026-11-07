@@ -25,7 +25,8 @@ jobs:
   test:
     name: Python ${{ matrix.python }} and pinned Typst syntax
     runs-on: ubuntu-latest
-    timeout-minutes: 15
+    # Full subprocess/crash-recovery suite needs headroom within the CI job budget.
+    timeout-minutes: 30
     strategy:
       fail-fast: false
       matrix:
