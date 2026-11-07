@@ -138,20 +138,25 @@ class BookIntegrationTests(unittest.TestCase):
         self.assertEqual([r['import_path'] for r in value['package_evidence']], [MATH_BOOK])
 
     def test_entrypoint_change_between_collection_and_snapshot_is_rejected(self):
-        original = typst_lint.collect
+        original = typst_lint.capture_selected_sources
         def changed(root, config):
             records = original(root, config)
             self.target.write_bytes(SOURCE + b'Changed.\n')
             return records
-        with patch.object(typst_lint, 'collect', side_effect=changed):
+        with patch.object(typst_lint, 'capture_selected_sources', side_effect=changed):
             with self.assertRaisesRegex(InputError, 'entrypoint changed after input selection'):
                 report(self.root, 'check', package_path=self.packages)
 
     def test_entrypoint_change_after_snapshot_cannot_supply_mismatched_tree_proofs(self):
         original = package_loader.read_snapshot_file
+        reads = 0
         def changed(path, limit):
+            nonlocal reads
             snapshot = original(path, limit)
-            self.target.write_bytes(SOURCE + b'Changed.\n')
+            if path == self.target:
+                reads += 1
+                if reads == 2:  # selected capture, then configured entrypoint
+                    self.target.write_bytes(SOURCE + b'Changed.\n')
             return snapshot
         with patch.object(package_loader, 'read_snapshot_file', side_effect=changed):
             value = report(self.root, 'check', package_path=self.packages)
@@ -163,12 +168,15 @@ class BookIntegrationTests(unittest.TestCase):
     def test_entrypoint_retained_descriptor_detects_in_place_mutation(self):
         original = package_loader._Snapshot._read_bytes
         changed = False
+        reads = 0
         def raced(fd, limit, path):
-            nonlocal changed
+            nonlocal changed, reads
             raw = original(fd, limit, path)
-            if path == self.target and not changed:
-                changed = True
-                self.target.write_bytes(SOURCE.replace(b'Notes', b'Other'))
+            if path == self.target:
+                reads += 1
+                if reads == 3:  # capture and retained verification precede entrypoint read
+                    changed = True
+                    self.target.write_bytes(SOURCE.replace(b'Notes', b'Other'))
             return raw
         with patch.object(package_loader._Snapshot, '_read_bytes', side_effect=raced):
             with self.assertRaisesRegex(InputError, 'Cannot safely read configured entrypoint'):

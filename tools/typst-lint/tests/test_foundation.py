@@ -91,7 +91,7 @@ class ConsumerTests(unittest.TestCase):
 
     def test_nonregular_and_invalid_utf8(self):
         self.put('bad.typ', b'\xff')
-        with self.assertRaises(UnicodeError): lint.collect(self.root, lint.Config())
+        with self.assertRaisesRegex(lint.InputError, 'UTF-8'): lint.collect(self.root, lint.Config())
         self.put('bad.typ', b'ok')
         os.link(self.root/'bad.typ', self.root/'hard.typ')
         with self.assertRaises(lint.InputError): lint.collect(self.root, lint.Config())

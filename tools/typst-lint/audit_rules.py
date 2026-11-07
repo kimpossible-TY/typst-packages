@@ -94,7 +94,7 @@ def run_cli(fixture, mode='dry-run', source_files=None):
         root = Path(directory).resolve()
         package_root = None
         package_before = {}
-        if fixture.get('scoped_namespace_evidence'):
+        if fixture.get('scoped_namespace_evidence') or fixture.get('supplemental_evidence'):
             package_root = Path(package_directory).resolve()
             fixtures = TOOL / 'tests/fixtures/scoped-reference-packages'
             artifacts = [
@@ -108,6 +108,13 @@ def run_cli(fixture, mode='dry-run', source_files=None):
                 (fixtures, 'preview/mannot/0.4.0/typst.toml'),
                 (fixtures, 'preview/mannot/0.4.0/src/lib.typ'),
             ]
+            if fixture.get('supplemental_evidence'):
+                artifacts = [(base, relative) for base, relative in artifacts
+                             if not relative.startswith('preview/')]
+                for family in ('marker-bounds-packages', 'anchor-overlay-packages'):
+                    base = TOOL / 'tests/fixtures' / family
+                    artifacts.extend((base, path.relative_to(base).as_posix())
+                                     for path in base.rglob('*') if path.is_file())
             for base, relative in artifacts:
                 raw = (base / relative).read_bytes()
                 target = package_root / relative
@@ -224,7 +231,28 @@ def candidate_verdict(baseline, candidate, source_files, candidate_files):
     edits = baseline.get('proposed_edits', [])
     repaired = {(e['path'], e['rule_id']) for e in edits}
 
+    moves = {}
+    for path in {e['path'] for e in edits if e['rule_id'] == 'pde.import-order'}:
+        from edit_plan import Edit
+        from source_analysis import _import_statement_moves
+        from syntax_client import parse
+        convert = lambda e: Edit(e['start'], e['end'], e['replacement'].encode('utf-8'))
+        from syntax_client import AdapterError
+        from typst_lint import InputError, SafetyError
+        try:
+            moves[path] = _import_statement_moves(parse(source_files[path].encode()),
+                parse(candidate_files[path].encode()),
+                tuple(convert(e) for e in edits if e['path'] == path),
+                tuple(convert(e) for e in edits if e['path'] == path and e['rule_id'] == 'pde.import-order'))
+        except (AdapterError, InputError, SafetyError, KeyError, TypeError, ValueError) as error:
+            # A missing map can never certify fallback ownership. Retain an
+            # unconditional blocked result while collecting other evidence.
+            blocked.append(f'Cannot verify import movement ownership for {path}: {error}')
+
     def mapped(path, position):
+        for start, end, target in moves.get(path, ()):
+            if start <= position < end:
+                return target + position - start
         return position + sum(len(e['replacement'].encode('utf-8')) - (e['end'] - e['start'])
                               for e in edits if e['path'] == path and e['end'] <= position)
 
@@ -363,6 +391,14 @@ def observe(fixture):
 
 
 MODULES = {
+    'core.scoped-marker-tags': ['marker_bounds_rules.py', 'scoped_provenance.py', 'package_artifacts.py', 'package_loader.py', 'static_resolver.py', 'source_analysis.py'],
+    'core.annotation-marker-bounds': ['marker_bounds_rules.py', 'scoped_provenance.py', 'package_artifacts.py', 'package_loader.py', 'static_resolver.py', 'source_analysis.py'],
+    'core.scoped-anchor-access': ['anchor_overlay_rules.py', 'marker_bounds_rules.py', 'scoped_provenance.py', 'package_artifacts.py', 'package_loader.py', 'static_resolver.py', 'source_analysis.py'],
+    'core.local-overlay-api': ['anchor_overlay_rules.py', 'scoped_provenance.py', 'package_artifacts.py', 'package_loader.py', 'static_resolver.py', 'source_analysis.py'],
+    'pde.import-order': ['import_rules.py', 'import_graph.py', 'source_analysis.py'],
+    'pde.no-redundant-facade-import': ['import_rules.py', 'import_graph.py', 'source_analysis.py'],
+    'pde.flowbox-colored-border': ['flowbox_rules.py', 'source_analysis.py'],
+
     'pde.theme-cancelmark': ['cancel_rules.py', 'static_resolver.py', 'source_analysis.py'],
     'core.single-book-show': ['book_rules.py', 'book_provenance.py', 'static_resolver.py', 'source_analysis.py'],
     'core.no-duplicate-book-reset': ['book_rules.py', 'book_provenance.py', 'static_resolver.py', 'source_analysis.py'],
@@ -391,6 +427,14 @@ MODULES = {
     'pde.paragraph-capitalization': ['capitalization.py', 'paragraph_rules.py', 'static_resolver.py', 'package_loader.py', 'source_analysis.py'],
 }
 TESTS = {
+    'core.scoped-marker-tags': ['tests/test_marker_bounds_rules.py', 'tests/test_supplemental_artifacts.py'],
+    'core.annotation-marker-bounds': ['tests/test_marker_bounds_rules.py', 'tests/test_supplemental_artifacts.py'],
+    'core.scoped-anchor-access': ['tests/test_anchor_overlay_rules.py', 'tests/test_cetz_provenance.py'],
+    'core.local-overlay-api': ['tests/test_anchor_overlay_rules.py', 'tests/test_cetz_provenance.py'],
+    'pde.import-order': ['tests/test_import_graph.py', 'tests/test_import_rules.py', 'tests/test_import_integration.py', 'tests/test_import_render.py'],
+    'pde.no-redundant-facade-import': ['tests/test_import_graph.py', 'tests/test_import_rules.py', 'tests/test_import_integration.py', 'tests/test_import_render.py'],
+    'pde.flowbox-colored-border': ['tests/test_flowbox_rules.py', 'tests/test_flowbox_integration.py', 'tests/test_flowbox_render.py'],
+
     'pde.theme-cancelmark': ['tests/test_cancel_rules.py', 'tests/test_cancel_integration.py', 'tests/test_cancel_render.py'],
     'core.single-book-show': ['tests/test_book_rules.py', 'tests/test_book_integration.py', 'tests/test_book_render.py'],
     'core.no-duplicate-book-reset': ['tests/test_book_rules.py', 'tests/test_book_integration.py', 'tests/test_book_render.py'],
@@ -419,6 +463,14 @@ TESTS = {
     'pde.paragraph-capitalization': ['tests/test_capitalization.py', 'tests/test_source_rules.py', 'tests/test_source_rules_render.py'],
 }
 LIMITS = {
+    'core.scoped-marker-tags': 'Actual reviewed raw mark/annotation calls under recognized literal local callbacks only. Exact wrapper, namespace and definition artifacts required. Diagnostic only; no generated-label repair or general capture proof.',
+    'core.annotation-marker-bounds': 'Complete direct display and ordered same-scope target events only. Diagnose the nearest preceding known plain label on a nonmetadata atom; never infer missing markers from global absence. Opaque output, argument effects, aliases losing target identity and collisions refuse. Diagnostic only.',
+    'core.scoped-anchor-access': 'Genuine complete fixed CeTZ artifact evidence, direct line positional coordinate strings, same-display unique preceding applied marker and target ownership, safe dot-free scope prefix and eight compass suffixes only. Conditional scope.node repair; no opaque drawing or rendering-equivalence claim.',
+    'core.local-overlay-api': 'Genuine raw mannot annot/annot-cetz calls under recognized local annotation callbacks only. Diagnostic only; local wrappers retained. General closures, facades and dynamic execution unresolved.',
+    'pde.import-order': 'Immutable explicit relative import graph and pure literal/alias modules only. Reorder disjoint immediate styles/figures groups with exact statement identity and no comments/directives/dependencies. Package initializers, includes and arbitrary calls remain unsupported.',
+    'pde.no-redundant-facade-import': 'Exact graph-derived original leaf binding identity must already be retained from a pure styles facade. Remove only standalone redundant compatibility import with no effects/comments/directive reassignment. No name-only facade proof.',
+    'pde.flowbox-colored-border': 'Whole reviewed math-blocks module AST/token fingerprint with one permitted border slot only. Add its proven existing theme.rule to a literal width-only stroke. Fragments, changed bodies/themes/selectors and dynamic strokes refuse; light/dark isolated renders verify width and geometry.',
+
     'pde.theme-cancelmark': 'Proven builtin math cancellation in real mathematical source only, with distinct math/code namespace lookup and verified lexical/module aliases. Shadowed, unknown wildcard, dynamic/deferred and higher-order cases remain unresolved. No cancelmark replacement, facade identity or palette effect is certified.',
     'core.single-book-show': 'Explicit immutable configured root and paired reviewed book/blocks sources only. Direct root book/reset transform identity with bounded literal metadata/reset options; duplicate owners and adjacent same-reset ownership only. No missing-owner, included-file/graph claims, broad wildcard proofs or reset deletion without full body transformation equivalence.',
     'core.no-duplicate-book-reset': 'Explicit immutable configured root and paired reviewed book/blocks sources only. Direct root book/reset transform identity with bounded literal metadata/reset options; duplicate owners and adjacent same-reset ownership only. No missing-owner, included-file/graph claims, broad wildcard proofs or reset deletion without full body transformation equivalence.',
@@ -493,9 +545,9 @@ def write_matrix(evidence, output):
         '## Reproduce', '', '```sh',
         'python3 tools/typst-lint/audit_rules.py', '```', '',
         'The official syntax adapter must already be built as documented in the tool README. This runner never builds, evaluates Typst imports, invokes a real compiler, or edits a consumer. Exit **2** means the audit finished with incomplete rule implementation/acceptance; it is not a success code. Exit 1 indicates an audit invariant failure, parse-blocked representative, or mismatch in claimed supported behavior.', '',
-        'The runner creates isolated temporary consumers from [fixtures.json](audit/fixtures.json), supplies the explicit repository package path except in its missing-path refusal case. Explicitly flagged scoped-reference and direct-mannot fixtures instead copy the exact wrapper, text-utils and reviewed mannot namespace artifacts into a separate temporary package root. This supports the selected facade fixture files without evaluating their imports or granting raw mannot API provenance. The runner captures the full normalized CLI reports in [latest-evidence.json](audit/latest-evidence.json). `<repo>`, `<fixture>` and `<package-fixture>` are portable path placeholders, not missing evidence. Every input/config/catalog hash, proposed edit baseline, package hash, runtime/spec fingerprint and report is retained. Negative fixtures with absent/partial coverage are **not semantic passes**.', '',
+        'The runner creates isolated temporary consumers from [fixtures.json](audit/fixtures.json), supplies the explicit repository package path except in its missing-path refusal case. Explicitly flagged scoped-reference and direct-mannot fixtures instead copy the exact wrapper, text-utils and reviewed mannot namespace artifacts into a separate temporary package root. Namespace-only fixtures do not grant raw APIs. Explicit supplemental-evidence fixtures additionally copy genuine pinned mannot and CeTZ definition artifacts, without evaluating or fetching them. The runner captures the full normalized CLI reports in [latest-evidence.json](audit/latest-evidence.json). `<repo>`, `<fixture>` and `<package-fixture>` are portable path placeholders, not missing evidence. Every input/config/catalog hash, proposed edit baseline, package hash, runtime/spec fingerprint and report is retained. Negative fixtures with absent/partial coverage are **not semantic passes**.', '',
         'Only proposed-edit bytes are composed in memory and copied into a different temporary consumer for candidate reanalysis. Idempotence is verified only when all repaired rule/file pairs retain supported coverage, baseline-supported pairs have no downgrade or new refusal after mapping byte offsets, no unexpected active findings appear, and no edits remain. Missing/unsupported reanalysis is explicitly CANDIDATE_ANALYSIS_BLOCKED, never verified. This does not exercise protected source application, editor leases, convergence of all 33 rules, or the authoritative compiler gate. A PATH tripwire plus the reported compiler flag/output sentinel checks that these CLI invocations remain inert; it is not a proof about arbitrary external compiler paths.', '',
-        'The fixture inventory contains representative snippets of each normative positive/negative scenario. Reviewed direct text-utils, project-references, bounded math-blocks theme/spacer/proof and scoped-annotations wrappers are supported; other helper provenance cannot yet be resolved, and reports retain the exact unavailable-package reasons. Synthetic facade re-exports and flowbox fragments are not represented as trusted package implementations. No unresolved helper is promoted to a semantic pass.', '',
+        'The fixture inventory contains representative snippets of each normative positive/negative scenario. Reviewed direct text-utils, project-references, bounded math-blocks theme/spacer/proof and scoped-annotations wrappers are supported; other helper provenance cannot yet be resolved, and reports retain the exact unavailable-package reasons. Pure captured relative re-export graphs and a whole-module flowbox fingerprint have bounded proofs; arbitrary facade names and flowbox fragments still do not establish semantics. No unresolved helper is promoted to a semantic pass.', '',
         '## Historical baseline and corrected reference contract', '',
         'The prior 3-PARTIAL / 30-NOT_IMPLEMENTED audit is preserved in Git commit `58111d8c2cd956bfe019869a76571945b22b3671` at `tools/typst-lint/audit/latest-evidence.json` and its matrix. Current counts are derived from this run, never copied forward. That baseline identified a malformed bare-reference repair example.', '',
         'The current normative contract permits only the exact syntax-valid `project-ref("pde", [@energy])` content-to-label repair with a unique explicit catalog match. Bare `@energy` in code arguments is now an intentional parse-refusal scenario, not an unresolved SPEC_CONFLICT. Invalid duplicate-key/nonfinite catalogs are reported as EXPECTED_INPUT_REFUSAL and never count as semantic rule passes. An absent optional catalog likewise does not establish target validity.', '',

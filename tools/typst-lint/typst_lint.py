@@ -2,7 +2,7 @@
 from __future__ import annotations
 
 import argparse
-from dataclasses import asdict, dataclass
+from dataclasses import asdict, dataclass, field
 from functools import lru_cache
 import hashlib
 import json
@@ -15,6 +15,8 @@ import tomllib
 
 VERSION = '0.4.0-rules'
 CATALOG = Path(__file__).with_name('rules') / 'catalog.json'
+# Retained selected-source bytes, excluding bounded per-file read/verify buffers.
+MAX_CAPTURE_BYTES = 64 * 1024 * 1024
 
 
 class InputError(ValueError):
@@ -175,8 +177,41 @@ def read_reference_catalog(path):
     return load_reference_catalog(path).sha256
 
 
-def collect(root, config):
+@dataclass(frozen=True)
+class _SelectedSource:
+    path: str
+    source: bytes = field(repr=False)
+    sha256: str = field(init=False)
+
+    def __post_init__(self):
+        require(type(self.source) is bytes, 'Selected source must be immutable bytes')
+        object.__setattr__(self, 'sha256', digest(self.source))
+
+    def record(self):
+        return dict(path=self.path, sha256=self.sha256, bytes=len(self.source))
+
+
+def _read_selected_source(root, name, *, reread=False):
+    # These modules depend on typst_lint primitives; keep initialization lazy.
+    from package_loader import PackageInputError, read_snapshot_file
+    from syntax_client import MAX_INPUT
+    try:
+        _, raw = read_snapshot_file(checked_path(root, name), MAX_INPUT)
+    except PackageInputError as error:
+        action = 'reread' if reread else 'read'
+        raise InputError(f'Cannot safely {action} selected input {name}: {error}') from error
+    return raw
+
+
+def capture_selected_sources(root, config):
+    """Capture selected UTF-8 bytes, at most 1 MiB each and 64 MiB in total.
+
+    Per-file descriptor-verified reads are not an atomic directory snapshot or
+    an editor lease. Selection/exclusion semantics are unchanged; no imports or
+    dependency paths are traversed. Retained descriptors close after each read.
+    """
     selected = []
+    captured_bytes = 0
     def onerror(error):
         raise error
     for directory, dirs, files in os.walk(root, followlinks=False, onerror=onerror):
@@ -195,10 +230,17 @@ def collect(root, config):
             if not config.selects(rel):
                 continue
             require(Path(rel).suffix in ('.typ', '.md'), f'Unsupported selected input: {rel}')
-            raw = checked_path(root, rel).read_bytes()
-            raw.decode('utf-8')
-            selected.append({'path': rel, 'sha256': digest(raw), 'bytes': len(raw)})
-    return sorted(selected, key=lambda f: f['path'])
+            raw = _read_selected_source(root, rel)
+            captured_bytes += len(raw)
+            require(captured_bytes <= MAX_CAPTURE_BYTES,
+                    f'Selected inputs exceed aggregate capture byte limit ({MAX_CAPTURE_BYTES}): {rel}')
+            selected.append(_SelectedSource(rel, raw))
+    return tuple(sorted(selected, key=lambda item: item.path))
+
+
+def collect(root, config):
+    """Return the public metadata-only projection of safely captured sources."""
+    return [item.record() for item in capture_selected_sources(root, config)]
 
 
 @dataclass(frozen=True)
@@ -237,7 +279,8 @@ def report(root, mode, *, package_path=None):
     catalog, rule_hash = load_rules()
     config = read_config(root, catalog['rules'])
     enabled = [r for r in catalog['rules'] if r['id'].split('.')[0] in catalog['packs'][config.pack]]
-    inputs = collect(root, config)
+    selected_sources = capture_selected_sources(root, config)
+    inputs = [item.record() for item in selected_sources]
     entry_hash = None
     entrypoint = None
     if config.entrypoint:
@@ -250,8 +293,8 @@ def report(root, mode, *, package_path=None):
         except PackageInputError as error:
             raise InputError(f'Cannot safely read configured entrypoint: {error}') from error
         entry_hash = digest(raw)
-        selected_entry = next((item for item in inputs if item['path'] == config.entrypoint), None)
-        require(selected_entry is None or selected_entry['sha256'] == entry_hash,
+        selected_entry = next((item for item in selected_sources if item.path == config.entrypoint), None)
+        require(selected_entry is None or (selected_entry.sha256 == entry_hash and selected_entry.source == raw),
                 f'Configured entrypoint changed after input selection: {config.entrypoint}')
         entrypoint = EntrypointSnapshot(config.entrypoint, raw)
     from reference_catalog import load_reference_catalog
@@ -269,8 +312,8 @@ def report(root, mode, *, package_path=None):
     suppressed_by_rule = {}
     configuration_failures = []
     evaluated, parsed = [], {}
-    for item in inputs:
-        name = item['path']
+    for item in selected_sources:
+        name = item.path
         if not name.endswith('.typ'):
             file_coverage.extend(dict(path=name, rule_id=rid, status='unsupported',
                                       reasons=['Markdown extraction is not implemented']) for rid in backends)
@@ -282,11 +325,11 @@ def report(root, mode, *, package_path=None):
                 except PackageInputError as error:
                     raise InputError(f'Cannot safely reread configured entrypoint: {error}') from error
             else:
-                raw = checked_path(root, name).read_bytes()
-            require(digest(raw) == item['sha256'], f'Input changed during analysis: {name}')
+                raw = _read_selected_source(root, name, reread=True)
+            require(digest(raw) == item.sha256 and raw == item.source, f'Input changed during analysis: {name}')
             require(entrypoint is None or name != entrypoint.path or raw == entrypoint.source,
                     f'Configured entrypoint changed before parsing: {name}')
-            parsed[name] = parse(raw)
+            parsed[name] = parse(item.source)
         except (AdapterError, OSError, InputError) as error:
             file_coverage.extend(dict(path=name, rule_id=rid, status='unsupported', reasons=[str(error)])
                                  for rid in backends)
@@ -299,6 +342,11 @@ def report(root, mode, *, package_path=None):
         package_evidence = [asdict(record) for record in loaded.evidence]
         package_unavailable = [asdict(record) for record in loaded.unavailable]
         resolved_package_path = loaded.package_path
+    import_graph = None
+    if config.pack == 'pde':
+        from import_graph import load_import_graph
+        import_graph = load_import_graph(root, ((item.path, item.source) for item in selected_sources
+                                               if item.path in parsed))
     for item in inputs:
         name = item['path']
         if name not in parsed:
@@ -309,7 +357,7 @@ def report(root, mode, *, package_path=None):
             results = analyze(parsed[name], name, pack=config.pack,
                               fallback_language=config.capitalization_language,
                               packages=package_sources, reference_catalog=reference_catalog,
-                              entrypoint=entrypoint, ignored=ignored)
+                              entrypoint=entrypoint, import_graph=import_graph, ignored=ignored)
         except SuppressionError as error:
             configuration_failures.append(dict(path=name, error=str(error)))
             file_coverage.extend(dict(path=name, rule_id=rid, status='configuration-failure', reasons=[str(error)])
@@ -361,7 +409,7 @@ def report(root, mode, *, package_path=None):
                               implemented=[rid for rid in backends if any(row['rule_id'] == rid for row in evaluated)], evaluated=evaluated,
                               files=file_coverage, unsupported=unsupported,
                               optional_skips=[] if config.catalog else [dict(check='catalog-membership', reason='No catalog configured')]),
-                blockers=['Required rule coverage remains incomplete; Markdown, general dependency resolution and additional rule backends are unavailable',
+                blockers=['Required rule coverage remains incomplete; Markdown, general dependency resolution and full rule acceptance are unavailable',
                           'Protected source transactions and immutable compile snapshots are unavailable'],
                 routes=dict(cli='unmanaged', ci='unmanaged', watch='unmanaged', editor='unmanaged'))
 

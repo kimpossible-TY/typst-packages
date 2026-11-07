@@ -14,6 +14,8 @@ never evidence that an arbitrary same-spelled helper has the reviewed semantics.
 from dataclasses import dataclass, replace
 
 from book_provenance import BookApplication, BookProof, document_show_shape, literal_options, value_binding
+from package_artifacts import (PackageArtifact, MANNOT_ARTIFACTS, CETZ_ARTIFACTS,
+                               SUPPLEMENTAL_ARTIFACTS, CETZ, CETZ_SOURCE_SHA256, CETZ_MANIFEST_SHA256)
 from syntax_client import Tree
 from typst_lint import InputError, digest
 
@@ -105,6 +107,7 @@ class PackageSource:
     import_path: str
     source_identity: str
     source: bytes
+    artifacts: tuple[PackageArtifact, ...] = ()
 
 
 @dataclass(frozen=True)
@@ -134,15 +137,41 @@ REVIEWED_PACKAGES = (
                     PROJECT_REFERENCES_EXPORTS, 'local', 'project-references', '0.1.0', 'lib.typ'),
 )
 
-# Namespace evidence only: the exact two-line entrypoint imports named exports
-# that include neither ref nor label. It supplies NO raw mannot API or module
-# bindings. This fixed optional artifact is requested only after the loader has
-# verified scoped-annotations itself, never by cache or dependency discovery.
+# Entrypoint-only evidence cannot grant raw APIs. Exact fixed supplemental
+# definition artifacts may promote a bounded subset below. Optional mannot
+# evidence is requested only after the reviewed wrapper, never cache discovery.
 REVIEWED_NAMESPACE_PACKAGES = (
     ReviewedPackage(MANNOT_NAMESPACE, MANNOT_NAMESPACE_SOURCE_SHA256, (),
                     'preview', 'mannot', '0.4.0', 'src/lib.typ', MANNOT_NAMESPACE_MANIFEST_SHA256),
+    ReviewedPackage(CETZ, CETZ_SOURCE_SHA256, (),
+                    'preview', 'cetz', '0.4.2', 'src/lib.typ', CETZ_MANIFEST_SHA256),
 )
 REVIEWED_NAMESPACE_DEPENDENCIES = {SCOPED_ANNOTATIONS: (MANNOT_NAMESPACE,)}
+
+
+def has_mannot_namespace(packages):
+    return any(type(p) is PackageSource and type(p.source) is bytes
+               and p.import_path == MANNOT_NAMESPACE
+               and digest(p.source) == MANNOT_NAMESPACE_SOURCE_SHA256 for p in packages)
+
+
+def is_mannot_binding(binding, name=None):
+    artifact = ('src/mark.typ' if binding and binding.name == 'mark' else
+                'src/annot.typ' if binding and binding.name in ('annot', 'annot-cetz', 'core-annot') else None)
+    return bool(binding and binding.kind == 'api' and binding.package == MANNOT_NAMESPACE
+                and (name is None or binding.name == name) and artifact
+                and binding.source_sha256 == dict(MANNOT_ARTIFACTS)[artifact])
+
+
+def is_cetz_module_binding(binding):
+    return bool(binding and binding.kind == 'module' and binding.name == 'cetz'
+                and binding.package == CETZ and binding.source_sha256 == CETZ_SOURCE_SHA256)
+
+
+def is_cetz_line_binding(binding):
+    return bool(binding and binding.kind == 'api' and binding.name == 'line'
+                and binding.package == CETZ
+                and binding.source_sha256 == dict(CETZ_ARTIFACTS)['src/draw/shapes.typ'])
 
 
 @dataclass(frozen=True)
@@ -352,6 +381,7 @@ class _Resolver:
         self.root_children = frozenset(tree.nodes[0].children) if tree.mode == 'markup' else frozenset()
         self.skips = []
         self.packages = {}
+        self.artifacts = {}
         seen = set()
         for package in packages:
             if type(package) is not PackageSource or type(package.source) is not bytes:
@@ -363,9 +393,38 @@ class _Resolver:
             seen.add(package.import_path)
             namespace = next((p for p in REVIEWED_NAMESPACE_PACKAGES
                               if p.import_path == package.import_path), None)
+            if type(package.artifacts) is not tuple:
+                raise InputError('Resolver artifacts must be an immutable tuple')
+            artifacts = {}
+            expected = dict(SUPPLEMENTAL_ARTIFACTS.get(package.import_path, ()))
+            artifact_paths = set()
+            for artifact in package.artifacts:
+                if (type(artifact) is not PackageArtifact or type(artifact.source) is not bytes
+                        or type(artifact.relative_path) is not str
+                        or type(artifact.source_identity) is not str or not artifact.source_identity):
+                    raise InputError('Resolver artifacts require immutable bytes and explicit identities')
+                if artifact.relative_path in artifact_paths:
+                    raise InputError('Duplicate resolver artifact path')
+                artifact_paths.add(artifact.relative_path)
+                if expected.get(artifact.relative_path) == digest(artifact.source):
+                    artifacts[artifact.relative_path] = artifact
+                else:
+                    self.skips.append(f'Unreviewed supplemental artifact: {package.import_path}/{artifact.relative_path}')
             if namespace is not None:
                 if digest(package.source) != namespace.source_sha256:
                     self.skips.append(f'Unreviewed package namespace: {package.import_path}')
+                    continue
+                exports = ()
+                if package.import_path == MANNOT_NAMESPACE and 'src/util.typ' in artifacts:
+                    if 'src/mark.typ' in artifacts:
+                        exports += (('mark', 'mark'),)
+                    if 'src/annot.typ' in artifacts:
+                        exports += tuple((n, n) for n in ('annot', 'annot-cetz', 'core-annot'))
+                elif package.import_path == CETZ and set(expected) <= artifacts.keys():
+                    exports = (('draw', 'draw'),)
+                if exports:
+                    self.packages[package.import_path] = (package, replace(namespace, exports=exports))
+                    self.artifacts[package.import_path] = artifacts
                 continue
             contract = next((p for p in REVIEWED_PACKAGES if p.import_path == package.import_path), None)
             if contract is None or digest(package.source) != contract.source_sha256:
@@ -409,6 +468,12 @@ class _Resolver:
         canonical = dict(contract.exports).get(name)
         if canonical is None:
             return None
+        if path == MANNOT_NAMESPACE:
+            artifact = self.artifacts[path]['src/mark.typ' if canonical == 'mark' else 'src/annot.typ']
+            return Binding('api', canonical, path, artifact.source_identity, digest(artifact.source))
+        if path == CETZ:
+            artifact = self.artifacts[path]['src/draw.typ']
+            return Binding('module', 'cetz.draw', path, artifact.source_identity, digest(artifact.source))
         return Binding('api', canonical, path, source.source_identity, contract.source_sha256)
 
     def module_binding(self, path):
@@ -422,6 +487,15 @@ class _Resolver:
     def module_member(self, module, name):
         if module and module.kind == 'builtin-module' and module.name == 'math':
             return Binding('builtin-math', 'cancel') if name == 'cancel' else None
+        if module and module.kind == 'module' and module.package == CETZ:
+            if is_cetz_module_binding(module):
+                return self.package_binding(CETZ, name)
+            if (module.name == 'cetz.draw' and name == 'line'
+                    and module.source_sha256 == dict(CETZ_ARTIFACTS)['src/draw.typ']
+                    and CETZ in self.artifacts):
+                artifact = self.artifacts[CETZ]['src/draw/shapes.typ']
+                return Binding('api', 'line', CETZ, artifact.source_identity, digest(artifact.source))
+            return None
         if module and module.kind == 'module':
             return self.package_binding(module.package, name)
         return None
@@ -712,7 +786,9 @@ class _Resolver:
             source_binding = self.visit(children[1], state)
         builtin_math = bool(source_binding and source_binding.kind == 'builtin-module'
                             and source_binding.name == 'math')
-        module = source_binding if builtin_math else self.module_binding(path)
+        source_module = bool(source_binding and source_binding.kind == 'module'
+                             and source_binding.package == CETZ)
+        module = source_binding if builtin_math or source_module else self.module_binding(path)
         if module is None:
             self.note(i, 'Import has no verified direct-package contract')
         items = next((c for c in children if self.nodes[c].kind == 'ImportItems'), None)
@@ -723,10 +799,14 @@ class _Resolver:
                     state.unknown_wildcard()
                     self.note(i, 'Builtin math contract has a partial export namespace')
                     state.bind('cancel', self.module_member(module, 'cancel'))
-                elif path in (MATH_BLOCKS, MATH_BOOK, SCOPED_ANNOTATIONS):
+                elif source_module or path in (MATH_BLOCKS, MATH_BOOK, SCOPED_ANNOTATIONS, MANNOT_NAMESPACE, CETZ):
                     state.unknown_wildcard()
                     self.note(i, 'Reviewed package contract has a partial export namespace')
-                if not builtin_math:
+                if source_module:
+                    names = ('line',) if module.name == 'cetz.draw' else ('draw',)
+                    for name in names:
+                        state.bind(name, self.module_member(module, name))
+                elif not builtin_math:
                     for name, _ in self.packages[path][1].exports:
                         state.bind(name, self.package_binding(path, name))
             else:
@@ -755,7 +835,7 @@ class _Resolver:
                 name = path.rsplit('/', 1)[-1].split(':', 1)[0]
                 if not path.startswith('@'):
                     name = name.rsplit('.', 1)[0]
-            elif builtin_math and len(children) == 2 and self.nodes[children[1]].kind == 'Ident':
+            elif (builtin_math or source_module) and len(children) == 2 and self.nodes[children[1]].kind == 'Ident':
                 # Unaliased identifier imports preserve that source spelling,
                 # not the module's intrinsic name (e.g. `import maths`). Other
                 # expression forms have no reviewed destination-name proof.

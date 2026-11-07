@@ -18,6 +18,7 @@ import stat
 import tomllib
 from typing import Iterable
 
+from package_artifacts import PackageArtifact, SUPPLEMENTAL_ARTIFACTS
 from static_resolver import (PackageSource, REVIEWED_PACKAGES, REVIEWED_NAMESPACE_PACKAGES,
                              REVIEWED_NAMESPACE_DEPENDENCIES)
 
@@ -32,6 +33,13 @@ class PackageInputError(ValueError):
 
 
 @dataclass(frozen=True)
+class ArtifactEvidence:
+    relative_path: str
+    source_identity: str
+    source_sha256: str
+
+
+@dataclass(frozen=True)
 class PackageEvidence:
     import_path: str
     manifest_identity: str
@@ -42,6 +50,7 @@ class PackageEvidence:
     name: str
     version: str
     entrypoint: str
+    artifacts: tuple[ArtifactEvidence, ...] = ()
 
 
 @dataclass(frozen=True)
@@ -364,6 +373,7 @@ def load_packages(package_path: str | os.PathLike[str],
                         import_path, 'unreviewed-package-manifest',
                         f'Package manifest bytes do not match the reviewed {contract.name} {contract.version} namespace artifact'))
                     continue
+                package_directory = directory
                 components = contract.entrypoint.split('/')
                 for component in components[:-1]:
                     if optional and not exists(directory, component):
@@ -383,7 +393,25 @@ def load_packages(package_path: str | os.PathLike[str],
                         import_path, 'unreviewed-package-source',
                         f'Package source bytes do not match the reviewed {contract.name} {contract.version} artifact'))
                     continue
-                sources.append(PackageSource(import_path, source_path, source))
+                artifacts = []
+                for relative, expected_hash in SUPPLEMENTAL_ARTIFACTS.get(import_path, ()):
+                    artifact_directory = package_directory
+                    parts = relative.split('/')
+                    absent_artifact = False
+                    for part in parts[:-1]:
+                        if not exists(artifact_directory, part):
+                            absent_artifact = True
+                            break
+                        artifact_directory = snapshot.directory(artifact_directory, part)
+                    if absent_artifact or not exists(artifact_directory, parts[-1]):
+                        continue
+                    data = snapshot.read(artifact_directory, parts[-1], MAX_SOURCE_BYTES)
+                    identity = str(artifact_directory.path / parts[-1])
+                    artifacts.append(PackageArtifact(relative, identity, data))
+                evidence[-1] = PackageEvidence(source_identity=source_path, source_sha256=source_hash,
+                    artifacts=tuple(ArtifactEvidence(a.relative_path, a.source_identity, _digest(a.source))
+                                    for a in artifacts), **metadata)
+                sources.append(PackageSource(import_path, source_path, source, tuple(artifacts)))
                 for dependency in REVIEWED_NAMESPACE_DEPENDENCIES.get(import_path, ()):
                     if dependency not in scheduled:
                         scheduled.add(dependency)

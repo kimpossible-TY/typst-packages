@@ -5,7 +5,7 @@ This is the implementation draft for the reviewed
 **This is not a production linter or build gate.** Selected script, reference,
 paragraph, display, highlight, theme and scoped-helper rules produce diagnostics and partial in-memory repair
 plans from real Typst parsing and narrowly proven contexts.
-Other required rules, protected runtime writes and compilation remain incomplete.
+All 33 rules now have bounded backends; full rule acceptance, protected runtime writes and compilation remain incomplete.
 Every real CLI run still returns **2**, including an empty selection. No source
 is changed and no compiler is invoked. Help/version return 0.
 
@@ -35,6 +35,10 @@ UTF-8 boundaries, root partitioning, links, errors and versions before rule use.
 Limits are 1 MiB input, 16 MiB stdout, 64 KiB stderr, 100,000 nodes, depth 256 and
 a default five-second process deadline. Pipes are bounded while streaming.
 Exceeding a limit fails explicitly; it does not approve an incompletely read file.
+Selected-source capture separately caps each .typ/.md at 1 MiB and the total
+captured payload at 64 MiB. Immutable bytes, hashes and lengths are retained and
+safely rechecked before parsing; no truncated input is accepted. See
+[SOURCE_CAPTURE_CONTRACT.md](SOURCE_CAPTURE_CONTRACT.md).
 
 ## Run without modifying a consumer
 
@@ -66,7 +70,11 @@ only the reviewed local definitions are certified, not arbitrary re-exports or
 the runtime dependency graph. Scoped reference repairs additionally require the
 exact mannot 0.4.0 manifest and two-line public entrypoint from that explicit
 package path. This attests that wildcard imports do not shadow `ref`/`label`;
-it does not certify raw mannot APIs or load its implementation dependencies.
+namespace evidence alone does not certify raw APIs. Additional fixed, safely
+captured mark/annot/util definition artifacts can certify selected raw mannot
+APIs. CeTZ line coordinates require all seven pinned supplemental artifacts,
+not just a package name or root entrypoint. No arbitrary dependency traversal
+or runtime geometry is inferred from those capability proofs.
 Absent optional namespace evidence leaves the reference finding diagnostic-only;
 a directly requested missing artifact remains an input error. The reference function's runtime
 `projects.json` is never loaded or evaluated by this analyzer. A matching package name/version
@@ -111,7 +119,13 @@ files; `directory/**` exclusions prune their subtrees. Config/entrypoint/catalog
 paths must be regular files without symlink components. The root is canonicalized.
 These read checks do not establish an editor lease or race-safe write snapshot.
 
-An entrypoint is currently read and hashed, not followed for imports or ownership.
+The explicit entrypoint is safely captured for bounded book ownership. For the
+PDE pack, selected Typst sources also seed a read-only graph of explicitly
+referenced relative imports. It is limited to 512 files, 16 MiB, 4096 edges and
+depth 32, with the same 1 MiB file bound. Imported files remain evidence only,
+never expand the source selection, and receive no style findings unless selected.
+General includes, packages, initializer effects and computed imports are not
+certified. See [IMPORT_GRAPH_CONTRACT.md](IMPORT_GRAPH_CONTRACT.md).
 The optional read-only reference catalog requires schema 1, a projects object,
 per-project references and optional ambiguous-label lists. Entries require a
 positive integer page and nonempty reference text; optional coordinates must be
@@ -155,8 +169,8 @@ Limitations remain explicit:
 - Config path/rule ignores suppress both script findings and their file's edits.
 - Direct reviewed package imports, explicit renames/module aliases, simple aliases,
   lexical shadowing and literal builtin text-language settings have a bounded
-  static resolver. General import/include graphs and local facade exports remain
-  unsupported. Unknown wildcard imports, bindings, dynamic language, show/output
+  static resolver. Pure relative re-export graphs have a separate bounded import
+  backend; general import/include graphs and facade API provenance remain unsupported. Unknown wildcard imports, bindings, dynamic language, show/output
   effects and deferred bodies cannot certify paragraph prose or language.
 - Root prose with proven canonical paragraph markers supports three paragraph
   rules. Reviewed root project-reference calls, typed displays, bounded theme APIs,
@@ -258,7 +272,8 @@ the same proven standalone marker. It proposes one newline only when the previou
 line is proven safe literal prose/whitespace, retaining nearby LF/CRLF style.
 Unsupported footnote/call/comment combinations are never guessed or repaired with
 an incomplete paragraph-break transformation. The source must already contain the
-marker; automatic marker insertion and other paragraph rules remain unimplemented.
+marker; bounded insertion is now described in the prose marker section below,
+while broader paragraph ownership remains incomplete.
 Supported script and paragraph proposals are composed before a whole-candidate
 reparse and repeated analysis, checking zero second-pass edits, deterministic
 results, unchanged suppression ownership and no newly introduced finding.
@@ -391,6 +406,36 @@ or period adjacency. Ambiguous punctuation, nested context and paragraph-marker
 composition stay explicitly unsupported. These proposals go through the common
 candidate parser, coverage-retention and idempotence checks. See the
 [footnote contract](FOOTNOTE_CONTRACT.md) for precise scope and render limits.
+
+## Additional bounded rule backends
+
+- `core.scoped-marker-tags` diagnoses proven manual raw marker labels inside
+  recognized local annotation callbacks. `core.annotation-marker-bounds` only
+  diagnoses a proven nearest preceding plain label on a nonmetadata atom in a
+  complete direct display. Unknown output, target ordering and collisions refuse;
+  neither rule invents marker bounds or proposes a repair. See
+  [MARKER_BOUNDS_CONTRACT.md](MARKER_BOUNDS_CONTRACT.md).
+- `core.scoped-anchor-access` can replace eight supported CeTZ line coordinate
+  suffixes with an actual scope.node call only with genuine artifact evidence,
+  a unique preceding applied marker, exact same-display target ownership and a
+  safe dot-free scope prefix. Opaque drawing and runtime geometry are not proved.
+  `core.local-overlay-api` diagnoses proven raw annotation calls in a local scope
+  without inventing wrapper replacement. See
+  [ANCHOR_OVERLAY_CONTRACT.md](ANCHOR_OVERLAY_CONTRACT.md).
+- `pde.import-order` reorders only pure, disjoint, immediate styles/figures import
+  groups. `pde.no-redundant-facade-import` removes a compatibility import only when
+  the retained facade already supplies identical captured leaf bindings. Exact
+  unchanged statement spans map candidate locations through reorderings. Comments,
+  directives, dependency effects and name-only facade assumptions refuse repair.
+- `pde.flowbox-colored-border` uses the complete reviewed math-blocks module's
+  AST/token fingerprint with one permitted border expression slot. A literal
+  width-only stroke can acquire its proven theme.rule color; copied fragments
+  and modified selectors/themes/bodies are not ownership evidence. Isolated
+  light/dark renders preserve width, geometry and body content. See
+  [FLOWBOX_CONTRACT.md](FLOWBOX_CONTRACT.md).
+
+These are partial implementations, not 33 fully accepted rules. Production
+writes, compiler execution and all-project rollout remain disabled.
 
 ## Verification
 

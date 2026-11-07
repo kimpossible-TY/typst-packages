@@ -94,8 +94,8 @@ class HighlightRules(unittest.TestCase):
         # Exercise the real verifier with the proposed registry integration,
         # without modifying the parent-owned source_analysis module.
         original = source_analysis._analyze
-        def registered(tree, path, pack, fallback_language, packages, reference_catalog, entrypoint):
-            results = original(tree, path, pack, fallback_language, packages, reference_catalog, entrypoint)
+        def registered(tree, path, pack, fallback_language, packages, reference_catalog, entrypoint, import_graph=None):
+            results = original(tree, path, pack, fallback_language, packages, reference_catalog, entrypoint, import_graph)
             if pack == 'pde':
                 results[RULE_ID] = analyze(tree, path, resolve(tree, packages=packages, fallback_language=fallback_language))
             return results

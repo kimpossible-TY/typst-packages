@@ -117,6 +117,30 @@ class CandidateCoverageTests(unittest.TestCase):
                 else: candidate.pop('phase')
                 self.assertEqual(self.verdict(baseline, candidate)['status'], 'BLOCKED_ANALYSIS')
 
+    def test_import_movement_failure_and_parser_absence_block_without_aborting(self):
+        from syntax_client import AdapterError
+        from typst_lint import SafetyError
+        source = '#import "figures.typ": fig\n#import "Styles/styles.typ": token\n'
+        expected = '#import "Styles/styles.typ": token\n#import "figures.typ": fig\n'
+        rid = 'pde.import-order'
+        baseline, candidate = pair()
+        for report in (baseline, candidate):
+            report['coverage'] = {'enabled': [rid], 'files': [
+                {'path': 'main.typ', 'rule_id': rid, 'status': 'partial', 'reasons': []}]}
+        baseline['proposed_edits'] = [dict(path='main.typ', rule_id=rid, start=0,
+            end=len(source.rstrip('\n')), replacement=expected.rstrip('\n'))]
+        candidate['proposed_edits'] = []
+        bad = {'main.typ': '#import "different.typ": token\n'}
+        result = candidate_verdict(baseline, candidate, {'main.typ': source}, bad)
+        self.assertEqual(result['status'], 'BLOCKED_ANALYSIS')
+        self.assertIn('movement ownership', ' '.join(result['reasons']))
+        for target, error in (('syntax_client.parse', AdapterError('adapter unavailable')),
+                              ('source_analysis._import_statement_moves', SafetyError('ambiguous identity'))):
+            with patch(target, side_effect=error):
+                result = candidate_verdict(baseline, candidate, {'main.typ': source}, {'main.typ': expected})
+                self.assertEqual(result['status'], 'BLOCKED_ANALYSIS')
+                self.assertFalse(result['verified'])
+
     def test_remaining_edits_cannot_be_idempotent(self):
         baseline, candidate = pair()
         candidate['proposed_edits'] = baseline['proposed_edits']
@@ -237,7 +261,7 @@ class AuditPackageSnapshotTests(unittest.TestCase):
         fixture = self.fixture('pde.import-order--positive')
         result = observe(fixture)
         report = self.assert_snapshot_analysis(result['run'])
-        self.assertEqual(result['observation'], 'NOT_IMPLEMENTED')
+        self.assertEqual(result['observation'], 'PARTIAL_CASE')
         self.assertFalse(report['proposed_edits'])
         self.assertEqual({e['import_path'] for e in report['package_evidence']},
                          {SCOPED_ANNOTATIONS, MANNOT_NAMESPACE, TEXT_UTILS})

@@ -161,4 +161,15 @@ The design follow-up is reviewed and merged first. Groups 2–7 are authorized i
 - [x] 21.2 Diagnose proven cancellation calls without inventing cancelmark replacement or palette semantics. Verify unaliased builtin-module imports preserve their actual source identifier, including the shadow-module regression.
 - [x] 21.3 Review the independent worktree implementation and integrate it with book provenance while retaining math-book partial-wildcard safeguards. Add explicit audit fixtures and no-edit contract documentation.
 - [x] 21.4 Complete combined independent review, 483 Python tests (482 passed, one filesystem setuid skip), four Rust tests, formatting/Clippy, strict OpenSpec and whitespace checks. Audit: 191 fixtures, 233 CLI invocations, 39 verified candidate reanalyses, 26 PARTIAL / 7 NOT_IMPLEMENTED / 0 COMPLETE, with no invariant failures. Keep consumer rollout and production gates separate.
-- [ ] 21.5 Publish the integrated checkpoint and verify both CI jobs for its exact PR head.
+- [x] 21.5 Publish bedcf2e2d6de612cc472fcc6df44bc1f6dc7e167 and verify both Python 3.11/3.15 CI jobs for that exact draft PR head (run 42353340232).
+
+
+## 22. Capture selected sources and cover remaining bounded rules
+
+- [x] 22.1 Capture immutable selected source bytes with retained-descriptor safety checks, 1 MiB per-file and 64 MiB aggregate bounds, and safe rereads before parsing. Preserve metadata-only collect reports, entrypoint identity and UTF-8 refusals. Independent 55-test capture/foundation/book review passed.
+- [x] 22.2 Add fixed authentic mannot/CeTZ supplemental artifacts and definition-specific provenance. Preserve namespace-only refusal, no ambient package discovery and partial wildcard invalidation.
+- [x] 22.3 Add bounded marker-tag/bounds diagnostics, conditional same-display scoped anchor proposals and local-overlay diagnostics without inferring arbitrary runtime geometry.
+- [x] 22.4 Add immutable relative-import graph capture and pure export identity, conditional disjoint import ordering and exact redundant-facade removal. Preserve original traversal checks, race refusal, resource budgets and exact moved-statement ownership in candidate checks.
+- [x] 22.5 Add whole-module flowbox fingerprint and width-preserving theme color proposals, with isolated light/dark rendering evidence. Never infer ownership from copied helper fragments.
+- [x] 22.6 Complete independent feature review, 637 Python tests with rendering enabled (636 passed, one filesystem setuid skip), four Rust tests, formatting/Clippy, strict OpenSpec and whitespace checks. Frozen audit: 209 fixtures, 255 actual CLI calls, 43 verified candidate reanalyses, 33 PARTIAL / 0 NOT_IMPLEMENTED / 0 COMPLETE, with zero invariant issues. All backends remain bounded; no production write/compiler route is enabled.
+- [ ] 22.7 Publish the verified draft checkpoint and confirm both CI jobs on its exact PR head. Keep PR description, merge, deployment and consumer rollout unchanged.

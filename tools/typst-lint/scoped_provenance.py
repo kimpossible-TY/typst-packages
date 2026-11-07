@@ -5,7 +5,7 @@ Raw mannot reexports and facade imports are deliberately not certified. Scope
 callback execution is recognized only for one literal, single-parameter closure.
 Nested arbitrary closures, context expressions, mutation and includes stay opaque.
 """
-from static_resolver import (_Resolver, Binding, _literal_string,
+from static_resolver import (_Resolver, Binding, _literal_string, is_mannot_binding, MANNOT_NAMESPACE,
                              SCOPED_ANNOTATIONS as PACKAGE,
                              SCOPED_ANNOTATIONS_SOURCE_SHA256 as SOURCE_SHA256)
 
@@ -47,6 +47,16 @@ class ScopedResolver(_Resolver):
                     return binding
         if node.kind == 'FuncCall' and len(parts) == 2:
             callee = self.visit(parts[0], state)
+            if (callee and callee.kind == 'scope-field' and callee.name == 'mark'
+                    and not state.deferred and is_mannot_binding(self.package_binding(MANNOT_NAMESPACE, 'mark'), 'mark')):
+                args = arguments(self, parts[1])
+                target = _literal_string(self.tree, args[0]) if len(args) == 1 else None
+                # Direct dictionary methods are not callable with Typst dot-call
+                # syntax; a parenthesized field or immutable alias is required.
+                if target is not None and self.nodes[parts[0]].kind in ('Parenthesized', 'Ident'):
+                    self.record(i, state, callee)
+                    self.visit(parts[1], state)
+                    return Binding('scope-marker', target, PACKAGE, callee.source_identity, SOURCE_SHA256)
             if callee and callee.kind == 'api' and callee.package == PACKAGE and callee.name in SCOPES and not state.deferred:
                 args = arguments(self, parts[1])
                 positional = [c for c in args if self.nodes[c].kind != 'Named']
