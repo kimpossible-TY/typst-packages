@@ -331,6 +331,7 @@ def observe(fixture):
 
 
 MODULES = {
+    'pde.paragraph-marker-target': ['paragraph_rules.py', 'static_resolver.py', 'source_analysis.py'],
     'core.parenthesized-scripts': ['script_rule.py', 'syntax_client.py', 'source_analysis.py'],
     'pde.paragraph-marker-gap': ['paragraph_rules.py', 'static_resolver.py', 'package_loader.py', 'source_analysis.py'],
     'core.project-ref-arguments': ['reference_rules.py', 'reference_catalog.py', 'static_resolver.py', 'package_loader.py', 'source_analysis.py'],
@@ -344,6 +345,7 @@ MODULES = {
     'pde.paragraph-capitalization': ['capitalization.py', 'paragraph_rules.py', 'static_resolver.py', 'package_loader.py', 'source_analysis.py'],
 }
 TESTS = {
+    'pde.paragraph-marker-target': ['tests/test_paragraph_target.py'],
     'core.project-ref-arguments': ['tests/test_reference_rules.py', 'tests/test_reference_catalog.py'],
     'core.project-ref-catalog-target': ['tests/test_reference_rules.py', 'tests/test_reference_catalog.py'],
     'pde.standalone-display': ['tests/test_display_rules.py'],
@@ -357,6 +359,7 @@ TESTS = {
     'pde.paragraph-capitalization': ['tests/test_capitalization.py', 'tests/test_source_rules.py', 'tests/test_source_rules_render.py'],
 }
 LIMITS = {
+    'pde.paragraph-marker-target': 'Proven canonical standalone root markers before heading/display siblings, across whitespace/comments. Nested, captured, facade and alias forms remain partial. Directives targeting a removed marker refuse repair rather than acquire another target.',
     'core.project-ref-arguments': 'Only proven direct root calls, reviewed project-references package/aliases and bounded literal types. Exact [@label] repair needs an explicit unique catalog target. Facade graphs, nested/captured calls, dynamic types and generated labels remain unsupported.',
     'core.project-ref-catalog-target': 'Immutable explicit catalogs and direct literal project/label calls only. No catalog is an optional skip, not a clean target check. Facades, dynamic/global identity proofs and broader document graphs remain unsupported.',
     'pde.standalone-display': 'Typed Equation.display proof and root ordinary prose only. Nested/captured bodies, unknown inline wrappers, ambiguous labels, comments and general content graphs remain partial.',

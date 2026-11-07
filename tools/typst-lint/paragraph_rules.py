@@ -13,7 +13,8 @@ from typst_lint import Diagnostic, digest, load_rules
 
 CAPITALIZATION = 'pde.paragraph-capitalization'
 MARKER_GAP = 'pde.paragraph-marker-gap'
-RULE_IDS = (CAPITALIZATION, MARKER_GAP)
+MARKER_TARGET = 'pde.paragraph-marker-target'
+RULE_IDS = (CAPITALIZATION, MARKER_GAP, MARKER_TARGET)
 
 
 @dataclass(frozen=True)
@@ -101,6 +102,32 @@ def analyze(tree, path, resolution):
             if reason:
                 for rid in RULE_IDS:
                     skip(rid, ms, reason)
+                continue
+
+            # Heading/display ownership is structural: comments and blank
+            # lines do not turn the next sibling into a prose paragraph. This
+            # branch takes precedence over gap/casing diagnostics on a marker
+            # which should not be present at all.
+            target_position = position + 1
+            while (target_position < len(siblings)
+                   and nodes[siblings[target_position]].kind in
+                   ('Space', 'Parbreak', 'LineComment', 'BlockComment')):
+                target_position += 1
+            target = nodes[siblings[target_position]] if target_position < len(siblings) else None
+            if target is not None and (target.kind == 'Heading'
+                                       or (target.kind == 'Equation' and target.display)):
+                finding = _diagnostic(source, path, catalog[MARKER_TARGET], ms,
+                                      'Remove the paragraph marker before a heading or display equation.')
+                # Keep this otherwise empty physical line, including its line
+                # terminator. Deleting only the token cannot merge surrounding
+                # structural elements and preserves every intervening comment.
+                # Any directive targeting the removed marker, even for another
+                # rule, would acquire a different target after deletion.
+                reassigned = any(scope.start <= ms < scope.end for scope in scopes)
+                edit = None if reassigned else Edit(ms, me, b'')
+                add(MARKER_TARGET, finding, edit, ms, ms)
+                if reassigned and finding not in suppressed[MARKER_TARGET]:
+                    skip(MARKER_TARGET, ms, 'fix_unavailable: removing marker would reassign an inline directive')
                 continue
 
             # Gap belongs to the immediate previous physical source line.

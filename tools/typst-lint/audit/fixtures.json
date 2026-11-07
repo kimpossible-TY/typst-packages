@@ -511,7 +511,11 @@
       "normative_diagnostics": 1,
       "note": "",
       "intentional_parse_error": false,
-      "scenario_heading": "Violation before structural content"
+      "scenario_heading": "Violation before structural content",
+      "assert_normative_count": true,
+      "expected_candidate": {
+        "main.typ": "#import \"@local/text-utils:0.1.2\": paragraph_tab, apply-paragraph-tabs\n#show: apply-paragraph-tabs\n#set text(lang: \"en\")\n\n\n= A heading\n"
+      }
     },
     {
       "id": "pde.paragraph-marker-target--negative",
@@ -1985,6 +1989,115 @@
       "note": "Direct known builtin footnote: diagnose alignment, but no spacer binding proof permits an edit.",
       "intentional_parse_error": false,
       "scenario_heading": "Violation in either kind of aligned display",
+      "assert_normative_count": true,
+      "expected_no_target_edits": true
+    },
+    {
+      "id": "pde.paragraph-marker-target--display",
+      "rule_id": "pde.paragraph-marker-target",
+      "kind": "display",
+      "files": {
+        "main.typ": "#import \"@local/text-utils:0.1.2\": paragraph_tab\n\n$ x=y $\n#paragraph_tab\n$ y=z $ <stable>\n"
+      },
+      "config": "rule-set=\"pde\"\ninclude=[\"**/*.typ\",\"**/*.md\"]\n",
+      "normative_diagnostics": 1,
+      "note": "",
+      "intentional_parse_error": false,
+      "scenario_heading": "Violation before structural content",
+      "assert_normative_count": true,
+      "expected_candidate": {
+        "main.typ": "#import \"@local/text-utils:0.1.2\": paragraph_tab\n\n$ x=y $\n\n$ y=z $ <stable>\n"
+      }
+    },
+    {
+      "id": "pde.paragraph-marker-target--comments",
+      "rule_id": "pde.paragraph-marker-target",
+      "kind": "comments",
+      "files": {
+        "main.typ": "#import \"@local/text-utils:0.1.2\": paragraph_tab\n\n#paragraph_tab\n// retain\n\n= Heading\n"
+      },
+      "config": "rule-set=\"pde\"\ninclude=[\"**/*.typ\",\"**/*.md\"]\n",
+      "normative_diagnostics": 1,
+      "note": "",
+      "intentional_parse_error": false,
+      "scenario_heading": "Violation before structural content",
+      "assert_normative_count": true,
+      "expected_candidate": {
+        "main.typ": "#import \"@local/text-utils:0.1.2\": paragraph_tab\n\n\n// retain\n\n= Heading\n"
+      }
+    },
+    {
+      "id": "pde.paragraph-marker-target--inline-math",
+      "rule_id": "pde.paragraph-marker-target",
+      "kind": "inline-math",
+      "files": {
+        "main.typ": "#import \"@local/text-utils:0.1.2\": paragraph_tab\n\n#paragraph_tab\n$x=y$\n"
+      },
+      "config": "rule-set=\"pde\"\ninclude=[\"**/*.typ\",\"**/*.md\"]\n",
+      "normative_diagnostics": 0,
+      "note": "",
+      "intentional_parse_error": false,
+      "scenario_heading": "Violation before structural content",
+      "assert_normative_count": true,
+      "expected_no_target_edits": true
+    },
+    {
+      "id": "pde.paragraph-marker-target--directive-owner",
+      "rule_id": "pde.paragraph-marker-target",
+      "kind": "directive-owner",
+      "files": {
+        "main.typ": "#import \"@local/text-utils:0.1.2\": paragraph_tab\n\n// typst-lint: ignore-next core.parenthesized-scripts -- intentional\n#paragraph_tab\n= Heading\n"
+      },
+      "config": "rule-set=\"pde\"\ninclude=[\"**/*.typ\",\"**/*.md\"]\n",
+      "normative_diagnostics": 1,
+      "note": "",
+      "intentional_parse_error": false,
+      "scenario_heading": "Violation before structural content",
+      "assert_normative_count": true,
+      "expected_no_target_edits": true
+    },
+    {
+      "id": "pde.paragraph-marker-target--suppressed",
+      "rule_id": "pde.paragraph-marker-target",
+      "kind": "suppressed",
+      "files": {
+        "main.typ": "#import \"@local/text-utils:0.1.2\": paragraph_tab\n\n// typst-lint: ignore-next pde.paragraph-marker-target -- intentional\n#paragraph_tab\n= Heading\n"
+      },
+      "config": "rule-set=\"pde\"\ninclude=[\"**/*.typ\",\"**/*.md\"]\n",
+      "normative_diagnostics": 0,
+      "note": "",
+      "intentional_parse_error": false,
+      "scenario_heading": "Violation before structural content",
+      "assert_normative_count": true,
+      "expected_no_target_edits": true
+    },
+    {
+      "id": "pde.paragraph-marker-target--nested",
+      "rule_id": "pde.paragraph-marker-target",
+      "kind": "nested",
+      "files": {
+        "main.typ": "#import \"@local/text-utils:0.1.2\": paragraph_tab\n\n#block[\n#paragraph_tab\n= Heading\n]\n"
+      },
+      "config": "rule-set=\"pde\"\ninclude=[\"**/*.typ\",\"**/*.md\"]\n",
+      "normative_diagnostics": 0,
+      "note": "",
+      "intentional_parse_error": false,
+      "scenario_heading": "Violation before structural content",
+      "assert_normative_count": true,
+      "expected_no_target_edits": true
+    },
+    {
+      "id": "pde.paragraph-marker-target--unresolved",
+      "rule_id": "pde.paragraph-marker-target",
+      "kind": "unresolved",
+      "files": {
+        "main.typ": "#import \"@local/text-utils:0.1.2\": paragraph_tab\n\n#let paragraph_tab = []\n#paragraph_tab\n= Heading\n"
+      },
+      "config": "rule-set=\"pde\"\ninclude=[\"**/*.typ\",\"**/*.md\"]\n",
+      "normative_diagnostics": 0,
+      "note": "",
+      "intentional_parse_error": false,
+      "scenario_heading": "Violation before structural content",
       "assert_normative_count": true,
       "expected_no_target_edits": true
     }

@@ -49,7 +49,7 @@ class DisplayIntegrationTests(unittest.TestCase):
                 self.assertFalse(result['applied_fixes'])
                 self.assertFalse(result['coverage']['complete'])
                 self.assertEqual(result['coverage']['available_backends'], list(rule_ids('pde')))
-                self.assertEqual({item['rule_id'] for item in result['diagnostics']}, set(rule_ids('pde')) - {CONTINUATION, FOOTNOTE_GAP, FOOTNOTE_PUNCT, FOOTNOTE_ALIGNED})
+                self.assertEqual({item['rule_id'] for item in result['diagnostics']}, {'core.parenthesized-scripts', 'core.project-ref-arguments', 'core.project-ref-catalog-target', 'pde.paragraph-capitalization', 'pde.paragraph-marker-gap', 'pde.standalone-display', 'pde.display-continuation-gap'})
                 self.assertEqual(before, {p.name: p.read_bytes() for p in root.iterdir()})
                 results.append(result)
             proposals = results[0]['proposed_edits']
