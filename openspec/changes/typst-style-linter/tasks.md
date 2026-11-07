@@ -182,4 +182,13 @@ The design follow-up is reviewed and merged first. Groups 2–7 are authorized i
 - [x] 23.3 Permit only the pure capitalization policy's exact eligible lowercase initial to follow marker insertion; real subsequent parsing/resolution supplies the edit. Default direct marker behavior and protected-name/language/provenance refusals remain unchanged.
 - [x] 23.4 Authenticate serialized repair evidence against independent captured raw-analysis contexts. Recompute actual rule proposals, composition, attribution and final zero-edit analysis; reject stripped/forged histories, wrong hashes/types/pass counts, cycles and lost ownership.
 - [x] 23.5 Complete independent review, 678 Python tests with rendering enabled (677 passed, one filesystem setuid skip), four Rust tests, formatting/Clippy, strict OpenSpec and whitespace checks. Frozen audit: 213 fixtures, 265 actual CLI calls, 49 verified candidate reanalyses, 33 PARTIAL / 0 NOT_IMPLEMENTED / 0 COMPLETE, with zero invariant issues. Full rule acceptance, production source writes, compiler dispatch and consumer rollout remain separate.
-- [ ] 23.6 Publish the next verified draft checkpoint and verify both CI jobs for its exact head without changing PR metadata or merging.
+- [x] 23.6 Publish 5bcb84960e8dd5c714f4506231e5a41efdd7eedb and verify both Python 3.11/3.15 jobs for exact head CI run 42358393262. PR metadata, merge and rollout remain unchanged.
+
+
+## 24. Check bounded Markdown math examples
+
+- [x] 24.1 Extract explicitly included Typst fences and inline math examples with exact original-byte mapping, bounded ambiguity refusals and the exact documentation teaching exemption.
+- [x] 24.2 Integrate script-only Markdown analysis, actual fence directive scopes and config ignores without applying other Typst style rules or resolving documentation imports.
+- [x] 24.3 Authenticate Markdown repair candidates from independent immutable captured contexts and preserve source mapping, parsing, suppression ownership and zero-edit idempotence.
+- [x] 24.4 Complete independent adversarial/resource review, 730 Python tests with rendering enabled (729 passed, one filesystem setuid skip), four Rust tests, formatting/Clippy, strict OpenSpec and whitespace checks. Frozen audit: 219 fixtures, 276 actual CLI calls, 54 verified candidate reanalyses, 33 PARTIAL / 0 NOT_IMPLEMENTED / 0 COMPLETE, with zero invariant issues. Full acceptance and production writes/compiler routes remain separate.
+- [ ] 24.5 Publish the Markdown checkpoint to the existing draft branch and verify both CI jobs for its exact head without changing PR metadata or merging.

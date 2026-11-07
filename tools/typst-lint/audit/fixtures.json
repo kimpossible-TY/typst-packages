@@ -999,9 +999,13 @@
       },
       "config": "rule-set=\"pde\"\ninclude=[\"**/*.typ\",\"**/*.md\"]\n",
       "normative_diagnostics": 1,
-      "note": "Included guide example is normative but Markdown extraction is unsupported.",
+      "note": "Explicit Markdown fence uses the pinned parser, exact original-byte proposals and independently captured candidate authentication.",
       "intentional_parse_error": false,
-      "scenario_heading": null
+      "scenario_heading": null,
+      "expected_candidate": {
+        "main.md": "```typst\n$X^(i)$\n```\n"
+      },
+      "assert_normative_count": true
     },
     {
       "id": "core.parenthesized-scripts--markdown-teaching",
@@ -1012,9 +1016,10 @@
       },
       "config": "rule-set=\"pde\"\ninclude=[\"**/*.typ\",\"**/*.md\"]\n",
       "normative_diagnostics": 0,
-      "note": "No diagnostic without Markdown extraction is unsupported, not evidence the exact teaching exemption works.",
+      "note": "Exact standalone documentation teaching sentence is deliberately exempt; this is not a general incorrect-example exemption.",
       "intentional_parse_error": false,
-      "scenario_heading": "Non-violation in the teaching line"
+      "scenario_heading": "Non-violation in the teaching line",
+      "assert_normative_count": true
     },
     {
       "id": "core.parenthesized-scripts--malformed-refusal",
@@ -3231,6 +3236,104 @@
       },
       "assert_normative_count": true,
       "scoped_namespace_evidence": true
+    },
+    {
+      "id": "core.parenthesized-scripts--markdown-inline-unicode",
+      "rule_id": "core.parenthesized-scripts",
+      "kind": "markdown-inline-unicode",
+      "files": {
+        "main.md": "﻿한국어 $X^i$ and `$Y_j$`.\r\n"
+      },
+      "config": "rule-set=\"pde\"\ninclude=[\"**/*.typ\",\"**/*.md\"]\n",
+      "normative_diagnostics": 2,
+      "note": "",
+      "intentional_parse_error": false,
+      "scenario_heading": null,
+      "assert_normative_count": true,
+      "expected_candidate": {
+        "main.md": "﻿한국어 $X^(i)$ and `$Y_(j)$`.\r\n"
+      }
+    },
+    {
+      "id": "core.parenthesized-scripts--markdown-fence-ignore",
+      "rule_id": "core.parenthesized-scripts",
+      "kind": "markdown-fence-ignore",
+      "files": {
+        "main.md": "```typst\n// typst-lint: ignore-next core.parenthesized-scripts -- intentional notation\n$X^i$\n$Y_j$\n```\n"
+      },
+      "config": "rule-set=\"pde\"\ninclude=[\"**/*.typ\",\"**/*.md\"]\n",
+      "normative_diagnostics": 1,
+      "note": "",
+      "intentional_parse_error": false,
+      "scenario_heading": null,
+      "assert_normative_count": true,
+      "expected_candidate": {
+        "main.md": "```typst\n// typst-lint: ignore-next core.parenthesized-scripts -- intentional notation\n$X^i$\n$Y_(j)$\n```\n"
+      }
+    },
+    {
+      "id": "core.parenthesized-scripts--markdown-teaching-near-match",
+      "rule_id": "core.parenthesized-scripts",
+      "kind": "markdown-teaching-near-match",
+      "files": {
+        "main.md": "Do not write bare scripts such as `$X^i$` or `$X_j$`.\nAvoid bare scripts such as `$X^i$` or `$X_j$`.\n"
+      },
+      "config": "rule-set=\"pde\"\ninclude=[\"**/*.typ\",\"**/*.md\"]\n",
+      "normative_diagnostics": 2,
+      "note": "",
+      "intentional_parse_error": false,
+      "scenario_heading": null,
+      "assert_normative_count": true,
+      "expected_candidate": {
+        "main.md": "Do not write bare scripts such as `$X^i$` or `$X_j$`.\nAvoid bare scripts such as `$X^(i)$` or `$X_(j)$`.\n"
+      }
+    },
+    {
+      "id": "core.parenthesized-scripts--markdown-malformed",
+      "rule_id": "core.parenthesized-scripts",
+      "kind": "markdown-malformed",
+      "files": {
+        "main.md": "$x^$\n"
+      },
+      "config": "rule-set=\"pde\"\ninclude=[\"**/*.typ\",\"**/*.md\"]\n",
+      "normative_diagnostics": 0,
+      "note": "",
+      "intentional_parse_error": true,
+      "scenario_heading": null,
+      "assert_normative_count": true,
+      "expected_no_target_edits": true
+    },
+    {
+      "id": "core.parenthesized-scripts--markdown-unsupported-blockquote",
+      "rule_id": "core.parenthesized-scripts",
+      "kind": "markdown-unsupported-blockquote",
+      "files": {
+        "main.md": "> $X^i$\n\nValid $Y_j$.\n"
+      },
+      "config": "rule-set=\"pde\"\ninclude=[\"**/*.typ\",\"**/*.md\"]\n",
+      "normative_diagnostics": 1,
+      "note": "",
+      "intentional_parse_error": false,
+      "scenario_heading": null,
+      "assert_normative_count": true,
+      "expected_candidate": {
+        "main.md": "> $X^i$\n\nValid $Y_(j)$.\n"
+      }
+    },
+    {
+      "id": "core.parenthesized-scripts--markdown-config-ignore",
+      "rule_id": "core.parenthesized-scripts",
+      "kind": "markdown-config-ignore",
+      "files": {
+        "main.md": "$X^i$\n"
+      },
+      "config": "include=[\"**/*.md\"]\n[[ignore]]\npaths=[\"**/*.md\"]\nrules=[\"core.parenthesized-scripts\"]\nreason=\"documented notation\"\n",
+      "normative_diagnostics": 0,
+      "note": "",
+      "intentional_parse_error": false,
+      "scenario_heading": null,
+      "assert_normative_count": true,
+      "expected_no_target_edits": true
     }
   ]
 }

@@ -1,5 +1,8 @@
 """Authenticate serialized repair lineage against independently captured analysis."""
-from candidate_convergence import converge
+from dataclasses import dataclass
+
+from candidate_convergence import AttributedEdit, Contribution, Step, converge
+from edit_plan import plan
 from typst_lint import SafetyError, digest
 
 
@@ -28,6 +31,48 @@ def _same_json(actual, expected):
     return actual == expected
 
 
+
+@dataclass(frozen=True)
+class AuthenticatedMarkdown:
+    """One real script pass with original-byte mapping, never a Typst document tree."""
+    baseline: bytes
+    content: bytes
+    step: Step
+
+    @property
+    def passes(self):
+        return int(bool(self.step.applied))
+
+    @property
+    def edits(self):
+        return self.step.applied
+
+    def map_offset(self, position):
+        return self.step.map_offset(position)
+
+    def map_boundary(self, position, *, side='right'):
+        return self.step.map_boundary(position, side=side)
+
+
+def _authenticate_markdown(context, baseline, candidate, record):
+    from markdown_scripts import RULE_ID
+    if (type(baseline) is not bytes or type(candidate) is not bytes or context.source != baseline
+            or record is not None):
+        raise SafetyError('Original captured Markdown context without synthetic history is required')
+    actual = context.analyze()
+    if actual.parse_errors or actual != context.analyze():
+        raise SafetyError('Markdown analysis is malformed or nondeterministic')
+    checked = plan(baseline, actual.edits)
+    if checked.deferred or checked.candidate() != candidate:
+        raise SafetyError('Candidate differs from independently recomputed Markdown script repairs')
+    # Only actual parser-issued parentheses insertions have an original-byte map.
+    if any(e.start != e.end or not e.replacement or set(e.replacement) - {40, 41} for e in checked.edits):
+        raise SafetyError('Markdown proposal is not a script-parenthesis insertion')
+    attributed = tuple(AttributedEdit(e, RULE_ID, (RULE_ID,), (Contribution(1, RULE_ID, e),))
+                       for e in checked.edits)
+    return AuthenticatedMarkdown(baseline, candidate, Step(baseline, candidate, attributed, ()))
+
+
 def authenticate_candidate(context, baseline, candidate, record=None):
     """Recompute actual rules and convergence from original immutable resources.
 
@@ -37,6 +82,9 @@ def authenticate_candidate(context, baseline, candidate, record=None):
     This proves bounded repair lineage, never full coverage or permission to write.
     """
     from source_analysis import AnalysisContext, _validate_step, _validate_final, _movement_proofs
+    from markdown_scripts import MarkdownContext
+    if type(context) is MarkdownContext:
+        return _authenticate_markdown(context, baseline, candidate, record)
     if (type(context) is not AnalysisContext or type(baseline) is not bytes
             or type(candidate) is not bytes or context.tree.source != baseline):
         raise SafetyError('Original captured analysis context is required to authenticate repairs')

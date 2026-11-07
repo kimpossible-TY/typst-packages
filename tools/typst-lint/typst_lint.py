@@ -306,19 +306,23 @@ def report(root, mode, *, package_path=None, _verify=True, _analysis_observer=No
     from static_resolver import imported_paths
     from package_loader import load_packages
     from suppression import SuppressionError
+    from markdown_scripts import MarkdownContext, RULE_ID as SCRIPT
     backends = rule_ids(config.pack)
+
+    def applicable(name):
+        return backends if name.endswith('.typ') else (SCRIPT,)
     active_findings, proposals, file_coverage, parse_failures = [], [], [], []
     suppressed_count = 0
     suppressed_by_rule = {}
     configuration_failures = []
     convergence_evidence = []
-    evaluated, parsed = [], {}
+    evaluated, parsed, markdown = [], {}, {}
     for item in selected_sources:
         name = item.path
-        if not name.endswith('.typ'):
-            file_coverage.extend(dict(path=name, rule_id=rid, status='unsupported',
-                                      reasons=['Markdown extraction is not implemented']) for rid in backends)
-            continue
+        if name.endswith('.md'):
+            file_coverage.extend(dict(path=name, rule_id=rid, status='not-applicable',
+                reasons=['Only math-script checking applies to Markdown examples'])
+                for rid in backends if rid != SCRIPT)
         try:
             if entrypoint is not None and name == entrypoint.path:
                 try:
@@ -330,13 +334,16 @@ def report(root, mode, *, package_path=None, _verify=True, _analysis_observer=No
             require(digest(raw) == item.sha256 and raw == item.source, f'Input changed during analysis: {name}')
             require(entrypoint is None or name != entrypoint.path or raw == entrypoint.source,
                     f'Configured entrypoint changed before parsing: {name}')
-            parsed[name] = parse(item.source)
+            if name.endswith('.md'):
+                markdown[name] = item.source
+            else:
+                parsed[name] = parse(item.source)
         except (AdapterError, OSError, InputError) as error:
             file_coverage.extend(dict(path=name, rule_id=rid, status='unsupported', reasons=[str(error)])
-                                 for rid in backends)
+                                 for rid in applicable(name))
     package_sources, package_evidence, package_unavailable = (), [], []
     resolved_package_path = None
-    if package_path is not None:
+    if package_path is not None and any(item.path.endswith('.typ') for item in selected_sources):
         requested = sorted({name for tree in parsed.values() for name in imported_paths(tree)})
         loaded = load_packages(package_path, requested)
         package_sources = loaded.sources
@@ -344,33 +351,38 @@ def report(root, mode, *, package_path=None, _verify=True, _analysis_observer=No
         package_unavailable = [asdict(record) for record in loaded.unavailable]
         resolved_package_path = loaded.package_path
     import_graph = None
-    if config.pack == 'pde':
+    if config.pack == 'pde' and parsed:
         from import_graph import load_import_graph
         import_graph = load_import_graph(root, ((item.path, item.source) for item in selected_sources
                                                if item.path in parsed))
     for item in inputs:
         name = item['path']
-        if name not in parsed:
+        if name not in parsed and name not in markdown:
             continue
         ignored = frozenset(rid for ignore in config.ignores if any(matches(name, glob) for glob in ignore.paths)
                             for rid in ignore.rules)
+        context = (MarkdownContext(markdown[name], name, ignored) if name in markdown else
+            AnalysisContext(parsed[name], name, config.pack, config.capitalization_language,
+                            tuple(package_sources), reference_catalog, entrypoint, import_graph, ignored))
         if _analysis_observer is not None:
-            _analysis_observer(name, AnalysisContext(parsed[name], name, config.pack,
-                config.capitalization_language, tuple(package_sources), reference_catalog,
-                entrypoint, import_graph, ignored))
+            _analysis_observer(name, context)
         try:
-            results = analyze(parsed[name], name, pack=config.pack,
-                              fallback_language=config.capitalization_language,
-                              packages=package_sources, reference_catalog=reference_catalog,
-                              entrypoint=entrypoint, import_graph=import_graph, ignored=ignored, _verify=_verify)
+            if name in markdown:
+                from markdown_scripts import analyze as analyze_markdown
+                results = {SCRIPT: analyze_markdown(context.source, name, ignored=ignored, _verify=_verify)}
+            else:
+                results = analyze(parsed[name], name, pack=config.pack,
+                                  fallback_language=config.capitalization_language,
+                                  packages=package_sources, reference_catalog=reference_catalog,
+                                  entrypoint=entrypoint, import_graph=import_graph, ignored=ignored, _verify=_verify)
         except SuppressionError as error:
             configuration_failures.append(dict(path=name, error=str(error)))
             file_coverage.extend(dict(path=name, rule_id=rid, status='configuration-failure', reasons=[str(error)])
-                                 for rid in backends)
+                                 for rid in applicable(name))
             continue
         except (AdapterError, OSError, InputError) as error:
             file_coverage.extend(dict(path=name, rule_id=rid, status='unsupported', reasons=[str(error)])
-                                 for rid in backends)
+                                 for rid in applicable(name))
             continue
         steps = next((getattr(result, 'repair_steps', ()) for result in results.values()
                       if getattr(result, 'repair_passes', 0) > 1), ())
@@ -411,11 +423,13 @@ def report(root, mode, *, package_path=None, _verify=True, _analysis_observer=No
                     proposals.append(record)
     active_findings.sort(key=lambda d: (d.path, d.line, d.column, d.rule_id))
     proposals.sort(key=lambda e: (e['path'], e['start'], e['end'], e['rule_id']))
-    complete_backends = {rid for rid in backends if inputs and
-                         sum(row['rule_id'] == rid for row in evaluated) == len(inputs)}
-    unsupported = [dict(rule_id=r['id'], reason=('See per-file supported-source coverage' if r['id'] in backends
-                                                else 'Binding/rule backend not implemented'))
-                   for r in enabled if r['id'] not in complete_backends]
+    applicable_counts = {rid: sum(rid in applicable(item['path']) for item in inputs) for rid in backends}
+    complete_backends = {rid for rid in backends if applicable_counts[rid] and
+                         sum(row['rule_id'] == rid for row in evaluated) == applicable_counts[rid]}
+    unsupported = [dict(rule_id=r['id'], reason=(
+        'No applicable selected input for this rule' if not applicable_counts.get(r['id'], 0) else
+        'See per-file supported-source coverage' if r['id'] in backends else
+        'Binding/rule backend not implemented')) for r in enabled if r['id'] not in complete_backends]
 
     # available_backends reports wiring only: each backend can still be partial
     # or unavailable for a particular input. It never implies evaluated/complete.
@@ -433,7 +447,7 @@ def report(root, mode, *, package_path=None, _verify=True, _analysis_observer=No
                               implemented=[rid for rid in backends if any(row['rule_id'] == rid for row in evaluated)], evaluated=evaluated,
                               files=file_coverage, unsupported=unsupported,
                               optional_skips=[] if config.catalog else [dict(check='catalog-membership', reason='No catalog configured')]),
-                blockers=['Required rule coverage remains incomplete; Markdown, general dependency resolution and full rule acceptance are unavailable',
+                blockers=['Required rule coverage remains incomplete; general Markdown/dependency resolution and full rule acceptance are unavailable',
                           'Protected source transactions and immutable compile snapshots are unavailable'],
                 routes=dict(cli='unmanaged', ci='unmanaged', watch='unmanaged', editor='unmanaged'),
                 **({'convergence_evidence': convergence_evidence} if convergence_evidence else {}))

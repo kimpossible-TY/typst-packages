@@ -164,8 +164,8 @@ Limitations remain explicit:
   or CodeBlock wrapper remain unsupported rather than receiving guessed scope.
 - Escaped/comment-interleaved operands are reported as unsupported rather than
   rewritten. Other proven spans may appear only as a partial proposal.
-- Markdown extraction is not implemented; included Markdown cannot count as
-  evaluated script coverage.
+- Explicitly included Markdown uses the bounded extraction contract below;
+  other Markdown contexts remain explicit partial coverage.
 - Config path/rule ignores suppress both script findings and their file's edits.
 - Direct reviewed package imports, explicit renames/module aliases, simple aliases,
   lexical shadowing and literal builtin text-language settings have a bounded
@@ -193,6 +193,50 @@ The intended final statuses are 0 clean, 1 active findings (warnings included),
 Pure edit/convergence primitives validate immutable bytes, UTF-8 span boundaries,
 conflicts, cycles, eight-pass limits and idempotence. They do not establish editor
 safety or complete Typst analysis and are not a filesystem writer.
+
+
+## Bounded Markdown script examples
+
+Markdown stays opt-in through `include`, for example
+`include = ["**/*.typ", "docs/**/*.md"]`. Only
+`core.parenthesized-scripts` applies to selected Markdown. Other rule coverage
+rows are explicitly `not-applicable`, not guessed Typst analysis. Imports inside
+examples are syntax only: they do not load packages, traverse the dependency
+graph or execute code.
+
+The initial supported extraction is column-zero backtick/tilde fences with exact
+`typst` info, same-line inline mathematics and a same-line code span containing
+one equation. Each extracted source slice is parsed by the pinned real adapter;
+the math closing delimiter comes from its AST, not a guessed Typst regular
+expression. Original byte spans and Unicode diagnostic columns are retained,
+including BOM and CRLF. Source input is bounded to 1 MiB, an example/probe to
+64 KiB, and extraction to a shared budget of 256 probes/examples. Partial
+reasons are capped at 256 plus an omission notice; adversarial delimiter runs
+use bounded scanning.
+
+The exact documentation sentence
+``Do not write bare scripts such as `$X^i$` or `$X_j$`.``
+is exempt. Other sentences describing an incorrect example are still checked.
+Inside a Typst fence the normal Typst string/comment/raw semantics apply, along
+with actual parser-scoped `ignore-next` directives. Inline examples use only
+path/rule config ignores. Parse/config failures cannot be ignored.
+
+Only actual script parentheses insertions can be proposed. Before exposing them,
+the whole Markdown candidate is extracted and parsed again to preserve example
+identity, suppression ownership and zero-edit idempotence. The rule audit captures
+an independent immutable `MarkdownContext` and recomputes exact verified repairs;
+serialized hashes or fabricated pass history alone never certify a candidate.
+
+Ambiguous containers, indentation, HTML/link or bracket-bearing paragraphs,
+multiline or unclosed inline constructs and display-dollar runs are deliberately
+unsupported and quarantined. This includes bracket-bearing inline Typst math
+for now; unknown raw HTML/fence recovery never exposes its opaque contents.
+Column-zero code spans with three or more backticks are also conservatively
+refused as ambiguous fences. This is not a general CommonMark parser or full
+documentation acceptance.
+See [MARKDOWN_SCRIPTS_CONTRACT.md](MARKDOWN_SCRIPTS_CONTRACT.md).
+The actual CLI remains read-only with exit 2 and never invokes the compiler.
+
 
 ## Protected offline transaction component
 
@@ -505,7 +549,7 @@ The repository test workflow (PRs and relevant main changes) builds the pinned
 adapter and tests Python 3.11/3.15. It neither builds consumer documents nor
 publishes/deploys anything. Renderer-dependent characterization is separate.
 
-Next work: extend only provable directive scopes and Markdown/source extraction; expand
+Next work: extend only provable directive scopes and Markdown extraction contexts; expand
 verified package/local-facade graphs and paragraph ownership; implement
 the remaining rule contracts; validate protected writer/editor transactions and
 immutable compiler snapshots; then verify CI/watch/Tinymist adapters. AGENTS.md

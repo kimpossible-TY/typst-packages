@@ -469,7 +469,7 @@ MODULES = {
     'core.theme-in-context': ['theme_rules.py', 'static_resolver.py', 'package_loader.py', 'source_analysis.py'],
     'pde.text-only-highlight': ['highlight_rules.py', 'static_resolver.py', 'source_analysis.py'],
     'pde.paragraph-marker-target': ['paragraph_rules.py', 'static_resolver.py', 'source_analysis.py'],
-    'core.parenthesized-scripts': ['script_rule.py', 'syntax_client.py', 'source_analysis.py'],
+    'core.parenthesized-scripts': ['script_rule.py', 'markdown_scripts.py', 'syntax_client.py', 'source_analysis.py', 'convergence_evidence.py'],
     'pde.paragraph-marker-gap': ['paragraph_rules.py', 'static_resolver.py', 'package_loader.py', 'source_analysis.py'],
     'core.project-ref-arguments': ['reference_rules.py', 'reference_catalog.py', 'static_resolver.py', 'package_loader.py', 'source_analysis.py'],
     'core.project-ref-catalog-target': ['reference_rules.py', 'reference_catalog.py', 'static_resolver.py', 'package_loader.py', 'source_analysis.py'],
@@ -515,7 +515,7 @@ TESTS = {
     'pde.aligned-footnote-spacer': ['tests/test_footnote_rules.py', 'tests/test_continuation_integration.py', 'tests/test_spacer_provenance.py', 'tests/test_footnote_render.py'],
     'pde.unaligned-footnote-no-spacer': ['tests/test_footnote_rules.py', 'tests/test_spacer_provenance.py', 'tests/test_footnote_render.py'],
     'pde.prose-footnote-no-spacer': ['tests/test_footnote_rules.py', 'tests/test_spacer_provenance.py', 'tests/test_footnote_render.py'],
-    'core.parenthesized-scripts': ['tests/test_syntax.py', 'tests/test_suppression.py', 'tests/test_source_rules.py'],
+    'core.parenthesized-scripts': ['tests/test_syntax.py', 'tests/test_suppression.py', 'tests/test_source_rules.py', 'tests/test_markdown_scripts.py', 'tests/test_markdown_integration.py'],
     'pde.paragraph-marker-gap': ['tests/test_source_rules.py', 'tests/test_source_rules_render.py'],
     'pde.paragraph-capitalization': ['tests/test_capitalization.py', 'tests/test_source_rules.py', 'tests/test_source_rules_render.py'],
 }
@@ -544,16 +544,16 @@ LIMITS = {
     'core.project-ref-arguments': 'Only proven direct root calls, reviewed project-references package/aliases and bounded literal types. Exact [@label] repair needs an explicit unique catalog target. Facade graphs, nested/captured calls, dynamic types and generated labels remain unsupported.',
     'core.project-ref-catalog-target': 'Immutable explicit catalogs and direct literal project/label calls only. No catalog is an optional skip, not a clean target check. Facades, dynamic/global identity proofs and broader document graphs remain unsupported.',
     'pde.standalone-display': 'Typed Equation.display proof and root ordinary prose only. Nested/captured bodies, unknown inline wrappers, ambiguous labels, comments and general content graphs remain partial.',
-    'pde.display-continuation-gap': 'Root standalone displays, one known attached label, whitespace-only gap and direct unmarked prose only. Nested contexts, comments, unknown wrappers and multi-pass interactions remain incomplete.',
+    'pde.display-continuation-gap': 'Root standalone displays, one known attached label, whitespace-only gap and direct unmarked prose only. Nested contexts, comments and unknown wrappers remain incomplete; verified standalone-display followup passes retain exact source ownership.',
     'pde.continuation-line': 'Direct root Text/Space/Text prose only; periods require a small word allowlist, questions and exclamations use bounded literal forms. Nested bodies, inline content, other vocabulary and ambiguous boundaries remain unsupported.',
     'pde.footnote-trailing-gap': 'Only proven builtin literal-form root prose or direct root display footnotes. Prose repair requires unavailable paragraph-marker composition; comment attachments and nested bodies are unsupported.',
     'pde.prose-footnote-punctuation': 'Only direct root prose and proven builtin literal-form calls, with bounded punctuation repairs. Inline wrappers, nested bodies and ambiguous punctuation are unsupported.',
     'pde.aligned-footnote-spacer': 'Direct display-level footnotes and typed alignment only. Insertion requires the exact reviewed math-blocks 0.2.0 canonical dots_space binding; aliases prove removal only. Nested contexts, facades, unknown wildcards and ambiguous preceding expressions remain unsupported.',
     'pde.unaligned-footnote-no-spacer': 'Direct root display footnotes and actual source-bound spacer value proof, including aliases/module access. No spelling-only, facade, deferred or unknown preceding-expression repair. Nested ownership and richer math contexts remain incomplete.',
     'pde.prose-footnote-no-spacer': 'Direct root prose footnotes with actual spacer identity and pre-spacer prose safety. Removal also preserves existing punctuation adjacency; ambiguous punctuation requires unsupported composition. Facades and nested bodies remain incomplete.',
-    'core.parenthesized-scripts': 'Markdown extraction/teaching exemption and ambiguous escaped/commented operands are unsupported. Protected runtime apply/compile unavailable.',
+    'core.parenthesized-scripts': 'Explicitly included bounded Markdown fences and same-line math examples use actual parser/source mappings and the exact teaching exemption. General Markdown contexts, multiline examples and ambiguous escaped/commented operands remain unsupported. Protected runtime apply/compile unavailable.',
     'pde.paragraph-marker-gap': 'Only proven root prose with reviewed direct text-utils binding. Nested/body-start contexts and footnote-combined repair unsupported; comments can make repair unavailable.',
-    'pde.paragraph-capitalization': 'Only proven root prose, canonical marker spelling, bounded starter/language policy. Nested/dynamic contexts and marker-insertion convergence unsupported.',
+    'pde.paragraph-capitalization': 'Only proven root prose, canonical marker spelling, bounded starter/language policy. Nested/dynamic contexts remain unsupported; eligible lowercase starters can follow actual marker insertion under bounded convergence and exact ownership checks.',
 }
 
 

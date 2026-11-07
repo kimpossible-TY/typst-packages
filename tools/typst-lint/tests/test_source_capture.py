@@ -301,7 +301,9 @@ class SourceCaptureTests(unittest.TestCase):
         self.assertEqual(value['inputs'], records)
         self.assertEqual(value['inputs'][0], dict(path='main.typ', sha256=lint.digest(raw), bytes=len(raw)))
         self.assertTrue(all(set(item) == {'path', 'sha256', 'bytes'} for item in value['inputs']))
-        self.assertTrue(any(row['path'] == 'notes.md' and row['reasons'] == ['Markdown extraction is not implemented']
+        self.assertTrue(any(row['path'] == 'notes.md' and row['status'] == 'not-applicable'
+                            for row in value['coverage']['files']))
+        self.assertTrue(any(row['path'] == 'notes.md' and row['rule_id'] == 'core.parenthesized-scripts'
                             for row in value['coverage']['files']))
         self.assertIsInstance(json.loads(json.dumps(value)), dict)
         self.assertFalse(value['compiler_invoked'] or value['applied_fixes'])
