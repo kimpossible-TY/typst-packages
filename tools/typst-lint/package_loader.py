@@ -2,7 +2,8 @@
 
 The root has Typst's ``--package-path`` layout, not an individual package
 checkout. No cache, home directory, installed copy, network, evaluator or
-recursive discovery is consulted. Import paths must come from the validated AST.
+recursive discovery is consulted. Import paths must come from the validated AST;
+an exact verified package may request its fixed optional namespace attestation.
 An immutable read snapshot is evidence for static analysis, not an editor lease,
 a complete dependency graph or proof that a later Typst invocation uses it.
 """
@@ -17,7 +18,8 @@ import stat
 import tomllib
 from typing import Iterable
 
-from static_resolver import PackageSource, REVIEWED_PACKAGES
+from static_resolver import (PackageSource, REVIEWED_PACKAGES, REVIEWED_NAMESPACE_PACKAGES,
+                             REVIEWED_NAMESPACE_DEPENDENCIES)
 
 MAX_MANIFEST_BYTES = 64 * 1024
 MAX_SOURCE_BYTES = 1024 * 1024
@@ -153,6 +155,8 @@ class _Snapshot:
         return fd
 
     def directory(self, parent, name):
+        _require(name not in ('', '.', '..') and '/' not in name,
+                 'Package directory traversal requires one safe component at a time')
         path = parent.path / name
         before = os.stat(name, dir_fd=parent.fd, follow_symlinks=False)
         _require(stat.S_ISDIR(before.st_mode),
@@ -177,6 +181,8 @@ class _Snapshot:
             chunks.append(chunk)
 
     def read(self, parent, name, limit):
+        _require(name not in ('', '.', '..') and '/' not in name,
+                 'Package reads require a basename under a verified directory descriptor')
         path = parent.path / name
         before = os.stat(name, dir_fd=parent.fd, follow_symlinks=False)
         _require(stat.S_ISREG(before.st_mode),
@@ -288,24 +294,54 @@ def load_packages(package_path: str | os.PathLike[str],
     ``unavailable`` records, never invented exports or version diagnostics.
     A supplied root, required manifest or source that is unavailable, malformed,
     unsafe or changed raises ``PackageInputError``. Unknown imports are not read.
+    Only a successfully verified package may enqueue its fixed optional namespace
+    attestation. A missing optional file/component reports unavailability without
+    blocking other rules; malformed/unsafe inputs and raced disappearance still
+    fail. Direct user-requested imports remain required, including namespace-only
+    artifacts. No arbitrary dependency traversal or package evaluation occurs.
     Results and original source bytes are immutable. Paths are canonical absolute
     identities; no symbolic-link component, hard link or parent escape is used.
     """
     requested = _requested_paths(import_paths)
     root = _absolute_root(package_path)
     sources, evidence, unavailable = [], [], []
+    pending = [(path, False) for path in requested]
+    scheduled = set(requested)
     try:
         with _Snapshot(root) as snapshot:
-            for import_path in requested:
-                contract = next((p for p in REVIEWED_PACKAGES if p.import_path == import_path), None)
+            def exists(parent, name):
+                # Only initial absence is optional. Do not catch failures during
+                # the subsequent descriptor walk/open/read/verification: an
+                # existing file that disappears during capture is a race.
+                try:
+                    os.stat(name, dir_fd=parent.fd, follow_symlinks=False)
+                    return True
+                except FileNotFoundError:
+                    return False
+
+            def missing(import_path):
+                unavailable.append(PackageUnavailable(
+                    import_path, 'missing-optional-namespace',
+                    'Optional reviewed namespace evidence is absent from the explicit package path; dependent repairs are unavailable'))
+
+            for import_path, optional in pending:
+                contract = next((p for p in (*REVIEWED_PACKAGES, *REVIEWED_NAMESPACE_PACKAGES)
+                                 if p.import_path == import_path), None)
                 if contract is None:
                     unavailable.append(PackageUnavailable(
                         import_path, 'unreviewed-package',
                         'No reviewed static contract exists for this import; its files were not read'))
                     continue
                 directory = snapshot.directory_root
+                absent = False
                 for component in (contract.namespace, contract.name, contract.version):
+                    if optional and not exists(directory, component):
+                        absent = True
+                        break
                     directory = snapshot.directory(directory, component)
+                if absent or (optional and not exists(directory, 'typst.toml')):
+                    missing(import_path)
+                    continue
                 manifest_path = str(directory.path / 'typst.toml')
                 manifest = snapshot.read(directory, 'typst.toml', MAX_MANIFEST_BYTES)
                 package = _manifest(manifest, manifest_path)
@@ -321,8 +357,24 @@ def load_packages(package_path: str | os.PathLike[str],
                         import_path, 'unreviewed-package-metadata',
                         f'Package metadata does not match the reviewed {contract.namespace}/{contract.name}/{contract.version} {contract.entrypoint} artifact'))
                     continue
-                source_path = str(directory.path / contract.entrypoint)
-                source = snapshot.read(directory, contract.entrypoint, MAX_SOURCE_BYTES)
+                if contract.manifest_sha256 is not None and _digest(manifest) != contract.manifest_sha256:
+                    evidence.append(PackageEvidence(source_identity=None, source_sha256=None, **metadata))
+                    unavailable.append(PackageUnavailable(
+                        import_path, 'unreviewed-package-manifest',
+                        f'Package manifest bytes do not match the reviewed {contract.name} {contract.version} namespace artifact'))
+                    continue
+                components = contract.entrypoint.split('/')
+                for component in components[:-1]:
+                    if optional and not exists(directory, component):
+                        absent = True
+                        break
+                    directory = snapshot.directory(directory, component)
+                if absent or (optional and not exists(directory, components[-1])):
+                    evidence.append(PackageEvidence(source_identity=None, source_sha256=None, **metadata))
+                    missing(import_path)
+                    continue
+                source_path = str(directory.path / components[-1])
+                source = snapshot.read(directory, components[-1], MAX_SOURCE_BYTES)
                 source_hash = _digest(source)
                 evidence.append(PackageEvidence(source_identity=source_path, source_sha256=source_hash, **metadata))
                 if source_hash != contract.source_sha256:
@@ -331,6 +383,10 @@ def load_packages(package_path: str | os.PathLike[str],
                         f'Package source bytes do not match the reviewed {contract.name} {contract.version} artifact'))
                     continue
                 sources.append(PackageSource(import_path, source_path, source))
+                for dependency in REVIEWED_NAMESPACE_DEPENDENCIES.get(import_path, ()):
+                    if dependency not in scheduled:
+                        scheduled.add(dependency)
+                        pending.append((dependency, True))
             snapshot.verify()
     except OSError as error:
         raise PackageInputError(f'Cannot safely read package path {root}: {error}') from error

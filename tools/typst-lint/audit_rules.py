@@ -54,13 +54,14 @@ def snapshot():
             'adapter_sha256': digest(ADAPTER.read_bytes()) if ADAPTER.is_file() else None}
 
 
-def normalize(value, root):
+def normalize(value, root, package_root=None):
     if isinstance(value, dict):
-        return {key: normalize(item, root) for key, item in value.items()}
+        return {key: normalize(item, root, package_root) for key, item in value.items()}
     if isinstance(value, list):
-        return [normalize(item, root) for item in value]
+        return [normalize(item, root, package_root) for item in value]
     if isinstance(value, str):
-        return value.replace(str(root), '<fixture>').replace(str(REPO), '<repo>')
+        normalized = value.replace(str(root), '<fixture>').replace(str(REPO), '<repo>')
+        return normalized.replace(str(package_root), '<package-fixture>') if package_root else normalized
     return value
 
 
@@ -88,8 +89,31 @@ def expected_input_refusal(fixture, report):
 
 
 def run_cli(fixture, mode='dry-run', source_files=None):
-    with tempfile.TemporaryDirectory(prefix='typst-rule-audit-') as directory:
+    with tempfile.TemporaryDirectory(prefix='typst-rule-audit-') as directory, \
+            tempfile.TemporaryDirectory(prefix='typst-rule-package-snapshot-') as package_directory:
         root = Path(directory).resolve()
+        package_root = None
+        package_before = {}
+        if fixture.get('scoped_namespace_evidence'):
+            package_root = Path(package_directory).resolve()
+            fixtures = TOOL / 'tests/fixtures/scoped-reference-packages'
+            artifacts = [
+                (REPO, 'local/scoped-annotations/0.3.0/typst.toml'),
+                (REPO, 'local/scoped-annotations/0.3.0/lib.typ'),
+                # Facade inventory fixtures select their local text-utils
+                # imports too. These exact copies supply only requested
+                # source evidence, never an evaluated dependency graph.
+                (REPO, 'local/text-utils/0.1.2/typst.toml'),
+                (REPO, 'local/text-utils/0.1.2/lib.typ'),
+                (fixtures, 'preview/mannot/0.4.0/typst.toml'),
+                (fixtures, 'preview/mannot/0.4.0/src/lib.typ'),
+            ]
+            for base, relative in artifacts:
+                raw = (base / relative).read_bytes()
+                target = package_root / relative
+                target.parent.mkdir(parents=True, exist_ok=True)
+                target.write_bytes(raw)
+                package_before[relative] = digest(raw)
         files = dict(fixture['files'] if source_files is None else source_files)
         files['.typst-lint.toml'] = fixture['config']
         for name, source in files.items():
@@ -118,7 +142,7 @@ def run_cli(fixture, mode='dry-run', source_files=None):
             args += ['--dry-run']
         args += ['--root', str(root)]
         if fixture['kind'] != 'missing-package-path':
-            args += ['--package-path', str(REPO)]
+            args += ['--package-path', str(package_root or REPO)]
         args += ['--format', 'json']
         if mode == 'compile':
             args += ['--', 'main.typ', 'output.pdf']
@@ -128,16 +152,20 @@ def run_cli(fixture, mode='dry-run', source_files=None):
             report = json.loads(process.stdout)
         except json.JSONDecodeError:
             report = None
-        record = {'mode': mode, 'command': ['python3', *normalize(args[1:], root)],
-                  'exit_code': process.returncode, 'stderr': normalize(process.stderr, root),
-                  'report': normalize(report, root), 'source_hashes_before': before, 'source_hashes_after': after,
+        record = {'mode': mode, 'command': ['python3', *normalize(args[1:], root, package_root)],
+                  'exit_code': process.returncode, 'stderr': normalize(process.stderr, root, package_root),
+                  'report': normalize(report, root, package_root), 'source_hashes_before': before, 'source_hashes_after': after,
                   'source_unchanged': before == after,
+                  'package_fixture_hashes': package_before,
+                  'package_fixture_unchanged': all((package_root / name).is_file() and
+                      digest((package_root / name).read_bytes()) == expected
+                      for name, expected in package_before.items()),
                   'compiler_tripwire_untouched': not (root / '.compiler-called').exists(),
                   'output_sentinel_unchanged': (root / 'output.pdf').read_bytes() == b'AUDIT OUTPUT SENTINEL\n'}
         issues = []
         if report is None:
             issues.append('CLI did not emit valid JSON')
-            record['non_json_stdout'] = normalize(process.stdout[:4096], root)
+            record['non_json_stdout'] = normalize(process.stdout[:4096], root, package_root)
         else:
             if process.returncode != 2 or report.get('status') != 2:
                 issues.append('Expected current partial runtime status/exit 2')
@@ -158,7 +186,7 @@ def run_cli(fixture, mode='dry-run', source_files=None):
             for edit in report.get('proposed_edits', []):
                 if edit.get('baseline_sha256') != before.get(edit['path']):
                     issues.append('Proposed edit baseline hash mismatch')
-        for field in ('source_unchanged', 'compiler_tripwire_untouched', 'output_sentinel_unchanged'):
+        for field in ('source_unchanged', 'package_fixture_unchanged', 'compiler_tripwire_untouched', 'output_sentinel_unchanged'):
             if not record[field]:
                 issues.append(field + ' invariant failed')
         record['invariant_issues'] = issues
@@ -251,8 +279,12 @@ def candidate_verdict(baseline, candidate, source_files, candidate_files):
             if column > len(text) + 1:
                 raise ValueError('Diagnostic column is outside source')
             offset = sum(len(part) + 1 for part in lines[:line - 1]) + len(text[:column - 1].encode('utf-8'))
+            explanation = item['explanation']
+            related = re.fullmatch(r'Duplicate literal scope namespace; first declaration at byte (\d+)', explanation)
+            if item['rule_id'] == 'core.unique-scope-namespace' and related:
+                explanation = f'Duplicate literal scope namespace; first declaration at byte {transform(path, int(related.group(1)))}'
             found[(item['rule_id'], item['grade'], path, transform(path, offset),
-                   item['explanation'], item.get('source'))] += 1
+                   explanation, item.get('source'))] += 1
         return found
 
     try:
@@ -331,6 +363,7 @@ def observe(fixture):
 
 
 MODULES = {
+    'pde.proof-trailing-gap': ['proof_rules.py', 'static_resolver.py', 'source_analysis.py'],
     'core.scoped-function-call': ['scoped_rules.py', 'scoped_provenance.py', 'source_analysis.py'],
     'core.scoped-reference-access': ['scoped_rules.py', 'scoped_provenance.py', 'source_analysis.py'],
     'core.annotation-in-display': ['scoped_rules.py', 'scoped_provenance.py', 'source_analysis.py'],
@@ -354,8 +387,9 @@ MODULES = {
     'pde.paragraph-capitalization': ['capitalization.py', 'paragraph_rules.py', 'static_resolver.py', 'package_loader.py', 'source_analysis.py'],
 }
 TESTS = {
+    'pde.proof-trailing-gap': ['tests/test_proof_rules.py', 'tests/test_proof_integration.py', 'tests/test_proof_render.py'],
     'core.scoped-function-call': ['tests/test_scoped_rules.py', 'tests/test_new_rule_integration.py'],
-    'core.scoped-reference-access': ['tests/test_scoped_rules.py', 'tests/test_new_rule_integration.py'],
+    'core.scoped-reference-access': ['tests/test_scoped_rules.py', 'tests/test_scoped_reference_repairs.py', 'tests/test_scoped_namespace_loader.py', 'tests/test_new_rule_integration.py'],
     'core.annotation-in-display': ['tests/test_scoped_rules.py', 'tests/test_new_rule_integration.py'],
     'core.unique-scope-namespace': ['tests/test_scoped_rules.py', 'tests/test_new_rule_integration.py'],
     'core.no-set-theme': ['tests/test_theme_rules.py', 'tests/test_new_rule_integration.py'],
@@ -377,10 +411,11 @@ TESTS = {
     'pde.paragraph-capitalization': ['tests/test_capitalization.py', 'tests/test_source_rules.py', 'tests/test_source_rules_render.py'],
 }
 LIMITS = {
-    'core.scoped-function-call': 'Exact reviewed scoped-annotations wrapper imports and literal one-parameter callbacks only. No raw mannot or facades, graph-wide namespace or reference repair coverage. Mutations, includes and dynamic branches withhold scope proofs.',
-    'core.scoped-reference-access': 'Exact reviewed scoped-annotations wrapper imports and literal one-parameter callbacks only. No raw mannot or facades, graph-wide namespace or reference repair coverage. Mutations, includes and dynamic branches withhold scope proofs.',
-    'core.annotation-in-display': 'Exact reviewed scoped-annotations wrapper imports and literal one-parameter callbacks only. No raw mannot or facades, graph-wide namespace or reference repair coverage. Mutations, includes and dynamic branches withhold scope proofs.',
-    'core.unique-scope-namespace': 'Exact reviewed scoped-annotations wrapper imports and literal one-parameter callbacks only. No raw mannot or facades, graph-wide namespace or reference repair coverage. Mutations, includes and dynamic branches withhold scope proofs.',
+    'pde.proof-trailing-gap': 'Exact reviewed math-blocks proof helper at standalone root output only, with incoming safe style facts and a proven next sibling. No synthetic EOF paragraph, nested/deferred/facade ownership or ambiguous comment/label attachment. Candidate non-whitespace syntax must remain identical.',
+    'core.scoped-function-call': 'Exact reviewed scoped-annotations wrapper imports and literal one-parameter callbacks only. No raw mannot, facade or graph-wide namespace coverage; reference repair requires one literal tag target, its exact scope receiver and explicit reviewed mannot namespace evidence. Mutations, includes and dynamic branches withhold scope proofs.',
+    'core.scoped-reference-access': 'Exact reviewed scoped-annotations wrapper imports and literal one-parameter callbacks only. No raw mannot, facade or graph-wide namespace coverage; reference repair requires one literal tag target, its exact scope receiver and explicit reviewed mannot namespace evidence. Mutations, includes and dynamic branches withhold scope proofs.',
+    'core.annotation-in-display': 'Exact reviewed scoped-annotations wrapper imports and literal one-parameter callbacks only. No raw mannot, facade or graph-wide namespace coverage; reference repair requires one literal tag target, its exact scope receiver and explicit reviewed mannot namespace evidence. Mutations, includes and dynamic branches withhold scope proofs.',
+    'core.unique-scope-namespace': 'Exact reviewed scoped-annotations wrapper imports and literal one-parameter callbacks only. No raw mannot, facade or graph-wide namespace coverage; reference repair requires one literal tag target, its exact scope receiver and explicit reviewed mannot namespace evidence. Mutations, includes and dynamic branches withhold scope proofs.',
     'core.no-set-theme': 'Exact reviewed math-blocks 0.2.0 palette/helper values and aliases only; local facades and other versions unresolved. Diagnostic only.',
     'core.theme-in-context': 'Exact theme helper within reusable closure bodies, proven immutable theme captures and lexical context only. No context insertion without complete content-result and call-site proof. Local facades and arbitrary colors are not inferred.',
     'pde.text-only-highlight': 'Builtin highlight and reviewed text-utils highlighted with literal content. Wrapper-only extraction preserves direct equations and prose bytes. Options, nested styles/calls, comments/directives, labels and ambiguous arguments refuse repair; later-pass display interactions remain blocked.',
@@ -446,9 +481,9 @@ def write_matrix(evidence, output):
         '## Reproduce', '', '```sh',
         'python3 tools/typst-lint/audit_rules.py', '```', '',
         'The official syntax adapter must already be built as documented in the tool README. This runner never builds, evaluates Typst imports, invokes a real compiler, or edits a consumer. Exit **2** means the audit finished with incomplete rule implementation/acceptance; it is not a success code. Exit 1 indicates an audit invariant failure, parse-blocked representative, or mismatch in claimed supported behavior.', '',
-        'The runner creates isolated temporary consumers from [fixtures.json](audit/fixtures.json), supplies the explicit repository package path except in its missing-path refusal case, and captures the full normalized CLI reports in [latest-evidence.json](audit/latest-evidence.json). `<repo>` and `<fixture>` are portable path placeholders, not missing evidence. Every input/config/catalog hash, proposed edit baseline, package hash, runtime/spec fingerprint and report is retained. Negative fixtures with absent/partial coverage are **not semantic passes**.', '',
+        'The runner creates isolated temporary consumers from [fixtures.json](audit/fixtures.json), supplies the explicit repository package path except in its missing-path refusal case. Explicitly flagged scoped-reference and direct-mannot fixtures instead copy the exact wrapper, text-utils and reviewed mannot namespace artifacts into a separate temporary package root. This supports the selected facade fixture files without evaluating their imports or granting raw mannot API provenance. The runner captures the full normalized CLI reports in [latest-evidence.json](audit/latest-evidence.json). `<repo>`, `<fixture>` and `<package-fixture>` are portable path placeholders, not missing evidence. Every input/config/catalog hash, proposed edit baseline, package hash, runtime/spec fingerprint and report is retained. Negative fixtures with absent/partial coverage are **not semantic passes**.', '',
         'Only proposed-edit bytes are composed in memory and copied into a different temporary consumer for candidate reanalysis. Idempotence is verified only when all repaired rule/file pairs retain supported coverage, baseline-supported pairs have no downgrade or new refusal after mapping byte offsets, no unexpected active findings appear, and no edits remain. Missing/unsupported reanalysis is explicitly CANDIDATE_ANALYSIS_BLOCKED, never verified. This does not exercise protected source application, editor leases, convergence of all 33 rules, or the authoritative compiler gate. A PATH tripwire plus the reported compiler flag/output sentinel checks that these CLI invocations remain inert; it is not a proof about arbitrary external compiler paths.', '',
-        'The fixture inventory contains representative snippets of each normative positive/negative scenario. Reviewed direct text-utils, project-references, bounded math-blocks theme/spacer and scoped-annotations wrappers are supported; other helper provenance cannot yet be resolved, and reports retain the exact unavailable-package reasons. Synthetic facade re-exports and flowbox fragments are not represented as trusted package implementations. No unresolved helper is promoted to a semantic pass.', '',
+        'The fixture inventory contains representative snippets of each normative positive/negative scenario. Reviewed direct text-utils, project-references, bounded math-blocks theme/spacer/proof and scoped-annotations wrappers are supported; other helper provenance cannot yet be resolved, and reports retain the exact unavailable-package reasons. Synthetic facade re-exports and flowbox fragments are not represented as trusted package implementations. No unresolved helper is promoted to a semantic pass.', '',
         '## Historical baseline and corrected reference contract', '',
         'The prior 3-PARTIAL / 30-NOT_IMPLEMENTED audit is preserved in Git commit `58111d8c2cd956bfe019869a76571945b22b3671` at `tools/typst-lint/audit/latest-evidence.json` and its matrix. Current counts are derived from this run, never copied forward. That baseline identified a malformed bare-reference repair example.', '',
         'The current normative contract permits only the exact syntax-valid `project-ref("pde", [@energy])` content-to-label repair with a unique explicit catalog match. Bare `@energy` in code arguments is now an intentional parse-refusal scenario, not an unresolved SPEC_CONFLICT. Invalid duplicate-key/nonfinite catalogs are reported as EXPECTED_INPUT_REFUSAL and never count as semantic rule passes. An absent optional catalog likewise does not establish target validity.', '',
@@ -461,7 +496,7 @@ def write_matrix(evidence, output):
         repair = f"../../openspec/changes/typst-style-linter/fix-policy.md#L{rule['repair_line']}"
         modules = ', '.join(f'[{p}]({p})' for p in rule['implementation_modules']) or 'No backend'
         cases = [r for r in evidence['fixtures'] if r['rule_id'] == rid]
-        smoke = '; '.join(f"{r['kind']}: {r['observation']}, findings={r['target_findings']}, edits={r['target_edits']}" for r in cases if r['kind'] in ('positive','negative'))
+        smoke = '; '.join(f"{r['kind']}: {r['observation']}, findings={r['target_findings']}, edits={r['target_edits']}" for r in cases if r['kind'] in ('positive','negative','direct-reviewed-repair'))
         lines.append(f"| [{rid}]({spec}#L{rule['spec_line']}) | [{rule['repair_policy']}]({repair}) | **{rule['status']}**. {modules} | {smoke}. Full records keyed by `{rid}--…` in JSON. | {rule['remaining']} |")
     lines += ['', '## Normative scenario inventory', '',
         'All scenario headings are indexed below and in the JSON with exact source lines. SMOKE_ONLY means at least one variant was run, **not** that all alternatives/preconditions in that scenario were exercised. Every scenario acceptance remains NOT_COMPLETE. Required exact-edit/refusal/idempotence/preservation/render dimensions are separately reported per rule; none is inferred from a zero-diagnostic run.', '']

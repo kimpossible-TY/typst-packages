@@ -28,7 +28,8 @@ The value contains only built-in math alignment, spacing and dots. The module's
 three named dependency imports (`capitalize-title`, `is-numeric-title`,
 `project-ref`) cannot shadow those names; none is used in this definition.
 No other top-level definition or mutation replaces `dots_space`. This review
-therefore adds **only this export** to the three existing theme export contracts.
+therefore certifies **only this spacer export**. The same artifact also has
+three independent theme contracts and a separate [proof contract](PROOF_CONTRACT.md).
 It does not certify dependent package execution, other math-blocks exports,
 math-book facades, wildcard completeness or a whole document graph. Runtime
 compilation and dependency availability remain separate, unproven gates.
@@ -38,7 +39,7 @@ snapshot with retained descriptors and exact hashing. No cache, installed
 package, network, dependency traversal or evaluator is consulted. Other
 versions, changed bytes and same-spelled local helpers never inherit this
 contract. A wildcard import of this partial namespace invalidates all earlier
-bindings and builtins before establishing the four reviewed exports. In
+bindings and builtins before establishing the five reviewed exports. In
 particular it does not prove the remaining `footnote` builtin.
 
 ## Resolver-produced binding evidence

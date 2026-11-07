@@ -1,10 +1,11 @@
 """Conservative scoped rules; no writes, graph claims or synthetic scope input."""
 from dataclasses import dataclass
 from edit_plan import Edit
-from scoped_provenance import resolve, arguments, PACKAGE
-from static_resolver import _literal_string
+from scoped_provenance import resolve, arguments, PACKAGE, SOURCE_SHA256
+from static_resolver import (_literal_string, PackageSource, MANNOT_NAMESPACE,
+                             MANNOT_NAMESPACE_SOURCE_SHA256)
 from suppression import resolve as suppressions
-from typst_lint import Diagnostic, load_rules
+from typst_lint import Diagnostic, digest, load_rules
 
 CALL = 'core.scoped-function-call'
 REFERENCE = 'core.scoped-reference-access'
@@ -22,7 +23,71 @@ class ScopedResult:
     suppressed: tuple = ()
 
 
+def reference_repair(r, outer, target, packages):
+    """The exact reviewed ref((scope.tag)(literal)) contract, not name guessing.
+
+    Retain the actual receiver and the complete inner call's bytes, changing
+    only its `tag` field to `ref` and deleting the outer builtin call. Scope
+    field aliases lose the receiver needed to prove a corresponding ref field.
+    Comments and line breaks in removed scaffolding are never relocated.
+    """
+    nodes, source = r.nodes, r.tree.source
+    outer_parts, target_parts = r.sig(outer), r.sig(target)
+    outer_binding, target_binding = r.facts[outer].binding, r.facts[target].binding
+    if not (outer_binding and outer_binding.kind == 'builtin' and outer_binding.name == 'ref'
+            and target_binding and target_binding.kind == 'scope-field'
+            and target_binding.package == PACKAGE and target_binding.source_sha256 == SOURCE_SHA256):
+        return (), 'builtin ref and reviewed scope-field provenance are required'
+    if (len(outer_parts) != 2 or nodes[outer_parts[0]].kind != 'Ident'
+            or nodes[outer_parts[1]].kind != 'Args'
+            or arguments(r, outer_parts[1]) != [target]):
+        return (), 'requires one generated target and no ref options, spread or extra arguments'
+    if target_binding.name != 'tag':
+        return (), 'generated-name references have no supported tag-to-ref repair'
+    if len(target_parts) != 2 or nodes[target_parts[1]].kind != 'Args':
+        return (), 'requires one literal local target argument'
+    local_args = arguments(r, target_parts[1])
+    if len(local_args) != 1 or nodes[local_args[0]].kind != 'Str':
+        return (), 'requires one literal local target and no tag options, spread or extra arguments'
+    callee = target_parts[0]
+    callee_parts = r.sig(callee)
+    if (nodes[callee].kind != 'Parenthesized' or len(callee_parts) != 3
+            or [nodes[c].kind for c in callee_parts] != ['LeftParen', 'FieldAccess', 'RightParen']):
+        return (), 'requires a direct parenthesized scope.tag field; function aliases are unsupported'
+    field = callee_parts[1]
+    field_parts = r.sig(field)
+    if (len(field_parts) != 3 or [nodes[c].kind for c in field_parts] != ['Ident', 'Dot', 'Ident']
+            or r.text(field_parts[2]) != 'tag'):
+        return (), 'the original scope receiver is not a direct identifier'
+    receiver = r.facts[field_parts[0]].binding
+    if not (receiver and receiver.kind in ('tag-scope', 'annotation-scope')
+            and receiver.package == PACKAGE and receiver.source_sha256 == SOURCE_SHA256
+            and receiver.source_identity == target_binding.source_identity
+            and r.facts[field].binding == target_binding):
+        return (), 'the corresponding ref field is not proven on the same resolved scope'
+    node, inner, name = nodes[outer], nodes[target], nodes[field_parts[2]]
+    pending = [outer]
+    while pending:
+        child = nodes[pending.pop()]
+        if child.kind in ('LineComment', 'BlockComment'):
+            return (), 'comments or directives inside the reference must retain their ownership'
+        pending.extend(child.children)
+    removed = source[node.start:inner.start] + source[inner.end:node.end]
+    if b'\n' in removed or b'\r' in removed:
+        return (), 'line breaks in the outer ref scaffolding cannot be removed or relocated'
+    # The local wrapper imports mannot with `*`. Its source alone cannot prove
+    # package-local ref/label are builtins. This exact namespace-only entrypoint
+    # has two named imports that export neither name. Only real loader-supplied
+    # immutable bytes can attest that boundary; no boolean/test-only proof.
+    if not any(type(p) is PackageSource and p.import_path == MANNOT_NAMESPACE
+               and digest(p.source) == MANNOT_NAMESPACE_SOURCE_SHA256 for p in packages):
+        return (), 'reviewed mannot export namespace evidence is required to exclude ref/label shadowing'
+    replacement = source[inner.start:name.start] + b'ref' + source[name.end:inner.end]
+    return (Edit(node.start, node.end, replacement),), None
+
+
 def analyze(tree, path, *, packages=()):
+    packages = tuple(packages)
     r = resolve(tree, packages)
     catalog = {rule['id']: rule for rule in load_rules()[0]['rules']}
     scopes = suppressions(tree, set(catalog))
@@ -92,7 +157,10 @@ def analyze(tree, path, *, packages=()):
                 inner = r.facts[arg].binding
                 if (tree.nodes[arg].kind == 'FuncCall' and inner and inner.kind == 'scope-field'
                         and inner.name in ('tag', 'name')):
-                    add(REFERENCE, i, 'Use the corresponding scope ref helper for a generated local target')
+                    proposals, refusal = reference_repair(r, i, arg, packages)
+                    add(REFERENCE, i, 'Use the corresponding scope ref helper for a generated local target', proposals)
+                    if refusal and not any(s.covers(REFERENCE, node.start) for s in scopes):
+                        r.note(i, f'{REFERENCE} repair refused: {refusal}')
                     break
         if i in r.scope_calls:
             if not owned_scope(i):
@@ -112,11 +180,11 @@ def analyze(tree, path, *, packages=()):
                     key = ('child', parent.source_identity, name)
             if key is not None:
                 if key in namespaces:
-                    add(UNIQUE, i, 'Duplicate literal scope namespace in proven document output')
+                    add(UNIQUE, i, f'Duplicate literal scope namespace; first declaration at byte {namespaces[key]}')
                 else:
                     namespaces[key] = node.start
     skips = tuple(dict.fromkeys((*r.skips,
-        'Partial: direct reviewed scoped package imports only; no facade, raw mannot, graph-wide collision or reference repair coverage; namespace checks require direct root or literal callback output')))
+        'Partial: direct reviewed scoped package imports only; no facade, raw mannot or graph-wide collision coverage; reference repairs require namespace evidence, a literal tag target and the same proven scope receiver; namespace checks require direct root or literal callback output')))
     errors = tuple((n.start, n.end) for n in tree.nodes if n.kind == 'Error')
     return {rid: ScopedResult(tuple(diagnostics[rid]), tuple(edits[rid]), skips, errors,
                                tuple(suppressed[rid])) for rid in RULE_IDS}

@@ -14,12 +14,13 @@ execution. Versions, paths or spellings alone never establish semantics.
 
 The theme contract exports only `light-theme`, `dark-theme` and
 `theme-from-text-fill`. The separate [footnote contract](FOOTNOTE_CONTRACT.md)
-certifies the locally defined `dots_space` value from this same artifact. The palettes are literal dictionaries. The zero-argument selector
+certifies the locally defined `dots_space` value from this same artifact, and
+the [proof contract](PROOF_CONTRACT.md) certifies its local `proof` helper. The palettes are literal dictionaries. The zero-argument selector
 reads `text.fill` and returns one of those dictionaries. Its imported helpers
 (`capitalize-title`, `is-numeric-title`, `project-ref`) are neither used by nor
 allowed to redefine those palette bindings. Their dependency contents are not
 loaded or certified. Other exports remain unresolved. A wildcard import thus
-invalidates all existing names before establishing just these four independently reviewed exports.
+invalidates all existing names before establishing just these five independently reviewed exports.
 
 Direct imports, renamed imports, module access, parentheses and local immutable
 aliases reuse the resolver's lexical binding machinery. The palette result is

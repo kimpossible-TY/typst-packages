@@ -29,7 +29,7 @@ MATH_BLOCKS = '@local/math-blocks:0.2.0'
 MATH_BLOCKS_SOURCE_SHA256 = '542c7ce1ebfc6fbd51a7fefb2b55405a968a951b61d49170e49ef331948f36ff'
 # Deliberately partial namespace. Wildcards invalidate other names below.
 MATH_BLOCKS_EXPORTS = tuple((name, name) for name in
-                           ('light-theme', 'dark-theme', 'theme-from-text-fill', 'dots_space'))
+                           ('light-theme', 'dark-theme', 'theme-from-text-fill', 'dots_space', 'proof'))
 
 
 def is_spacer_binding(binding):
@@ -38,6 +38,15 @@ def is_spacer_binding(binding):
     # redefine those names. No facade, other version or function result is
     # inferred. See FOOTNOTE_CONTRACT.md for the reviewed dependency boundary.
     return bool(binding and binding.kind == 'api' and binding.name == 'dots_space'
+                and binding.package == MATH_BLOCKS
+                and binding.source_sha256 == MATH_BLOCKS_SOURCE_SHA256)
+
+
+def is_proof_binding(binding):
+    # The exact local closure captures math_font/qed and builtin parbreak/text,
+    # never an imported dependency helper. This establishes callable identity,
+    # not general output/style safety. See PROOF_CONTRACT.md.
+    return bool(binding and binding.kind == 'api' and binding.name == 'proof'
                 and binding.package == MATH_BLOCKS
                 and binding.source_sha256 == MATH_BLOCKS_SOURCE_SHA256)
 
@@ -57,6 +66,9 @@ SCOPED_ANNOTATIONS_SOURCE_SHA256 = 'eb8e7ff7b31238c8fa4b996deb9502fec0ae46102404
 SCOPED_ANNOTATIONS_EXPORTS = tuple((name, name) for name in
                                  ('local-tag-scope', 'local-scope-annotations',
                                   'mannot-scope', 'annot-cetz-local'))
+MANNOT_NAMESPACE = '@preview/mannot:0.4.0'
+MANNOT_NAMESPACE_SOURCE_SHA256 = '288027cea059b327bf3253c44ae975339e7afc0f149375d9d87ca1c1fe739f57'
+MANNOT_NAMESPACE_MANIFEST_SHA256 = 'aef4310b36955dc98d8b03ec4abf17d45777d0a08b65d6e67214752e57647545'
 
 PROJECT_REFERENCES = '@local/project-references:0.1.0'
 PROJECT_REFERENCES_SOURCE_SHA256 = '94b5f60db26e97faa511285fecd92a0f2afed708c8d56b1ed252cce3458a1720'
@@ -84,6 +96,7 @@ class ReviewedPackage:
     name: str
     version: str
     entrypoint: str
+    manifest_sha256: str | None = None
 
 
 REVIEWED_PACKAGES = (
@@ -98,6 +111,16 @@ REVIEWED_PACKAGES = (
     ReviewedPackage(PROJECT_REFERENCES, PROJECT_REFERENCES_SOURCE_SHA256,
                     PROJECT_REFERENCES_EXPORTS, 'local', 'project-references', '0.1.0', 'lib.typ'),
 )
+
+# Namespace evidence only: the exact two-line entrypoint imports named exports
+# that include neither ref nor label. It supplies NO raw mannot API or module
+# bindings. This fixed optional artifact is requested only after the loader has
+# verified scoped-annotations itself, never by cache or dependency discovery.
+REVIEWED_NAMESPACE_PACKAGES = (
+    ReviewedPackage(MANNOT_NAMESPACE, MANNOT_NAMESPACE_SOURCE_SHA256, (),
+                    'preview', 'mannot', '0.4.0', 'src/lib.typ', MANNOT_NAMESPACE_MANIFEST_SHA256),
+)
+REVIEWED_NAMESPACE_DEPENDENCIES = {SCOPED_ANNOTATIONS: (MANNOT_NAMESPACE,)}
 
 
 @dataclass(frozen=True)
@@ -286,6 +309,12 @@ class _Resolver:
             if package.import_path in seen:
                 raise InputError('Duplicate resolver package identity')
             seen.add(package.import_path)
+            namespace = next((p for p in REVIEWED_NAMESPACE_PACKAGES
+                              if p.import_path == package.import_path), None)
+            if namespace is not None:
+                if digest(package.source) != namespace.source_sha256:
+                    self.skips.append(f'Unreviewed package namespace: {package.import_path}')
+                continue
             contract = next((p for p in REVIEWED_PACKAGES if p.import_path == package.import_path), None)
             if contract is None or digest(package.source) != contract.source_sha256:
                 self.skips.append(f'Unreviewed package content or version: {package.import_path}')

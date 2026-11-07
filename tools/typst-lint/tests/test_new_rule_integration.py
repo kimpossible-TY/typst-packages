@@ -59,23 +59,33 @@ class NewRuleIntegrationTests(unittest.TestCase):
                   b'#local-tag-scope(s => [#s.tag("x") #ref((s.tag)("x"))], prefix: "p")\n'
                   b'#local-tag-scope(t => [], prefix: "p")\n'
                   b'#mannot-scope(s => [#(s.annot)("x", c, d)])\n')
-        with tempfile.TemporaryDirectory() as directory:
+        with tempfile.TemporaryDirectory() as directory, tempfile.TemporaryDirectory() as package_directory:
             root = Path(directory).resolve()
+            packages = Path(package_directory).resolve()
+            fixture_root = TOOL / 'tests/fixtures/scoped-reference-packages'
+            for base, relative in ((REPO, 'local/scoped-annotations/0.3.0/lib.typ'),
+                                   (REPO, 'local/scoped-annotations/0.3.0/typst.toml'),
+                                   (fixture_root, 'preview/mannot/0.4.0/src/lib.typ'),
+                                   (fixture_root, 'preview/mannot/0.4.0/typst.toml')):
+                path = packages / relative
+                path.parent.mkdir(parents=True, exist_ok=True)
+                path.write_bytes((base / relative).read_bytes())
             target = root / 'main.typ'
             target.write_bytes(source)
-            value = report(root, 'check', package_path=REPO)
+            value = report(root, 'check', package_path=packages)
             self.assertEqual({d['rule_id'] for d in value['diagnostics']}, {
                 'core.scoped-function-call', 'core.scoped-reference-access',
                 'core.annotation-in-display', 'core.unique-scope-namespace'})
             edits = [Edit(e['start'], e['end'], e['replacement'].encode()) for e in value['proposed_edits']]
             candidate = plan(source, edits).candidate()
-            self.assertEqual(candidate, source.replace(b'#s.tag("x")', b'#(s.tag)("x")'))
+            self.assertEqual(candidate, source.replace(b'#s.tag("x")', b'#(s.tag)("x")')
+                             .replace(b'#ref((s.tag)("x"))', b'#(s.ref)("x")'))
             self.assertEqual(target.read_bytes(), source)
             self.assertFalse(value['compiler_invoked'] or value['applied_fixes'] or value['coverage']['complete'])
             target.write_bytes(candidate)
-            final = report(root, 'check', package_path=REPO)
+            final = report(root, 'check', package_path=packages)
             self.assertFalse(final['proposed_edits'])
-            self.assertEqual(len(final['diagnostics']), 3)
+            self.assertEqual(len(final['diagnostics']), 2)
 
     def test_duplicate_namespace_does_not_cancel_earlier_script_repair(self):
         source = (b'#import "@local/scoped-annotations:0.3.0": local-tag-scope\n'
@@ -88,6 +98,8 @@ class NewRuleIntegrationTests(unittest.TestCase):
             value = report(root, 'check', package_path=REPO)
             self.assertEqual({d['rule_id'] for d in value['diagnostics']},
                              {'core.parenthesized-scripts', 'core.unique-scope-namespace'})
+            duplicate = next(d for d in value['diagnostics'] if d['rule_id'] == 'core.unique-scope-namespace')
+            self.assertIn(f'first declaration at byte {source.index(b"local-tag-scope(s")}', duplicate['explanation'])
             edits = [Edit(e['start'], e['end'], e['replacement'].encode()) for e in value['proposed_edits']]
             self.assertEqual(plan(source, edits).candidate(), source.replace(b'$x^i$', b'$x^(i)$'))
             self.assertEqual((root / 'main.typ').read_bytes(), source)
@@ -105,6 +117,20 @@ class NewRuleIntegrationTests(unittest.TestCase):
             self.assertEqual({d['rule_id'] for d in value['diagnostics']}, {'core.parenthesized-scripts'})
             edits = [Edit(e['start'], e['end'], e['replacement'].encode()) for e in value['proposed_edits']]
             self.assertEqual(plan(source, edits).candidate(), source.replace(b'$x^i$', b'$x^(i)$'))
+
+    def test_literal_catalog_name_with_byte_text_is_not_a_related_location(self):
+        source = (b'#import "@local/project-references:0.1.0": project-ref\n'
+                  b'$x^i$\n#project-ref("at byte 100", <energy>)\n')
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory).resolve()
+            (root / 'main.typ').write_bytes(source)
+            (root / '.typst-lint.toml').write_text('catalog="catalog.json"\n')
+            (root / 'catalog.json').write_text('{"schema":1,"projects":{}}')
+            value = report(root, 'check', package_path=REPO)
+            edits = [Edit(e['start'], e['end'], e['replacement'].encode()) for e in value['proposed_edits']]
+            self.assertEqual(plan(source, edits).candidate(), source.replace(b'$x^i$', b'$x^(i)$'))
+            finding = next(d for d in value['diagnostics'] if d['rule_id'] == 'core.project-ref-catalog-target')
+            self.assertEqual(finding['explanation'], "Unknown catalog project 'at byte 100'.")
 
     def test_candidate_cannot_hide_findings_behind_new_analysis_refusals(self):
         original = parse(b'$x^i$\n')

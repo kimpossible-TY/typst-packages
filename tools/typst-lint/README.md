@@ -54,15 +54,21 @@ interface remains inert: arguments after `--` are never executed, no compiler is
 resolved and existing outputs are never replaced. There is no fail-open option.
 
 `--package-path` explicitly supplies Typst's local-package directory layout. The
-bounded resolver reads only AST-requested reviewed artifacts below it. There is
+bounded resolver reads AST-requested reviewed artifacts below it and one fixed
+optional namespace artifact requested by an exact reviewed scoped wrapper. There is
 no implicit lookup in the package owner's checkout, home directory, installed
 packages, caches or environment variable. Reviewed contracts cover the exact
 `@local/text-utils:0.1.2` and `@local/project-references:0.1.0` definition sources
 shipped here; both manifest identity and actual source bytes are checked. The text-utils and project-references definition sources import no other module.
-Bounded contracts also recognize math-blocks 0.2.0 theme/spacer values and the locally
-defined scoped-annotations 0.3.0 wrappers. Those packages import other modules;
+Bounded contracts also recognize math-blocks 0.2.0 theme/spacer values and its
+local proof helper, plus locally defined scoped-annotations 0.3.0 wrappers. Those packages import other modules;
 only the reviewed local definitions are certified, not arbitrary re-exports or
-the runtime dependency graph. The reference function's runtime
+the runtime dependency graph. Scoped reference repairs additionally require the
+exact mannot 0.4.0 manifest and two-line public entrypoint from that explicit
+package path. This attests that wildcard imports do not shadow `ref`/`label`;
+it does not certify raw mannot APIs or load its implementation dependencies.
+Absent optional namespace evidence leaves the reference finding diagnostic-only;
+a directly requested missing artifact remains an input error. The reference function's runtime
 `projects.json` is never loaded or evaluated by this analyzer. A matching package name/version
 alone is insufficient. Other versions, modified source and local facades remain
 unresolved, not version-style violations. Missing/unsafe/malformed requested
@@ -331,12 +337,23 @@ See [the theme contract](THEME_CONTRACT.md).
 Four scoped-helper backends use exact scoped-annotations 0.3.0 wrapper evidence
 and a literal one-parameter callback. They diagnose dictionary function-call
 syntax, generated scoped targets passed directly to `ref`, overlays outside a
-display, and duplicate literal namespaces in proven direct output. Only dictionary
-callee parenthesization is proposed automatically. Arguments and their comments
-are retained. Stored content and arbitrary wrappers cannot establish namespace
-graph membership. Wildcard re-exports, raw mannot APIs, dynamic execution,
-mutations, facades, general document graphs and reference repairs remain unsupported.
+display, and duplicate literal namespaces in proven direct output. Dictionary
+callee parenthesization preserves argument comments. The exact builtin
+`ref((scope.tag)("target"))` form can also become `(scope.ref)("target")` when
+the receiver, literal target and package-local reference namespace are proven,
+with no options, extra arguments or internal comments. Related namespace locations
+are mapped through preceding edits while literal project names and other diagnostic
+data remain untouched. Stored content and arbitrary wrappers cannot establish
+namespace graph membership. Wildcard re-exports, raw mannot APIs, dynamic execution,
+mutations, facades, general document graphs and other reference forms remain unsupported.
 No caller receives a scope binding based on variable spelling alone.
+
+`pde.proof-trailing-gap` recognizes the reviewed math-blocks proof helper only
+at a proven standalone root call. It proposes a blank source line before the
+next supported prose or structural sibling, after one unambiguous attached label.
+EOF, nested/deferred output, unknown style effects and ambiguous comments/labels
+are not guessed. Candidate parsing must preserve all non-whitespace syntax and
+attachments. See the [proof contract](PROOF_CONTRACT.md).
 
 ## Proven footnote spacer proposals
 

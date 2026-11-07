@@ -4,13 +4,15 @@ import unittest
 TOOL = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(TOOL))
 from syntax_client import parse
-from static_resolver import PackageSource
+from static_resolver import PackageSource, MANNOT_NAMESPACE
 from scoped_provenance import PACKAGE
 from scoped_rules import analyze, CALL, DISPLAY, UNIQUE, REFERENCE
 from edit_plan import plan
 
 SOURCE = (TOOL.parents[1] / 'local/scoped-annotations/0.3.0/lib.typ').read_bytes()
-PACKAGES = (PackageSource(PACKAGE, 'reviewed-test-entrypoint', SOURCE),)
+NAMESPACE_FILE = TOOL / 'tests/fixtures/scoped-reference-packages/preview/mannot/0.4.0/src/lib.typ'
+PACKAGES = (PackageSource(PACKAGE, 'reviewed-test-entrypoint', SOURCE),
+            PackageSource(MANNOT_NAMESPACE, str(NAMESPACE_FILE), NAMESPACE_FILE.read_bytes()))
 IMPORT = b'#import "@local/scoped-annotations:0.3.0": local-tag-scope, mannot-scope, annot-cetz-local\n'
 
 class ScopedRulesTests(unittest.TestCase):
@@ -43,11 +45,12 @@ class ScopedRulesTests(unittest.TestCase):
         self.assertEqual(len(self.run_rules(b'#annot-cetz-local(x,c,d)')[DISPLAY].diagnostics), 1)
         self.assertFalse(self.run_rules(b'#local-tag-scope(s => [#(s.annot)("x",c,d)])')[DISPLAY].diagnostics)
 
-    def test_reference_is_diagnostic_without_lossy_fix(self):
+    def test_reference_exact_repair_and_shadowed_builtin(self):
         body = b'#local-tag-scope(s => [#ref((s.tag)("x"))])'
         result = self.run_rules(body)[REFERENCE]
         self.assertEqual(len(result.diagnostics), 1)
-        self.assertFalse(result.edits)
+        self.assertEqual(plan(IMPORT + body, result.edits).candidate(),
+                         IMPORT + b'#local-tag-scope(s => [#(s.ref)("x")])')
         self.assertFalse(self.run_rules(b'#let ref = x => x\n'+body)[REFERENCE].diagnostics)
 
     def test_literal_prefix_and_parent_identity(self):

@@ -42,7 +42,8 @@
       "normative_diagnostics": 1,
       "note": "",
       "intentional_parse_error": false,
-      "scenario_heading": "Violation with field-call syntax"
+      "scenario_heading": "Violation with field-call syntax",
+      "scoped_namespace_evidence": true
     },
     {
       "id": "core.scoped-function-call--negative",
@@ -55,7 +56,8 @@
       "normative_diagnostics": 0,
       "note": "",
       "intentional_parse_error": false,
-      "scenario_heading": "Non-violation with receiver binding"
+      "scenario_heading": "Non-violation with receiver binding",
+      "scoped_namespace_evidence": true
     },
     {
       "id": "core.scoped-marker-tags--positive",
@@ -68,7 +70,8 @@
       "normative_diagnostics": 1,
       "note": "",
       "intentional_parse_error": false,
-      "scenario_heading": "Violation with a manual marker label"
+      "scenario_heading": "Violation with a manual marker label",
+      "scoped_namespace_evidence": true
     },
     {
       "id": "core.scoped-marker-tags--negative",
@@ -81,7 +84,8 @@
       "normative_diagnostics": 0,
       "note": "",
       "intentional_parse_error": false,
-      "scenario_heading": "Non-violation with scoped marker"
+      "scenario_heading": "Non-violation with scoped marker",
+      "scoped_namespace_evidence": true
     },
     {
       "id": "core.scoped-anchor-access--positive",
@@ -94,7 +98,8 @@
       "normative_diagnostics": 2,
       "note": "Syntactic scope/drawing fixture; reviewed facade and drawing binding proof is unavailable, so never semantic acceptance.",
       "intentional_parse_error": false,
-      "scenario_heading": "Violation with a known raw marker anchor"
+      "scenario_heading": "Violation with a known raw marker anchor",
+      "scoped_namespace_evidence": true
     },
     {
       "id": "core.scoped-anchor-access--negative",
@@ -107,7 +112,8 @@
       "normative_diagnostics": 0,
       "note": "Syntactic scope/drawing fixture; reviewed facade and drawing binding proof is unavailable, so never semantic acceptance.",
       "intentional_parse_error": false,
-      "scenario_heading": "Non-violation with helpers"
+      "scenario_heading": "Non-violation with helpers",
+      "scoped_namespace_evidence": true
     },
     {
       "id": "core.scoped-reference-access--positive",
@@ -120,7 +126,8 @@
       "normative_diagnostics": 1,
       "note": "",
       "intentional_parse_error": false,
-      "scenario_heading": "Violation using the generated label"
+      "scenario_heading": "Violation using the generated label",
+      "scoped_namespace_evidence": true
     },
     {
       "id": "core.scoped-reference-access--negative",
@@ -133,7 +140,8 @@
       "normative_diagnostics": 0,
       "note": "",
       "intentional_parse_error": false,
-      "scenario_heading": "Non-violation using the public local API"
+      "scenario_heading": "Non-violation using the public local API",
+      "scoped_namespace_evidence": true
     },
     {
       "id": "core.local-overlay-api--positive",
@@ -146,7 +154,8 @@
       "normative_diagnostics": 1,
       "note": "",
       "intentional_parse_error": false,
-      "scenario_heading": "Violation with the raw API"
+      "scenario_heading": "Violation with the raw API",
+      "scoped_namespace_evidence": true
     },
     {
       "id": "core.local-overlay-api--negative",
@@ -159,7 +168,8 @@
       "normative_diagnostics": 0,
       "note": "",
       "intentional_parse_error": false,
-      "scenario_heading": "Non-violation with supported APIs"
+      "scenario_heading": "Non-violation with supported APIs",
+      "scoped_namespace_evidence": true
     },
     {
       "id": "core.annotation-in-display--positive",
@@ -172,7 +182,8 @@
       "normative_diagnostics": 1,
       "note": "",
       "intentional_parse_error": false,
-      "scenario_heading": "Violation after the equation"
+      "scenario_heading": "Violation after the equation",
+      "scoped_namespace_evidence": true
     },
     {
       "id": "core.annotation-in-display--negative",
@@ -185,7 +196,8 @@
       "normative_diagnostics": 0,
       "note": "",
       "intentional_parse_error": false,
-      "scenario_heading": "Non-violation inside the equation"
+      "scenario_heading": "Non-violation inside the equation",
+      "scoped_namespace_evidence": true
     },
     {
       "id": "core.annotation-marker-bounds--positive",
@@ -198,7 +210,8 @@
       "normative_diagnostics": 1,
       "note": "",
       "intentional_parse_error": false,
-      "scenario_heading": "Violation with only a plain label"
+      "scenario_heading": "Violation with only a plain label",
+      "scoped_namespace_evidence": true
     },
     {
       "id": "core.annotation-marker-bounds--negative",
@@ -211,7 +224,8 @@
       "normative_diagnostics": 0,
       "note": "",
       "intentional_parse_error": false,
-      "scenario_heading": "Non-violation with either marker API"
+      "scenario_heading": "Non-violation with either marker API",
+      "scoped_namespace_evidence": true
     },
     {
       "id": "core.unique-scope-namespace--positive",
@@ -224,7 +238,8 @@
       "normative_diagnostics": 1,
       "note": "",
       "intentional_parse_error": false,
-      "scenario_heading": "Violation with explicit collisions"
+      "scenario_heading": "Violation with explicit collisions",
+      "scoped_namespace_evidence": true
     },
     {
       "id": "core.unique-scope-namespace--negative",
@@ -237,7 +252,8 @@
       "normative_diagnostics": 0,
       "note": "",
       "intentional_parse_error": false,
-      "scenario_heading": "Non-violation across automatic scopes"
+      "scenario_heading": "Non-violation across automatic scopes",
+      "scoped_namespace_evidence": true
     },
     {
       "id": "core.project-ref-arguments--positive",
@@ -425,7 +441,8 @@
       "normative_diagnostics": 1,
       "note": "Root-relative analogue of the normative ../Styles path; local re-export proof and import-order backend are unavailable.",
       "intentional_parse_error": false,
-      "scenario_heading": "Violation with a reversed import group"
+      "scenario_heading": "Violation with a reversed import group",
+      "scoped_namespace_evidence": true
     },
     {
       "id": "pde.import-order--negative",
@@ -441,7 +458,8 @@
       "normative_diagnostics": 0,
       "note": "Root-relative analogue of the normative ../Styles path; local re-export proof and import-order backend are unavailable.",
       "intentional_parse_error": false,
-      "scenario_heading": "Non-violation with the existing grouping"
+      "scenario_heading": "Non-violation with the existing grouping",
+      "scoped_namespace_evidence": true
     },
     {
       "id": "pde.no-redundant-facade-import--positive",
@@ -457,7 +475,8 @@
       "normative_diagnostics": 1,
       "note": "Re-export graph is deliberately present as files but not evaluated; overlapping exports require an unimplemented resolver.",
       "intentional_parse_error": false,
-      "scenario_heading": "Violation with redundant compatibility imports"
+      "scenario_heading": "Violation with redundant compatibility imports",
+      "scoped_namespace_evidence": true
     },
     {
       "id": "pde.no-redundant-facade-import--negative",
@@ -473,7 +492,8 @@
       "normative_diagnostics": 0,
       "note": "Re-export graph is deliberately present as files but not evaluated; overlapping exports require an unimplemented resolver.",
       "intentional_parse_error": false,
-      "scenario_heading": "Non-violation preserving compatibility"
+      "scenario_heading": "Non-violation preserving compatibility",
+      "scoped_namespace_evidence": true
     },
     {
       "id": "pde.paragraph-marker-gap--positive",
@@ -2292,7 +2312,10 @@
       "intentional_parse_error": false,
       "scenario_heading": "Violation using the generated label",
       "assert_normative_count": true,
-      "expected_no_target_edits": true
+      "expected_candidate": {
+        "main.typ": "#import \"@local/scoped-annotations:0.3.0\": local-tag-scope, mannot-scope\n#local-tag-scope(s => [#(s.ref)(\"x\")])\n"
+      },
+      "scoped_namespace_evidence": true
     },
     {
       "id": "core.annotation-in-display--reviewed-callback",
@@ -2453,6 +2476,103 @@
       "expected_candidate": {
         "main.typ": "#import \"@local/math-blocks:0.2.0\": dots_space\nThis holds.#footnote[Reason.]\n"
       }
+    },
+    {
+      "id": "core.project-ref-catalog-target--literal-byte-name",
+      "rule_id": "core.project-ref-catalog-target",
+      "kind": "literal-byte-name",
+      "files": {
+        "main.typ": "#import \"@local/project-references:0.1.0\": project-ref\n$x^i$\n#project-ref(\"at byte 100\", <energy>)\n",
+        "catalog.json": "{\"schema\":1,\"projects\":{}}"
+      },
+      "config": "rule-set=\"core\"\ncatalog=\"catalog.json\"\n",
+      "normative_diagnostics": 1,
+      "note": "Literal project text is not a related diagnostic source location.",
+      "intentional_parse_error": false,
+      "scenario_heading": "Violation against a supplied snapshot",
+      "assert_normative_count": true,
+      "expected_candidate": {
+        "main.typ": "#import \"@local/project-references:0.1.0\": project-ref\n$x^(i)$\n#project-ref(\"at byte 100\", <energy>)\n"
+      }
+    },
+    {
+      "id": "pde.proof-trailing-gap--direct-reviewed-repair",
+      "rule_id": "pde.proof-trailing-gap",
+      "kind": "direct-reviewed-repair",
+      "files": {
+        "main.typ": "#import \"@local/math-blocks:0.2.0\": proof\n#proof[The claim follows.]\n$ A = B $\n"
+      },
+      "config": "rule-set=\"pde\"\n",
+      "normative_diagnostics": 1,
+      "note": "Direct reviewed root proof ownership; comments and end-of-file never acquire synthetic boundaries.",
+      "intentional_parse_error": false,
+      "scenario_heading": "Violation with adjacent content",
+      "assert_normative_count": true,
+      "expected_candidate": {
+        "main.typ": "#import \"@local/math-blocks:0.2.0\": proof\n#proof[The claim follows.]\n\n$ A = B $\n"
+      }
+    },
+    {
+      "id": "pde.proof-trailing-gap--label-preservation",
+      "rule_id": "pde.proof-trailing-gap",
+      "kind": "label-preservation",
+      "files": {
+        "main.typ": "#import \"@local/math-blocks:0.2.0\": proof\n#proof[The claim follows.] <proof-label>\n$ A = B $\n"
+      },
+      "config": "rule-set=\"pde\"\n",
+      "normative_diagnostics": 1,
+      "note": "Direct reviewed root proof ownership; comments and end-of-file never acquire synthetic boundaries.",
+      "intentional_parse_error": false,
+      "scenario_heading": "Violation with adjacent content",
+      "assert_normative_count": true,
+      "expected_candidate": {
+        "main.typ": "#import \"@local/math-blocks:0.2.0\": proof\n#proof[The claim follows.] <proof-label>\n\n$ A = B $\n"
+      }
+    },
+    {
+      "id": "pde.proof-trailing-gap--eof-refusal",
+      "rule_id": "pde.proof-trailing-gap",
+      "kind": "eof-refusal",
+      "files": {
+        "main.typ": "#import \"@local/math-blocks:0.2.0\": proof\n#proof[The claim follows.]\n"
+      },
+      "config": "rule-set=\"pde\"\n",
+      "normative_diagnostics": 0,
+      "note": "Direct reviewed root proof ownership; comments and end-of-file never acquire synthetic boundaries.",
+      "intentional_parse_error": false,
+      "scenario_heading": "Non-violation with a source gap",
+      "assert_normative_count": true,
+      "expected_no_target_edits": true
+    },
+    {
+      "id": "pde.proof-trailing-gap--comment-boundary",
+      "rule_id": "pde.proof-trailing-gap",
+      "kind": "comment-boundary",
+      "files": {
+        "main.typ": "#import \"@local/math-blocks:0.2.0\": proof\n#proof[The claim follows.]\n// keep attachment\n$ A = B $\n"
+      },
+      "config": "rule-set=\"pde\"\n",
+      "normative_diagnostics": 0,
+      "note": "Direct reviewed root proof ownership; comments and end-of-file never acquire synthetic boundaries.",
+      "intentional_parse_error": false,
+      "scenario_heading": "Non-violation with a source gap",
+      "assert_normative_count": true,
+      "expected_no_target_edits": true
+    },
+    {
+      "id": "core.scoped-reference-access--missing-namespace-proof",
+      "rule_id": "core.scoped-reference-access",
+      "kind": "missing-namespace-proof",
+      "files": {
+        "main.typ": "#import \"@local/scoped-annotations:0.3.0\": local-tag-scope, mannot-scope\n#local-tag-scope(s => [#ref((s.tag)(\"x\"))])\n"
+      },
+      "config": "rule-set=\"pde\"\ninclude=[\"**/*.typ\",\"**/*.md\"]\n",
+      "normative_diagnostics": 1,
+      "note": "Wrapper bytes alone cannot establish that its wildcard dependency leaves ref and label unshadowed.",
+      "intentional_parse_error": false,
+      "scenario_heading": "Violation using the generated label",
+      "assert_normative_count": true,
+      "expected_no_target_edits": true
     }
   ]
 }

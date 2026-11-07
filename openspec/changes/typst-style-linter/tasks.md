@@ -128,3 +128,11 @@ The design follow-up is reviewed and merged first. Groups 2–7 are authorized i
 - [x] 17.4 Verify builtin and reviewed text-utils highlight candidates with isolated real compile/query evidence. Certify only text-only generated fragments as bounded transparent output; retain unknown nested/option/show cases.
 - [x] 17.5 Add actual resolver-produced math-blocks spacer identity and canonical insertion proofs, verify aliases/shadowing/mutation, integrate all five footnote backends and independently review exact proposals.
 - [x] 17.6 Regenerate all 33-rule evidence and run final local checks before publishing the draft checkpoint. Final local checks: 356 Python tests (355 passed, one filesystem setuid skip), four Rust tests, formatting/Clippy, strict OpenSpec and whitespace checks. Audit: 202 CLI invocations, 21 PARTIAL / 12 NOT_IMPLEMENTED / 0 COMPLETE, with no audit invariant failures. Consumer rollout and complete rule acceptance remain outside this checkpoint.
+
+
+## 18. Add proof boundaries and scoped reference repairs
+
+- [x] 18.1 Add exact reviewed proof-helper identity and bounded standalone-root source-gap proposals. Preserve labels, original bytes and non-whitespace syntax; refuse ambiguous comments, unknown ownership and synthetic EOF/body-end paragraphs. Verify isolated actual-CLI and render effects.
+- [x] 18.2 Retain the first namespace declaration in diagnostics while mapping only that trusted related-location format through preceding edits. Never reinterpret literal catalog project text as a source offset.
+- [x] 18.3 Require a separately reviewed mannot public namespace snapshot before repairing the exact local scoped-reference form. Keep its fixed optional loader evidence separate from raw API bindings and retain safe descriptor traversal, refusal and race tests.
+- [x] 18.4 Complete independent review and final local checks: 411 Python tests (410 passed, one filesystem setuid skip), four Rust tests, formatting/Clippy, strict OpenSpec and whitespace checks. Refreshed audit: 172 fixtures, 212 CLI invocations, 37 verified candidate reanalyses, 22 PARTIAL / 11 NOT_IMPLEMENTED / 0 COMPLETE, with no invariant failures. Preserve fail-closed source writes and compiler dispatch; keep consumer rollout separate.

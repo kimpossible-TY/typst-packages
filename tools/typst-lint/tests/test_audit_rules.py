@@ -8,7 +8,10 @@ from unittest.mock import patch
 
 TOOL = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(TOOL))
-from audit_rules import candidate_verdict, expected_input_refusal, observe, snapshot, spec_index
+from audit_rules import candidate_verdict, expected_input_refusal, observe, run_cli, snapshot, spec_index
+from static_resolver import (MANNOT_NAMESPACE, MANNOT_NAMESPACE_MANIFEST_SHA256,
+                             MANNOT_NAMESPACE_SOURCE_SHA256, SCOPED_ANNOTATIONS, TEXT_UTILS)
+from syntax_client import EXECUTABLE
 
 SCRIPT = 'core.parenthesized-scripts'
 CAP = 'pde.paragraph-capitalization'
@@ -80,6 +83,24 @@ class CandidateCoverageTests(unittest.TestCase):
         candidate['diagnostics'] = [dict(finding)]
         self.assertTrue(self.verdict(baseline, candidate)['verified'])
 
+    def test_related_diagnostic_byte_location_is_mapped_not_discarded(self):
+        baseline, candidate = pair()
+        finding = {'rule_id': 'core.unique-scope-namespace', 'grade': 'error', 'path': 'main.typ',
+                   'line': 2, 'column': 1, 'explanation': 'Duplicate literal scope namespace; first declaration at byte 6', 'source': 'fixture'}
+        baseline['diagnostics'] = [finding]
+        candidate['diagnostics'] = [dict(finding, explanation='Duplicate literal scope namespace; first declaration at byte 8')]
+        self.assertTrue(self.verdict(baseline, candidate)['verified'])
+        candidate['diagnostics'][0]['explanation'] = 'Duplicate literal scope namespace; first declaration at byte 9'
+        self.assertEqual(self.verdict(baseline, candidate)['status'], 'MISMATCH')
+
+    def test_byte_text_inside_literal_diagnostic_data_is_never_mapped(self):
+        baseline, candidate = pair()
+        finding = {'rule_id': 'core.project-ref-catalog-target', 'grade': 'warning', 'path': 'main.typ',
+                   'line': 2, 'column': 1, 'explanation': "Unknown catalog project 'at byte 100'.", 'source': 'fixture'}
+        baseline['diagnostics'] = [dict(finding)]
+        candidate['diagnostics'] = [dict(finding)]
+        self.assertTrue(self.verdict(baseline, candidate)['verified'])
+
     def test_partial_repaired_rule_preserves_existing_bounded_skip(self):
         baseline, candidate = pair()
         for report, offset in ((baseline, 6), (candidate, 8)):
@@ -111,6 +132,14 @@ class CandidateCoverageTests(unittest.TestCase):
 
 
 class AuditInventoryTests(unittest.TestCase):
+    def test_direct_mannot_fixtures_explicitly_select_the_namespace_snapshot(self):
+        fixtures = json.loads((TOOL / 'audit/fixtures.json').read_text())['fixtures']
+        requested = [f for f in fixtures if any(MANNOT_NAMESPACE in source for source in f['files'].values())]
+        self.assertTrue(requested)
+        for fixture in requested:
+            with self.subTest(fixture=fixture['id']):
+                self.assertIs(fixture.get('scoped_namespace_evidence'), True)
+
     def test_expected_catalog_refusal_requires_matching_phase_and_reason(self):
         fixture = {'expected_input_error': 'Duplicate reference catalog key'}
         report = {'phase': 'input', 'error': 'Duplicate reference catalog key: energy'}
@@ -172,6 +201,69 @@ class AuditInventoryTests(unittest.TestCase):
         bare = next(f for f in fixtures if f['kind'] == 'malformed-bare-reference')
         self.assertTrue(bare['intentional_parse_error'])
         self.assertEqual(bare['scenario_heading'], 'Malformed bare reference is not repaired')
+
+
+@unittest.skipUnless(EXECUTABLE.is_file(), 'Build pinned syntax adapter first')
+class AuditPackageSnapshotTests(unittest.TestCase):
+    def fixture(self, fixture_id):
+        fixtures = json.loads((TOOL / 'audit/fixtures.json').read_text())['fixtures']
+        return next(f for f in fixtures if f['id'] == fixture_id)
+
+    def assert_snapshot_analysis(self, run):
+        self.assertEqual(run['exit_code'], 2)
+        self.assertFalse(run['invariant_issues'])
+        self.assertTrue(run['source_unchanged'] and run['package_fixture_unchanged'])
+        self.assertTrue(run['compiler_tripwire_untouched'] and run['output_sentinel_unchanged'])
+        report = run['report']
+        self.assertEqual(report['phase'], 'analysis')
+        self.assertFalse(report['coverage']['complete'] or report['compiler_invoked'] or report['applied_fixes'])
+        self.assertEqual(report['package_path'], '<package-fixture>')
+        namespace = next(e for e in report['package_evidence'] if e['import_path'] == MANNOT_NAMESPACE)
+        self.assertEqual(namespace['manifest_sha256'], MANNOT_NAMESPACE_MANIFEST_SHA256)
+        self.assertEqual(namespace['source_sha256'], MANNOT_NAMESPACE_SOURCE_SHA256)
+        self.assertEqual(namespace['source_identity'], '<package-fixture>/preview/mannot/0.4.0/src/lib.typ')
+        return report
+
+    def test_direct_normative_import_reaches_partial_analysis_without_ambient_packages(self):
+        fixture = self.fixture('core.annotation-in-display--positive')
+        result = observe(fixture)
+        report = self.assert_snapshot_analysis(result['run'])
+        self.assertEqual(result['observation'], 'PARTIAL_CASE')
+        self.assertFalse(report['proposed_edits'])
+        self.assertEqual({e['import_path'] for e in report['package_evidence']},
+                         {SCOPED_ANNOTATIONS, MANNOT_NAMESPACE})
+
+    def test_facade_fixture_gets_its_selected_text_utils_without_graph_proof(self):
+        fixture = self.fixture('pde.import-order--positive')
+        result = observe(fixture)
+        report = self.assert_snapshot_analysis(result['run'])
+        self.assertEqual(result['observation'], 'NOT_IMPLEMENTED')
+        self.assertFalse(report['proposed_edits'])
+        self.assertEqual({e['import_path'] for e in report['package_evidence']},
+                         {SCOPED_ANNOTATIONS, MANNOT_NAMESPACE, TEXT_UTILS})
+        self.assertEqual(set(result['run']['package_fixture_hashes']), {
+            'local/scoped-annotations/0.3.0/typst.toml', 'local/scoped-annotations/0.3.0/lib.typ',
+            'local/text-utils/0.1.2/typst.toml', 'local/text-utils/0.1.2/lib.typ',
+            'preview/mannot/0.4.0/typst.toml', 'preview/mannot/0.4.0/src/lib.typ'})
+        self.assertTrue(any('no verified direct-package contract' in reason
+                            for row in report['coverage']['files'] if row['path'] == 'main.typ'
+                            for reason in row['reasons']))
+
+    def test_namespace_snapshot_never_invents_raw_api_or_module_bindings(self):
+        fixture = self.fixture('core.annotation-in-display--positive')
+        for source, reason in (
+            ('#let mark = highlight\n#import "@preview/mannot:0.4.0": *\n#mark[$x$]\n',
+             'Unknown wildcard may shadow'),
+            ('#let mark = highlight\n#import "@preview/mannot:0.4.0": mark\n#mark[$x$]\n',
+             'Imported item is unresolved'),
+            ('#import "@preview/mannot:0.4.0" as m\n#m.mark[$x$]\n',
+             'Import has no verified direct-package contract'),
+        ):
+            with self.subTest(source=source):
+                report = self.assert_snapshot_analysis(run_cli(fixture, source_files={'main.typ': source}))
+                self.assertFalse(report['diagnostics'] or report['proposed_edits'])
+                self.assertTrue(any(reason in skip for row in report['coverage']['files']
+                                    for skip in row['reasons']))
 
 
 if __name__ == '__main__':
