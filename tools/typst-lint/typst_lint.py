@@ -484,6 +484,9 @@ def report(root, mode, *, package_path=None, _verify=True, _analysis_observer=No
 
 def main(argv=None, *, gate=False):
     arguments = list(sys.argv[1:] if argv is None else argv)
+    if not gate and arguments[:1] == ['inspect-document']:
+        from document_cli import main as document_main
+        return document_main(arguments[1:])
     # Import only at dispatch: the trusted bridge imports shared definitions
     # from this module. Existing read-only reports retain their old behavior.
     from offline_cli import requested, main as offline_main, _command as offline_command
@@ -497,7 +500,8 @@ def main(argv=None, *, gate=False):
         'explicit canonical --package-path /absolute/packages; compile requires embedded-ascii-v1. '
         'journal-status; recover --offline-exclusive --target main.typ --journal-id ID; '
         'output-status; recover-output --offline-output-exclusive --output build/main.pdf --journal-id ID. '
-        'Use COMMAND --help for the offline route options.')
+        'inspect-document --entrypoint main.typ inventories literal includes and proposes math script repairs. '
+        'Use COMMAND --help for route options.')
     parser.add_argument('--version', action='version', version=VERSION)
     parser.add_argument('command', choices=['compile'] if gate else ['check', 'fix', 'compile', 'journal-status', 'recover'])
     parser.add_argument('--root', required=True, type=Path)

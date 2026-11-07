@@ -8,7 +8,7 @@ projects, not consumer documents or copied private prose.
 
 ## Capture API and retained reads
 
-`load_include_context(project_root, entrypoint_sources)` takes a canonical
+`load_include_context(project_root, entrypoint_sources, *, budget='standard-v1')` takes a canonical
 absolute project root and a nonempty bounded iterable of immutable
 `(canonical_project_relative_typ_path, exact_bytes)` tuples. Entrypoint bytes
 must be immutable UTF-8 and are checked against the actual retained read before
@@ -16,6 +16,14 @@ the parser receives them. Each entrypoint and every reachable supported literal
 include target is read with the existing `package_loader._Snapshot` no-follow
 descriptor reader. Files and directories remain open until **after** occurrence
 derivation and final `_Snapshot.verify()` content and identity checks.
+
+The optional budget selects exactly `standard-v1` or `book-v1`. The standard
+default retains the original 32-source / 200,000 aggregate-node limits. The
+explicit book budget permits 64 sources / 400,000 aggregate nodes for finite
+book-sized inventory; every other bound is identical. Unknown names, mutable
+options, string subclasses and arbitrary numerical limits fail before root
+capture or parsing. This selects capture resources, not a linter source profile
+or downstream analysis permission.
 
 The bounded directory cache checks the original parent-relative name and retained
 descriptor identity before reuse. Every original request traversal is checked,
@@ -45,6 +53,8 @@ Initially missing entrypoints are fatal, not unresolved include edges.
 All returned records are frozen dataclasses containing tuples and immutable
 bytes. `IncludeContext` exposes `project_root`, `entrypoints`, `sources`, `edges`,
 `occurrences`, `unresolved`, and `source_for(canonical_path)`.
+Its `budget` field retains the exact selected budget name (default
+`standard-v1`) and is covered by original-parser issuance verification.
 
 - `IncludeSourceIdentity(path, source_sha256, tree_sha256)` identifies exact
   logical source bytes and the complete pinned parser tree.
@@ -139,11 +149,15 @@ capture deliberately provides no lexical/style fields to guess from.
 
 ## Fixed bounds and failures
 
-There is no public limit override. Module constants name the exact denominators:
+There is no arbitrary public limit override. The only explicit selection is
+the fixed `budget='book-v1'` alternative. Module constants name the exact
+denominators:
 
-- `MAX_CONTEXT_FILES`: 32 unique sources including all entrypoints.
+- `MAX_CONTEXT_FILES`: 32 unique sources including all entrypoints under
+  `standard-v1`; `BOOK_MAX_CONTEXT_FILES`: 64 under `book-v1`.
 - `MAX_SOURCE_BYTES`: 1 MiB per source; `MAX_CONTEXT_BYTES`: 4 MiB aggregate.
-- `MAX_CONTEXT_NODES`: 200,000 aggregate parser nodes; the adapter's unchanged
+- `MAX_CONTEXT_NODES`: 200,000 aggregate parser nodes under `standard-v1`;
+  `BOOK_MAX_CONTEXT_NODES`: 400,000 under `book-v1`. The adapter's unchanged
   100,000-node/depth-256/output/deadline limits also apply to each parse.
 - `MAX_INCLUDE_NODES`: 128 include nodes, including unsupported requests.
 - `MAX_INCLUDE_DEPTH`: 16 edges per occurrence chain, roots at depth zero.
@@ -157,6 +171,13 @@ There is no public limit override. Module constants name the exact denominators:
 - `MAX_REQUEST_EXPRESSION_BYTES`: 4,096 bytes per raw operand expression;
   `MAX_TOTAL_REQUEST_BYTES`: 4 MiB summed over all include operand expressions.
 - `MAX_ANCESTRY_NODES`: 32,768 summed parent references over include nodes.
+
+The selected budget is retained in the context and its issuance signature;
+changing that field does not reissue a context. Larger inventory does not widen
+the independent scoped paragraph analyzer, whose 200,000 retained-source-node
+limit still explicitly refuses a larger capture. Callers can inspect the include
+graph or use independently bounded syntax-local analysis without mistaking the
+inventory budget for complete document semantics.
 
 All fatal errors derive from `IncludeContextError` (`InputError`). Invalid
 explicit arguments/entrypoint encoding use `IncludeInputError`; parser
@@ -174,6 +195,10 @@ actual pinned syntax adapter. It checks exact source/tree/node identities,
 ancestry, repeated/diamond/multiple-entrypoint occurrences, explicit unsupported
 requests/containment/cycles, original and cached traversal, all named budget
 denominators, retained final checks, byte/inode/directory races, links and aliases.
+Generic temporary book fixtures verify the original default still refuses a
+64-source closure, the explicit budget captures it, source 65 refuses, a dense
+220,000-plus-node closure is captured only with the book budget, and unchanged
+byte/include ceilings plus downstream analysis limits remain enforced.
 Origin checks cover copied/constructed/deep-copied values, nested tampering,
 deleted fields, primitive-type substitutions, oversized/self-linked fields,
 parser/filesystem-free assertions and weak-registry garbage-collection cleanup.

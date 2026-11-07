@@ -54,6 +54,26 @@ safely rechecked before parsing; no truncated input is accepted. See
 /path/to/typst-packages/tools/typst-lint/typst-style compile --root /path/to/project --format json -- main.typ output.pdf
 ```
 
+For an entrypoint and its included chapters, use the explicit read-only document
+inspection route:
+
+```sh
+/path/to/typst-packages/tools/typst-lint/typst-lint inspect-document --root /absolute/project --entrypoint main.typ --format json
+```
+
+This route captures literal relative includes with the fixed `book-v1` budget
+(64 source files and 400,000 syntax nodes), retains separate repeated include
+occurrences, and analyzes `core.parenthesized-scripts` once per captured source.
+Its byte offsets, baseline/candidate hashes and in-memory edit proposals can be
+inspected even when includes occur inside `book-part` or other opaque wrappers.
+Those wrappers remain explicit unresolved execution context. Imports, other
+style rules, runtime resources and actual rendering are outside this inspection.
+The report keeps global coverage incomplete and exits 2; it never applies the
+proposals or invokes Typst compilation. Unsafe paths, malformed sources and
+exhausted budgets return an input error rather than a truncated document report.
+See [DOCUMENT_INSPECTION_CONTRACT.md](DOCUMENT_INSPECTION_CONTRACT.md) and the
+[local PDE characterization](audit/document-inspection-evidence.json).
+
 The ordinary modes above remain read-only. Reports may include AST-backed proposed edits
 with baseline hashes, but label them `partial-not-applicable-transaction`.
 They are **not** permission or proof that the complete protected write contract

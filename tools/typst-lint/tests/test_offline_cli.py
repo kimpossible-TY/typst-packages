@@ -283,16 +283,18 @@ class OfflineCliTests(unittest.TestCase):
         namespace = next(self.store.glob('root-*'))
         try:
             os.mkdir(os.fsencode(namespace) + b'/\xff', mode=0o700)
-            observed = journal_inventory(self.root)
         except OSError as error:
-            if error.errno not in (errno.EILSEQ, errno.EINVAL):
+            if error.errno not in (errno.EILSEQ, errno.EINVAL, errno.EPERM):
                 raise
-            # APFS forbids invalid UTF-8 filenames. Exercise the same immutable
+            # APFS/sandbox may forbid invalid UTF-8 filenames with EPERM.
+            # Exercise the same immutable
             # inventory output with the POSIX surrogate name a Linux reader can
             # really observe, rather than omitting the JSON encoding regression.
             observed = journal_inventory(self.root)
             corrupt = transactions.JournalEntry(os.fsdecode(b'\xff'), 'unreadable-or-corrupt', 'invalid filename')
             observed = replace(observed, entries=observed.entries + (corrupt,))
+        else:
+            observed = journal_inventory(self.root)
         output = io.StringIO()
         with redirect_stdout(output), mock.patch.object(offline_cli, 'journal_inventory', return_value=observed):
             status = lint.main(['journal-status', '--root', str(self.root), '--format', 'json'])

@@ -23,6 +23,10 @@ MAX_INCLUDE_NODES = 128
 MAX_INCLUDE_DEPTH = 16
 MAX_OCCURRENCES = 1024
 MAX_CONTEXT_NODES = 200_000
+# Explicit inventory-only headroom for book-sized include closures. All other
+# resource/safety bounds remain identical to the standard capture budget.
+BOOK_MAX_CONTEXT_FILES = 64
+BOOK_MAX_CONTEXT_NODES = 400_000
 MAX_CONTEXT_DIRECTORIES = 64
 MAX_PATH_BYTES = 512
 MAX_TOTAL_PATH_BYTES = 16 * 1024
@@ -127,6 +131,7 @@ class IncludeContext:
     edges: tuple[IncludeEdge, ...]
     occurrences: tuple[IncludeOccurrence, ...]
     unresolved: tuple[IncludeUnresolved, ...]
+    budget: str = 'standard-v1'
 
     def source_for(self, path):
         return next((source for source in self.sources if source.path == path), None)
@@ -135,6 +140,14 @@ class IncludeContext:
 def _limit(condition, message):
     if not condition:
         raise IncludeLimitError(message)
+
+
+def _capture_bounds(budget):
+    if type(budget) is not str or budget not in ('standard-v1', 'book-v1'):
+        raise IncludeInputError('Include budget must be exactly standard-v1 or book-v1')
+    if budget == 'book-v1':
+        return BOOK_MAX_CONTEXT_FILES, BOOK_MAX_CONTEXT_NODES
+    return MAX_CONTEXT_FILES, MAX_CONTEXT_NODES
 
 
 def _seed_path(path):
@@ -376,11 +389,13 @@ def _context_signature(context):
         return value
 
     require(type(context) is IncludeContext)
+    require(type(context.budget) is str and context.budget in ('standard-v1', 'book-v1'))
+    max_files, max_nodes = _capture_bounds(context.budget)
     root = string(context.project_root, MAX_ROOT_BYTES)
-    entrypoints = tuple(identity(value) for value in sequence(context.entrypoints, MAX_CONTEXT_FILES))
+    entrypoints = tuple(identity(value) for value in sequence(context.entrypoints, max_files))
     sources = []
     total_bytes = total_nodes = total_paths = 0
-    for source in sequence(context.sources, MAX_CONTEXT_FILES):
+    for source in sequence(context.sources, max_files):
         require(type(source) is IncludeSource and type(source.source) is bytes)
         require(len(source.source) <= MAX_SOURCE_BYTES)
         total_bytes += len(source.source)
@@ -394,7 +409,7 @@ def _context_signature(context):
                 and tree.mode == 'markup')
         sequence(tree.nodes, 100_000)
         total_nodes += len(tree.nodes)
-        require(total_nodes <= MAX_CONTEXT_NODES)
+        require(total_nodes <= max_nodes)
         child_count = 0
         for item in tree.nodes:
             require(type(item) is Node)
@@ -448,7 +463,7 @@ def _context_signature(context):
         unresolved.append((node(value.node), codes(value.codes),
             identity(value.entrypoint) if value.entrypoint is not None else None,
             tuple(node(item) for item in sequence(value.edge_chain, MAX_INCLUDE_DEPTH))))
-    return json.dumps((root, entrypoints, sources, edges, occurrences, unresolved),
+    return json.dumps((context.budget, root, entrypoints, sources, edges, occurrences, unresolved),
                       separators=(',', ':'), ensure_ascii=True).encode('ascii')
 
 
@@ -485,8 +500,12 @@ def assert_include_context(context):
     return context
 
 
-def load_include_context(project_root, entrypoint_sources):
+def load_include_context(project_root, entrypoint_sources, *, budget='standard-v1'):
     """Capture explicit entrypoint bytes and their literal include-only closure.
+
+    The fixed book-v1 budget permits 64 sources / 400,000 aggregate nodes for
+    explicit book inventory. The default standard-v1 stays at 32 / 200,000.
+    Neither choice changes downstream analysis budgets or establishes execution.
 
     Every safe literal site is followed as syntax, including opaque containment.
     Unsupported requests/missing targets remain explicit edge records. Unsafe
@@ -495,6 +514,7 @@ def load_include_context(project_root, entrypoint_sources):
     transaction receipt, editor lease, certificate, repair or compiler input.
     """
     try:
+        max_files, max_nodes = _capture_bounds(budget)
         try:
             raw_root = os.fspath(project_root)
             if type(raw_root) is not str or not raw_root:
@@ -518,7 +538,7 @@ def load_include_context(project_root, entrypoint_sources):
             raise IncludeInputError('Include entrypoints must be iterable') from error
         expected = {}
         for count, row in enumerate(iterator, 1):
-            _limit(count <= MAX_CONTEXT_FILES, 'Include context file limit exceeded')
+            _limit(count <= max_files, 'Include context file limit exceeded')
             if type(row) is not tuple or len(row) != 2:
                 raise IncludeInputError('Include entrypoints require immutable path/bytes pairs')
             path, source = row
@@ -538,7 +558,7 @@ def load_include_context(project_root, entrypoint_sources):
         with _IncludeSnapshot(root) as snapshot:
             def read_source(directory, basename, path):
                 nonlocal source_bytes, syntax_nodes, path_bytes
-                _limit(len(sources) < MAX_CONTEXT_FILES, 'Include context file limit exceeded')
+                _limit(len(sources) < max_files, 'Include context file limit exceeded')
                 path_bytes += len(path.encode('utf-8'))
                 _limit(path_bytes <= MAX_TOTAL_PATH_BYTES, 'Include total path byte limit exceeded')
                 source = snapshot.read(directory, basename, MAX_SOURCE_BYTES)
@@ -553,7 +573,7 @@ def load_include_context(project_root, entrypoint_sources):
                 if tree.nodes[0].errors:
                     raise IncludeSyntaxError(f'Malformed include source syntax: {path}')
                 syntax_nodes += len(tree.nodes)
-                _limit(syntax_nodes <= MAX_CONTEXT_NODES, 'Include aggregate syntax node limit exceeded')
+                _limit(syntax_nodes <= max_nodes, 'Include aggregate syntax node limit exceeded')
                 identity = IncludeSourceIdentity(path, digest(source), _tree_sha256(tree))
                 record = snapshot.files[-1]
                 sources[path] = IncludeSource(identity, source, tree, _file_signature(record.before))
@@ -643,7 +663,7 @@ def load_include_context(project_root, entrypoint_sources):
                            for edge in ordered_edges if edge.unresolved_codes)
         return _issue(IncludeContext(str(root), entrypoints,
             tuple(sources[path] for path in sorted(sources)), ordered_edges,
-            occurrences, (*unresolved, *cycle_records)))
+            occurrences, (*unresolved, *cycle_records), budget))
     except IncludeContextError:
         raise
     except (PackageInputError, OSError, TypeError, ValueError, UnicodeError) as error:

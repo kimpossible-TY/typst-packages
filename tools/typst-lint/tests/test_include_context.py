@@ -496,6 +496,83 @@ class IncludeContextTests(unittest.TestCase):
                      self.assertRaises(capture.IncludeLimitError):
                     self.load(source)
 
+    def test_unknown_or_nonliteral_budget_refuses_before_capture_side_effects(self):
+        class BudgetName(str):
+            pass
+        for value in ('book', 'BOOK-V1', '', None, True, 64, {}, [], BudgetName('book-v1')):
+            with self.subTest(value=value), \
+                 patch.object(capture, '_absolute_root', side_effect=AssertionError('Unexpected root read')), \
+                 patch.object(capture, 'parse', side_effect=AssertionError('Unexpected parser')), \
+                 self.assertRaises(capture.IncludeInputError):
+                capture.load_include_context(self.root, (('main.typ', b'Root.\n'),), budget=value)
+
+    def test_book_budget_explicitly_extends_file_capture_with_a_fixed_ceiling(self):
+        for index in range(64):
+            self.put(f'part-{index}.typ', b'Literal chapter.\n')
+        source = b''.join(f'#include "part-{index}.typ"\n'.encode() for index in range(63))
+        self.put('main.typ', source)
+        for kwargs in ({}, {'budget': 'standard-v1'}):
+            with self.subTest(kwargs=kwargs), self.assertRaises(capture.IncludeLimitError):
+                capture.load_include_context(self.root, (('main.typ', source),), **kwargs)
+        context = capture.load_include_context(self.root, (('main.typ', source),), budget='book-v1')
+        self.assertEqual(len(context.sources), 64)
+        self.assertEqual(len(context.occurrences), 64)
+        self.assertEqual(context.budget, 'book-v1')
+        self.assertIs(capture.assert_include_context(context), context)
+        overflow = source + b'#include "part-63.typ"\n'
+        self.put('main.typ', overflow)
+        with self.assertRaises(capture.IncludeLimitError):
+            capture.load_include_context(self.root, (('main.typ', overflow),), budget='book-v1')
+
+    def test_book_budget_captures_dense_book_without_widening_scoped_analysis(self):
+        # Five independently captured 44,001-node chapters exceed the old
+        # aggregate limit while each obeys the unchanged adapter limit.
+        chapter = b'$ x_i $\n' * 4000
+        source = b''.join(f'#include "dense-{index}.typ"\n'.encode() for index in range(5))
+        for index in range(5):
+            self.put(f'dense-{index}.typ', chapter)
+        self.put('main.typ', source)
+        with self.assertRaisesRegex(capture.IncludeLimitError, 'aggregate syntax node'):
+            capture.load_include_context(self.root, (('main.typ', source),))
+        context = capture.load_include_context(self.root, (('main.typ', source),), budget='book-v1')
+        nodes = sum(len(row.tree.nodes) for row in context.sources)
+        self.assertGreater(nodes, 200_000)
+        self.assertLess(nodes, 400_000)
+        self.assertEqual(len(context.edges), 5)
+        self.assertIs(capture.assert_include_context(context), context)
+        # Capture headroom is not permission for a downstream analyzer to
+        # silently exceed its independently documented work limits.
+        import scoped_paragraph_context
+        with self.assertRaisesRegex(scoped_paragraph_context.EvidenceError, 'aggregate byte/node'):
+            scoped_paragraph_context.analyze_scoped_paragraph_context(context)
+        with patch.object(capture, 'BOOK_MAX_CONTEXT_NODES', nodes - 1), \
+             self.assertRaisesRegex(capture.IncludeLimitError, 'aggregate syntax node'):
+            capture.load_include_context(self.root, (('main.typ', source),), budget='book-v1')
+
+    def test_book_budget_retains_shared_byte_and_include_count_ceilings(self):
+        self.put('leaf.typ', b'Leaf.\n')
+        source = b'#include "leaf.typ"\n#include "leaf.typ"\n'
+        self.put('main.typ', source)
+        for constant, boundary in (('MAX_CONTEXT_BYTES', len(source) + len(b'Leaf.\n')),
+                                   ('MAX_INCLUDE_NODES', 2)):
+            with self.subTest(constant=constant):
+                with patch.object(capture, constant, boundary):
+                    context = capture.load_include_context(self.root, (('main.typ', source),), budget='book-v1')
+                    self.assertEqual(len(context.occurrences), 3)
+                with patch.object(capture, constant, boundary - 1), \
+                     self.assertRaises(capture.IncludeLimitError):
+                    capture.load_include_context(self.root, (('main.typ', source),), budget='book-v1')
+
+    def test_selected_budget_is_bound_to_original_issuance(self):
+        self.put('main.typ', b'Root.\n')
+        for selected, replacement in (('standard-v1', 'book-v1'), ('book-v1', 'standard-v1')):
+            context = capture.load_include_context(self.root, (('main.typ', b'Root.\n'),), budget=selected)
+            object.__setattr__(context, 'budget', replacement)
+            with self.subTest(selected=selected), self.assertRaises(capture.IncludeCaptureError):
+                capture.assert_include_context(context)
+            object.__setattr__(context, 'budget', selected)
+            self.assertIs(capture.assert_include_context(context), context)
+
     def test_include_node_bound_counts_unsupported_requests_too(self):
         source = b'#include "missing.typ"\n#include ("dynamic" + ".typ")\n'
         with patch.object(capture, 'MAX_INCLUDE_NODES', 2):
