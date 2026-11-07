@@ -1,0 +1,303 @@
+{
+  "schema": 1,
+  "version": "0.1.0-foundation",
+  "packs": {
+    "core": [
+      "core"
+    ],
+    "pde": [
+      "core",
+      "pde"
+    ]
+  },
+  "rules": [
+    {
+      "id": "core.parenthesized-scripts",
+      "grade": "warning",
+      "source": "My / Mathematical presentation; PDE / Equations / Superscripts and subscripts.",
+      "description": "The linter SHALL report each explicit `^` or `_` math script whose operand is not parenthesized, in real code and included guide examples, except the documented teaching sentence.",
+      "repair": "automatic",
+      "rewrite": "Automatic: wrap the parser's complete unparenthesized script operand span with `(` and `)`, e.g. `X^i` → `X^(i)`, `partial^alpha` → `partial^(alpha)`.",
+      "preconditions": "Preserve operand token tree, math text, delimiter kind and adjacent scripts. Never infer operand extent by regex. Include chains, primes, fractions and Unicode fixtures; reject ambiguous/error nodes. Markdown fixes map only extracted example spans; the exact teaching sentence stays unchanged."
+    },
+    {
+      "id": "core.scoped-function-call",
+      "grade": "error",
+      "source": "Packages / Labels and annotations; PDE / mannot / Dictionary function call rule.",
+      "description": "The linter SHALL report unparenthesized dictionary-function calls on a known scope receiver for `tag`, `tags`, `name`, `names`, `anchor`, `ref`, `node`, `annot`, or `mark`.",
+      "repair": "automatic",
+      "rewrite": "Automatic: `s.tag(args)` → `(s.tag)(args)` for each catalog-listed dictionary field on a known scope receiver, including code and `#`-escaped math/markup.",
+      "preconditions": "Preserve receiver, field, arguments and trivia. Parser recovery is limited to this exact recognized call form with balanced arguments; refuse other parse errors. API resolution is the intended effect."
+    },
+    {
+      "id": "core.scoped-marker-tags",
+      "grade": "warning",
+      "source": "My / PDE book conventions; Packages / Labels and annotations; PDE / mannot / Basic rule.",
+      "description": "Within a known local annotation scope, the linter SHALL report a literal raw global label supplied to mannot `mark(..., tag: ...)`, recommending a scope-generated tag. Documented special external-label cases can suppress this rule.",
+      "repair": "diagnostic-only",
+      "rewrite": "Diagnostic only.",
+      "preconditions": "Changing `<x>` to a scoped tag can break references outside the analyzed graph or external consumers. Do not invent a public-to-local migration or rename tags automatically."
+    },
+    {
+      "id": "core.scoped-anchor-access",
+      "grade": "warning",
+      "source": "PDE / mannot / How to refer to CeTZ anchors; Packages / Labels and annotations.",
+      "description": "In a scoped annotation drawing, the linter SHALL report a raw anchor string matching a known local marker name and anchor direction. It SHALL accept scope node/anchor helpers and unrelated literal drawing-node names.",
+      "repair": "conditional",
+      "rewrite": "Conditional: `\"x.north\"` → `(s.node)(\"x\", \"north\")` inside a known scoped annotation drawing, likewise for the known literal name/direction.",
+      "preconditions": "Unique scope/marker ownership and exact direction suffix required; dotted marker names must be disambiguated by bindings, not split blindly. Preserve marker/direction; intended effect is using the correct scoped anchor. Unknown or ordinary drawing nodes are untouched."
+    },
+    {
+      "id": "core.scoped-reference-access",
+      "grade": "warning",
+      "source": "My / Mentions within a document; PDE / Local equation and figure references.",
+      "description": "The linter SHALL report a known generated scoped tag/name passed directly to a document reference instead of using the corresponding scope's `ref` helper. Stable global `@label` references SHALL remain permitted.",
+      "repair": "conditional",
+      "rewrite": "Conditional: `ref((s.tag)(\"energy\"))` → `(s.ref)(\"energy\")`, retaining any necessary markup `#`.",
+      "preconditions": "Exactly one literal local target argument, no ref options, no shadowed API, same resolved scope. Preserve target and surrounding prose. Other generated-name/ref forms remain diagnostic until an exact supported contract exists."
+    },
+    {
+      "id": "core.local-overlay-api",
+      "grade": "warning",
+      "source": "Packages / Labels and annotations; PDE / mannot / Practical rules.",
+      "description": "The linter SHALL report calls to resolved raw `annot-cetz` in local scopes, recommending `annot-cetz-local` or the scope's `annot` helper. It SHALL preserve supported `mannot-scope` wrappers.",
+      "repair": "diagnostic-only",
+      "rewrite": "Diagnostic only.",
+      "preconditions": "Raw and local annotation APIs can have different target/anchor conventions. No rename without a proven argument/geometry conversion; preserve supported `mannot-scope`."
+    },
+    {
+      "id": "core.annotation-in-display",
+      "grade": "error",
+      "source": "My / PDE book conventions; Packages / Labels and annotations; PDE / mannot / Practical rules.",
+      "description": "The linter SHALL report resolved equation-overlay calls (`annot`, `annot-cetz`, `annot-cetz-local`, or a scope's `annot`) outside a display math ancestor. Annotation code nested inside the marked display SHALL be accepted.",
+      "repair": "diagnostic-only",
+      "rewrite": "Diagnostic only.",
+      "preconditions": "The correct destination display and ordering may be ambiguous; moving a call can change scope or geometry. Do not choose an equation on proximity alone."
+    },
+    {
+      "id": "core.annotation-marker-bounds",
+      "grade": "error",
+      "source": "My / PDE book conventions; Packages / Labels and annotations.",
+      "description": "For statically known overlay targets, the linter SHALL report a target supplied only by a plain scoped tag, with no matching `mark` or applied scope-marker binding in that display. Unknown target production SHALL be skipped rather than declared missing.",
+      "repair": "diagnostic-only",
+      "rewrite": "Diagnostic only.",
+      "preconditions": "Missing bounds do not identify which mathematical expression should be wrapped by `mark`; never invent a target region."
+    },
+    {
+      "id": "core.unique-scope-namespace",
+      "grade": "error",
+      "source": "Packages / Labels and annotations.",
+      "description": "The linter SHALL report duplicate literal explicit scope prefixes in the selected document graph and duplicate literal sibling names under the same known parent scope. Automatically generated scopes SHALL allow repeated local names. Unrelated document graphs SHALL not be compared.",
+      "repair": "diagnostic-only",
+      "rewrite": "Diagnostic only.",
+      "preconditions": "Choosing a new public prefix/name and updating all external consumers requires intent unavailable to the linter. Never append arbitrary suffixes."
+    },
+    {
+      "id": "core.project-ref-arguments",
+      "grade": "error",
+      "source": "My / References between projects; Projects / Mention an existing target.",
+      "description": "The linter SHALL require exactly two positional arguments and no named arguments for resolved `project-ref`: a string project key and a global Typst label. Known strings, reference content, displayed numbers, or scope-generated labels in the second slot SHALL be rejected. Unresolved values SHALL not be guessed.",
+      "repair": "conditional",
+      "rewrite": "Conditional: exactly `project-ref(\"pde\", @energy)` → `project-ref(\"pde\", <energy>)`.",
+      "preconditions": "Only a simple global reference with no supplements/options and exactly two arguments; matching literal project/label must be unique in a configured valid catalog. Preserve project and label identity; intended effect is passing a label rather than rendered reference content. Extra/named args, strings containing numbers, dynamic/scoped targets remain diagnostic; do not drop arguments or guess labels."
+    },
+    {
+      "id": "core.project-ref-catalog-target",
+      "grade": "error",
+      "source": "Projects / Mention an existing target.",
+      "description": "With a configured catalog, the linter SHALL check literal project keys and global labels against that catalog and report unknown projects, missing labels, and entries listed as ambiguous. It SHALL never infer aliases, select duplicate targets, guess pages, or refresh the catalog.",
+      "repair": "diagnostic-only",
+      "rewrite": "Diagnostic only.",
+      "preconditions": "Never replace a missing/ambiguous target with a similarly named result, a page number or a new catalog entry; no catalog refresh or export."
+    },
+    {
+      "id": "core.single-book-show",
+      "grade": "error",
+      "source": "Packages / Book configuration.",
+      "description": "For a configured entrypoint using shared math-book helpers, the linter SHALL require one `apply-math-book` document show application at that entrypoint and report proven missing, duplicate, or included-file applications. Conditional execution that cannot be resolved SHALL be skipped.",
+      "repair": "diagnostic-only",
+      "rewrite": "Diagnostic only.",
+      "preconditions": "Missing title/options or competing ownership cannot be chosen safely from a duplicate count. Do not add/remove document show applications automatically."
+    },
+    {
+      "id": "core.no-duplicate-book-reset",
+      "grade": "error",
+      "source": "Packages / Book configuration.",
+      "description": "On a proven path where `apply-math-book` owns mathematical-block resets, the linter SHALL report a separate application of `apply-math-block-reset`. Explicit `reset-math-blocks: false` SHALL allow caller-owned resets.",
+      "repair": "conditional",
+      "rewrite": "Conditional: remove the standalone zero-argument `#show: apply-math-block-reset` statement.",
+      "preconditions": "Prove the exact shared `apply-math-book` owner enables the same reset behavior on this path. Refuse customized `.with(...)`, conditional ownership, attached directives/comments that would be reassigned, or `reset-math-blocks: false`. Preserve the book owner/options and surrounding text. Intended effect is one reset owner."
+    },
+    {
+      "id": "core.no-set-theme",
+      "grade": "error",
+      "source": "My / PDE book conventions; PDE / theme and dark mode.",
+      "description": "The linter SHALL report `set theme(...)` when `theme` is the known custom palette helper or value rather than a settable Typst element. Theme values applied through `set text` or `set page` SHALL be accepted.",
+      "repair": "diagnostic-only",
+      "rewrite": "Diagnostic only.",
+      "preconditions": "`set theme(fill: ...)` does not identify whether the intended target is page, text, stroke or something else; never guess or delete the setting."
+    },
+    {
+      "id": "core.theme-in-context",
+      "grade": "warning",
+      "source": "Packages / Shared drawing helpers; PDE / theme and dark mode.",
+      "description": "The linter SHALL report a resolved `theme-from-text-fill()` call outside a lexical `context` in a reusable helper. It SHALL check this named API only, without guessing whether arbitrary literal colors are semantic or neutral.",
+      "repair": "conditional",
+      "rewrite": "Conditional: `let mybox(body) = { ... theme-from-text-fill() ... }` → `let mybox(body) = context { ... }`.",
+      "preconditions": "Only a statically known reusable content-producing helper with an explicit block expression and all call sites accepting content; no value-return API, early return, mutation or unknown call site. Preserve body bytes and parameters. Intended effect is contextual palette resolution. Otherwise diagnostic only."
+    },
+    {
+      "id": "pde.import-order",
+      "grade": "warning",
+      "source": "My / PDE book conventions; Packages / Ownership and imports; PDE / the order of import.",
+      "description": "Among present, recognized imports in a PDE content file, the linter SHALL require the relative `Styles/styles.typ` facade before local figure imports, and those before annotation package imports. Unrelated imports SHALL retain their order; absent optional categories SHALL not be required.",
+      "repair": "conditional",
+      "rewrite": "Conditional: stable-sort the contiguous recognized import group as facade, local figures, annotation packages.",
+      "preconditions": "Full static export/binding proof must show no collision, side effect, import dependency or changed resolution. No unrelated import may move or be crossed. Preserve exact statements and unambiguous leading comment attachments; refuse interleaved suppressions/comments whose scope would change. Do not add missing imports or change versions."
+    },
+    {
+      "id": "pde.no-redundant-facade-import",
+      "grade": "warning",
+      "source": "Packages / Ownership and imports.",
+      "description": "Where `Styles/styles.typ` already provides the requested symbols, the linter SHALL report redundant `Styles/mannot_utils.typ` or `Styles/local_tags.typ` imports. A compatibility facade used alone or exporting otherwise unavailable requested symbols SHALL remain accepted.",
+      "repair": "conditional",
+      "rewrite": "Conditional: delete a redundant compatibility import statement.",
+      "preconditions": "Verify all imported names resolve to identical facade exports and module evaluation has no side effects, no alias needed elsewhere and no suppression/comment reassignment. Preserve comments in place only if attachment remains unchanged; otherwise refuse. Wildcard import alone is insufficient evidence."
+    },
+    {
+      "id": "pde.paragraph-marker-gap",
+      "grade": "warning",
+      "source": "My / Paragraphs and reading rhythm, PDE book conventions; PDE / spaceing role(including `#paragraph_tab` role).",
+      "description": "The linter SHALL require a whitespace-only blank source line immediately before a standalone `#paragraph_tab`. Start of file or content-block opening alone SHALL not substitute for that blank line.",
+      "repair": "automatic",
+      "rewrite": "Automatic: insert one newline before a standalone marker when there is no immediately preceding whitespace-only blank source line.",
+      "preconditions": "At file/body start insert a blank line too. Preserve the marker and all prose. If the immediately preceding source line ends in a prose footnote, insert `#parbreak()` then the blank line as one combined repair. Intended effect is the author's chosen paragraph boundary; do not infer a new idea."
+    },
+    {
+      "id": "pde.paragraph-marker-target",
+      "grade": "warning",
+      "source": "My / PDE book conventions; PDE / spaceing role(including `#paragraph_tab` role).",
+      "description": "The linter SHALL report `#paragraph_tab` whose next substantive sibling is a heading or display equation, including markers between consecutive displays. Intervening whitespace and comments SHALL not change that classification.",
+      "repair": "automatic",
+      "rewrite": "Automatic: remove only the standalone marker token/its otherwise empty line before a heading or display.",
+      "preconditions": "Target must be a proven next structural sibling. Keep comments and structural separation, never merge surrounding structural elements or remove prose. It removes unintended indentation/capitalization before nonprose. A marker before ordinary prose is not affected."
+    },
+    {
+      "id": "pde.prose-paragraph-marker",
+      "grade": "warning",
+      "source": "My / Paragraphs and reading rhythm, Completion and verification; PDE / paragraph break.",
+      "description": "At a new prose boundary after existing prose, including boundaries introduced by `block` or `parbreak`, the linter SHALL require `#paragraph_tab` for the new paragraph. Headings, lists, displays, figures, proof/theorem blocks, and document start SHALL not themselves imply an indented prose paragraph.",
+      "repair": "conditional",
+      "rewrite": "Conditional: insert a standalone `#paragraph_tab` on the existing new-prose boundary, with one preceding blank line; for `block` insert inside its content before the prose.",
+      "preconditions": "Boundary already exists in source and is not a display continuation, document start or structural exclusion. Resolve the marker and active paragraph show rule; never invent an import/show rule or infer an idea change. Preserve every original prose byte. Intentional effect: 1.5em indentation and show-rule capitalization of a following lowercase letter. For a preceding prose footnote use `#parbreak()` plus blank line plus marker."
+    },
+    {
+      "id": "pde.continuation-line",
+      "grade": "warning",
+      "source": "My / Paragraphs and reading rhythm.",
+      "description": "Within an ordinary prose run without a new-paragraph marker, the linter SHALL report adjacent prose sentences split across source lines. Structural blocks, display boundaries, list items, raw/code bodies, and explicit new marked paragraphs SHALL be excluded.",
+      "repair": "conditional",
+      "rewrite": "Conditional: replace only the source newline and indentation between the proven adjacent prose sentences with one space.",
+      "preconditions": "Same prose run, unambiguous sentence boundary, no comment, raw text, hard break, list or structural sibling. Preserve punctuation/words/inline content. Do not cross blank lines that already denote paragraphs. Intended effect is continuous source prose; no guessed sentence or abbreviation boundaries."
+    },
+    {
+      "id": "pde.display-continuation-gap",
+      "grade": "warning",
+      "source": "My / Paragraphs and reading rhythm, Completion and verification.",
+      "description": "The linter SHALL report a blank source line between a standalone display's closing delimiter and subsequent unmarked prose in the same content body. Immediate prose on the next source line and explicitly marked new prose paragraphs SHALL remain accepted.",
+      "repair": "automatic",
+      "rewrite": "Automatic: reduce whitespace between a standalone display's closing line (including its attached semantic label) and following unmarked prose to one newline.",
+      "preconditions": "Same content body, only whitespace in gap; no marker, comment, suppression, explicit break or structural element. Preserve prose and equation tokens. Intentional effect is continuation rather than a new paragraph."
+    },
+    {
+      "id": "pde.proof-trailing-gap",
+      "grade": "warning",
+      "source": "My / PDE book conventions; PDE / Equations / Equations blocks / proof.",
+      "description": "After a resolved `proof` content block, the linter SHALL require a blank source line before the next paragraph, equation, heading, or other block in that content body. End of file or end of the containing body SHALL not require a synthetic trailing paragraph.",
+      "repair": "automatic",
+      "rewrite": "Automatic: insert one blank source line after the complete proof call and any attached semantic label, before its next structural sibling.",
+      "preconditions": "A real next sibling must exist. Preserve labels/comments and proof contents; refuse ambiguous attachment. Do not append a synthetic paragraph at body end/EOF. Intended effect is required source separation."
+    },
+    {
+      "id": "pde.footnote-trailing-gap",
+      "grade": "warning",
+      "source": "My / PDE book conventions; PDE / spaceing role(including `#paragraph_tab` role).",
+      "description": "The linter SHALL report a blank source line immediately after a source-line footnote's closing bracket when more content follows, including within math. An explicit paragraph break on the next source line SHALL be accepted in prose. End of file SHALL not require additional content.",
+      "repair": "conditional",
+      "rewrite": "Conditional: in prose insert `#parbreak()` immediately after the footnote-ending source line and before an existing paragraph blank line. Inside math remove only surplus blank lines, leaving one newline.",
+      "preconditions": "In prose preserve the existing intentional paragraph boundary; if next prose lacks its required marker, compose with the marker rule. If a break already exists do nothing. Preserve footnote body and following words. Do not move comments or insert a prose break in math."
+    },
+    {
+      "id": "pde.prose-footnote-punctuation",
+      "grade": "warning",
+      "source": "PDE / Equations / Footnote placement.",
+      "description": "In prose, the linter SHALL require `#footnote[...]` immediately after a comma or period, with no intervening space, newline, or comment. Math footnotes SHALL be classified separately using their enclosing math context.",
+      "repair": "conditional",
+      "rewrite": "Conditional: `text. #footnote[body]` → `text.#footnote[body]` when separator is horizontal whitespace; `text #footnote[body].` → `text.#footnote[body]` when the adjacent following punctuation is a single comma/period.",
+      "preconditions": "Same prose run, exactly one known footnote and no intervening comments, newlines, other calls or punctuation ambiguity. Remove the pre-footnote separator; move only the existing comma/period, never invent punctuation or replace a semicolon. Preserve words/body and punctuation identity; intended effect is source adjacency."
+    },
+    {
+      "id": "pde.aligned-footnote-spacer",
+      "grade": "warning",
+      "source": "PDE / Equations / Footnotes in equation, Footnote placement.",
+      "description": "In a display containing an actual alignment `&` or math line-break `\\` token, the linter SHALL require `#dots_space #footnote[...]` for each equation-level footnote, with only whitespace between the spacer and footnote. Tokens nested in footnote bodies, strings, or comments SHALL not classify the outer display.",
+      "repair": "conditional",
+      "rewrite": "Conditional: insert `#dots_space ` immediately before each equation-level `#footnote[...]` missing it.",
+      "preconditions": "Outer display has actual `&` or math line-break tokens, helper is resolved and in scope. Never infer alignment from physical wrapping or nested footnote content. Preserve formula and footnote body; intended effect is aligned justification spacing."
+    },
+    {
+      "id": "pde.unaligned-footnote-no-spacer",
+      "grade": "warning",
+      "source": "PDE / Equations / Footnotes in equation, Footnote placement.",
+      "description": "In a display with no alignment or math line-break tokens, the linter SHALL forbid `#dots_space` immediately before an equation-level footnote. This includes single-line unaligned displays; physical source wrapping alone SHALL not make a display aligned.",
+      "repair": "automatic",
+      "rewrite": "Automatic: remove the immediately preceding resolved `#dots_space` and its separator before the footnote.",
+      "preconditions": "Proven unaligned display; retain needed surrounding token separation so neighboring expressions cannot merge. Preserve formula/body. Intended effect is removal of the forbidden justification spacer."
+    },
+    {
+      "id": "pde.prose-footnote-no-spacer",
+      "grade": "warning",
+      "source": "My / PDE book conventions; PDE / Equations / Footnote placement.",
+      "description": "In prose, the linter SHALL forbid `#dots_space` before `#footnote[...]`. An inline math fragment elsewhere in the sentence SHALL not turn its prose footnote into an equation-level footnote.",
+      "repair": "automatic",
+      "rewrite": "Automatic: `text.#dots_space #footnote[body]` → `text.#footnote[body]`.",
+      "preconditions": "Remove the spacer and its whitespace only; preserve punctuation/body. For a missing comma/period also apply the punctuation row if eligible, otherwise report unresolved punctuation. Never let this repair alone leave adjacency whitespace behind."
+    },
+    {
+      "id": "pde.standalone-display",
+      "grade": "warning",
+      "source": "My / Mathematical presentation, Paragraphs and reading rhythm; PDE / highlight.",
+      "description": "The linter SHALL report prose sharing a source line with a display math delimiter. A display SHALL stand on its own source line or lines; attached semantic labels and equation-overlay calls within the display SHALL remain permitted. Inline math SHALL not be reclassified as display math.",
+      "repair": "automatic",
+      "rewrite": "Automatic: insert single newlines between adjacent prose and the display boundaries; `Thus $ A=B $ and ...` → `Thus\\n$ A=B $\\nand ...`.",
+      "preconditions": "Parser establishes display math, not inline math. Keep attached semantic labels with the display and overlays inside it. Preserve formula/prose tokens; do not add blank lines or paragraph markers just because a display intervenes."
+    },
+    {
+      "id": "pde.text-only-highlight",
+      "grade": "warning",
+      "source": "My / Mathematical presentation; PDE / highlight.",
+      "description": "The linter SHALL report math inside resolved `highlight` or `highlighted` content, including inline and display equations. Text-only highlights SHALL remain accepted. It SHALL not judge whether prose deserves emphasis.",
+      "repair": "conditional",
+      "rewrite": "Conditional: split a simple content-only `highlight`/`highlighted` call into highlighted nonempty prose segments and unchanged unwrapped math in the same order. Example `#highlight[The term $x^(2)$ matters.]` → `#highlight[The term ]$x^(2)$#highlight[ matters.]`; math-only call → its unchanged math.",
+      "preconditions": "One literal content argument, known supported helper, no options, nested styles, labels, side effects or comments/directives whose scope would change. Keep leading/trailing spaces and equation tokens; subsequent standalone-display rule may add newlines. Intended effect is removing math highlighting while retaining prose emphasis, not identical layout. Complex helper bodies remain diagnostic."
+    },
+    {
+      "id": "pde.theme-cancelmark",
+      "grade": "warning",
+      "source": "My / PDE book conventions (algebraic cancellations).",
+      "description": "In PDE content, the linter SHALL report resolved bare math `cancel(...)` calls and recommend the facade's theme-aware `cancelmark`. Explicit intentional `stroke:` overrides on `cancelmark` SHALL remain permitted.",
+      "repair": "conditional",
+      "rewrite": "Conditional: `cancel(args)` → `cancelmark(args)` in resolved math.",
+      "preconditions": "Facade helper is in scope, supported argument signature is verified, and no shadowing. Preserve all arguments including deliberate `stroke:`/`cross:`. Do not import/migrate dependencies. Intended effect is the shared light/dark default stroke, not a guessed algebraic cancellation pair."
+    },
+    {
+      "id": "pde.flowbox-colored-border",
+      "grade": "warning",
+      "source": "PDE / Equations / Equations blocks / flowbox.",
+      "description": "Inside the resolved `flowbox` implementation, the linter SHALL report a width-only literal `stroke:` on its border, such as `1pt`, without a color. This check SHALL not extend to arbitrary figures or infer the semantic role of colors in other helpers.",
+      "repair": "conditional",
+      "rewrite": "Conditional: `stroke: 1pt` → `stroke: 1pt + theme.rule` (retain the original literal width).",
+      "preconditions": "Inside the resolved flowbox implementation, an existing known lexical-context palette binding exposes `rule`. Use its actual identifier; never introduce a global theme, guess a color or edit arbitrary figure strokes. Preserve border width/body; intended effect is theme-aware border color."
+    }
+  ]
+}

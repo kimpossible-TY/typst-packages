@@ -55,5 +55,13 @@ The design follow-up is reviewed and merged first. Groups 2–7 are authorized i
 - [x] 8.1 Verify original PR #2 is already merged and base this follow-up on current origin/main; preserve existing worktrees.
 - [x] 8.2 Replace historical read-only restrictions, add all 32 repair policies and protected-fix/build-gate capabilities, retaining 15 core + 17 PDE IDs and 18 judgment exclusions.
 - [x] 8.3 Independently review the exact design diff, resolve findings, and pass OpenSpec strict validation and catalog consistency checks; final review confirmed the compiler/publication status and partial-fix policies.
-- [ ] 8.5 Merge the design follow-up after checking the remote head and repository requirements.
+- [x] 8.5 Merge the design follow-up after checking the remote head and repository requirements (PR #3, `b8c8f186`).
 - [ ] 8.4 Branch implementation from merged main, start a tested foundation and draft PR, and report implemented versus pending coverage without deploying or mass-editing consumers.
+
+
+## 9. Initial implementation foundation (partial, not a working linter)
+
+- [x] 9.1 Add shared Python launchers, shipped 32-rule metadata/repair catalog, strict config and read-only selection/catalog reporting. All real runs explicitly fail unsupported analysis with exit 2.
+- [x] 9.2 Add tested pure diagnostic ordering/path-ignore and immutable byte-edit/convergence primitives. Do not treat these as syntax analysis, actual repairs or protected filesystem writes.
+- [x] 9.3 Verify 22 isolated foundation tests, including compiler non-invocation and previous-output preservation; document 0 implemented rules and remaining parser, transaction, snapshot and route work.
+- [x] 9.4 Correct the design's factual capitalization claim after an isolated Typst 0.15.1 characterization: current text-utils indents but does not uppercase; preserve source bytes and record the compatibility gap without changing packages or consumers.
