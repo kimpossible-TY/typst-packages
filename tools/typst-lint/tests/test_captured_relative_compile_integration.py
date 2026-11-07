@@ -421,29 +421,39 @@ class CapturedRelativeCompileIntegrationTests(unittest.TestCase):
                 f = self.fixture()
                 path = f.root / 'values.typ' if role == 'dependency' else getattr(f, role)
                 marker = f.base / 'owned-child-mutated'
-                behavior = (f'live=pathlib.Path({str(path)!r})\n'
-                    'mode=live.stat().st_mode & 0o777\n'
-                    'live.chmod(mode | 0o200)\n'
-                    'live.write_bytes(live.read_bytes() + b"\\n")\n'
-                    'live.chmod(mode)\n'
-                    f'pathlib.Path({str(marker)!r}).write_text(str(os.getpid()))\n'
+                behavior = (f'pathlib.Path({str(marker)!r}).write_text(str(os.getpid()))\n'
+                    f'fd=os.open({str(path)!r}, os.O_WRONLY | os.O_APPEND)\n'
+                    'assert os.write(fd, b"\\n") == 1\n'
+                    'os.close(fd)\n'
                     'time.sleep(30)')
                 f.program(behavior)
+                # Capture an owner-writable baseline, so the child need only
+                # append one byte and cannot be killed between chmod/write.
+                path.chmod(stat.S_IMODE(path.stat().st_mode) | 0o200)
                 with f.context() as fix, f.resources(korean=True):
                     snapshot = fix.committed_graph_snapshot()
                     summary = fix.summary
                     before = path.read_bytes()
+                    before_stat = path.stat()
                     with self.assertRaises(runtime.CompileSafetyError) as caught:
                         self.compile(fix, snapshot, profile=KOREAN, deadline_seconds=5)
                     report = caught.exception.report
                     self.assertTrue(marker.is_file(), 'child never reached mutation handshake')
+                    child_pid = int(marker.read_text())
+                    self.assertGreater(child_pid, 0)
                     self.assertEqual(path.read_bytes(), before + b'\n')
+                    after_stat = path.stat()
+                    self.assertEqual((after_stat.st_dev, after_stat.st_ino, after_stat.st_mode),
+                                     (before_stat.st_dev, before_stat.st_ino, before_stat.st_mode))
                     self.assertEqual(report.safety_gate, 'refused')
                     self.assertEqual(report.compiler_status, -signal.SIGKILL)
                     self.assertEqual(report.attempts[-1].purpose, 'compile')
+                    self.assertTrue(report.attempts[-1].started)
                     self.assertEqual(report.attempts[-1].lifecycle, 'signaled')
                     self.assertEqual(report.attempts[-1].termination_reason, 'safety refusal')
                     self.assertIsNone(report.compiler_failure, 'drift was discovered only after timeout')
+                    with self.assertRaises(ChildProcessError):
+                        os.waitpid(child_pid, os.WNOHANG)
                     self.assertEqual(len(report.resource_report.fonts), 1)
                     self.assert_cleaned(report)
                     self.assertIs(fix.summary, summary)
