@@ -1,4 +1,4 @@
-"""Partial syntax-backed lint analysis; no active writer or compiler dispatcher."""
+"""Partial read-only analysis and an explicit offline closed-core fix profile."""
 from __future__ import annotations
 
 import argparse
@@ -483,15 +483,23 @@ def report(root, mode, *, package_path=None, _verify=True, _analysis_observer=No
 
 
 def main(argv=None, *, gate=False):
-    parser = argparse.ArgumentParser(description=__doc__)
+    arguments = list(sys.argv[1:] if argv is None else argv)
+    # Import only at dispatch: the trusted bridge imports shared definitions
+    # from this module. Existing read-only reports retain their old behavior.
+    from offline_cli import requested, main as offline_main
+    if requested(arguments):
+        return offline_main(arguments, gate=gate)
+    parser = argparse.ArgumentParser(description=__doc__, epilog=None if gate else
+        'Explicit offline routes: fix --profile closed-core-v1 --offline-exclusive --target main.typ; '
+        'journal-status; recover --offline-exclusive --target main.typ --journal-id ID. '
+        'Use COMMAND --help for the offline route options.')
     parser.add_argument('--version', action='version', version=VERSION)
-    parser.add_argument('command', choices=['compile'] if gate else ['check', 'fix'])
+    parser.add_argument('command', choices=['compile'] if gate else ['check', 'fix', 'journal-status', 'recover'])
     parser.add_argument('--root', required=True, type=Path)
     parser.add_argument('--format', choices=['json', 'text'], default='text')
     parser.add_argument('--package-path', type=Path, help='Explicit Typst package directory for bounded read-only provenance')
     if not gate:
         parser.add_argument('--dry-run', action='store_true')
-    arguments = list(sys.argv[1:] if argv is None else argv)
     if gate and '--' in arguments:
         arguments = arguments[:arguments.index('--')]  # Never execute the remaining compiler argv.
     args = parser.parse_args(arguments)

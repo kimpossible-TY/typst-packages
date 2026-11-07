@@ -5,9 +5,11 @@ This is the implementation draft for the reviewed
 **This is not a production linter or build gate.** Selected script, reference,
 paragraph, display, highlight, theme and scoped-helper rules produce diagnostics and partial in-memory repair
 plans from real Typst parsing and narrowly proven contexts.
-All 33 rules now have bounded backends; full rule acceptance, protected runtime writes and compilation remain incomplete.
-Every real CLI run still returns **2**, including an empty selection. No source
-is changed and no compiler is invoked. Help/version return 0.
+All 33 rules have bounded backends; full rule acceptance and compilation remain incomplete.
+Ordinary analysis/fix/compile modes return **2**, including an empty selection,
+without changing source or invoking a compiler. A separate explicit offline
+closed-core profile can apply a narrowly proven script repair. It is not an
+all-project writer. Help/version return 0.
 
 ## Build the official syntax adapter
 
@@ -50,7 +52,7 @@ safely rechecked before parsing; no truncated input is accepted. See
 /path/to/typst-packages/tools/typst-lint/typst-style compile --root /path/to/project --format json -- main.typ output.pdf
 ```
 
-All modes are currently read-only. Reports may include AST-backed proposed edits
+The ordinary modes above remain read-only. Reports may include AST-backed proposed edits
 with baseline hashes, but label them `partial-not-applicable-transaction`.
 They are **not** permission or proof that the complete protected write contract
 has passed. Incomplete required analysis prevents application. The `compile`
@@ -117,12 +119,12 @@ that is its package-contract result, not a facade capability or per-rule
 coverage claim. No local file is promoted merely by its spelling. See
 [FACADE_PROVENANCE_CONTRACT.md](FACADE_PROVENANCE_CONTRACT.md).
 
-## Internal protected core fixture bridge
+## Explicit offline closed-core profile
 
 `protected_fix.py` connects actual parser/script analysis to the existing
-protected transaction for a deliberately closed input language. It is an
-internal API, not a public launcher route or an all-project writer. Ordinary
-`check`, dry-run, `fix` and `compile` remain read-only with exit 2.
+protected transaction for a deliberately closed input language. The separately
+selected CLI profile below exposes that engine. Ordinary `check`, dry-run,
+`fix` without the profile, and `compile` remain read-only with exit 2.
 
 The profile requires one literal `.typ` target in an explicit core-only config,
 with no broader globs, excludes, ignores, packages or catalogs. An optional
@@ -133,9 +135,9 @@ actual script rule executes. Each of the other 14 core rules has an explicit
 source-derived inapplicability proof, re-established for every candidate. This
 does not change the global 33-rule PARTIAL audit status.
 
-The caller must supply a genuine offline-exclusive assertion and an existing
-private journal directory. The API never infers editor safety or creates that
-assertion. Config and the exact reviewed full rule catalog are immutable
+The caller must explicitly assert offline exclusivity for the whole operation.
+The engine never infers editor safety or creates that assertion itself. The CLI
+requires the flag below and safely prepares its one fixed private journal store. Config and the exact reviewed full rule catalog are immutable
 transaction evidence; callbacks parse their retained bytes without rereading
 inputs. All 15 required core IDs are fixed in implementation. The transaction's
 actual one-pass script repair must agree with an independent source-origin
@@ -151,6 +153,42 @@ compiler snapshot. No user project, installed package or build route is enabled.
 See [CLOSED_CORE_CONTRACT.md](CLOSED_CORE_CONTRACT.md),
 [PROTECTED_CORE_CONTRACT.md](PROTECTED_CORE_CONTRACT.md) and
 [TRANSACTION_BOUNDS_CONTRACT.md](TRANSACTION_BOUNDS_CONTRACT.md).
+
+### Explicit commands and recovery
+
+For a document containing only the admitted literal prose/math language, use an
+explicit config such as `rule-set = "core"` and `include = ["main.typ"]`.
+Only after all editors, watchers and other writers are stopped for the entire
+operation, select both opt-ins:
+
+```sh
+tools/typst-lint/typst-lint fix --root /absolute/project --profile closed-core-v1 --offline-exclusive --target main.typ --format json
+tools/typst-lint/typst-lint journal-status --root /absolute/project --format json
+tools/typst-lint/typst-lint recover --root /absolute/project --offline-exclusive --target main.typ --journal-id JOURNAL_ID --format json
+```
+
+The fixed store is the canonical project's sibling `.typst-lint-journals`, with
+a root-specific namespace. There is no option, config key or environment override.
+Fix may create private storage under the root lock; existing unsafe permissions,
+symlinks, unwritable parents or cross-device layouts refuse without chmod or a
+fallback store. Status creates nothing, reads no current source/config and does
+not assert editor safety. An absent store is an observation, not proof that no
+historical transaction existed.
+
+Keep the store and original canonical root location. Deleted/forged stores,
+relocated roots and journals created by internal callers elsewhere cannot be
+discovered by this route. Incomplete or corrupt journals block new fixes. Recover
+only the named journal with its explicit target, even if current config is gone.
+Later edits remain preserved and unresolved; there is no force, conflict
+acknowledgment or migration switch. Recovery never compiles.
+
+Successful fix/no-op, complete inventory or completed recovery returns 0.
+Invalid arguments/profile/config/grammar/parser return 2. Unsafe storage, stale
+identities, ownership/convergence disagreement, write failure, pending/corrupt
+journals or unresolved recovery return 3. Status 1 remains reserved for active
+findings; this profile requires a clean final candidate. Reports distinguish its
+15-rule per-input proof from the global 33 PARTIAL rules. New options are rejected
+with check, dry-run and compile. See [OFFLINE_CLI_CONTRACT.md](OFFLINE_CLI_CONTRACT.md).
 
 ## Consumer configuration
 
@@ -303,13 +341,13 @@ Column-zero code spans with three or more backticks are also conservatively
 refused as ambiguous fences. This is not a general CommonMark parser or full
 documentation acceptance.
 See [MARKDOWN_SCRIPTS_CONTRACT.md](MARKDOWN_SCRIPTS_CONTRACT.md).
-The actual CLI remains read-only with exit 2 and never invokes the compiler.
+These Markdown CLI paths remain read-only with exit 2 and never invoke the compiler.
 
 
 ## Protected offline transaction component
 
-`transactions.py` is an independently tested storage component, **not connected
-to CLI writes**. Its trusted-engine API requires an explicit assertion that
+`transactions.py` is an independently tested storage component, connected only
+to the explicit closed-core CLI profile above. Its trusted-engine API requires an explicit assertion that
 editors, watchers and every other writer are stopped throughout the transaction.
 It cannot inspect unsaved buffers or lock arbitrary editors. A root directory
 lock serializes this library's runs; fingerprint checks narrow races but are not
@@ -349,7 +387,7 @@ Replacement timestamps intentionally change. Staged bytes and metadata are check
 again after content writes and fsync, including before recovery replacement.
 The original snapshot is a baseline, not a compiler-ready snapshot; validated
 candidate sources describe postimages. Compiler resource capture, output
-publication, editor version integration and production CLI wiring remain absent.
+publication, editor version integration and general project writer coverage remain absent.
 
 ## Bounded prose footnote boundaries
 
@@ -571,8 +609,9 @@ candidate parser, coverage-retention and idempotence checks. See the
   light/dark renders preserve width, geometry and body content. See
   [FLOWBOX_CONTRACT.md](FLOWBOX_CONTRACT.md).
 
-These are partial implementations, not 33 fully accepted rules. Production
-writes, compiler execution and all-project rollout remain disabled.
+These are partial implementations, not 33 fully accepted rules. Their ordinary
+CLI plans remain unapplied; the separate closed-core profile admits only its
+strict input language. Compiler execution and all-project rollout remain disabled.
 
 ## Multi-pass proposal evidence
 

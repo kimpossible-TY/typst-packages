@@ -1,4 +1,6 @@
-"""Offline-only protected file transactions; deliberately NOT wired to the CLI.
+"""Offline-only protected transactions, used by the explicit closed-core CLI profile.
+
+Ordinary CLI routes remain read-only and cannot authorize this writer.
 
 This is a trusted-engine API, not a way for a caller's JSON/boolean to certify
 analysis. ``validate`` invokes an in-process analyzer over immutable graph views
@@ -53,6 +55,10 @@ class TransactionError(SafetyError):
     """A protected-source precondition failed; no compilation is authorized."""
 
 
+class SourceEncodingError(TransactionError):
+    """An initial UTF-8 source capture cannot be admitted as profile input."""
+
+
 @dataclass(frozen=True)
 class ReadLimits:
     """Byte ceilings, including on revalidation and explicit crash recovery.
@@ -60,7 +66,9 @@ class ReadLimits:
     Capture totals include source/evidence bytes and extended-attribute names
     (including their NUL terminators) and values. They apply to each graph view,
     not cumulatively to repeated reads of the same view. Journal totals apply
-    to the manifest plus events of each individual journal. Zero permits only
+    to the manifest plus events of each individual journal. Directory enumeration
+    separately caps each namespace/journal count without first allocating an
+    unbounded list. Zero permits only
     empty content. These bounds are not a total process-memory/time guarantee.
     """
     max_source_bytes: int = 1024 * 1024
@@ -69,6 +77,7 @@ class ReadLimits:
     max_metadata_bytes: int = 256 * 1024
     max_journal_bytes: int = 64 * 1024 * 1024
     max_journal_total_bytes: int = 128 * 1024 * 1024
+    max_directory_entries: int = 100_000
 
     def __post_init__(self):
         for name, value in vars(self).items():
@@ -439,7 +448,7 @@ def _read(path: Path, *, missing: bool = False, utf8: bool = False,
                 try:
                     data.decode('utf-8')
                 except UnicodeError as error:
-                    raise TransactionError(f'Non-UTF-8 source: {path}') from error
+                    raise SourceEncodingError(f'Non-UTF-8 source: {path}') from error
             fp = Fingerprint(before.st_dev, before.st_ino,
                              stat.S_IMODE(before.st_mode), before.st_uid, before.st_gid, _hash(data), _xattr_hash(attributes))
             return _File(path, data, fp, parent, (before.st_mtime_ns, before.st_ctime_ns), attributes)
@@ -488,14 +497,251 @@ def _private_directory(fd: int, path: Path, *,
     _plain_metadata(fd, path, max_bytes=max_bytes)
 
 
-class ProtectedTransaction:
+@dataclass(frozen=True)
+class JournalEntry:
+    journal: str
+    status: str
+    error: str | None = None
+    targets: tuple[str, ...] = ()
+
+
+class _JournalReader:
+    """One schema-1 bounded reader shared by transactions and read-only status."""
+
+    @property
+    def limits(self) -> ReadLimits:
+        return self._limits
+
+    def _journal_names(self, fd: int) -> list[str]:
+        names = []
+        with os.scandir(fd) as entries:
+            for entry in entries:
+                _fail(len(names) < self.limits.max_directory_entries,
+                      'Journal directory entry limit exceeded')
+                names.append(entry.name)
+        return names
+
+    def _load_json(self, directory_fd: int, name: str, *, budget: _ReadBudget | None = None) -> object:
+        budget = _ReadBudget(self.limits.max_journal_total_bytes) if budget is None else budget
+        fd = os.open(name, os.O_RDONLY | os.O_NOFOLLOW | os.O_NONBLOCK, dir_fd=directory_fd)
+        try:
+            s = os.fstat(fd)
+            _fail(stat.S_ISREG(s.st_mode) and s.st_nlink == 1 and s.st_uid == os.geteuid()
+                  and stat.S_IMODE(s.st_mode) & 0o077 == 0, f'Unsafe journal file: {name}')
+            data = _bounded_bytes(fd, min(self.limits.max_journal_bytes, budget.remaining), name, before=s)
+            named = os.stat(name, dir_fd=directory_fd, follow_symlinks=False)
+            _fail(_stable(s) == _stable(os.fstat(fd)) == _stable(named), f'Journal changed while reading: {name}')
+            budget.consume(len(data), name)
+            def unique(pairs):
+                result = {}
+                for key, value in pairs:
+                    _fail(key not in result, f'Duplicate JSON key in journal: {name}')
+                    result[key] = value
+                return result
+            try:
+                return json.loads(data, object_pairs_hook=unique)
+            except TransactionError:
+                raise
+            except (ValueError, RecursionError) as error:
+                raise TransactionError(f'Malformed journal JSON: {name}: {error}') from error
+        finally:
+            os.close(fd)
+
+    def _open_journal(self, journal: str, *, with_identity: bool = False):
+        _fail(isinstance(journal, str) and re.fullmatch('[0-9a-f]{32}', journal) is not None,
+              'Invalid transaction journal ID')
+        fd = os.open(journal, os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW, dir_fd=self._ns_fd)
+        try:
+            before = os.fstat(fd)
+            _private_directory(fd, self._namespace / journal, max_bytes=self.limits.max_metadata_bytes)
+            _fail(before.st_dev == self._store_identity[0],
+                  'Journal must be on the source filesystem')
+            for name in self._journal_names(fd):
+                _fail(name == 'manifest.json' or re.fullmatch(r'event-[0-9]{8}\.json', name)
+                      or re.fullmatch(r'(stage-[0-9]+|restore-[0-9a-f]{32})\.bin', name),
+                      f'Unknown journal artifact: {journal}/{name}')
+                s = os.stat(name, dir_fd=fd, follow_symlinks=False)
+                _fail(stat.S_ISREG(s.st_mode) and s.st_nlink == 1 and s.st_uid == os.geteuid(),
+                      f'Unsafe journal artifact: {journal}/{name}')
+            self._journal_unchanged(fd, journal, before)
+            return (fd, before) if with_identity else fd
+        except BaseException:
+            os.close(fd)
+            raise
+
+    def _journal_unchanged(self, fd: int, journal: str, before: os.stat_result) -> None:
+        named = os.stat(journal, dir_fd=self._ns_fd, follow_symlinks=False)
+        _fail(_stable(before) == _stable(os.fstat(fd)) == _stable(named),
+              f'Journal directory changed while reading: {journal}')
+
+    def _load_manifest(self, fd: int, *, budget: _ReadBudget | None = None) -> dict:
+        value = self._load_json(fd, 'manifest.json', budget=budget)
+        _fail(isinstance(value, dict) and set(value) == {'schema', 'root', 'root_identity', 'files', 'evidence'}
+              and value['schema'] == 1 and value['root'] == str(self.root)
+              and value['root_identity'] == list(self._root_identity),
+              'Journal belongs to a different root or has an invalid schema')
+        _fail(type(value['files']) is list and bool(value['files'])
+              and type(value['evidence']) is list, 'Invalid journal manifest entries')
+        paths = set()
+        before_budget = _ReadBudget(self.limits.max_capture_bytes)
+        after_budget = _ReadBudget(self.limits.max_capture_bytes)
+        for index, entry in enumerate(value['files']):
+            _fail(type(entry) is dict and set(entry) == {'path', 'before', 'after', 'fingerprint', 'parent', 'stage', 'xattrs'},
+                  'Invalid journal source entry')
+            path = _relative(entry['path'])
+            _fail(path not in paths and Path(path).suffix in ('.typ', '.md'), 'Invalid or duplicate journal source')
+            paths.add(path)
+            _fail(entry['stage'] == f'stage-{index}.bin', 'Invalid journal stage path')
+            fp = _fp_load(entry['fingerprint'])
+            _fail(fp.uid == os.geteuid() and fp.mode <= 0o777
+                  and fp.device == self._store_identity[0], 'Unsafe journal source ownership/mode/device')
+            _fail(type(entry['parent']) is list and len(entry['parent']) == 2
+                  and all(type(n) is int and n >= 0 for n in entry['parent']),
+                  'Invalid journal parent identity')
+            _fail(type(entry['xattrs']) is list, 'Invalid journal metadata')
+            attrs = []
+            metadata_remaining = min(self.limits.max_metadata_bytes,
+                                     before_budget.remaining, after_budget.remaining)
+            for pair in entry['xattrs']:
+                _fail(type(pair) is list and len(pair) == 2 and isinstance(pair[0], str)
+                      and bool(pair[0]) and '\x00' not in pair[0], 'Invalid journal metadata entry')
+                metadata_remaining -= len(os.fsencode(pair[0])) + 1
+                _fail(metadata_remaining >= 0, 'Journal metadata byte limit exceeded')
+                attribute = _decode(pair[1], maximum=metadata_remaining)
+                metadata_remaining -= len(attribute)
+                attrs.append((pair[0], attribute))
+            _fail(attrs == sorted(set(attrs)) and len({name for name, _ in attrs}) == len(attrs)
+                  and _xattr_hash(tuple(attrs)) == fp.metadata_sha256, 'Invalid journal metadata digest')
+            metadata_size = _metadata_size(tuple(attrs))
+            before_budget.consume(metadata_size, path)
+            after_budget.consume(metadata_size, path)
+            before = _decode(entry['before'], maximum=min(self.limits.max_source_bytes, before_budget.remaining))
+            after = _decode(entry['after'], maximum=min(self.limits.max_source_bytes, after_budget.remaining))
+            before_budget.consume(len(before), path)
+            after_budget.consume(len(after), path)
+            _fail(_hash(before) == fp.sha256 and before != after, 'Invalid original journal bytes')
+            try:
+                before.decode('utf-8')
+                after.decode('utf-8')
+            except UnicodeError as error:
+                raise TransactionError('Invalid UTF-8 journal source') from error
+            _fail(before.startswith(b'\xef\xbb\xbf') == after.startswith(b'\xef\xbb\xbf'),
+                  'Journal changes source BOM')
+        evidence_paths = set()
+        for entry in value['evidence']:
+            _fail(type(entry) is dict and set(entry) == {'path', 'bytes', 'fingerprint'},
+                  'Invalid journal evidence entry')
+            path = _absolute(entry['path'])
+            _fail(str(path) not in evidence_paths, 'Duplicate journal evidence')
+            evidence_paths.add(str(path))
+            if entry['bytes'] is None:
+                _fail(entry['fingerprint'] is None, 'Malformed absent evidence')
+            else:
+                content = _decode(entry['bytes'], maximum=min(self.limits.max_evidence_bytes,
+                                                            before_budget.remaining, after_budget.remaining))
+                before_budget.consume(len(content), path)
+                after_budget.consume(len(content), path)
+                _fail(_hash(content) == _fp_load(entry['fingerprint']).sha256,
+                      'Invalid journal evidence bytes')
+        return value
+
+    def _events(self, fd: int, manifest: dict, *, budget: _ReadBudget | None = None) -> list[dict]:
+        budget = _ReadBudget(self.limits.max_journal_total_bytes) if budget is None else budget
+        names = sorted(n for n in self._journal_names(fd) if n.startswith('event-'))
+        _fail(names == [f'event-{i:08d}.json' for i in range(len(names))], 'Noncontiguous journal events')
+        events = []
+        entries = {e['path']: e for e in manifest['files']}
+        paths = set(entries)
+        terminal = False
+        applied = set()
+        for name in names:
+            event = self._load_json(fd, name, budget=budget)
+            _fail(isinstance(event, dict) and isinstance(event.get('kind'), str),
+                  'Invalid journal event sequence')
+            kind = event['kind']
+            _fail(not terminal or kind == 'recovery_required', 'Events follow completed journal')
+            if kind in ('staged', 'replace_intent', 'applied', 'restore_intent', 'restored'):
+                _fail(set(event) == {'kind', 'path', 'fingerprint'} and event['path'] in paths,
+                      'Invalid journal progress path')
+                fp = _fp_load(event['fingerprint'])
+                original = _fp_load(entries[event['path']]['fingerprint'])
+                content = entries[event['path']]['before' if kind in ('restore_intent', 'restored') else 'after']
+                _fail(fp.sha256 == _hash(_decode(content, maximum=self.limits.max_source_bytes))
+                      and (fp.device, fp.mode, fp.uid, fp.gid, fp.metadata_sha256) ==
+                      (original.device, original.mode, original.uid, original.gid, original.metadata_sha256),
+                      'Progress fingerprint disagrees with immutable manifest')
+                if kind == 'applied':
+                    applied.add(event['path'])
+            elif kind == 'recovery_required':
+                _fail(set(event) == {'kind'}, 'Invalid recovery-required event')
+                terminal = False
+            elif kind in ('committed', 'recovered'):
+                _fail(set(event) == {'kind'}, 'Invalid journal completion')
+                _fail(kind != 'committed' or applied == paths, 'Commit lacks complete per-file progress')
+                terminal = True
+            else:
+                _fail(False, 'Unknown journal event kind')
+            events.append(event)
+        return events
+
+    def _read_journal(self, journal: str):
+        """Open, fully validate and return a live journal fd plus bounded data.
+
+        All malformed structure is a typed storage failure, including JSON values
+        that are the wrong kind for a nested schema field. The successful caller
+        owns the descriptor; failures always close it here.
+        """
+        fd, before = self._open_journal(journal, with_identity=True)
+        try:
+            budget = _ReadBudget(self.limits.max_journal_total_bytes)
+            manifest = self._load_manifest(fd, budget=budget)
+            events = self._events(fd, manifest, budget=budget)
+            self._journal_unchanged(fd, journal, before)
+            return fd, manifest, events, budget
+        except BaseException as error:
+            os.close(fd)
+            if isinstance(error, TransactionError):
+                raise
+            if isinstance(error, (ValueError, TypeError, KeyError, RecursionError)):
+                raise TransactionError(f'Malformed journal structure: {journal}: {error}') from error
+            raise
+
+    def _journal_entries(self) -> tuple[JournalEntry, ...]:
+        entries = []
+        namespace_before = os.fstat(self._ns_fd)
+        for journal in sorted(self._journal_names(self._ns_fd)):
+            try:
+                fd, manifest, events, _ = self._read_journal(journal)
+                try:
+                    status = (events[-1]['kind'] if events and
+                              events[-1]['kind'] in ('committed', 'recovered') else 'incomplete')
+                    entries.append(JournalEntry(journal, status,
+                                                targets=tuple(e['path'] for e in manifest['files'])))
+                finally:
+                    os.close(fd)
+            except (OSError, ValueError, TypeError, KeyError, RecursionError) as error:
+                # Corrupt or interrupted journals fail closed, never disappear.
+                entries.append(JournalEntry(journal, 'unreadable-or-corrupt',
+                                            f'{type(error).__name__}: {error}'))
+        _fail(_stable(namespace_before) == _stable(os.fstat(self._ns_fd)),
+              'Journal namespace changed while reading')
+        return tuple(entries)
+
+    def _pending(self) -> tuple[str, ...]:
+        return tuple(entry.journal for entry in self._journal_entries()
+                     if entry.status not in ('committed', 'recovered'))
+
+
+class ProtectedTransaction(_JournalReader):
     """Hold root lock and offline assertion from baseline through handoff.
 
     The explicit allowlist is already filtered by the trusted selection engine;
     this module does not infer excludes, generated files, or packages. Evidence
     must enumerate every config/dependency/resource on which analysis depends.
-    Journal storage must be an existing canonical owner-only directory outside
-    the root, on the same filesystem as every replacement. Unsupported platforms
+    Journal storage must be a canonical owner-only directory outside
+    the root, on the same filesystem as every replacement. It must exist unless
+    ``create_journal_directory=True`` explicitly permits creating only that directory
+    under the root lock and genuine offline assertion. Unsupported platforms
     and cross-device layouts fail rather than weakening the protocol. Sources
     must be owned by the effective user, with a group this user may preserve.
     Normal transaction targets must have the owner-write mode bit set; an
@@ -513,8 +759,14 @@ class ProtectedTransaction:
     def __init__(self, root: Path, targets, *, journal_directory: Path,
                  evidence=(), lease: OfflineExclusive | None = None,
                  recovery_only: bool = False,
+                 create_journal_directory: bool = False,
+                 require_existing_namespace: bool = False,
                  limits: ReadLimits = DEFAULT_READ_LIMITS,
                  fault: Callable[[str, str | None], None] | None = None):
+        _fail(type(create_journal_directory) is bool, 'Journal creation opt-in must be a boolean')
+        _fail(type(require_existing_namespace) is bool, 'Existing namespace requirement must be a boolean')
+        _fail(not (create_journal_directory and require_existing_namespace),
+              'Existing namespace requirement cannot create journal storage')
         _fail(type(limits) is ReadLimits, 'Explicit immutable ReadLimits required')
         # Recheck fields even if a caller bypassed the frozen dataclass API.
         limits.__post_init__()
@@ -539,6 +791,8 @@ class ProtectedTransaction:
               'Transaction storage cannot be an analysis input')
         self.lease = lease
         self.recovery_only = recovery_only
+        self.create_journal_directory = create_journal_directory
+        self.require_existing_namespace = require_existing_namespace
         self.fault = fault
         self._fds: list[int] = []
         self._owner = object()
@@ -570,7 +824,7 @@ class ProtectedTransaction:
         _fail(os.name == 'posix' and fcntl is not None
               and hasattr(os, 'O_NOFOLLOW') and hasattr(os, 'O_DIRECTORY') and hasattr(os, 'fchown')
               and os.open in os.supports_dir_fd and os.stat in os.supports_dir_fd
-              and os.rename in os.supports_dir_fd,
+              and os.rename in os.supports_dir_fd and os.scandir in os.supports_fd,
               'Protected transactions require supported POSIX dirfd, nofollow and flock primitives')
         try:
             self._root_fd = _directory(self.root)
@@ -580,24 +834,28 @@ class ProtectedTransaction:
             except OSError as error:
                 raise TransactionError(f'Root lock unavailable: {self.root}: {error}') from error
             self._root_identity = _identity(os.fstat(self._root_fd))
-            self._store_fd = _directory(self.store)
+            self._store_fd = self._open_store()
             self._fds.append(self._store_fd)
             _private_directory(self._store_fd, self.store, max_bytes=self.limits.max_metadata_bytes)
             self._store_identity = _identity(os.fstat(self._store_fd))
             _fail(self._root_identity[0] == self._store_identity[0],
                   'Journal storage must be on the source filesystem')
-            try:
-                os.mkdir(self._namespace_name, 0o700, dir_fd=self._store_fd)
-                os.fsync(self._store_fd)
-            except FileExistsError:
-                pass
+            if not self.require_existing_namespace:
+                try:
+                    os.mkdir(self._namespace_name, 0o700, dir_fd=self._store_fd)
+                    os.fsync(self._store_fd)
+                except FileExistsError:
+                    pass
             self._ns_fd = os.open(self._namespace_name,
                                   os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW,
                                   dir_fd=self._store_fd)
             self._fds.append(self._ns_fd)
             _private_directory(self._ns_fd, self._namespace, max_bytes=self.limits.max_metadata_bytes)
             self._namespace_identity = _identity(os.fstat(self._ns_fd))
+            _fail(self._namespace_identity[0] == self._store_identity[0],
+                  'Journal namespace must be on the source filesystem')
             self._active = True
+            self._check_active()
             self.pending = self._pending()
             if self.pending and not self.recovery_only:
                 raise RecoveryRequired(self.pending)
@@ -620,6 +878,57 @@ class ProtectedTransaction:
         except BaseException:
             self.__exit__(None, None, None)
             raise
+
+    def _open_store(self) -> int:
+        if not self.create_journal_directory:
+            return _directory(self.store)
+        # The caller is already holding the cooperating root lock and has a
+        # genuine operator lease. Never create ancestors, chmod an existing
+        # store, follow a symlink, or select a fallback location.
+        parent_fd = _directory(self.store.parent)
+        try:
+            parent_identity = _identity(os.fstat(parent_fd))
+            _fail(parent_identity[0] == self._root_identity[0],
+                  'Journal storage parent must be on the source filesystem')
+            self._check_directory_identity(self.root, self._root_identity)
+            self._check_directory_identity(self.store.parent, parent_identity)
+            try:
+                os.mkdir(self.store.name, 0o700, dir_fd=parent_fd)
+                created = True
+            except FileExistsError:
+                created = False
+            named = os.stat(self.store.name, dir_fd=parent_fd, follow_symlinks=False)
+            _fail(not created or stat.S_IMODE(named.st_mode) == 0o700,
+                  f'Created journal storage must have mode 0700: {self.store}')
+            fd = os.open(self.store.name, os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW,
+                         dir_fd=parent_fd)
+            try:
+                _fail(_stable(named) == _stable(os.fstat(fd)),
+                      f'Journal storage identity changed while opening: {self.store}')
+                _private_directory(fd, self.store, max_bytes=self.limits.max_metadata_bytes)
+                _fail(_identity(os.fstat(fd))[0] == self._root_identity[0],
+                      'Journal storage must be on the source filesystem')
+                if created:
+                    self._sync(parent_fd, 'store_parent_fsync', str(self.store))
+                current = os.stat(self.store.name, dir_fd=parent_fd, follow_symlinks=False)
+                _fail(_stable(named) == _stable(os.fstat(fd)) == _stable(current),
+                      f'Journal storage identity changed while opening: {self.store}')
+                self._check_directory_identity(self.root, self._root_identity)
+                self._check_directory_identity(self.store.parent, parent_identity)
+                return fd
+            except BaseException:
+                os.close(fd)
+                raise
+        finally:
+            os.close(parent_fd)
+
+    @staticmethod
+    def _check_directory_identity(path: Path, expected: tuple[int, int]) -> None:
+        fd = _directory(path)
+        try:
+            _fail(_identity(os.fstat(fd)) == expected, f'Directory identity changed: {path}')
+        finally:
+            os.close(fd)
 
     def __exit__(self, exc_type, exc, tb):
         self._active = False
@@ -648,8 +957,13 @@ class ProtectedTransaction:
         for sources, values in ((True, (self._files if expected is None else expected).values()),
                                 (False, self._evidence.values())):
             for value in values:
-                now = _read(value.path, missing=value.data is None, utf8=sources,
-                            limits=self.limits, budget=budget)
+                try:
+                    now = _read(value.path, missing=value.data is None, utf8=sources,
+                                limits=self.limits, budget=budget)
+                except SourceEncodingError as error:
+                    # Encoding failure after initial capture is a stale/raced
+                    # protected baseline, not merely unsupported initial input.
+                    raise TransactionError(f'Stale baseline: {error}') from error
                 _fail(now == value, f'Stale baseline (bytes, identity, mode or metadata): {value.path}')
 
     @property
@@ -813,173 +1127,6 @@ class ProtectedTransaction:
         self._write_new(self._tx_fd, name, _json_bytes(dict(kind=kind, **values)))
         self._sync(self._tx_fd, 'journal_directory_fsync', name)
 
-    def _load_json(self, directory_fd: int, name: str, *, budget: _ReadBudget | None = None) -> object:
-        budget = _ReadBudget(self.limits.max_journal_total_bytes) if budget is None else budget
-        fd = os.open(name, os.O_RDONLY | os.O_NOFOLLOW | os.O_NONBLOCK, dir_fd=directory_fd)
-        try:
-            s = os.fstat(fd)
-            _fail(stat.S_ISREG(s.st_mode) and s.st_nlink == 1 and s.st_uid == os.geteuid()
-                  and stat.S_IMODE(s.st_mode) & 0o077 == 0, f'Unsafe journal file: {name}')
-            data = _bounded_bytes(fd, min(self.limits.max_journal_bytes, budget.remaining), name, before=s)
-            named = os.stat(name, dir_fd=directory_fd, follow_symlinks=False)
-            _fail(_stable(s) == _stable(os.fstat(fd)) == _stable(named), f'Journal changed while reading: {name}')
-            budget.consume(len(data), name)
-            def unique(pairs):
-                result = {}
-                for key, value in pairs:
-                    _fail(key not in result, f'Duplicate JSON key in journal: {name}')
-                    result[key] = value
-                return result
-            return json.loads(data, object_pairs_hook=unique)
-        finally:
-            os.close(fd)
-
-    def _open_journal(self, journal: str) -> int:
-        _fail(isinstance(journal, str) and re.fullmatch('[0-9a-f]{32}', journal) is not None,
-              'Invalid transaction journal ID')
-        fd = os.open(journal, os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW, dir_fd=self._ns_fd)
-        try:
-            _private_directory(fd, self._namespace / journal, max_bytes=self.limits.max_metadata_bytes)
-            for name in os.listdir(fd):
-                _fail(name == 'manifest.json' or re.fullmatch(r'event-[0-9]{8}\.json', name)
-                      or re.fullmatch(r'(stage-[0-9]+|restore-[0-9a-f]{32})\.bin', name),
-                      f'Unknown journal artifact: {journal}/{name}')
-                s = os.stat(name, dir_fd=fd, follow_symlinks=False)
-                _fail(stat.S_ISREG(s.st_mode) and s.st_nlink == 1 and s.st_uid == os.geteuid(),
-                      f'Unsafe journal artifact: {journal}/{name}')
-            return fd
-        except BaseException:
-            os.close(fd)
-            raise
-
-    def _load_manifest(self, fd: int, *, budget: _ReadBudget | None = None) -> dict:
-        value = self._load_json(fd, 'manifest.json', budget=budget)
-        _fail(isinstance(value, dict) and set(value) == {'schema', 'root', 'root_identity', 'files', 'evidence'}
-              and value['schema'] == 1 and value['root'] == str(self.root)
-              and value['root_identity'] == list(self._root_identity),
-              'Journal belongs to a different root or has an invalid schema')
-        _fail(type(value['files']) is list and bool(value['files'])
-              and type(value['evidence']) is list, 'Invalid journal manifest entries')
-        paths = set()
-        before_budget = _ReadBudget(self.limits.max_capture_bytes)
-        after_budget = _ReadBudget(self.limits.max_capture_bytes)
-        for index, entry in enumerate(value['files']):
-            _fail(type(entry) is dict and set(entry) == {'path', 'before', 'after', 'fingerprint', 'parent', 'stage', 'xattrs'},
-                  'Invalid journal source entry')
-            path = _relative(entry['path'])
-            _fail(path not in paths and Path(path).suffix in ('.typ', '.md'), 'Invalid or duplicate journal source')
-            paths.add(path)
-            _fail(entry['stage'] == f'stage-{index}.bin', 'Invalid journal stage path')
-            fp = _fp_load(entry['fingerprint'])
-            _fail(fp.uid == os.geteuid() and fp.mode <= 0o777
-                  and fp.device == self._store_identity[0], 'Unsafe journal source ownership/mode/device')
-            _fail(type(entry['parent']) is list and len(entry['parent']) == 2
-                  and all(type(n) is int and n >= 0 for n in entry['parent']),
-                  'Invalid journal parent identity')
-            _fail(type(entry['xattrs']) is list, 'Invalid journal metadata')
-            attrs = []
-            metadata_remaining = min(self.limits.max_metadata_bytes,
-                                     before_budget.remaining, after_budget.remaining)
-            for pair in entry['xattrs']:
-                _fail(type(pair) is list and len(pair) == 2 and isinstance(pair[0], str)
-                      and bool(pair[0]) and '\x00' not in pair[0], 'Invalid journal metadata entry')
-                metadata_remaining -= len(os.fsencode(pair[0])) + 1
-                _fail(metadata_remaining >= 0, 'Journal metadata byte limit exceeded')
-                attribute = _decode(pair[1], maximum=metadata_remaining)
-                metadata_remaining -= len(attribute)
-                attrs.append((pair[0], attribute))
-            _fail(attrs == sorted(set(attrs)) and len({name for name, _ in attrs}) == len(attrs)
-                  and _xattr_hash(tuple(attrs)) == fp.metadata_sha256, 'Invalid journal metadata digest')
-            metadata_size = _metadata_size(tuple(attrs))
-            before_budget.consume(metadata_size, path)
-            after_budget.consume(metadata_size, path)
-            before = _decode(entry['before'], maximum=min(self.limits.max_source_bytes, before_budget.remaining))
-            after = _decode(entry['after'], maximum=min(self.limits.max_source_bytes, after_budget.remaining))
-            before_budget.consume(len(before), path)
-            after_budget.consume(len(after), path)
-            _fail(_hash(before) == fp.sha256 and before != after, 'Invalid original journal bytes')
-            try:
-                before.decode('utf-8')
-                after.decode('utf-8')
-            except UnicodeError as error:
-                raise TransactionError('Invalid UTF-8 journal source') from error
-            _fail(before.startswith(b'\xef\xbb\xbf') == after.startswith(b'\xef\xbb\xbf'),
-                  'Journal changes source BOM')
-        evidence_paths = set()
-        for entry in value['evidence']:
-            _fail(type(entry) is dict and set(entry) == {'path', 'bytes', 'fingerprint'},
-                  'Invalid journal evidence entry')
-            path = _absolute(entry['path'])
-            _fail(str(path) not in evidence_paths, 'Duplicate journal evidence')
-            evidence_paths.add(str(path))
-            if entry['bytes'] is None:
-                _fail(entry['fingerprint'] is None, 'Malformed absent evidence')
-            else:
-                content = _decode(entry['bytes'], maximum=min(self.limits.max_evidence_bytes,
-                                                            before_budget.remaining, after_budget.remaining))
-                before_budget.consume(len(content), path)
-                after_budget.consume(len(content), path)
-                _fail(_hash(content) == _fp_load(entry['fingerprint']).sha256,
-                      'Invalid journal evidence bytes')
-        return value
-
-    def _events(self, fd: int, manifest: dict, *, budget: _ReadBudget | None = None) -> list[dict]:
-        budget = _ReadBudget(self.limits.max_journal_total_bytes) if budget is None else budget
-        names = sorted(n for n in os.listdir(fd) if n.startswith('event-'))
-        _fail(names == [f'event-{i:08d}.json' for i in range(len(names))], 'Noncontiguous journal events')
-        events = []
-        entries = {e['path']: e for e in manifest['files']}
-        paths = set(entries)
-        terminal = False
-        applied = set()
-        for name in names:
-            event = self._load_json(fd, name, budget=budget)
-            _fail(isinstance(event, dict) and isinstance(event.get('kind'), str),
-                  'Invalid journal event sequence')
-            kind = event['kind']
-            _fail(not terminal or kind == 'recovery_required', 'Events follow completed journal')
-            if kind in ('staged', 'replace_intent', 'applied', 'restore_intent', 'restored'):
-                _fail(set(event) == {'kind', 'path', 'fingerprint'} and event['path'] in paths,
-                      'Invalid journal progress path')
-                fp = _fp_load(event['fingerprint'])
-                original = _fp_load(entries[event['path']]['fingerprint'])
-                content = entries[event['path']]['before' if kind in ('restore_intent', 'restored') else 'after']
-                _fail(fp.sha256 == _hash(_decode(content, maximum=self.limits.max_source_bytes))
-                      and (fp.device, fp.mode, fp.uid, fp.gid, fp.metadata_sha256) ==
-                      (original.device, original.mode, original.uid, original.gid, original.metadata_sha256),
-                      'Progress fingerprint disagrees with immutable manifest')
-                if kind == 'applied':
-                    applied.add(event['path'])
-            elif kind == 'recovery_required':
-                _fail(set(event) == {'kind'}, 'Invalid recovery-required event')
-                terminal = False
-            elif kind in ('committed', 'recovered'):
-                _fail(set(event) == {'kind'}, 'Invalid journal completion')
-                _fail(kind != 'committed' or applied == paths, 'Commit lacks complete per-file progress')
-                terminal = True
-            else:
-                _fail(False, 'Unknown journal event kind')
-            events.append(event)
-        return events
-
-    def _pending(self) -> tuple[str, ...]:
-        pending = []
-        for journal in sorted(os.listdir(self._ns_fd)):
-            try:
-                fd = self._open_journal(journal)
-                try:
-                    budget = _ReadBudget(self.limits.max_journal_total_bytes)
-                    manifest = self._load_manifest(fd, budget=budget)
-                    events = self._events(fd, manifest, budget=budget)
-                    if not events or events[-1]['kind'] not in ('committed', 'recovered'):
-                        pending.append(journal)
-                finally:
-                    os.close(fd)
-            except (OSError, ValueError, TypeError, KeyError):
-                # Corrupt or interrupted journals fail closed, never disappear.
-                pending.append(journal)
-        return tuple(pending)
-
     def apply(self, candidate: ValidatedCandidate) -> ApplyResult:
         self._check_active()
         _fail(not self.recovery_only and not self._used, 'Cannot apply in this context')
@@ -1084,11 +1231,8 @@ class ProtectedTransaction:
     def _recover(self, journal: str, *, finish: bool,
                  preserve_conflicts: Mapping[str, Fingerprint]) -> RecoveryReport:
         self._check_active()
-        fd = self._open_journal(journal)
+        fd, manifest, events, budget = self._read_journal(journal)
         try:
-            budget = _ReadBudget(self.limits.max_journal_total_bytes)
-            manifest = self._load_manifest(fd, budget=budget)
-            events = self._events(fd, manifest, budget=budget)
             entries = manifest['files']
             _fail({e['path'] for e in entries} <= set(self.targets),
                   'Recovery journal exceeds explicit target allowlist')

@@ -1,6 +1,7 @@
 # Protected transaction read bounds
 
-This internal storage primitive remains disconnected from the production CLI.
+This storage primitive underlies the explicitly selected offline closed-core
+CLI profile; ordinary analysis/fix/compile routes remain read-only.
 It does not implement a Typst analyzer, authorize consumer deployment, or make
 the offline-exclusive assertion equivalent to detecting unsaved editor buffers.
 
@@ -15,6 +16,7 @@ validated set of byte ceilings. The defaults are:
 | `max_metadata_bytes` | 256 KiB | Xattr names and values on each inspected inode |
 | `max_journal_bytes` | 64 MiB | Each manifest or event JSON file |
 | `max_journal_total_bytes` | 128 MiB | Combined manifest and events in each journal |
+| `max_directory_entries` | 100,000 | Entries enumerated in each journal namespace or artifact directory |
 
 Names include their NUL terminators in metadata accounting. Absent optional
 evidence consumes zero payload bytes. Limits require nonnegative integers,
@@ -48,10 +50,11 @@ These are finite content bounds, not a promise that process RSS equals 16 MiB.
 Immutable snapshot maps share byte objects rather than copy payloads. Convergence
 can retain up to nine source versions under its existing eight-pass ceiling.
 Transient bounded copies, journal JSON/base64 representations and decoding,
-metadata, fingerprints, Python object overhead, directory enumeration, and the
-trusted analyzer have separate costs. This API does not promise a global time,
-file-count, or total-process-memory limit, or constrain allocations performed by
-a trusted callback itself.
+metadata, fingerprints, Python object overhead and the trusted analyzer have
+separate costs. Directory enumeration streams up to its per-directory entry
+ceiling before deterministic sorting. This API does not promise a global time,
+aggregate file-count or total-process-memory limit, or constrain allocations
+performed by a trusted callback itself.
 
 ## Journals and recovery
 

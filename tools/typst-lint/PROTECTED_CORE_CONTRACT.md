@@ -2,15 +2,18 @@
 
 `protected_fix.py` is a trusted in-process engine bridge, not a CLI, complete
 project linter, serialized authorization format, compiler gate or deployment.
-All existing CLI modes remain read-only and incomplete. Nothing here installs
-packages, invokes Typst compilation, selects output files, or edits real consumer
-documents as part of testing.
+Ordinary CLI modes remain read-only and incomplete. The separately selected
+closed-core offline CLI profile calls this bridge; see `OFFLINE_CLI_CONTRACT.md`.
+Nothing here installs packages, invokes Typst compilation, selects output files,
+or edits real consumer documents as part of testing.
 
 ## Narrow selection and authority
 
 The caller supplies a canonical root, one literal root-relative `.typ` target,
-an existing private journal directory outside the root, and its real
-`OfflineExclusive` assertion. The bridge never creates that assertion itself.
+a private journal directory outside the root, and its real
+`OfflineExclusive` assertion. The default engine API requires existing storage;
+the explicit CLI profile opts into safe fixed-store creation under the root lock.
+The bridge never creates that assertion itself.
 The assertion means editors, watchers and other writers are stopped for the
 whole context; the transaction lock does not establish that fact.
 
@@ -83,5 +86,5 @@ only as the transaction's internal test hook.
 
 Tests create isolated temporary documents, evidence copies and private journal
 stores and deliberately assert offline exclusivity only for those fixtures.
-No global core-completion claim, production writer wiring, consumer migration,
+No global core-completion claim, general writer coverage, consumer migration,
 compiler execution or installation follows from this internal profile.

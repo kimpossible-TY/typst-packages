@@ -1,4 +1,4 @@
-"""Internal trusted closed-core repair bridge, deliberately absent from the CLI.
+"""Trusted closed-core repair bridge for the explicit offline CLI profile.
 
 Only one explicitly configured literal .typ input is admitted. This does not
 certify general Typst projects, the PDE pack, dependency graphs or compilation.
@@ -7,7 +7,7 @@ The caller must hold the real offline-exclusive assertion for the whole context.
 """
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from pathlib import Path
 import tomllib
 from types import MappingProxyType
@@ -63,6 +63,19 @@ class ProtectedCoreError(TransactionError):
     """The deliberately narrow protected profile was not fully proven."""
 
 
+class ProtectedCoreInputError(ProtectedCoreError, InputError):
+    """Invalid explicit target/config/catalog, still caught by the old bridge API."""
+    def __init__(self, message, *, error_code='invalid_configuration', phase='configuration'):
+        self.error_code = error_code
+        self.phase = phase
+        super().__init__(message)
+
+
+def _input_require(condition, message, **category):
+    if not condition:
+        raise ProtectedCoreInputError(message, **category)
+
+
 def _require(condition, message):
     if not condition:
         raise ProtectedCoreError(message)
@@ -72,48 +85,53 @@ def _literal_target(target):
     try:
         relative(target)
     except InputError as error:
-        raise ProtectedCoreError(str(error)) from error
-    _require(target.endswith('.typ') and not any(c in target for c in '*?[]{}'),
-             'Protected core requires one literal canonical .typ target')
+        raise ProtectedCoreInputError(str(error), error_code='invalid_target', phase='arguments') from error
+    _input_require(target.endswith('.typ') and not any(c in target for c in '*?[]{}'),
+                   'Protected core requires one literal canonical .typ target',
+                   error_code='invalid_target', phase='arguments')
     return target
 
 
 def _config(raw, target):
-    _require(type(raw) is bytes, 'Explicit present configuration bytes required')
+    _input_require(type(raw) is bytes, 'Explicit present configuration bytes required')
     try:
         data = tomllib.loads(raw.decode('utf-8'))
     except (UnicodeDecodeError, tomllib.TOMLDecodeError) as error:
-        raise ProtectedCoreError(f'Invalid protected configuration: {error}') from error
-    _require({'rule-set', 'include'} <= data.keys()
+        raise ProtectedCoreInputError(f'Invalid protected configuration: {error}') from error
+    _input_require({'rule-set', 'include'} <= data.keys()
              and not (data.keys() - {'rule-set', 'include', 'entrypoint'}),
              'Protected core configuration requires explicit rule-set/include and no unsupported keys')
-    _require(data['rule-set'] == 'core', 'Protected core requires the core pack')
-    _require(type(data['include']) is list and data['include'] == [target],
+    _input_require(data['rule-set'] == 'core', 'Protected core requires the core pack')
+    _input_require(type(data['include']) is list and data['include'] == [target],
              'Protected core include must select exactly the literal target')
-    _require('entrypoint' not in data or data['entrypoint'] == target,
+    _input_require('entrypoint' not in data or data['entrypoint'] == target,
              'Protected core entrypoint must be absent or the same literal target')
     return digest(raw)
 
 
+def _catalog_require(condition, message):
+    _input_require(condition, message, error_code='invalid_catalog', phase='catalog')
+
+
 def _catalog(raw):
-    _require(type(raw) is bytes, 'Complete present catalog evidence required')
-    _require(digest(raw) == REVIEWED_CATALOG_SHA256,
+    _catalog_require(type(raw) is bytes, 'Complete present catalog evidence required')
+    _catalog_require(digest(raw) == REVIEWED_CATALOG_SHA256,
              'Protected core requires the exact reviewed full catalog digest')
     try:
         data, sha256 = parse_rules(raw)
     except (InputError, ValueError, UnicodeDecodeError) as error:
-        raise ProtectedCoreError(f'Invalid protected rule catalog: {error}') from error
-    _require(set(data) == {'schema', 'version', 'packs', 'rules'},
+        raise ProtectedCoreInputError(f'Invalid protected rule catalog: {error}', error_code='invalid_catalog', phase='catalog') from error
+    _catalog_require(set(data) == {'schema', 'version', 'packs', 'rules'},
              'Unknown protected catalog fields')
     records = data['rules']
-    _require({r['id'] for r in records} == CORE_RULE_IDS | _PDE_RULE_IDS,
+    _catalog_require({r['id'] for r in records} == CORE_RULE_IDS | _PDE_RULE_IDS,
              'Protected catalog IDs differ from the compiled reviewed set')
-    _require(frozenset(ADMISSION_CORE_RULE_IDS) == CORE_RULE_IDS,
+    _catalog_require(frozenset(ADMISSION_CORE_RULE_IDS) == CORE_RULE_IDS,
              'Admission and protected core rule sets disagree')
     for record in records:
-        _require(set(record) == _RULE_FIELDS, 'Unknown protected rule metadata')
+        _catalog_require(set(record) == _RULE_FIELDS, 'Unknown protected rule metadata')
         if record['id'] in CORE_RULE_IDS:
-            _require((record['grade'], record['repair']) == _CORE_POLICIES[record['id']],
+            _catalog_require((record['grade'], record['repair']) == _CORE_POLICIES[record['id']],
                      'Protected core rule repair metadata changed')
     # No mutable list/dict crosses into the actual script backend.
     return tuple(MappingProxyType(dict(record)) for record in records), sha256
@@ -185,20 +203,46 @@ class _Pass:
     analysis: GraphAnalysis
 
 
+@dataclass(frozen=True, slots=True)
+class AppliedInsertion:
+    path: str
+    start: int
+    end: int
+    replacement: bytes
+    rule_id: str = SCRIPT
+
+
+@dataclass(frozen=True, slots=True)
+class ProtectedCoreSummary:
+    """Reporting only. Neither this value nor its serialization authorizes apply."""
+    profile: str
+    target: str
+    original_sha256: str
+    final_sha256: str
+    required_rule_ids: tuple[str, ...]
+    evaluated_rule_ids: tuple[str, ...]
+    structural_reasons: tuple[tuple[str, str], ...]
+    applied_insertions: tuple[AppliedInsertion, ...]
+    modified_paths: tuple[str, ...] = ()
+    journal_id: str | None = None
+
+
 class ProtectedCoreFix:
     """One internal closed-core transaction with independent provenance replay.
 
     `fault` is solely a transaction test hook. This class never asserts an
-    OfflineExclusive lease, creates journal storage, invokes a compiler, installs
-    a dependency, or widens the fixed built-in catalog/profile.
+    OfflineExclusive lease, invokes a compiler, installs
+    a dependency, or widens the fixed built-in catalog/profile. Explicit callers
+    may request transaction-owned creation of the fixed CLI journal store.
     """
     def __init__(self, root: Path, target: str, *, journal_directory: Path,
-                 lease, limits=DEFAULT_READ_LIMITS, fault=None):
+                 lease, limits=DEFAULT_READ_LIMITS, fault=None,
+                 create_journal_directory=False):
         self.target = _literal_target(target)
         self._tx = ProtectedTransaction(root, (self.target,),
             journal_directory=journal_directory, lease=lease, limits=limits,
-            evidence=(EvidenceInput(Path(root) / _CONFIG), EvidenceInput(CATALOG)),
-            fault=fault)
+            evidence=(EvidenceInput(Path(root) / _CONFIG, allow_missing=True), EvidenceInput(CATALOG)),
+            fault=fault, create_journal_directory=create_journal_directory)
         self._config_path = str(self._tx.root / _CONFIG)
         self._catalog_path = str(Path(CATALOG).absolute())
         self._evidence_paths = frozenset((self._config_path, self._catalog_path))
@@ -206,11 +250,19 @@ class ProtectedCoreFix:
         self._active = False
         self._candidate = None
         self._history = []
+        self._validated_summary = None
+        self._summary = None
 
     @property
     def transaction(self):
         """Internal inspection/testing surface, not another bridge token issuer."""
         return self._tx
+
+    @property
+    def summary(self):
+        """Immutable independently verified reporting, available only after apply."""
+        _require(self._summary is not None, 'A successful protected apply is required for reporting')
+        return self._summary
 
     def __enter__(self):
         self._tx.__enter__()
@@ -298,6 +350,8 @@ class ProtectedCoreFix:
         _require(self._active, 'Active protected core context required')
         self._candidate = None
         self._history = []
+        self._validated_summary = None
+        self._summary = None
         snapshot = self._tx.snapshot
         token = self._tx.validate(self._analyze_graph, required_rules=CORE_RULE_IDS)
         _require(not token.findings and token.passes <= 1,
@@ -321,6 +375,14 @@ class ProtectedCoreFix:
         # Independent replay is outside the analysis callback; recheck the live
         # captured identities/bytes again before blessing this bridge token.
         self._tx._revalidate()
+        proof = certify(replay.final_tree, self.target)
+        verify_proof(proof, replay.final_tree, self.target)
+        self._validated_summary = ProtectedCoreSummary(
+            'closed-core-v1', self.target, digest(self._baseline), digest(replay.content),
+            tuple(sorted(CORE_RULE_IDS)), tuple(proof.evaluated_rule_ids),
+            tuple(proof.structural_reasons),
+            tuple(AppliedInsertion(self.target, item.edit.start, item.edit.end,
+                                   item.edit.replacement) for item in replay.edits))
         self._candidate = token
         return token
 
@@ -328,4 +390,8 @@ class ProtectedCoreFix:
         _require(self._active and candidate is not None and candidate is self._candidate,
                  'Only this bridge session\'s independently validated candidate may be applied')
         self._candidate = None
-        return self._tx.apply(candidate)
+        result = self._tx.apply(candidate)
+        # This reporting-only value is never an input to token validation/apply.
+        self._summary = replace(self._validated_summary, modified_paths=result.modified,
+                                journal_id=result.journal)
+        return result
