@@ -74,6 +74,11 @@ def is_theme_binding(binding):
                      or binding.kind in ('module', 'palette')))
 
 
+def is_math_cancel_binding(binding):
+    """The builtin math element, never an unqualified code-mode spelling."""
+    return bool(binding and binding.kind == 'builtin-math' and binding.name == 'cancel')
+
+
 SCOPED_ANNOTATIONS = '@local/scoped-annotations:0.3.0'
 SCOPED_ANNOTATIONS_SOURCE_SHA256 = 'eb8e7ff7b31238c8fa4b996deb9502fec0ae4610240427a8b40873708e509203'
 # Only the locally defined wrappers are reviewed. Re-exported @preview/mannot
@@ -297,12 +302,19 @@ class _State:
                                     if is_theme_binding(value)}
         return new
 
-    def lookup(self, name):
+    def lookup(self, name, *, math=False):
         for frame in reversed(self.frames):
             if name in frame.values:
                 return frame.values[name]
             if frame.wildcard:
                 return None
+        # MathIdent uses the math library fallback, not the global library.
+        # In Typst 0.15.1 even `$math.cancel(x)$` has no builtin `math` receiver.
+        # Locals still win in both modes; only cancel is reviewed here.
+        if math:
+            return Binding('builtin-math', 'cancel') if name == 'cancel' else None
+        if name == 'math':
+            return Binding('builtin-module', 'math')
         return Binding('builtin', name) if name in _BUILTINS else None
 
     def bind(self, name, value):
@@ -407,6 +419,13 @@ class _Resolver:
         return Binding('module', path.split('/')[1].split(':')[0], path,
                        source.source_identity, contract.source_sha256)
 
+    def module_member(self, module, name):
+        if module and module.kind == 'builtin-module' and module.name == 'math':
+            return Binding('builtin-math', 'cancel') if name == 'cancel' else None
+        if module and module.kind == 'module':
+            return self.package_binding(module.package, name)
+        return None
+
     def identifier_names(self, i):
         """Binding-pattern identifiers, excluding dictionary keys and defaults."""
         kind = self.nodes[i].kind
@@ -425,22 +444,22 @@ class _Resolver:
         kind = node.kind
         self.record(i, state)
         children = self.sig(i)
-        if kind == 'Ident':
-            binding = state.lookup(self.text(i))
+        if kind in ('Ident', 'MathIdent'):
+            binding = state.lookup(self.text(i), math=kind == 'MathIdent')
             if state.deferred and not is_theme_binding(binding):
                 binding = None
             self.set_binding(i, binding)
             if output and not (binding and binding.kind == 'api' and binding.name == 'paragraph_tab'):
                 self.unknown_output(i, state)
             return binding
-        if kind == 'FieldAccess':
+        if kind in ('FieldAccess', 'MathFieldAccess'):
             binding = None
-            if len(children) == 3 and self.nodes[children[1]].kind == 'Dot' and self.nodes[children[2]].kind == 'Ident':
+            if (len(children) == 3 and self.nodes[children[1]].kind == 'Dot'
+                    and self.nodes[children[2]].kind == ('MathIdent' if kind == 'MathFieldAccess' else 'Ident')):
                 receiver = self.visit(children[0], state)
                 self.record(children[1], state)
                 self.record(children[2], state)
-                if receiver and receiver.kind == 'module':
-                    binding = self.package_binding(receiver.package, self.text(children[2]))
+                binding = self.module_member(receiver, self.text(children[2]))
             self.set_binding(i, binding)
             if output and not (binding and binding.kind == 'api' and binding.name == 'paragraph_tab'):
                 self.unknown_output(i, state)
@@ -471,8 +490,9 @@ class _Resolver:
         if kind == 'ShowRule':
             self.show_node(i, state)
             return None
-        if kind == 'FuncCall':
-            binding = self.visit(children[0], state) if len(children) == 2 and self.nodes[children[1]].kind == 'Args' else None
+        if kind in ('FuncCall', 'MathCall'):
+            argument_kind = 'MathArgs' if kind == 'MathCall' else 'Args'
+            binding = self.visit(children[0], state) if len(children) == 2 and self.nodes[children[1]].kind == argument_kind else None
             self.set_binding(i, binding)
             # The inserted expression executes before this call's arguments.
             # Capture the lexical value here, not after walking a content body
@@ -489,7 +509,7 @@ class _Resolver:
                 self.unknown_output(i, state)
             # Only this exact reviewed zero-argument palette selector has a
             # known result. Arbitrary calls still never establish provenance.
-            if (is_theme_binding(binding) and binding.kind == 'api'
+            if (kind == 'FuncCall' and is_theme_binding(binding) and binding.kind == 'api'
                     and binding.name == 'theme-from-text-fill'
                     and len(children) == 2
                     and all(self.nodes[c].kind in ('LeftParen', 'RightParen')
@@ -685,21 +705,30 @@ class _Resolver:
     def import_node(self, i, state):
         children = self.sig(i)
         path = _literal_string(self.tree, children[1]) if len(children) >= 2 else None
+        source_binding = None
         if len(children) >= 2:
             # A dynamic import source can itself contain assignments. Reading
             # its AST effects is not importing or executing the source.
-            self.visit(children[1], state)
-        module = self.module_binding(path)
+            source_binding = self.visit(children[1], state)
+        builtin_math = bool(source_binding and source_binding.kind == 'builtin-module'
+                            and source_binding.name == 'math')
+        module = source_binding if builtin_math else self.module_binding(path)
         if module is None:
             self.note(i, 'Import has no verified direct-package contract')
         items = next((c for c in children if self.nodes[c].kind == 'ImportItems'), None)
         if any(self.nodes[c].kind == 'Star' for c in children):
             if module:
-                if path in (MATH_BLOCKS, MATH_BOOK, SCOPED_ANNOTATIONS):
+                if builtin_math:
+                    # The remaining math namespace is deliberately unreviewed.
+                    state.unknown_wildcard()
+                    self.note(i, 'Builtin math contract has a partial export namespace')
+                    state.bind('cancel', self.module_member(module, 'cancel'))
+                elif path in (MATH_BLOCKS, MATH_BOOK, SCOPED_ANNOTATIONS):
                     state.unknown_wildcard()
                     self.note(i, 'Reviewed package contract has a partial export namespace')
-                for name, _ in self.packages[path][1].exports:
-                    state.bind(name, self.package_binding(path, name))
+                if not builtin_math:
+                    for name, _ in self.packages[path][1].exports:
+                        state.bind(name, self.package_binding(path, name))
             else:
                 state.unknown_wildcard()
                 self.note(i, 'Unknown wildcard may shadow every visible name/builtin')
@@ -715,7 +744,7 @@ class _Resolver:
                     state.unknown_wildcard()
                     continue
                 local = self.text(parts[-1]) if kind == 'RenamedImportItem' else self.text(names[-1])
-                binding = self.package_binding(path, self.text(names[0])) if len(names) == 1 else None
+                binding = self.module_member(module, self.text(names[0])) if len(names) == 1 else None
                 state.bind(local, binding)
                 if binding is None:
                     self.note(item, 'Imported item is unresolved or outside reviewed exports')
@@ -726,6 +755,11 @@ class _Resolver:
                 name = path.rsplit('/', 1)[-1].split(':', 1)[0]
                 if not path.startswith('@'):
                     name = name.rsplit('.', 1)[0]
+            elif builtin_math and len(children) == 2 and self.nodes[children[1]].kind == 'Ident':
+                # Unaliased identifier imports preserve that source spelling,
+                # not the module's intrinsic name (e.g. `import maths`). Other
+                # expression forms have no reviewed destination-name proof.
+                name = self.text(children[1])
             else:
                 name = None
             if name:

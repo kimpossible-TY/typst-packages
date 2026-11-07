@@ -10,6 +10,7 @@ import re
 from book_provenance import EntrypointSnapshot
 from book_rules import RULE_IDS as BOOK_RULES, analyze as books
 from continuation_rules import RULE_ID as CONTINUATION, analyze as continuation
+from cancel_rules import RULE_ID as CANCEL, analyze as cancellations
 from edit_plan import plan
 from highlight_rules import RULE_ID as HIGHLIGHT, analyze as highlights
 from display_rules import RULE_IDS as DISPLAY_RULES, analyze as displays
@@ -29,7 +30,7 @@ from typst_lint import SafetyError
 def rule_ids(pack):
     core = (SCRIPT, *REFERENCE_RULES, *THEME_RULES, *SCOPED_RULES, *BOOK_RULES)
     return (*core, *PARAGRAPH_RULES, *DISPLAY_RULES, CONTINUATION,
-            *FOOTNOTE_RULES, HIGHLIGHT, PROOF, PROSE_MARKER) if pack == 'pde' else core
+            *FOOTNOTE_RULES, HIGHLIGHT, PROOF, PROSE_MARKER, CANCEL) if pack == 'pde' else core
 
 
 def _analyze(tree, path, pack, fallback_language, packages, reference_catalog, entrypoint):
@@ -44,6 +45,7 @@ def _analyze(tree, path, pack, fallback_language, packages, reference_catalog, e
         results[PROOF] = proofs(tree, path, resolution)
         results[PROSE_MARKER] = prose_markers(tree, path, resolution)
         results[HIGHLIGHT] = highlights(tree, path, resolution)
+        results[CANCEL] = cancellations(tree, path, resolution)
         results.update(displays(tree, path, resolution))
         results[CONTINUATION] = continuation(tree, path, resolution)
         results.update(footnotes(tree, path, resolution, resolution.spacer_proof))
