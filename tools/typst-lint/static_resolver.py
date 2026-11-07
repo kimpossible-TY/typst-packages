@@ -13,6 +13,7 @@ never evidence that an arbitrary same-spelled helper has the reviewed semantics.
 """
 from dataclasses import dataclass, replace
 
+from book_provenance import BookApplication, BookProof, document_show_shape, literal_options, value_binding
 from syntax_client import Tree
 from typst_lint import InputError, digest
 
@@ -29,7 +30,21 @@ MATH_BLOCKS = '@local/math-blocks:0.2.0'
 MATH_BLOCKS_SOURCE_SHA256 = '542c7ce1ebfc6fbd51a7fefb2b55405a968a951b61d49170e49ef331948f36ff'
 # Deliberately partial namespace. Wildcards invalidate other names below.
 MATH_BLOCKS_EXPORTS = tuple((name, name) for name in
-                           ('light-theme', 'dark-theme', 'theme-from-text-fill', 'dots_space', 'proof'))
+                           ('light-theme', 'dark-theme', 'theme-from-text-fill', 'dots_space', 'proof',
+                            'apply-math-block-reset'))
+MATH_BOOK = '@local/math-book:0.2.0'
+MATH_BOOK_SOURCE_SHA256 = '943c400626fd66b1d80b7f95391a66b245da83db33b4a74e4a17aa6a1275e3e8'
+MATH_BOOK_EXPORTS = (('apply-math-book', 'apply-math-book'),)
+
+
+def is_book_binding(binding):
+    return bool(binding and binding.kind == 'api' and binding.name == 'apply-math-book'
+                and binding.package == MATH_BOOK and binding.source_sha256 == MATH_BOOK_SOURCE_SHA256)
+
+
+def is_reset_binding(binding):
+    return bool(binding and binding.kind == 'api' and binding.name == 'apply-math-block-reset'
+                and binding.package == MATH_BLOCKS and binding.source_sha256 == MATH_BLOCKS_SOURCE_SHA256)
 
 
 def is_spacer_binding(binding):
@@ -104,6 +119,8 @@ REVIEWED_PACKAGES = (
                     'local', 'scoped-annotations', '0.3.0', 'lib.typ'),
     ReviewedPackage(MATH_BLOCKS, MATH_BLOCKS_SOURCE_SHA256, MATH_BLOCKS_EXPORTS,
                     'local', 'math-blocks', '0.2.0', 'lib.typ'),
+    ReviewedPackage(MATH_BOOK, MATH_BOOK_SOURCE_SHA256, MATH_BOOK_EXPORTS,
+                    'local', 'math-book', '0.2.0', 'lib.typ'),
     ReviewedPackage(TEXT_UTILS, TEXT_UTILS_SOURCE_SHA256, TEXT_UTILS_EXPORTS,
                     'local', 'text-utils', '0.1.2', 'lib.typ'),
     # The module only defines a function. Its runtime json("projects.json")
@@ -175,6 +192,7 @@ class Resolution:
     complete: bool = False
     spacer_proof: SpacerProof | None = None
     paragraph_insertion_proof: ParagraphInsertionProof | None = None
+    book_proof: BookProof | None = None
 
     def binding_for(self, node_id: int) -> Binding | None:
         return self.facts[node_id].binding
@@ -311,6 +329,13 @@ class _Resolver:
         self.nodes = tree.nodes
         self.facts = [Facts() for _ in tree.nodes]
         self.available_spacers = set()
+        self.book_applications = []
+        self.book_imports = set()
+        for child in tree.nodes[0].children:
+            if tree.nodes[child].kind == 'ModuleImport':
+                parts = _significant(tree, child)
+                if len(parts) >= 2 and not any(tree.nodes[c].kind == 'Star' for c in parts):
+                    self.book_imports.add(_literal_string(tree, parts[1]))
         self.available_paragraph_markers = set()
         self.root_children = frozenset(tree.nodes[0].children) if tree.mode == 'markup' else frozenset()
         self.skips = []
@@ -365,6 +390,10 @@ class _Resolver:
         if verified is None:
             return None
         source, contract = verified
+        # math-book captures its wildcard-imported reset helper. Its own bytes
+        # alone cannot establish that dependency's callable identity/namespace.
+        if path == MATH_BOOK and MATH_BLOCKS not in self.packages:
+            return None
         canonical = dict(contract.exports).get(name)
         if canonical is None:
             return None
@@ -666,7 +695,7 @@ class _Resolver:
         items = next((c for c in children if self.nodes[c].kind == 'ImportItems'), None)
         if any(self.nodes[c].kind == 'Star' for c in children):
             if module:
-                if path in (MATH_BLOCKS, SCOPED_ANNOTATIONS):
+                if path in (MATH_BLOCKS, MATH_BOOK, SCOPED_ANNOTATIONS):
                     state.unknown_wildcard()
                     self.note(i, 'Reviewed package contract has a partial export namespace')
                 for name, _ in self.packages[path][1].exports:
@@ -749,7 +778,28 @@ class _Resolver:
     def show_node(self, i, state):
         children = self.sig(i)
         supported = False
-        if len(children) == 3 and self.nodes[children[1]].kind == 'Colon' and self.nodes[children[2]].kind in ('Ident', 'FieldAccess'):
+        book_application = False
+        shape = document_show_shape(self.tree, i)
+        if (shape is not None and self.tree.mode == 'markup' and i in self.nodes[0].children
+                and {MATH_BOOK, MATH_BLOCKS} <= self.book_imports):
+            owner = value_binding(self.tree, shape.receiver, state.lookup, self.package_binding)
+            if is_book_binding(owner) or is_reset_binding(owner):
+                valid, enabled = literal_options(self.tree, shape.arguments, book=is_book_binding(owner))
+                reset = self.package_binding(MATH_BLOCKS, 'apply-math-block-reset')
+                if valid and is_reset_binding(reset):
+                    # The transformation expression is evaluated immediately;
+                    # only its body is deferred. No generic call-result binding
+                    # or captured/deferred ownership proof is manufactured.
+                    self.visit(shape.expression, state)
+                    self.set_binding(i, owner)
+                    self.book_applications.append(BookApplication(i, owner, reset, enabled,
+                                                                   shape.arguments is None))
+                    book_application = True
+                else:
+                    self.note(i, 'Dynamic/customized book or reset show options are unsupported')
+        if book_application:
+            pass  # Its general prose/styles remain unknown below.
+        elif len(children) == 3 and self.nodes[children[1]].kind == 'Colon' and self.nodes[children[2]].kind in ('Ident', 'FieldAccess'):
             binding = self.visit(children[2], state)
             self.set_binding(i, binding)
             supported = bool(binding and binding.kind == 'api' and binding.package == TEXT_UTILS
@@ -798,4 +848,5 @@ def resolve(tree: Tree, *, fallback_language=None, packages=()) -> Resolution:
     proof = SpacerProof(digest(tree.source), existing, frozenset(resolver.available_spacers))
     paragraph_proof = ParagraphInsertionProof(digest(tree.source), frozenset(resolver.available_paragraph_markers))
     return Resolution(digest(tree.source), tuple(resolver.facts), tuple(dict.fromkeys(resolver.skips)),
-                      spacer_proof=proof, paragraph_insertion_proof=paragraph_proof)
+                      spacer_proof=proof, paragraph_insertion_proof=paragraph_proof,
+                      book_proof=BookProof(digest(tree.source), tuple(resolver.book_applications)))

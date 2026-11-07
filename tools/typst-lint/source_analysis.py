@@ -7,6 +7,8 @@ from collections import Counter
 from dataclasses import replace
 import re
 
+from book_provenance import EntrypointSnapshot
+from book_rules import RULE_IDS as BOOK_RULES, analyze as books
 from continuation_rules import RULE_ID as CONTINUATION, analyze as continuation
 from edit_plan import plan
 from highlight_rules import RULE_ID as HIGHLIGHT, analyze as highlights
@@ -25,17 +27,18 @@ from typst_lint import SafetyError
 
 
 def rule_ids(pack):
-    core = (SCRIPT, *REFERENCE_RULES, *THEME_RULES, *SCOPED_RULES)
+    core = (SCRIPT, *REFERENCE_RULES, *THEME_RULES, *SCOPED_RULES, *BOOK_RULES)
     return (*core, *PARAGRAPH_RULES, *DISPLAY_RULES, CONTINUATION,
             *FOOTNOTE_RULES, HIGHLIGHT, PROOF, PROSE_MARKER) if pack == 'pde' else core
 
 
-def _analyze(tree, path, pack, fallback_language, packages, reference_catalog):
+def _analyze(tree, path, pack, fallback_language, packages, reference_catalog, entrypoint):
     results = {SCRIPT: scripts(tree, path, _verify=False)}
     resolution = resolve(tree, fallback_language=fallback_language, packages=packages)
     results.update(references(tree, path, resolution, reference_catalog))
     results.update(themes(tree, path, resolution))
     results.update(scoped(tree, path, packages=packages))
+    results.update(books(tree, path, resolution, entrypoint=entrypoint))
     if pack == 'pde':
         results.update(paragraphs(tree, path, resolution))
         results[PROOF] = proofs(tree, path, resolution)
@@ -68,14 +71,14 @@ def _findings(source, results, ignored, transform=lambda position: position, *, 
 
 
 def analyze(tree, path, *, pack='core', fallback_language=None, packages=(), reference_catalog=None,
-            ignored=frozenset(), _verify=True):
+            entrypoint=None, ignored=frozenset(), _verify=True):
     """Filter config-ignored edits before verifying one composed candidate.
 
 Baseline diagnostic offsets are mapped through every proposed edit before
 comparison, so an existing unresolved finding is not mistaken for a new one
 merely because an earlier script or blank line changed its coordinates.
 """
-    results = _analyze(tree, path, pack, fallback_language, packages, reference_catalog)
+    results = _analyze(tree, path, pack, fallback_language, packages, reference_catalog, entrypoint)
     for rid in ignored:
         if rid in results:
             results[rid] = replace(results[rid], edits=())
@@ -91,8 +94,14 @@ merely because an earlier script or blank line changed its coordinates.
         checked = parse(candidate, tree.mode)
         if checked.nodes[0].errors:
             raise SafetyError('Combined candidate failed to parse')
+        # Rebase only a context that already matches this exact baseline. A
+        # stale/wrong-path snapshot cannot be rescued by candidate analysis.
+        candidate_entrypoint = (replace(entrypoint, source=candidate)
+            if type(entrypoint) is EntrypointSnapshot and entrypoint.path == path
+            and type(entrypoint.source) is bytes and entrypoint.source == tree.source else entrypoint)
         final = analyze(checked, path, pack=pack, fallback_language=fallback_language,
-                        packages=packages, reference_catalog=reference_catalog, ignored=ignored, _verify=False)
+                        packages=packages, reference_catalog=reference_catalog, entrypoint=candidate_entrypoint,
+                        ignored=ignored, _verify=False)
         if any(result.edits for result in final.values()):
             raise SafetyError('Combined candidate has second-pass edits')
 
@@ -125,7 +134,7 @@ merely because an earlier script or blank line changed its coordinates.
         # Reparse and rerun independently rather than trust retained tree state.
         again = analyze(parse(candidate, tree.mode), path, pack=pack,
                         fallback_language=fallback_language, packages=packages, reference_catalog=reference_catalog,
-                        ignored=ignored, _verify=False)
+                        entrypoint=candidate_entrypoint, ignored=ignored, _verify=False)
         if again != final:
             raise SafetyError('Combined candidate is not deterministic/idempotent')
     except SafetyError as error:

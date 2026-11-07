@@ -253,9 +253,10 @@ def _requested_paths(import_paths):
 def read_snapshot_file(path: str | os.PathLike[str], limit: int) -> tuple[str, bytes]:
     """Read one explicit file with the same retained-descriptor safeguards.
 
-    Used by the optional reference catalog loader, not package dependency
-    discovery. Verification rereads the retained descriptor, never reopens an
-    unchecked path. No evaluator, cache or sibling-file lookup is involved.
+    Used by the optional reference catalog and configured entrypoint loaders,
+    not package dependency discovery. Verification rereads the retained
+    descriptor, never reopens an unchecked path. No evaluator, cache or
+    sibling-file lookup is involved.
     """
     _require(type(limit) is int and limit > 0, 'Invalid snapshot file byte limit')
     target = _absolute_root(path)

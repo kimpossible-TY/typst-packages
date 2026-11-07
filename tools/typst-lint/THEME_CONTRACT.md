@@ -20,7 +20,7 @@ reads `text.fill` and returns one of those dictionaries. Its imported helpers
 (`capitalize-title`, `is-numeric-title`, `project-ref`) are neither used by nor
 allowed to redefine those palette bindings. Their dependency contents are not
 loaded or certified. Other exports remain unresolved. A wildcard import thus
-invalidates all existing names before establishing just these five independently reviewed exports.
+invalidates all existing names before establishing only the independently reviewed exports.
 
 Direct imports, renamed imports, module access, parentheses and local immutable
 aliases reuse the resolver's lexical binding machinery. The palette result is

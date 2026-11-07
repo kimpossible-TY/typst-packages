@@ -144,4 +144,12 @@ The design follow-up is reviewed and merged first. Groups 2–7 are authorized i
 - [x] 19.2 Diagnose literal root prose boundaries separated by existing source paragraph breaks and propose only composition-stable insertions. Preserve source bytes, indentation, effective language and every directive target; do not manufacture imports, show rules or casing edits.
 - [x] 19.3 Integrate explicit backend coverage, focused CLI/render regressions and all-rule audit fixtures without weakening candidate coverage checks. Keep nested/structural/footnote boundaries and unsupported starter composition explicit.
 - [x] 19.4 Complete independent review, 438 Python tests (437 passed, one filesystem setuid skip), four Rust tests, formatting/Clippy, strict OpenSpec and whitespace checks. Audit: 177 fixtures, 219 CLI invocations, 39 verified candidate reanalyses, 23 PARTIAL / 10 NOT_IMPLEMENTED / 0 COMPLETE, with no invariant failures. A 1,000-paragraph independent probe completed backend analysis in 0.287s and fully verified shared analysis in 0.94s. Production source writes and compiler dispatch remain closed.
-- [ ] 19.5 Publish this checkpoint and verify both CI jobs for its exact PR head.
+- [x] 19.5 Publish checkpoint b28e29aa3f018375b1c53783f9f9d1d36dd27029 and verify both Python 3.11/3.15 CI jobs for that exact PR head (run 42351656010).
+
+
+## 20. Establish bounded book ownership
+
+- [x] 20.1 Add exact paired math-book and math-blocks source provenance, immediate root show-transform evidence and literal reset-option ownership without broadening wildcard or call-result assumptions.
+- [x] 20.2 Carry an explicit immutable configured-entrypoint snapshot through selected source analysis and validated candidate reanalysis. Do not infer ownership for unrelated, excluded or included files.
+- [x] 20.3 Diagnose proven duplicate book owners and separate reset ownership; retain an explicit reset-removal refusal because full-body heading/reference transformation equivalence remains unproven. Keep missing-owner and graph-wide claims unavailable.
+- [ ] 20.4 Verify independent review, focused parser/CLI/render evidence, full local checks and refreshed all-rule audit before publishing the next checkpoint. Keep production source writes and compiler dispatch closed.

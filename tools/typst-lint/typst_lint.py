@@ -239,11 +239,21 @@ def report(root, mode, *, package_path=None):
     enabled = [r for r in catalog['rules'] if r['id'].split('.')[0] in catalog['packs'][config.pack]]
     inputs = collect(root, config)
     entry_hash = None
+    entrypoint = None
     if config.entrypoint:
         require(config.entrypoint.endswith('.typ'), 'Entrypoint must be a Typst file')
-        raw = checked_path(root, config.entrypoint).read_bytes()
-        raw.decode('utf-8')
+        from book_provenance import EntrypointSnapshot
+        from package_loader import PackageInputError, read_snapshot_file
+        from syntax_client import MAX_INPUT
+        try:
+            _, raw = read_snapshot_file(checked_path(root, config.entrypoint), MAX_INPUT)
+        except PackageInputError as error:
+            raise InputError(f'Cannot safely read configured entrypoint: {error}') from error
         entry_hash = digest(raw)
+        selected_entry = next((item for item in inputs if item['path'] == config.entrypoint), None)
+        require(selected_entry is None or selected_entry['sha256'] == entry_hash,
+                f'Configured entrypoint changed after input selection: {config.entrypoint}')
+        entrypoint = EntrypointSnapshot(config.entrypoint, raw)
     from reference_catalog import load_reference_catalog
     reference_catalog = load_reference_catalog(checked_path(root, config.catalog)) if config.catalog else None
     reference_hash = reference_catalog.sha256 if reference_catalog is not None else None
@@ -266,8 +276,16 @@ def report(root, mode, *, package_path=None):
                                       reasons=['Markdown extraction is not implemented']) for rid in backends)
             continue
         try:
-            raw = checked_path(root, name).read_bytes()
+            if entrypoint is not None and name == entrypoint.path:
+                try:
+                    _, raw = read_snapshot_file(checked_path(root, name), MAX_INPUT)
+                except PackageInputError as error:
+                    raise InputError(f'Cannot safely reread configured entrypoint: {error}') from error
+            else:
+                raw = checked_path(root, name).read_bytes()
             require(digest(raw) == item['sha256'], f'Input changed during analysis: {name}')
+            require(entrypoint is None or name != entrypoint.path or raw == entrypoint.source,
+                    f'Configured entrypoint changed before parsing: {name}')
             parsed[name] = parse(raw)
         except (AdapterError, OSError, InputError) as error:
             file_coverage.extend(dict(path=name, rule_id=rid, status='unsupported', reasons=[str(error)])
@@ -290,7 +308,8 @@ def report(root, mode, *, package_path=None):
         try:
             results = analyze(parsed[name], name, pack=config.pack,
                               fallback_language=config.capitalization_language,
-                              packages=package_sources, reference_catalog=reference_catalog, ignored=ignored)
+                              packages=package_sources, reference_catalog=reference_catalog,
+                              entrypoint=entrypoint, ignored=ignored)
         except SuppressionError as error:
             configuration_failures.append(dict(path=name, error=str(error)))
             file_coverage.extend(dict(path=name, rule_id=rid, status='configuration-failure', reasons=[str(error)])

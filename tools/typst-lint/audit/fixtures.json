@@ -2649,6 +2649,118 @@
       "expected_candidate": {
         "main.typ": "#import \"@local/text-utils:0.1.2\": paragraph_tab, apply-paragraph-tabs\n#show: apply-paragraph-tabs\n#set text(lang: \"en\")\nFirst idea.\n\n#paragraph_tab\nThis consequence follows.\n\nSecond idea.\n"
       }
+    },
+    {
+      "id": "core.single-book-show--direct-duplicate",
+      "rule_id": "core.single-book-show",
+      "kind": "direct-reviewed-diagnostic",
+      "files": {
+        "main.typ": "#import \"@local/math-book:0.2.0\": apply-math-book\n#import \"@local/math-blocks:0.2.0\": apply-math-block-reset\n#show: apply-math-book.with(title: \"Notes\")\n#show: apply-math-book.with(title: \"Notes\")\n= Chapter\nText.\n"
+      },
+      "config": "rule-set=\"core\"\nentrypoint=\"main.typ\"\n",
+      "normative_diagnostics": 1,
+      "note": "Exact paired packages, direct named imports and configured root; no wildcard or included-file ownership inference.",
+      "intentional_parse_error": false,
+      "scenario_heading": "Violation with layered document show rules",
+      "assert_normative_count": true
+    },
+    {
+      "id": "core.single-book-show--direct-single",
+      "rule_id": "core.single-book-show",
+      "kind": "bounded-negative",
+      "files": {
+        "main.typ": "#import \"@local/math-book:0.2.0\": apply-math-book\n#import \"@local/math-blocks:0.2.0\": apply-math-block-reset\n#show: apply-math-book.with(title: \"Notes\")\n= Chapter\nText.\n"
+      },
+      "config": "rule-set=\"core\"\nentrypoint=\"main.typ\"\n",
+      "normative_diagnostics": 0,
+      "note": "One proven root owner; this does not establish graph-wide or missing-owner coverage.",
+      "intentional_parse_error": false,
+      "scenario_heading": "Non-violation with one owner",
+      "assert_normative_count": true
+    },
+    {
+      "id": "core.no-duplicate-book-reset--adjacent-owners",
+      "rule_id": "core.no-duplicate-book-reset",
+      "kind": "direct-reviewed-diagnostic",
+      "files": {
+        "main.typ": "#import \"@local/math-book:0.2.0\": apply-math-book\n#import \"@local/math-blocks:0.2.0\": apply-math-block-reset\n#show: apply-math-book.with(title: \"Notes\")\n#show: apply-math-block-reset\n= Chapter\nText.\n"
+      },
+      "config": "rule-set=\"core\"\nentrypoint=\"main.typ\"\n",
+      "normative_diagnostics": 1,
+      "note": "Adjacent same-reset ownership is diagnosed; whole-body reference/heading equivalence does not permit deletion yet.",
+      "intentional_parse_error": false,
+      "scenario_heading": "Violation with duplicate reset ownership",
+      "assert_normative_count": true
+    },
+    {
+      "id": "core.no-duplicate-book-reset--explicit-transfer",
+      "rule_id": "core.no-duplicate-book-reset",
+      "kind": "bounded-negative",
+      "files": {
+        "main.typ": "#import \"@local/math-book:0.2.0\": apply-math-book\n#import \"@local/math-blocks:0.2.0\": apply-math-block-reset\n#show: apply-math-book.with(title: \"Notes\", reset-math-blocks: false)\n#show: apply-math-block-reset\n= Chapter\nText.\n"
+      },
+      "config": "rule-set=\"core\"\nentrypoint=\"main.typ\"\n",
+      "normative_diagnostics": 0,
+      "note": "Literal false leaves reset ownership with the caller.",
+      "intentional_parse_error": false,
+      "scenario_heading": "Non-violation with an explicit transfer",
+      "assert_normative_count": true
+    },
+    {
+      "id": "core.no-duplicate-book-reset--unknown-transform-barrier",
+      "rule_id": "core.no-duplicate-book-reset",
+      "kind": "bounded-negative",
+      "files": {
+        "main.typ": "#import \"@local/math-book:0.2.0\": apply-math-book\n#import \"@local/math-blocks:0.2.0\": apply-math-block-reset\n#show: apply-math-book.with(title: \"Notes\")\n#show: body => [Replacement]\n#show: apply-math-block-reset\n= Chapter\nText.\n"
+      },
+      "config": "rule-set=\"core\"\nentrypoint=\"main.typ\"\n",
+      "normative_diagnostics": 0,
+      "note": "An unknown intervening body transform prevents a reset-overlap claim.",
+      "intentional_parse_error": false,
+      "scenario_heading": "Non-violation with an explicit transfer",
+      "assert_normative_count": true
+    },
+    {
+      "id": "core.no-duplicate-book-reset--reset-before-book",
+      "rule_id": "core.no-duplicate-book-reset",
+      "kind": "direct-reviewed-diagnostic",
+      "files": {
+        "main.typ": "#import \"@local/math-book:0.2.0\": apply-math-book\n#import \"@local/math-blocks:0.2.0\": apply-math-block-reset\n#show: apply-math-block-reset\n#show: apply-math-book.with(title: \"Notes\")\n= Chapter\nText.\n"
+      },
+      "config": "rule-set=\"core\"\nentrypoint=\"main.typ\"\n",
+      "normative_diagnostics": 1,
+      "note": "Adjacent wrappers overlap but earlier reset removal is not inferred.",
+      "intentional_parse_error": false,
+      "scenario_heading": "Violation with duplicate reset ownership",
+      "assert_normative_count": true
+    },
+    {
+      "id": "core.no-duplicate-book-reset--unconfigured-root",
+      "rule_id": "core.no-duplicate-book-reset",
+      "kind": "bounded-negative",
+      "files": {
+        "main.typ": "#import \"@local/math-book:0.2.0\": apply-math-book\n#import \"@local/math-blocks:0.2.0\": apply-math-block-reset\n#show: apply-math-book.with(title: \"Notes\")\n#show: apply-math-block-reset\n= Chapter\nText.\n"
+      },
+      "config": "rule-set=\"core\"\n",
+      "normative_diagnostics": 0,
+      "note": "A matching filename is not entrypoint authority.",
+      "intentional_parse_error": false,
+      "scenario_heading": "Non-violation with an explicit transfer",
+      "assert_normative_count": true
+    },
+    {
+      "id": "core.no-duplicate-book-reset--dynamic-option-refusal",
+      "rule_id": "core.no-duplicate-book-reset",
+      "kind": "bounded-negative",
+      "files": {
+        "main.typ": "#import \"@local/math-book:0.2.0\": apply-math-book\n#import \"@local/math-blocks:0.2.0\": apply-math-block-reset\n#let resets = true\n#show: apply-math-book.with(title: \"Notes\", reset-math-blocks: resets)\n#show: apply-math-block-reset\n= Chapter\nText.\n"
+      },
+      "config": "rule-set=\"core\"\nentrypoint=\"main.typ\"\n",
+      "normative_diagnostics": 0,
+      "note": "Nonliteral reset options remain unresolved without evaluation.",
+      "intentional_parse_error": false,
+      "scenario_heading": "Non-violation with an explicit transfer",
+      "assert_normative_count": true
     }
   ]
 }

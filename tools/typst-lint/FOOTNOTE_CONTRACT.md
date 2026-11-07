@@ -39,7 +39,7 @@ snapshot with retained descriptors and exact hashing. No cache, installed
 package, network, dependency traversal or evaluator is consulted. Other
 versions, changed bytes and same-spelled local helpers never inherit this
 contract. A wildcard import of this partial namespace invalidates all earlier
-bindings and builtins before establishing the five reviewed exports. In
+bindings and builtins before establishing the independently reviewed exports. In
 particular it does not prove the remaining `footnote` builtin.
 
 ## Resolver-produced binding evidence

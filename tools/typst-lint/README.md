@@ -348,6 +348,14 @@ namespace graph membership. Wildcard re-exports, raw mannot APIs, dynamic execut
 mutations, facades, general document graphs and other reference forms remain unsupported.
 No caller receives a scope binding based on variable spelling alone.
 
+Two book-ownership backends require an explicit configured entrypoint snapshot
+and exact paired math-book/math-blocks package evidence. They diagnose proven
+duplicate root book shows and adjacent reset ownership with bounded literal
+options. Unknown transforms, dynamic options and broader document graphs are
+not guessed. Reset deletion remains unavailable because whole-body reference
+and heading transformation equivalence is not yet certified. See the
+[book ownership contract](BOOK_CONTRACT.md).
+
 `pde.prose-paragraph-marker` diagnoses existing blank-line boundaries between
 literal root prose paragraphs. A marker proposal requires the canonical reviewed
 text-utils value and an already installed reviewed paragraph show, unchanged
