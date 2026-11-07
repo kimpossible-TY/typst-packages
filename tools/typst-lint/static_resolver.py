@@ -25,6 +25,21 @@ TEXT_UTILS_EXPORTS = (
     ('apply-paragraph-tabs', 'apply-paragraph-tabs'), ('highlighted', 'highlighted'),
     ('capitalize-title', 'capitalize-title'), ('is-numeric-title', 'is-numeric-title'),
 )
+MATH_BLOCKS = '@local/math-blocks:0.2.0'
+MATH_BLOCKS_SOURCE_SHA256 = '542c7ce1ebfc6fbd51a7fefb2b55405a968a951b61d49170e49ef331948f36ff'
+# Deliberately partial namespace. Wildcards invalidate other names below.
+MATH_BLOCKS_EXPORTS = tuple((name, name) for name in
+                           ('light-theme', 'dark-theme', 'theme-from-text-fill'))
+
+
+def is_theme_binding(binding):
+    return bool(binding and binding.package == MATH_BLOCKS
+                and binding.source_sha256 == MATH_BLOCKS_SOURCE_SHA256
+                and ((binding.kind == 'api' and binding.name in
+                      ('light-theme', 'dark-theme', 'theme-from-text-fill'))
+                     or binding.kind in ('module', 'palette')))
+
+
 PROJECT_REFERENCES = '@local/project-references:0.1.0'
 PROJECT_REFERENCES_SOURCE_SHA256 = '94b5f60db26e97faa511285fecd92a0f2afed708c8d56b1ed252cce3458a1720'
 PROJECT_REFERENCES_EXPORTS = (('project-ref', 'project-ref'),)
@@ -54,6 +69,8 @@ class ReviewedPackage:
 
 
 REVIEWED_PACKAGES = (
+    ReviewedPackage(MATH_BLOCKS, MATH_BLOCKS_SOURCE_SHA256, MATH_BLOCKS_EXPORTS,
+                    'local', 'math-blocks', '0.2.0', 'lib.typ'),
     ReviewedPackage(TEXT_UTILS, TEXT_UTILS_SOURCE_SHA256, TEXT_UTILS_EXPORTS,
                     'local', 'text-utils', '0.1.2', 'lib.typ'),
     # The module only defines a function. Its runtime json("projects.json")
@@ -179,6 +196,16 @@ class _State:
             # back into the actual lexical flow, nor infer closure captures.
             new.frames = [_Frame()]
             new.frames[0].wildcard = True
+            # Typst closures capture values at definition. Only the reviewed
+            # immutable theme APIs/modules survive this bounded proof. Copy
+            # frames so speculative body mutations cannot affect the caller.
+            visible = {}
+            for frame in self.frames:
+                if frame.wildcard:
+                    visible.clear()
+                visible.update(frame.values)
+            new.frames[0].values = {name: value for name, value in visible.items()
+                                    if is_theme_binding(value)}
         return new
 
     def lookup(self, name):
@@ -283,7 +310,9 @@ class _Resolver:
         self.record(i, state)
         children = self.sig(i)
         if kind == 'Ident':
-            binding = None if state.deferred else state.lookup(self.text(i))
+            binding = state.lookup(self.text(i))
+            if state.deferred and not is_theme_binding(binding):
+                binding = None
             self.set_binding(i, binding)
             if output and not (binding and binding.kind == 'api' and binding.name == 'paragraph_tab'):
                 self.unknown_output(i, state)
@@ -333,7 +362,14 @@ class _Resolver:
                 self.visit(children[1], state)
             if output and not self.plain_footnote(binding, children):
                 self.unknown_output(i, state)
-            # A callee binding is never evidence for the result of a call.
+            # Only this exact reviewed zero-argument palette selector has a
+            # known result. Arbitrary calls still never establish provenance.
+            if (is_theme_binding(binding) and binding.kind == 'api'
+                    and binding.name == 'theme-from-text-fill'
+                    and len(children) == 2
+                    and all(self.nodes[c].kind in ('LeftParen', 'RightParen')
+                            for c in self.sig(children[1]))):
+                return replace(binding, kind='palette', name='resolved-theme')
             return None
         if kind in ('ContentBlock', 'CodeBlock'):
             nested = state.nested()
@@ -350,8 +386,21 @@ class _Resolver:
                 self.unknown_output(i, state)
             return None
         if kind == 'Closure':
-            self.note(i, 'Deferred closure body/captures are unsupported')
+            self.note(i, 'Deferred closure body/captures are unsupported except reviewed theme values')
             nested = state.nested(deferred=True)
+            # Parameters, including defaults/destructuring, mask captures.
+            # Mask every identifier in Params conservatively (also default
+            # expressions); none of them can invent reviewed provenance.
+            for child in node.children:
+                if self.nodes[child].kind == 'Params':
+                    pending = [child]
+                    while pending:
+                        part = pending.pop()
+                        if self.nodes[part].kind == 'Ident':
+                            nested.bind(self.text(part), None)
+                        pending.extend(self.nodes[part].children)
+                elif self.nodes[child].kind == 'Ident':
+                    nested.bind(self.text(child), None)
             for child in node.children:
                 self.visit(child, nested)
             return None
@@ -496,6 +545,9 @@ class _Resolver:
         items = next((c for c in children if self.nodes[c].kind == 'ImportItems'), None)
         if any(self.nodes[c].kind == 'Star' for c in children):
             if module:
+                if path == MATH_BLOCKS:
+                    state.unknown_wildcard()
+                    self.note(i, 'Reviewed theme contract has a partial export namespace')
                 for name, _ in self.packages[path][1].exports:
                     state.bind(name, self.package_binding(path, name))
             else:
