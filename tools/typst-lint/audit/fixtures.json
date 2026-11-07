@@ -3434,6 +3434,128 @@
       "expected_candidate": {
         "main.typ": "﻿#import \"@local/text-utils:0.1.2\": paragraph_tab, apply-paragraph-tabs\r\n#show: apply-paragraph-tabs\r\n#set text(lang: \"en\")\r\n한글 문장.#footnote[Reason.]\r\n#parbreak()\r\n\r\n#paragraph_tab\r\nThis consequence follows.\r\n"
       }
+    },
+    {
+      "id": "pde.paragraph-capitalization--facade-named",
+      "rule_id": "pde.paragraph-capitalization",
+      "kind": "facade-named",
+      "files": {
+        "main.typ": "#import \"styles.typ\": saved-marker as paragraph_tab, tabs as apply-paragraph-tabs\n#show: apply-paragraph-tabs\n#set text(lang: \"en\")\n#paragraph_tab\nthis result follows.\n",
+        "styles.typ": "#import \"@local/text-utils:0.1.2\": paragraph-tab as marker, apply-paragraph-tabs as tabs, highlighted as paint\n#let saved-marker = marker\n#let count = 1\n"
+      },
+      "config": "rule-set=\"pde\"\ninclude=[\"main.typ\"]\n",
+      "normative_diagnostics": 1,
+      "note": "",
+      "intentional_parse_error": false,
+      "scenario_heading": null,
+      "assert_normative_count": true,
+      "expected_candidate": {
+        "main.typ": "#import \"styles.typ\": saved-marker as paragraph_tab, tabs as apply-paragraph-tabs\n#show: apply-paragraph-tabs\n#set text(lang: \"en\")\n#paragraph_tab\nThis result follows.\n"
+      }
+    },
+    {
+      "id": "pde.prose-paragraph-marker--facade-multihop-footnote",
+      "rule_id": "pde.prose-paragraph-marker",
+      "kind": "facade-multihop-footnote",
+      "files": {
+        "main.typ": "#import \"bridge.typ\": saved-marker as paragraph_tab, tabs as apply-paragraph-tabs\n#show: apply-paragraph-tabs\n#set text(lang: \"en\")\nThis holds.#footnote[Reason.]\n\nthis consequence follows.\n",
+        "styles.typ": "#import \"@local/text-utils:0.1.2\": paragraph-tab as marker, apply-paragraph-tabs as tabs, highlighted as paint\n#let saved-marker = marker\n#let count = 1\n",
+        "bridge.typ": "#import \"styles.typ\": saved-marker, tabs\n"
+      },
+      "config": "rule-set=\"pde\"\ninclude=[\"main.typ\"]\n",
+      "normative_diagnostics": 1,
+      "note": "",
+      "intentional_parse_error": false,
+      "scenario_heading": null,
+      "assert_normative_count": true,
+      "expected_candidate": {
+        "main.typ": "#import \"bridge.typ\": saved-marker as paragraph_tab, tabs as apply-paragraph-tabs\n#show: apply-paragraph-tabs\n#set text(lang: \"en\")\nThis holds.#footnote[Reason.]\n#parbreak()\n\n#paragraph_tab\nThis consequence follows.\n"
+      }
+    },
+    {
+      "id": "pde.text-only-highlight--facade-reviewed-alias",
+      "rule_id": "pde.text-only-highlight",
+      "kind": "facade-reviewed-alias",
+      "files": {
+        "main.typ": "#import \"styles.typ\": paint as hi\n#hi[The term $x^i$ matters.]\n",
+        "styles.typ": "#import \"@local/text-utils:0.1.2\": paragraph-tab as marker, apply-paragraph-tabs as tabs, highlighted as paint\n#let saved-marker = marker\n#let count = 1\n"
+      },
+      "config": "rule-set=\"pde\"\ninclude=[\"main.typ\"]\n",
+      "normative_diagnostics": 1,
+      "note": "",
+      "intentional_parse_error": false,
+      "scenario_heading": null,
+      "assert_normative_count": true,
+      "expected_candidate": {
+        "main.typ": "#import \"styles.typ\": paint as hi\n#hi[The term ]$x^(i)$#hi[ matters.]\n"
+      }
+    },
+    {
+      "id": "pde.prose-paragraph-marker--facade-unused-unsafe",
+      "rule_id": "pde.prose-paragraph-marker",
+      "kind": "facade-unused-unsafe",
+      "files": {
+        "main.typ": "#import \"styles.typ\": saved-marker as paragraph_tab, tabs as apply-paragraph-tabs\n#show: apply-paragraph-tabs\n#set text(lang: \"en\")\nFirst idea.\n\nthis consequence follows.\n",
+        "styles.typ": "#import \"@local/text-utils:0.1.2\": paragraph-tab as marker, apply-paragraph-tabs as tabs, highlighted as paint\n#let saved-marker = marker\n#let count = 1\n#let unused = mystery()\n"
+      },
+      "config": "rule-set=\"pde\"\ninclude=[\"main.typ\"]\n",
+      "normative_diagnostics": 0,
+      "note": "",
+      "intentional_parse_error": false,
+      "scenario_heading": null,
+      "assert_normative_count": true,
+      "expected_no_target_edits": true
+    },
+    {
+      "id": "core.parenthesized-scripts--facade-core-transitive",
+      "rule_id": "core.parenthesized-scripts",
+      "kind": "facade-core-transitive",
+      "files": {
+        "main.typ": "#import \"styles.typ\": saved-marker as paragraph_tab\n$X^i$\n",
+        "styles.typ": "#import \"@local/text-utils:0.1.2\": paragraph-tab as marker, apply-paragraph-tabs as tabs, highlighted as paint\n#let saved-marker = marker\n#let count = 1\n"
+      },
+      "config": "rule-set=\"core\"\ninclude=[\"main.typ\"]\n",
+      "normative_diagnostics": 1,
+      "note": "",
+      "intentional_parse_error": false,
+      "scenario_heading": null,
+      "assert_normative_count": true,
+      "expected_candidate": {
+        "main.typ": "#import \"styles.typ\": saved-marker as paragraph_tab\n$X^(i)$\n"
+      }
+    },
+    {
+      "id": "pde.prose-paragraph-marker--facade-wildcard-refused",
+      "rule_id": "pde.prose-paragraph-marker",
+      "kind": "facade-wildcard-refused",
+      "files": {
+        "main.typ": "#import \"styles.typ\": *\n#show: apply-paragraph-tabs\n#set text(lang: \"en\")\nFirst idea.\n\nthis consequence follows.\n",
+        "styles.typ": "#import \"@local/text-utils:0.1.2\": paragraph-tab as marker, apply-paragraph-tabs as tabs, highlighted as paint\n#let saved-marker = marker\n#let count = 1\n"
+      },
+      "config": "rule-set=\"pde\"\ninclude=[\"main.typ\"]\n",
+      "normative_diagnostics": 0,
+      "note": "",
+      "intentional_parse_error": false,
+      "scenario_heading": null,
+      "assert_normative_count": true,
+      "expected_no_target_edits": true
+    },
+    {
+      "id": "pde.import-order--facade-no-new-purity",
+      "rule_id": "pde.import-order",
+      "kind": "facade-no-new-purity",
+      "files": {
+        "main.typ": "#import \"figures.typ\": figure-number\n#import \"styles.typ\": saved-marker as paragraph_tab\n",
+        "styles.typ": "#import \"@local/text-utils:0.1.2\": paragraph-tab as marker, apply-paragraph-tabs as tabs, highlighted as paint\n#let saved-marker = marker\n#let count = 1\n",
+        "figures.typ": "#let figure-number = 1\n"
+      },
+      "config": "rule-set=\"pde\"\ninclude=[\"main.typ\"]\n",
+      "normative_diagnostics": null,
+      "note": "Export-access capability does not expand the separate import-order initializer-purity authority.",
+      "intentional_parse_error": false,
+      "scenario_heading": null,
+      "assert_normative_count": false,
+      "expected_no_target_edits": true
     }
   ]
 }

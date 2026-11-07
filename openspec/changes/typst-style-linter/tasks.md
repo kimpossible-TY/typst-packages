@@ -200,4 +200,13 @@ The design follow-up is reviewed and merged first. Groups 2–7 are authorized i
 - [x] 25.2 Share exact literal root paragraph/footnote ownership. Let the gap rule insert a missing break before an existing marker, and the marker rule own the complete break-plus-marker repair when a marker is missing.
 - [x] 25.3 Preserve comments, directive targets, ignored-rule ownership, original prose bytes, existing breaks and language/casing refusals. Require actual followup capitalization and authenticated zero-edit reanalysis.
 - [x] 25.4 Complete independent exact-source review, 764 Python tests with rendering enabled (763 passed, one filesystem setuid skip), four Rust tests, formatting/Clippy, strict OpenSpec and whitespace checks. Frozen audit: 225 fixtures, 286 actual CLI calls, 58 verified candidate reanalyses, 33 PARTIAL / 0 NOT_IMPLEMENTED / 0 COMPLETE, with zero invariant issues. Production writes, compilation and rollout remain closed.
-- [ ] 25.5 Publish the reviewed footnote-composition checkpoint and verify both CI jobs for its exact draft PR head without changing PR metadata or merging.
+- [x] 25.5 Publish 1532f16bc2879355ab6ac17ab79c528a23f17786 and verify both Python 3.11/3.15 jobs for exact head CI run 42360602612. PR metadata, merge and rollout remain unchanged.
+
+
+## 26. Recognize helpers through bounded local facades
+
+- [x] 26.1 Add a separate exact-hash text-utils initializer certificate and immutable complete facade export identities without expanding import-order/removal purity authority.
+- [x] 26.2 Preserve named/renamed import, alias, shadowing and wildcard-refusal semantics in source-bound resolver evidence, including fresh candidate graph rebasing.
+- [x] 26.3 Capture required relative dependencies before the single explicit package load in both packs, using only captured bytes for transitive package requests and preserving safety/resource refusals.
+- [x] 26.4 Complete independent adversarial/source review, 814 Python tests with rendering enabled (813 passed, one filesystem setuid skip), four Rust tests, formatting/Clippy, strict OpenSpec and whitespace checks. Frozen audit: 232 fixtures, 297 actual CLI calls, 62 verified candidate reanalyses, 33 PARTIAL / 0 NOT_IMPLEMENTED / 0 COMPLETE, with zero invariant issues. Production writes, compilation and rollout remain closed.
+- [ ] 26.5 Publish this checkpoint and verify both Python 3.11/3.15 jobs for the exact draft PR head. Keep PR metadata, merge and rollout unchanged.

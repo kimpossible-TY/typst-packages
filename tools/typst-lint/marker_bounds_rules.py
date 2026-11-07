@@ -312,9 +312,9 @@ def display_proof(r, display):
     return DisplayProof(tuple(events), tuple(markers), not reasons, tuple(dict.fromkeys(reasons)))
 
 
-def analyze(tree, path, *, packages=()):
+def analyze(tree, path, *, packages=(), import_graph=None):
     packages = tuple(packages)
-    r = resolve(tree, packages)
+    r = resolve(tree, packages, import_graph=import_graph, source_path=path)
     catalog = {rule['id']: rule for rule in load_rules()[0]['rules']}
     scopes = suppressions(tree, set(catalog))
     diagnostics = {rid: [] for rid in RULE_IDS}

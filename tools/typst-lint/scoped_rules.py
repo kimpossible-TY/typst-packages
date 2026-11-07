@@ -86,9 +86,9 @@ def reference_repair(r, outer, target, packages):
     return (Edit(node.start, node.end, replacement),), None
 
 
-def analyze(tree, path, *, packages=()):
+def analyze(tree, path, *, packages=(), import_graph=None):
     packages = tuple(packages)
-    r = resolve(tree, packages)
+    r = resolve(tree, packages, import_graph=import_graph, source_path=path)
     catalog = {rule['id']: rule for rule in load_rules()[0]['rules']}
     scopes = suppressions(tree, set(catalog))
     diagnostics, edits, suppressed = ({rid: [] for rid in RULE_IDS} for _ in range(3))

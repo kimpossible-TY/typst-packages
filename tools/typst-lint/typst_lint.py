@@ -341,20 +341,44 @@ def report(root, mode, *, package_path=None, _verify=True, _analysis_observer=No
         except (AdapterError, OSError, InputError) as error:
             file_coverage.extend(dict(path=name, rule_id=rid, status='unsupported', reasons=[str(error)])
                                  for rid in applicable(name))
+    # Dependency bytes are captured before package lookup. Facade analysis and
+    # candidate passes use only these retained inputs, never ambient caches.
+    from import_graph import import_request, load_import_graph
+    has_relative_import = any(
+        request is not None and not request.startswith('@')
+        for tree in parsed.values() for index, node in enumerate(tree.nodes)
+        if node.kind == 'ModuleImport' for request in (import_request(tree, index),))
+    import_graph = None
+    if parsed and (config.pack == 'pde' or has_relative_import):
+        import_graph = load_import_graph(root, ((item.path, item.source) for item in selected_sources
+                                               if item.path in parsed))
     package_sources, package_evidence, package_unavailable = (), [], []
     resolved_package_path = None
     if package_path is not None and any(item.path.endswith('.typ') for item in selected_sources):
-        requested = sorted({name for tree in parsed.values() for name in imported_paths(tree)})
-        loaded = load_packages(package_path, requested)
+        requested = {name for tree in parsed.values() for name in imported_paths(tree)}
+        if import_graph is not None:
+            unavailable_sources = {item.path for item in import_graph.unavailable if not item.request}
+            # Parse one dependency at a time rather than retaining another
+            # graph-sized collection of syntax trees. Invalid dependencies
+            # cannot grant facade identity or trigger speculative package reads.
+            for dependency in import_graph.sources:
+                if dependency.path in parsed:
+                    require(parsed[dependency.path].source == dependency.source,
+                            'Captured dependency graph differs from selected source bytes')
+                    continue
+                # Capture already recorded a syntax/resource or unresolved
+                # import-context refusal. Preserve that negative evidence;
+                # supplying a package root must not retry the refused parse.
+                if dependency.path in unavailable_sources:
+                    continue
+                dependency_tree = parse(dependency.source)
+                if not dependency_tree.nodes[0].errors:
+                    requested.update(imported_paths(dependency_tree))
+        loaded = load_packages(package_path, sorted(requested))
         package_sources = loaded.sources
         package_evidence = [asdict(record) for record in loaded.evidence]
         package_unavailable = [asdict(record) for record in loaded.unavailable]
         resolved_package_path = loaded.package_path
-    import_graph = None
-    if config.pack == 'pde' and parsed:
-        from import_graph import load_import_graph
-        import_graph = load_import_graph(root, ((item.path, item.source) for item in selected_sources
-                                               if item.path in parsed))
     for item in inputs:
         name = item['path']
         if name not in parsed and name not in markdown:

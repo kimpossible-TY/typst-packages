@@ -228,13 +228,13 @@ def _drawing(r, i, is_line):
     return tuple(calls), None
 
 
-def analyze(tree, path, *, packages=()):
+def analyze(tree, path, *, packages=(), import_graph=None):
     # Shared predicates certify exact authentic raw artifacts, including the
     # namespace chain. Imports are deliberately late to avoid circular loading.
     from static_resolver import is_mannot_binding, is_cetz_line_binding, is_cetz_module_binding
     from marker_bounds_rules import scoped_targets, display_proof, scope_ownership
 
-    r = resolve(tree, tuple(packages))
+    r = resolve(tree, tuple(packages), import_graph=import_graph, source_path=path)
     parents = _parents(r)
     catalog = {rule['id']: rule for rule in load_rules()[0]['rules']}
     directives = suppressions(tree, set(catalog))

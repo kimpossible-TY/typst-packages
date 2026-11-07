@@ -42,12 +42,13 @@ def rule_ids(pack):
 
 def _analyze(tree, path, pack, fallback_language, packages, reference_catalog, entrypoint, import_graph=None):
     results = {SCRIPT: scripts(tree, path, _verify=False)}
-    resolution = resolve(tree, fallback_language=fallback_language, packages=packages)
+    resolution = resolve(tree, fallback_language=fallback_language, packages=packages,
+                         import_graph=import_graph, source_path=path)
     results.update(references(tree, path, resolution, reference_catalog))
     results.update(themes(tree, path, resolution))
-    results.update(scoped(tree, path, packages=packages))
-    results.update(markers(tree, path, packages=packages))
-    results.update(anchors(tree, path, packages=packages))
+    results.update(scoped(tree, path, packages=packages, import_graph=import_graph))
+    results.update(markers(tree, path, packages=packages, import_graph=import_graph))
+    results.update(anchors(tree, path, packages=packages, import_graph=import_graph))
     results.update(books(tree, path, resolution, entrypoint=entrypoint))
     if pack == 'pde':
         results.update(imports(tree, path, graph=import_graph))

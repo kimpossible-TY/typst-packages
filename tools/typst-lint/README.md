@@ -78,12 +78,44 @@ or runtime geometry is inferred from those capability proofs.
 Absent optional namespace evidence leaves the reference finding diagnostic-only;
 a directly requested missing artifact remains an input error. The reference function's runtime
 `projects.json` is never loaded or evaluated by this analyzer. A matching package name/version
-alone is insufficient. Other versions, modified source and local facades remain
-unresolved, not version-style violations. Missing/unsafe/malformed requested
+alone is insufficient. Other versions, modified source and general local facades remain unresolved,
+not version-style violations. The separately certified named text-utils facade
+subset below is the only current local helper-forwarding exception. Missing/unsafe/malformed requested
 inputs fail; unsupported valid artifacts are reported with reasons. Package
 files are never changed, fetched, evaluated or installed. Reports record manifest
 and source identities/hashes. These read snapshots are not proof that a future
 compiler sees the same resources; immutable compiler capture remains pending.
+
+## Captured helper forwarding through local files
+
+A bounded local facade such as `styles.typ` can forward real text-utils 0.1.2
+helpers through explicit named/renamed imports and immutable aliases. This uses
+a separate complete export-identity proof, plus an exact source/AST certificate
+that the dependency-free package initializer only creates immutable values and
+deferred functions. It does not prove those function calls pure or let the
+import-order/removal rules reorder package-bearing facades.
+
+The facade must account for every binding and statement. Unsupported unused
+calls, functions, output, sets/shows, mutation, missing exports, wildcards or
+module namespaces invalidate the entire proof. Other reviewed packages do not
+inherit initializer safety. Ordinary constants never become helper APIs and
+still shadow imported builtin names. Canonical marker spelling and an already
+installed reviewed show remain required for insertion.
+
+Relative dependencies are safely captured before one explicit package load.
+Package requests found only in a facade come from those retained bytes, not a
+new filesystem lookup. The core pack now performs this graph capture when
+needed as well, including its path, race and graph-budget refusals. Captured
+syntax/resource failures remain negative evidence and are not retried merely
+because a package root was supplied. Markdown example imports remain data.
+Candidate passes use freshly rebased immutable graphs; all resolver variants
+share the same captured input boundary, without extending scoped/book package
+authority. No consumer dependency is reread during candidate authentication.
+
+The package loader may still report a local file name as `unreviewed-package`:
+that is its package-contract result, not a facade capability or per-rule
+coverage claim. No local file is promoted merely by its spelling. See
+[FACADE_PROVENANCE_CONTRACT.md](FACADE_PROVENANCE_CONTRACT.md).
 
 ## Consumer configuration
 
@@ -119,9 +151,9 @@ files; `directory/**` exclusions prune their subtrees. Config/entrypoint/catalog
 paths must be regular files without symlink components. The root is canonicalized.
 These read checks do not establish an editor lease or race-safe write snapshot.
 
-The explicit entrypoint is safely captured for bounded book ownership. For the
-PDE pack, selected Typst sources also seed a read-only graph of explicitly
-referenced relative imports. It is limited to 512 files, 16 MiB, 4096 edges and
+The explicit entrypoint is safely captured for bounded book ownership. The
+PDE pack, and core inputs with literal non-package imports, seed a read-only
+graph of explicitly referenced relative imports from selected Typst bytes. It is limited to 512 files, 16 MiB, 4096 edges and
 depth 32, with the same 1 MiB file bound. Imported files remain evidence only,
 never expand the source selection, and receive no style findings unless selected.
 General includes, packages, initializer effects and computed imports are not
@@ -170,7 +202,8 @@ Limitations remain explicit:
 - Direct reviewed package imports, explicit renames/module aliases, simple aliases,
   lexical shadowing and literal builtin text-language settings have a bounded
   static resolver. Pure relative re-export graphs have a separate bounded import
-  backend; general import/include graphs and facade API provenance remain unsupported. Unknown wildcard imports, bindings, dynamic language, show/output
+  backend; a separate named text-utils facade capability is described below.
+  General import/include graphs and other facade API provenance remain unsupported. Unknown wildcard imports, bindings, dynamic language, show/output
   effects and deferred bodies cannot certify paragraph prose or language.
 - Root prose with proven canonical paragraph markers supports three paragraph
   rules. Reviewed root project-reference calls, typed displays, bounded theme APIs,
@@ -393,8 +426,9 @@ heading or display siblings, skipping only whitespace and comments. It removes
 only the marker token, keeping its original line, comments, CRLF/BOM and structural
 separation. It avoids redundant gap/casing proposals for a marker that should be
 removed. A directive targeting that marker, even for another rule, refuses removal
-rather than acquiring a different target. Nested bodies and facade/alias forms
-remain unsupported by this bounded paragraph contract.
+rather than acquiring a different target. Nested bodies, general facades and
+noncanonical marker spellings remain unsupported; a certified named text-utils
+facade can retain the existing canonical marker identity.
 
 `pde.text-only-highlight` diagnoses direct rendered math inside builtin `highlight`
 or the reviewed text-utils `highlighted` helper. The simple content-only repair

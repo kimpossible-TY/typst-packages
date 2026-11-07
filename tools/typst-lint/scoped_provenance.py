@@ -1,8 +1,10 @@
 """Bounded direct callback proofs for reviewed scoped-annotations 0.3.0.
 
 No filesystem/evaluation occurs here. The caller supplies loader-verified bytes.
-Raw mannot reexports and facade imports are deliberately not certified. Scope
-callback execution is recognized only for one literal, single-parameter closure.
+Raw mannot reexports and scoped-package facade imports are not certified. An
+optional captured text-utils facade context preserves surrounding prose facts,
+not scope-helper initializer authority. Scope callback execution is recognized
+only for one literal, single-parameter closure.
 Nested arbitrary closures, context expressions, mutation and includes stay opaque.
 """
 from static_resolver import (_Resolver, Binding, _literal_string, is_mannot_binding, MANNOT_NAMESPACE,
@@ -19,8 +21,8 @@ def arguments(resolver, i):
 
 
 class ScopedResolver(_Resolver):
-    def __init__(self, tree, packages):
-        super().__init__(tree, None, packages)
+    def __init__(self, tree, packages, *, import_graph=None, source_path=None):
+        super().__init__(tree, None, packages, import_graph, source_path)
         self.scope_calls = {}
         self.callback_bodies = {}
         self.state.bind('ref', Binding('builtin', 'ref'))
@@ -88,8 +90,8 @@ class ScopedResolver(_Resolver):
         return super().visit(i, state, output=output)
 
 
-def resolve(tree, packages=()):
-    resolver = ScopedResolver(tree, tuple(packages))
+def resolve(tree, packages=(), *, import_graph=None, source_path=None):
+    resolver = ScopedResolver(tree, tuple(packages), import_graph=import_graph, source_path=source_path)
     # Mutation may change captures before deferred contextual scope execution.
     # Do not infer call order or chase include effects in this bounded backend.
     unsafe = {'ModuleInclude', 'DestructAssignment', 'Conditional', 'ForLoop', 'WhileLoop'}

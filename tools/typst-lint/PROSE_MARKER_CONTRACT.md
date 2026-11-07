@@ -51,7 +51,9 @@ point:
   prose/style ownership.
 
 Only explicit package snapshots supplied through the existing safe loader
-establish that identity. Aliased/module access to the show function can prove
+establish that identity. A captured, completely accounted named local facade
+may forward it under [FACADE_PROVENANCE_CONTRACT.md](FACADE_PROVENANCE_CONTRACT.md);
+this does not authorize unknown package initializers or wildcard namespaces. Aliased/module access to the show function can prove
 its application. An alias restored to the canonical marker spelling can prove
 availability. Alias-only marker availability cannot justify inventing a new
 spelling or import. The installed show captures its function value; rebinding

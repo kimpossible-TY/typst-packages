@@ -1,11 +1,12 @@
 """Conservative, syntax-only binding and language proofs over immutable ASTs.
 
-No evaluation, filesystem reads, package search or import traversal happens here.
+No evaluation, filesystem reads or package search happens here. Optional captured
+relative imports use a separate, bounded facade export-access capability.
 PackageSource is explicit trusted loader input: the loader must verify its selected
 package manifest, entrypoint identity and read safety. We additionally match the
 entrypoint bytes to the reviewed contract below. A path/version alone is not proof.
 
-This is deliberately a direct-import subset, not a complete document-graph or
+This is deliberately a bounded import subset, not a complete document-graph or
 Typst evaluator. Only root markup may be certified ordinary prose. Nested content,
 closures, dynamic execution, includes and unknown show/output effects are not
 certified. All unresolved cases remain partial coverage; absence of a binding is
@@ -369,7 +370,7 @@ class _State:
 
 
 class _Resolver:
-    def __init__(self, tree, fallback_language, packages):
+    def __init__(self, tree, fallback_language=None, packages=(), import_graph=None, source_path=None):
         self.tree = tree
         self.nodes = tree.nodes
         self.facts = [Facts() for _ in tree.nodes]
@@ -438,6 +439,10 @@ class _Resolver:
                 continue
             self.packages[package.import_path] = (package, contract)
         self.state = _State(fallback_language)
+        self.facades = None
+        self.facade_graph = import_graph
+        self.facade_packages = packages
+        self.source_path = source_path
 
     def text(self, i):
         return _raw(self.tree, i).decode('utf-8')
@@ -823,6 +828,11 @@ class _Resolver:
         source_module = bool(source_binding and source_binding.kind == 'module'
                              and source_binding.package == CETZ)
         module = source_binding if builtin_math or source_module else self.module_binding(path)
+        facade = self.facade_bindings(i, path) if module is None else None
+        if facade is not None:
+            for local, binding in facade:
+                state.bind(local, binding)
+            return
         if module is None:
             self.note(i, 'Import has no verified direct-package contract')
         items = next((c for c in children if self.nodes[c].kind == 'ImportItems'), None)
@@ -880,6 +890,64 @@ class _Resolver:
                 state.bind(name, module)
             else:
                 state.unknown_wildcard()
+
+    def facade_bindings(self, i, path):
+        """Translate complete named facade exports through validated packages.
+
+        Local literals deliberately bind unknown, including names like text.
+        A missing export or mismatched package origin refuses the whole import,
+        so existing conservative named/wildcard behavior handles the fallback.
+        """
+        if self.facade_graph is None or path is not None and path.startswith('@'):
+            return None
+        from import_graph import import_shape
+        shape = import_shape(self.tree, i)
+        if shape is None or shape.items is None:
+            self.note(i, 'Facade wildcard, namespace or dotted imports are unsupported')
+            return None
+        # Relative facade paths use the graph's literal grammar, including
+        # Unicode. Keep the established direct-package string grammar intact.
+        path = shape.request
+        if path.startswith('@'):
+            return None
+        if self.facades is None:
+            # Direct imports need no facade graph scan or initializer parsing.
+            # import_graph -> package_loader -> static_resolver is an existing
+            # cycle, so load the capability only for its first actual consumer.
+            from facade_provenance import FacadeAnalyzer
+            analyzer = FacadeAnalyzer(self.facade_graph, self.facade_packages)
+            reason = analyzer.consumer_reason(self.source_path, self.tree.source)
+            if reason:
+                self.note(i, reason)
+                return None
+            self.facades = analyzer
+        target = self.facades.graph.target_for(self.source_path, path)
+        if target is None or any(u.path == self.source_path and u.request == path
+                                 for u in self.facades.graph.unavailable):
+            self.note(i, 'Relative facade target is not a captured dependency')
+            return None
+        evidence = self.facades.analyze(target, (self.source_path,))
+        if not evidence.accepted:
+            self.note(i, evidence.reason or 'Facade export-access proof is unavailable')
+            return None
+        exports = dict(evidence.exports)
+        if any(name not in exports for name, _ in shape.items):
+            self.note(i, 'Requested facade export is unavailable')
+            return None
+        bindings = []
+        for name, alias in shape.items:
+            origin = exports[name].package_origin
+            binding = None
+            if origin is not None:
+                binding = self.package_binding(origin.import_path, origin.export_name)
+                if (binding is None or binding.kind != 'api' or binding.name != origin.canonical_name
+                        or binding.package != origin.import_path
+                        or binding.source_identity != origin.source_identity
+                        or binding.source_sha256 != origin.source_sha256):
+                    self.note(i, 'Facade package origin does not match a verified binding')
+                    return None
+            bindings.append((alias, binding))
+        return tuple(bindings)
 
     def set_node(self, i, state):
         children = self.sig(i)
@@ -968,7 +1036,8 @@ class _Resolver:
             self.note(i, 'Unknown show transformation may change language/body ownership')
 
 
-def resolve(tree: Tree, *, fallback_language=None, packages=()) -> Resolution:
+def resolve(tree: Tree, *, fallback_language=None, packages=(), import_graph=None,
+            source_path=None) -> Resolution:
     """Return conservative facts aligned to immutable ``tree.nodes`` IDs.
 
     Fallback is used only before any source language override. Unknown/dynamic
@@ -983,7 +1052,7 @@ def resolve(tree: Tree, *, fallback_language=None, packages=()) -> Resolution:
         raise InputError('Invalid fallback language')
     if type(packages) is not tuple:
         raise InputError('Resolver package sources must be an immutable tuple')
-    resolver = _Resolver(tree, fallback_language, packages)
+    resolver = _Resolver(tree, fallback_language, packages, import_graph, source_path)
     if tree.nodes[0].errors:
         return Resolution(digest(tree.source), tuple(resolver.facts), ('Malformed syntax; resolver has no proofs',))
     if tree.mode != 'markup':
