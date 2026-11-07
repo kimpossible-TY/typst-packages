@@ -122,7 +122,7 @@ that is its package-contract result, not a facade capability or per-rule
 coverage claim. No local file is promoted merely by its spelling. See
 [FACADE_PROVENANCE_CONTRACT.md](FACADE_PROVENANCE_CONTRACT.md).
 
-## Internal relative scalar capture foundation
+## Internal relative scalar capture and repair
 
 A separate internal proof/capture layer now accounts for named relative imports
 and their entire inert scalar dependency graph. It checks exact declaration and
@@ -137,13 +137,21 @@ schema-1 historical recovery keep their previous semantics. Live capture receipt
 reject altered, stale, copied, foreign or expired evidence. Their reports and
 pure proofs are not candidate, committed-source or compiler authority.
 
-The proposed identity `captured-relative-core-v1` is **not** registered or exposed
-by a CLI. Existing public profiles still refuse imports. Actual script analysis,
-protected root-only repair, multi-file compilation and publication must be
-separately integrated and verified before this graph can drive those operations.
-No consumer documents or installed build routes are changed. See
-[CAPTURED_RELATIVE_CORE_CONTRACT.md](CAPTURED_RELATIVE_CORE_CONTRACT.md) and
-[CAPTURED_RELATIVE_INPUT_CONTRACT.md](CAPTURED_RELATIVE_INPUT_CONTRACT.md).
+The separate internal `ProtectedCapturedRelativeFix` now runs actual root/module
+script analysis and an independent original-source replay through that same
+transaction. Only exact root parentheses may change; dependency bytes, import
+prefixes, scalar origins, alias routes and use ownership stay bound. Opaque
+candidates and committed graph receipts retain independent facts; capture/proof
+reports cannot substitute for the bridge's own successful apply. Valid fixes and
+honest successful reports survive a later rejected handoff.
+
+The identity `captured-relative-core-v1` is **not** registered or exposed by a CLI.
+Existing public profiles still refuse imports, and the current compiler does not
+accept this graph receipt. Multi-file resource capture, compilation and publication
+remain separate work. No consumer documents or installed build routes are changed.
+See [CAPTURED_RELATIVE_CORE_CONTRACT.md](CAPTURED_RELATIVE_CORE_CONTRACT.md),
+[CAPTURED_RELATIVE_INPUT_CONTRACT.md](CAPTURED_RELATIVE_INPUT_CONTRACT.md) and
+[CAPTURED_RELATIVE_FIX_CONTRACT.md](CAPTURED_RELATIVE_FIX_CONTRACT.md).
 
 ## Explicit offline source profiles
 

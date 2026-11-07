@@ -1,11 +1,14 @@
 # Internal captured relative input foundation
 
-`captured_relative_inputs.py` is an internal capture session, not a registered
-source profile or a repair/compiler bridge. Its proposed source identity is
-`captured-relative-core-v1`. Neither existing public source profile accepts it;
-both still reject imports without dependency discovery. No CLI, ordinary import
-graph/resolver, compiler dispatch, source apply, PDF publication, package lookup,
-installation, consumer deployment or recovery schema is added here.
+`captured_relative_inputs.py` is an internal capture session, not itself a
+registered source profile or repair/compiler bridge. Its internal source identity
+is `captured-relative-core-v1`. The separate `captured_relative_fix.py` bridge now
+performs protected root-only script repairs by owning one capture session and
+privately borrowing its same transaction. Capture alone never authorizes a write.
+Neither existing public source profile accepts this internal identity; both still
+reject imports without dependency discovery. No CLI, ordinary import graph/resolver,
+compiler dispatch, PDF publication, package lookup, installation, consumer
+deployment or recovery schema is added by this composition.
 
 ## Ownership and two captures
 
@@ -113,12 +116,15 @@ not rediscover, read later filesystem bytes as new authority or update a stale
 baseline. Copies, foreign/expired receipts and altered nested Trees/Nodes/proofs
 refuse. Reports, fingerprints and pure proofs are data, never live authority.
 
-The pure proof identifies `core.parenthesized-scripts` as requiring real later
-analysis; this checkpoint does not claim it was evaluated. No receipt here is a
-`ValidatedCandidate`, committed source snapshot, compiler resource certificate or
-permission to write/compile. A later protected bridge must separately implement
-complete actual rule analysis, candidate provenance, root-only repair and all
-existing transaction/compiler/publication obligations.
+The pure proof identifies `core.parenthesized-scripts` as requiring actual
+analysis; the capture module itself does not claim it was evaluated. No capture
+receipt is a `ValidatedCandidate`, committed source snapshot, compiler resource
+certificate or permission to write/compile. The separate existing internal repair
+bridge performs complete actual script analysis, independently verifies candidate
+provenance, and permits only root-only repair under the existing transaction.
+Its own successful apply is required for its opaque committed graph receipt.
+Compiler/resource/publication integration and its additional obligations remain
+outside both this capture module and that repair bridge.
 
 ## Verification
 
@@ -129,3 +135,18 @@ classification, symlink/FIFO/hardlink/root-escape/alias refusal, retained identi
 postcapture byte/inode/mode/xattr/ancestor changes, and forged/copied/foreign/
 expired/altered receipts. Legacy transaction, journal/recovery, committed-snapshot
 and public source-profile tests remain required regressions.
+
+## Private repair-bridge composition
+
+The separate internal `ProtectedCapturedRelativeFix` now owns a capture session
+and privately borrows its same transaction under the same lock. Capture itself
+still issues no repair/compiler authority. `_assert_binding(capture)` performs
+bounded historical object/byte/proof/signature checks only, using independently
+retained facts (including Path backing state and exact map identity) before
+traversing potentially altered objects. Public `assert_current(capture)` always
+adds the original baseline revalidation, even after a private apply. It is never
+silently reinterpreted as a postimage check. `_borrow_transaction(capture)` first
+runs that full original guard and does not transfer ownership. Optional `fault`
+only forwards the existing transaction test hook. The repair bridge alone can
+establish successful-apply provenance and guard existing committed postimages;
+see `CAPTURED_RELATIVE_FIX_CONTRACT.md`. No recovery schema changes are involved.

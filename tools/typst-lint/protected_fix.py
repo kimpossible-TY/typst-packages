@@ -438,6 +438,7 @@ class ProtectedCoreFix:
         self._candidate = None
         self._history = []
         self._validated_summary = None
+        self._summary_facts = None
         self._summary = None
         self._compile_owner = object()
         self._compile_validation = None
@@ -584,6 +585,7 @@ class ProtectedCoreFix:
         self._candidate = None
         self._history = []
         self._validated_summary = None
+        self._summary_facts = None
         self._summary = None
         self._compile_validation = None
         self._validation_authority = None
@@ -627,6 +629,8 @@ class ProtectedCoreFix:
             tuple(AppliedInsertion(self.target, item.edit.start, item.edit.end,
                                    item.edit.replacement) for item in replay.edits),
             grammar_version=self._selection.grammar_version)
+        self._summary_facts = (self._validated_summary,
+                               _retain_authority(self._validated_summary))
         self._compile_validation = _CompileValidation(token, replay, proof,
             snapshot.root, self.target, snapshot.evidence,
             digest(snapshot.evidence[self._config_path]),
@@ -643,14 +647,26 @@ class ProtectedCoreFix:
         _require(validation is not None and getattr(validation, 'candidate', None) is candidate,
                  'Independent protected candidate provenance required')
         self._assert_validation(validation)
+        facts = self._summary_facts
+        _require(facts is not None and self._validated_summary is facts[0]
+                 and _matches_authority(self._validated_summary, facts[1]),
+                 'Validated protected reporting facts changed before apply')
+        # Keep an unexposed reporting value before any transaction callback.
+        # Frozen issued records can still be reflectively changed, so copy the
+        # nested insertions as well. Other report fields contain only immutable
+        # scalar/tuple values. Later changes to the inspected report are ignored;
+        # they neither forge the applied report nor confer compiler authority.
+        reporting = replace(self._validated_summary, applied_insertions=tuple(
+            replace(item) for item in self._validated_summary.applied_insertions))
         self._candidate = None
         result = self._tx.apply(candidate)
+        # Record the known successful result before any postcommit guard. Never
+        # derive reporting from exposed objects or later filesystem bytes here.
+        self._summary = replace(reporting, modified_paths=result.modified,
+                                journal_id=result.journal)
         # Only this bridge's successful actual apply establishes authority. A
         # transaction receipt obtained through the inspection property does not.
         self._applied_validation = validation
-        # This reporting-only value is never an input to token validation/apply.
-        self._summary = replace(self._validated_summary, modified_paths=result.modified,
-                                journal_id=result.journal)
         # This check is after successful actual commit, outside transaction
         # rollback. A later selection/proof drift refuses authority while the
         # original applied summary and committed fixes remain available.

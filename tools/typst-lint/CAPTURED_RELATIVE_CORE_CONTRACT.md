@@ -1,11 +1,13 @@
 # Internal captured-relative scalar core proof
 
-This checkpoint is proof and protected-capture infrastructure only. The internal
-identity `captured-relative-core-v1` is **not** registered in `source_profiles`,
-exposed by a CLI, or consumed by a writer/compiler. Both existing public source
-profiles and every existing PARTIAL rule status remain unchanged. Certification
-is not script execution, compilation, resource/repertoire approval, or permission
-to publish a PDF.
+This module provides pure proof infrastructure. The internal identity
+`captured-relative-core-v1` is **not** registered in `source_profiles` or exposed
+by a CLI/compiler. The separate internal root-only repair bridge consumes these
+proofs only with its own transaction and independent validation authority; see
+[CAPTURED_RELATIVE_FIX_CONTRACT.md](CAPTURED_RELATIVE_FIX_CONTRACT.md). Both
+existing public source profiles and every PARTIAL rule status remain unchanged.
+Certification alone is not script execution, repair authority, compilation,
+resource/repertoire approval or permission to publish a PDF.
 
 ## Pure boundary and authority
 
@@ -144,27 +146,32 @@ The file/path/byte/parent limits fit inside the future compiler's 128-entry,
 64 KiB dependency framing, and 96 MiB workspace envelope. They do not enable or prove
 that compiler integration.
 
-## Imported uses and future independent replay
+## Imported uses and independent replay
 
 Every imported root MathIdent or `#name` occurrence records its exact node/span,
 name, kind/value/origin/full binding provenance, preorder use ordinal, enclosing
 wrapper/equation owners, and nested attachment operand owners. Grouping is
-transparent to the semantic owner identity. The semantic identity excludes
-root-import source hashes and byte/node offsets, which necessarily change when
-parentheses are inserted, but retains origin and the complete named provenance
-route. The exact proof separately retains all source-bound hashes and spans.
+transparent to the semantic owner identity. The convenience semantic identity
+retains exact declaration origin and the named provenance route, but omits use
+byte/node offsets and provenance-step hashes/spans. It is not sufficient repair
+authority. The exact proof separately retains every source-bound hash and span.
+The internal bridge compares exact module proofs and full provenance, normalizing
+only the root import step's necessarily changed whole-source hash. Initial import
+prefix bytes, node identities and spans remain exact; body use offsets change
+only through independently proven parentheses insertions.
 
 Focused real-parser tests apply actual `script_rule.analyze` proposals through
 `edit_plan` and confirm that original root/module bytes and Trees are not mutated,
 only script-boundary parentheses are inserted, and imported-use semantic owners
 survive nested scripts, fractions, wrappers, builtin shadowing, and punctuation
-strings. These are infrastructure tests, not an authorized repair bridge.
+strings. These pure tests alone do not authorize source writes.
 
-A future bridge must independently rederive insertions, enforce unchanged exact
-dependency bytes/edges and unchanged root imports, compare semantic owners and
-origins, re-certify the final original-structure candidate, actually execute the
-script rule, and validate the full resource repertoire across root and modules.
-Equal scalar values or equal use records alone never authorize rewriting.
+The separate internal bridge independently rederives insertions, enforces exact
+dependency bytes/edges and root imports, compares owners/origins/provenance,
+re-certifies final candidate structure and actually executes the script rule.
+A future compiler must additionally validate its full resource repertoire across
+root and modules. Equal scalar values or equal use records alone never authorize
+rewriting, compilation or publication.
 
 ## Core rule applicability
 

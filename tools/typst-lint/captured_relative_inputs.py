@@ -14,7 +14,7 @@ from types import MappingProxyType
 from typing import Mapping
 
 import captured_relative_core as core
-from protected_fix import _catalog, _config
+from protected_fix import _catalog, _config, _matches_authority, _retain_authority
 from syntax_client import AdapterError, Tree, parse
 from transactions import (DEFAULT_READ_LIMITS, EvidenceInput, GraphSnapshot,
                           OfflineExclusive, ProtectedTransaction, ReadLimits,
@@ -223,7 +223,7 @@ class CapturedRelativeInputSession:
     """
     def __init__(self, root: Path, target: str, *, journal_directory: Path,
                  lease, source_profile=core.SOURCE_PROFILE,
-                 limits=DEFAULT_READ_LIMITS, create_journal_directory=False):
+                 limits=DEFAULT_READ_LIMITS, create_journal_directory=False, fault=None):
         # All argument/selection/storage checks precede discovery filesystem work.
         if type(source_profile) is not str or source_profile != core.SOURCE_PROFILE:
             _input('Unknown internal captured relative source profile')
@@ -246,6 +246,8 @@ class CapturedRelativeInputSession:
         self._retained = None
         self._limits = limits
         self._create_store = create_journal_directory
+        self._fault = fault
+        self._binding_authority = None
         # Constructor is pure: this validates canonical roots, storage overlap,
         # target/evidence collision, booleans and immutable limits, without a lock.
         self._preflight = ProtectedTransaction(root, (target,),
@@ -270,7 +272,8 @@ class CapturedRelativeInputSession:
                     *(EvidenceInput(Path(p), utf8=True) for p in dependencies.values()))
         tx = ProtectedTransaction(self._root, (self._target,),
             journal_directory=self._store, lease=self._lease, limits=self._limits,
-            evidence=evidence, create_journal_directory=self._create_store, retain_ancestry=True)
+            evidence=evidence, create_journal_directory=self._create_store,
+            retain_ancestry=True, fault=self._fault)
         self._tx = tx
         try:
             tx.__enter__()
@@ -321,6 +324,7 @@ class CapturedRelativeInputSession:
             self._retained = _Retained(tx, graph, captures, dependencies, proof, report,
                 MappingProxyType({p: _tree_signature(t) for p, t in captures.items()}),
                 _report_signature(report), receipt)
+            self._binding_authority = _retain_authority((receipt, graph, tx.targets, tx.evidence_inputs))
             self._active = True
             self.assert_current(receipt)
             return self
@@ -360,13 +364,18 @@ class CapturedRelativeInputSession:
         self.assert_current(self._retained.receipt)
         return self._retained.receipt
 
-    def assert_current(self, capture):
+    def _assert_binding(self, capture):
+        """Check bounded retained identities only, never refresh baseline files."""
         retained = self._retained
         _require(self._active and retained is not None and self._tx is retained.transaction
                  and type(capture) is CapturedRelativeInputs and capture is retained.receipt
                  and getattr(capture, '_owner', None) is self._owner
                  and getattr(capture, '_seal', None) is _SEAL,
                  'Only this active session\'s original capture receipt is authoritative')
+        _require(self._binding_authority is not None
+                 and _matches_authority((capture, retained.graph, retained.transaction.targets,
+                                         retained.transaction.evidence_inputs), self._binding_authority),
+                 'Captured relative retained binding changed')
         _require(all(hasattr(capture, name) for name in ('root', 'target', 'source_profile',
                  'captures', 'dependency_evidence', 'proof', 'report')),
                  'Captured relative receipt fields changed')
@@ -399,10 +408,20 @@ class CapturedRelativeInputSession:
         for path, tree in capture.captures.items():
             _require(_tree_signature(tree) == retained.tree_signatures[path],
                      f'Captured parser tree changed: {path}')
-        # Exact retained transaction records, never rediscovery/fresh byte authority.
-        retained.transaction._revalidate()
+
+    def assert_current(self, capture):
+        """Guard the original baseline, including after any private transaction apply."""
+        self._assert_binding(capture)
+        # This public method always refers to original records, not postimages.
+        self._retained.transaction._revalidate()
+
+    def _borrow_transaction(self, capture):
+        """Internal bridge borrows this exact locked transaction; ownership stays here."""
+        self.assert_current(capture)
+        return self._retained.transaction
 
     def __exit__(self, exc_type, exc, tb):
         self._active = False
+        self._binding_authority = None
         if self._tx is not None:
             return self._tx.__exit__(exc_type, exc, tb)

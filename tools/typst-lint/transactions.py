@@ -39,7 +39,7 @@ import re
 import stat
 import sys
 from types import MappingProxyType
-from typing import Callable, Mapping
+from typing import Callable, Mapping, NamedTuple
 import uuid
 
 try:
@@ -207,6 +207,16 @@ class ValidatedCandidate:
     passes: int
     _owner: object = field(repr=False)
     _seal: object = field(repr=False)
+
+
+class _CandidateFacts(NamedTuple):
+    """Issuance-owned facts, independent of the caller-visible token's fields."""
+    source_view: Mapping[str, bytes]
+    sources: tuple[tuple[str, bytes], ...]
+    findings: frozenset[str]
+    passes: int
+    owner: object
+    seal: object
 
 
 @dataclass(frozen=True, slots=True, init=False, eq=False)
@@ -842,6 +852,7 @@ class ProtectedTransaction(_JournalReader):
         self._fds: list[int] = []
         self._owner = object()
         self._issued: ValidatedCandidate | None = None
+        self._issued_facts: _CandidateFacts | None = None
         self._used = False
         self._active = False
         self._files: dict[str, _File] = {}
@@ -984,6 +995,7 @@ class ProtectedTransaction(_JournalReader):
     def __exit__(self, exc_type, exc, tb):
         self._active = False
         self._issued = None
+        self._issued_facts = None
         for fd in reversed(self._fds):
             os.close(fd)
         self._fds.clear()
@@ -1169,11 +1181,17 @@ class ProtectedTransaction(_JournalReader):
                       and not any(p.edits or p.deferred for p in second.values()),
                       'Candidate is not idempotent')
                 self._revalidate()
+                # Retain immutable primitive payloads separately from the issued
+                # object's replaceable attributes and the map's backing dict.
+                items = tuple((str(p), bytes(data)) for p, data in sources.items())
+                view = MappingProxyType(dict(items))
+                findings = frozenset(str(item) for item in state.findings)
                 token = object.__new__(ValidatedCandidate)
-                for name, value in dict(sources=MappingProxyType(dict(sources)),
-                                        findings=state.findings, passes=iteration,
+                for name, value in dict(sources=view, findings=findings, passes=iteration,
                                         _owner=self._owner, _seal=_TOKEN_SEAL).items():
                     object.__setattr__(token, name, value)
+                self._issued_facts = _CandidateFacts(view, items, findings, iteration,
+                                                     self._owner, _TOKEN_SEAL)
                 self._issued = token
                 return token
             _fail(iteration < 8, 'Eight-pass convergence limit exceeded')
@@ -1244,21 +1262,50 @@ class ProtectedTransaction(_JournalReader):
         self._write_new(self._tx_fd, name, _json_bytes(dict(kind=kind, **values)))
         self._sync(self._tx_fd, 'journal_directory_fsync', name)
 
-    def apply(self, candidate: ValidatedCandidate) -> ApplyResult:
-        self._check_active()
-        _fail(not self.recovery_only and not self._used, 'Cannot apply in this context')
-        _fail(candidate is self._issued and isinstance(candidate, ValidatedCandidate)
-              and candidate._owner is self._owner and candidate._seal is _TOKEN_SEAL,
+    def _apply_inputs(self, candidate: ValidatedCandidate) -> tuple[Mapping[str, bytes], frozenset[str]]:
+        facts = self._issued_facts
+        _fail(candidate is self._issued and type(candidate) is ValidatedCandidate
+              and facts is not None and facts.owner is self._owner and facts.seal is _TOKEN_SEAL,
               'Only this active session\'s validated candidate may be applied')
+        fields = vars(candidate)
+        _fail(type(fields) is dict and len(fields) == 5 and all(type(name) is str for name in fields)
+              and set(fields) == {'sources', 'findings', 'passes', '_owner', '_seal'}
+              and fields['_owner'] is facts.owner and fields['_seal'] is facts.seal
+              and type(fields['passes']) is int and fields['passes'] == facts.passes
+              and type(fields['findings']) is frozenset
+              and len(fields['findings']) == len(facts.findings)
+              and all(type(item) is str for item in fields['findings'])
+              and fields['findings'] == facts.findings
+              and fields['sources'] is facts.source_view,
+              'Validated candidate fields changed since issuance')
+        view = fields['sources']
+        try:
+            matches = len(view) == len(facts.sources) and all(
+                type(path) is str and type(data) is bytes and path == old_path and data == old_data
+                for (path, data), (old_path, old_data) in zip(view.items(), facts.sources))
+        except RuntimeError as error:
+            raise TransactionError('Validated candidate sources changed since issuance') from error
+        _fail(matches, 'Validated candidate sources changed since issuance')
+        # No later read of the token or its map is allowed to select bytes or
+        # result facts. Freeze from issuance facts BEFORE filesystem operations,
+        # including active/pending checks, and BEFORE any fault callback.
+        return MappingProxyType(dict(facts.sources)), facts.findings
+
+    def apply(self, candidate: ValidatedCandidate) -> ApplyResult:
+        _fail(self._active, 'Active root lock and offline-exclusive context required')
+        _fail(not self.recovery_only and not self._used, 'Cannot apply in this context')
+        sources, findings = self._apply_inputs(candidate)
+        self._check_active()
         _fail(not self._pending(), 'Incomplete journal blocks source application')
         self._revalidate()
-        self._candidate_sizes({p: len(content) for p, content in candidate.sources.items()})
-        changed = tuple(p for p in self.targets if candidate.sources[p] != self._files[p].data)
+        self._candidate_sizes({p: len(content) for p, content in sources.items()})
+        changed = tuple(p for p in self.targets if sources[p] != self._files[p].data)
         self._used = True
         self._issued = None
+        self._issued_facts = None
         if not changed:
             self._retain_committed(self._files)
-            return ApplyResult(None, (), candidate.findings)
+            return ApplyResult(None, (), findings)
         journal = uuid.uuid4().hex
         self._journal = journal
         self._journal_bytes = 0
@@ -1269,7 +1316,7 @@ class ProtectedTransaction(_JournalReader):
         for index, p in enumerate(changed):
             before = self._files[p]
             manifest['files'].append(dict(path=p, before=base64.b64encode(before.data).decode(),
-                                          after=base64.b64encode(candidate.sources[p]).decode(),
+                                          after=base64.b64encode(sources[p]).decode(),
                                           fingerprint=_fp_json(before.fingerprint),
                                           parent=list(before.parent), stage=f'stage-{index}.bin',
                                           xattrs=[[name, base64.b64encode(data).decode()] for name, data in before.xattrs]))
@@ -1284,7 +1331,7 @@ class ProtectedTransaction(_JournalReader):
             stages = {}
             for entry in manifest['files']:
                 p = entry['path']
-                stages[p] = self._write_new(self._tx_fd, entry['stage'], candidate.sources[p],
+                stages[p] = self._write_new(self._tx_fd, entry['stage'], sources[p],
                                             mode=self._files[p].fingerprint.mode, group=self._files[p].fingerprint.gid,
                                             xattrs=self._files[p].xattrs, stage=True, path=p)
                 self._event('staged', path=p, fingerprint=_fp_json(stages[p]))
@@ -1340,7 +1387,7 @@ class ProtectedTransaction(_JournalReader):
         # Snapshot allocation, handoff and later currentness checks must NEVER
         # enter the source rollback/recovery path above.
         self._retain_committed(expected)
-        return ApplyResult(journal, changed, candidate.findings)
+        return ApplyResult(journal, changed, findings)
 
     def recover(self, journal: str, *,
                 preserve_conflicts: Mapping[str, Fingerprint] | None = None) -> RecoveryReport:

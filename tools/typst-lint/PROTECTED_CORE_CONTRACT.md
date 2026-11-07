@@ -107,6 +107,14 @@ or compile handoff as a safety failure. Before actual apply, the retained final
 proof is independently verified again with the original selection; foreign,
 changed or cross-profile proofs cannot authorize writes. Successful immutable
 summaries report the actual selected `profile` and `grammar_version`.
+Validated reporting facts are pinned separately before apply. An unexposed copy
+of the report, including new nested insertion records, is retained before any
+transaction callback. After success, only actual modified paths and journal ID
+are added. Mid-apply mutations to inspected report objects cannot forge the
+successful report or alter compiler authority. Pre-apply report drift refuses;
+summary-only drift during apply is ignored as an input. Candidate/proof/selection
+guards remain independent and can still reject a later handoff.
+
 Selection/proof is checked again after successful actual apply, outside the
 transaction rollback boundary. Drift during application returns a safety
 failure while retaining valid committed fixes, the applied summary and its
