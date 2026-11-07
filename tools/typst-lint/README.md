@@ -245,6 +245,21 @@ Package/consumer source and installed copies are not changed by the tests.
 
 ## Verification
 
+The [all-rule matrix](coverage-matrix.md) tracks every catalog ID, its normative
+scenarios, implementation, representative fixtures, actual CLI evidence and
+remaining gaps. It does not equate passing component tests with 33 completed
+rules. Reproduce the isolated audit with the already-built parser:
+
+```sh
+python3 tools/typst-lint/audit_rules.py
+```
+
+Audit exit 2 means implementation or acceptance remains incomplete; exit 1 means
+an audit invariant or claimed supported result mismatched. Missing/unsupported
+backends and empty diagnostics are never semantic passes. The runner retains
+portable hashes and normalized reports, does not invoke a real compiler, and
+applies proposed bytes only in a separate temporary fixture for reanalysis.
+
 ```sh
 cargo fmt --check --manifest-path tools/typst-lint/syntax-adapter/Cargo.toml
 cargo clippy --locked --manifest-path tools/typst-lint/syntax-adapter/Cargo.toml -- -D warnings

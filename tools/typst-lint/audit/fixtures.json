@@ -1,0 +1,1321 @@
+{
+  "schema": 1,
+  "scope": "Representative real-CLI probes, never full acceptance coverage. Source text is synthetic and never evaluated or compiled.",
+  "fixtures": [
+    {
+      "id": "core.parenthesized-scripts--positive",
+      "rule_id": "core.parenthesized-scripts",
+      "kind": "positive",
+      "files": {
+        "main.typ": "$X^i + X_j + partial^alpha u$\n"
+      },
+      "config": "rule-set=\"pde\"\ninclude=[\"**/*.typ\",\"**/*.md\"]\n",
+      "normative_diagnostics": 3,
+      "note": "",
+      "intentional_parse_error": false,
+      "expected_candidate": {
+        "main.typ": "$X^(i) + X_(j) + partial^(alpha) u$\n"
+      },
+      "scenario_heading": "Violation in actual mathematics"
+    },
+    {
+      "id": "core.parenthesized-scripts--negative",
+      "rule_id": "core.parenthesized-scripts",
+      "kind": "negative",
+      "files": {
+        "main.typ": "$X^(i) + X_(j) + T^(i)_(j) + partial^(alpha) u$\n"
+      },
+      "config": "rule-set=\"pde\"\ninclude=[\"**/*.typ\",\"**/*.md\"]\n",
+      "normative_diagnostics": 0,
+      "note": "",
+      "intentional_parse_error": false,
+      "scenario_heading": "Non-violation with grouped scripts"
+    },
+    {
+      "id": "core.scoped-function-call--positive",
+      "rule_id": "core.scoped-function-call",
+      "kind": "positive",
+      "files": {
+        "main.typ": "#import \"@local/scoped-annotations:0.3.0\": *\n#import \"@preview/mannot:0.4.0\": mark, annot-cetz\n#local-tag-scope(s => [#s.tag(\"x\")])\n"
+      },
+      "config": "rule-set=\"pde\"\ninclude=[\"**/*.typ\",\"**/*.md\"]\n",
+      "normative_diagnostics": 1,
+      "note": "",
+      "intentional_parse_error": false,
+      "scenario_heading": "Violation with field-call syntax"
+    },
+    {
+      "id": "core.scoped-function-call--negative",
+      "rule_id": "core.scoped-function-call",
+      "kind": "negative",
+      "files": {
+        "main.typ": "#import \"@local/scoped-annotations:0.3.0\": *\n#import \"@preview/mannot:0.4.0\": mark, annot-cetz\n#local-tag-scope(t => [$ x $ #(t.tag)(\"x\") See #(t.ref)(\"x\").])\n"
+      },
+      "config": "rule-set=\"pde\"\ninclude=[\"**/*.typ\",\"**/*.md\"]\n",
+      "normative_diagnostics": 0,
+      "note": "",
+      "intentional_parse_error": false,
+      "scenario_heading": "Non-violation with receiver binding"
+    },
+    {
+      "id": "core.scoped-marker-tags--positive",
+      "rule_id": "core.scoped-marker-tags",
+      "kind": "positive",
+      "files": {
+        "main.typ": "#import \"@local/scoped-annotations:0.3.0\": *\n#import \"@preview/mannot:0.4.0\": mark, annot-cetz\n#mannot-scope(s => [$ mark(x, tag: #<x>) $])\n"
+      },
+      "config": "rule-set=\"pde\"\ninclude=[\"**/*.typ\",\"**/*.md\"]\n",
+      "normative_diagnostics": 1,
+      "note": "",
+      "intentional_parse_error": false,
+      "scenario_heading": "Violation with a manual marker label"
+    },
+    {
+      "id": "core.scoped-marker-tags--negative",
+      "rule_id": "core.scoped-marker-tags",
+      "kind": "negative",
+      "files": {
+        "main.typ": "#import \"@local/scoped-annotations:0.3.0\": *\n#import \"@preview/mannot:0.4.0\": mark, annot-cetz\n#mannot-scope(s => [$ mark(x, tag: #(s.tag)(\"x\")) $])\n"
+      },
+      "config": "rule-set=\"pde\"\ninclude=[\"**/*.typ\",\"**/*.md\"]\n",
+      "normative_diagnostics": 0,
+      "note": "",
+      "intentional_parse_error": false,
+      "scenario_heading": "Non-violation with scoped marker"
+    },
+    {
+      "id": "core.scoped-anchor-access--positive",
+      "rule_id": "core.scoped-anchor-access",
+      "kind": "positive",
+      "files": {
+        "main.typ": "#import \"@local/scoped-annotations:0.3.0\": *\n#import \"@preview/mannot:0.4.0\": mark, annot-cetz\n#mannot-scope(s => [$ mark(x, tag: #(s.tag)(\"x\")) #(s.annot)(\"x\", cetz, { line(\"x.north\", \"x.south\") }) $])\n"
+      },
+      "config": "rule-set=\"pde\"\ninclude=[\"**/*.typ\",\"**/*.md\"]\n",
+      "normative_diagnostics": 2,
+      "note": "Syntactic scope/drawing fixture; reviewed facade and drawing binding proof is unavailable, so never semantic acceptance.",
+      "intentional_parse_error": false,
+      "scenario_heading": "Violation with a known raw marker anchor"
+    },
+    {
+      "id": "core.scoped-anchor-access--negative",
+      "rule_id": "core.scoped-anchor-access",
+      "kind": "negative",
+      "files": {
+        "main.typ": "#import \"@local/scoped-annotations:0.3.0\": *\n#import \"@preview/mannot:0.4.0\": mark, annot-cetz\n#mannot-scope(s => [$ mark(x, tag: #(s.tag)(\"x\")) #(s.annot)(\"x\", cetz, { line((s.node)(\"x\", \"north\"), (s.node)(\"x\", \"south\")) }) $])\n"
+      },
+      "config": "rule-set=\"pde\"\ninclude=[\"**/*.typ\",\"**/*.md\"]\n",
+      "normative_diagnostics": 0,
+      "note": "Syntactic scope/drawing fixture; reviewed facade and drawing binding proof is unavailable, so never semantic acceptance.",
+      "intentional_parse_error": false,
+      "scenario_heading": "Non-violation with helpers"
+    },
+    {
+      "id": "core.scoped-reference-access--positive",
+      "rule_id": "core.scoped-reference-access",
+      "kind": "positive",
+      "files": {
+        "main.typ": "#import \"@local/scoped-annotations:0.3.0\": *\n#import \"@preview/mannot:0.4.0\": mark, annot-cetz\n#local-tag-scope(s => [#ref((s.tag)(\"energy\"))])\n"
+      },
+      "config": "rule-set=\"pde\"\ninclude=[\"**/*.typ\",\"**/*.md\"]\n",
+      "normative_diagnostics": 1,
+      "note": "",
+      "intentional_parse_error": false,
+      "scenario_heading": "Violation using the generated label"
+    },
+    {
+      "id": "core.scoped-reference-access--negative",
+      "rule_id": "core.scoped-reference-access",
+      "kind": "negative",
+      "files": {
+        "main.typ": "#import \"@local/scoped-annotations:0.3.0\": *\n#import \"@preview/mannot:0.4.0\": mark, annot-cetz\n#local-tag-scope(s => [#(s.ref)(\"energy\") @global-energy])\n"
+      },
+      "config": "rule-set=\"pde\"\ninclude=[\"**/*.typ\",\"**/*.md\"]\n",
+      "normative_diagnostics": 0,
+      "note": "",
+      "intentional_parse_error": false,
+      "scenario_heading": "Non-violation using the public local API"
+    },
+    {
+      "id": "core.local-overlay-api--positive",
+      "rule_id": "core.local-overlay-api",
+      "kind": "positive",
+      "files": {
+        "main.typ": "#import \"@local/scoped-annotations:0.3.0\": *\n#import \"@preview/mannot:0.4.0\": mark, annot-cetz\n#mannot-scope(s => [$ mark(x, tag: #(s.tag)(\"x\")) #annot-cetz((s.tag)(\"x\"), cetz, draw) $])\n"
+      },
+      "config": "rule-set=\"pde\"\ninclude=[\"**/*.typ\",\"**/*.md\"]\n",
+      "normative_diagnostics": 1,
+      "note": "",
+      "intentional_parse_error": false,
+      "scenario_heading": "Violation with the raw API"
+    },
+    {
+      "id": "core.local-overlay-api--negative",
+      "rule_id": "core.local-overlay-api",
+      "kind": "negative",
+      "files": {
+        "main.typ": "#import \"@local/scoped-annotations:0.3.0\": *\n#import \"@preview/mannot:0.4.0\": mark, annot-cetz\n#mannot-scope(s => [$ mark(x, tag: #(s.tag)(\"x\")) #(s.annot)(\"x\", cetz, draw) $])\n"
+      },
+      "config": "rule-set=\"pde\"\ninclude=[\"**/*.typ\",\"**/*.md\"]\n",
+      "normative_diagnostics": 0,
+      "note": "",
+      "intentional_parse_error": false,
+      "scenario_heading": "Non-violation with supported APIs"
+    },
+    {
+      "id": "core.annotation-in-display--positive",
+      "rule_id": "core.annotation-in-display",
+      "kind": "positive",
+      "files": {
+        "main.typ": "#import \"@local/scoped-annotations:0.3.0\": *\n#import \"@preview/mannot:0.4.0\": mark, annot-cetz\n#mannot-scope(s => [$ mark(x, tag: #(s.tag)(\"x\")) $\n#(s.annot)(\"x\", cetz, draw)])\n"
+      },
+      "config": "rule-set=\"pde\"\ninclude=[\"**/*.typ\",\"**/*.md\"]\n",
+      "normative_diagnostics": 1,
+      "note": "",
+      "intentional_parse_error": false,
+      "scenario_heading": "Violation after the equation"
+    },
+    {
+      "id": "core.annotation-in-display--negative",
+      "rule_id": "core.annotation-in-display",
+      "kind": "negative",
+      "files": {
+        "main.typ": "#import \"@local/scoped-annotations:0.3.0\": *\n#import \"@preview/mannot:0.4.0\": mark, annot-cetz\n#mannot-scope(s => [$ mark(x, tag: #(s.tag)(\"x\")) #(s.annot)(\"x\", cetz, draw) $])\n"
+      },
+      "config": "rule-set=\"pde\"\ninclude=[\"**/*.typ\",\"**/*.md\"]\n",
+      "normative_diagnostics": 0,
+      "note": "",
+      "intentional_parse_error": false,
+      "scenario_heading": "Non-violation inside the equation"
+    },
+    {
+      "id": "core.annotation-marker-bounds--positive",
+      "rule_id": "core.annotation-marker-bounds",
+      "kind": "positive",
+      "files": {
+        "main.typ": "#import \"@local/scoped-annotations:0.3.0\": *\n#import \"@preview/mannot:0.4.0\": mark, annot-cetz\n#mannot-scope(s => [$ x #(s.tag)(\"x\") #(s.annot)(\"x\", cetz, draw) $])\n"
+      },
+      "config": "rule-set=\"pde\"\ninclude=[\"**/*.typ\",\"**/*.md\"]\n",
+      "normative_diagnostics": 1,
+      "note": "",
+      "intentional_parse_error": false,
+      "scenario_heading": "Violation with only a plain label"
+    },
+    {
+      "id": "core.annotation-marker-bounds--negative",
+      "rule_id": "core.annotation-marker-bounds",
+      "kind": "negative",
+      "files": {
+        "main.typ": "#import \"@local/scoped-annotations:0.3.0\": *\n#import \"@preview/mannot:0.4.0\": mark, annot-cetz\n#mannot-scope(s => [$ mark(x, tag: #(s.tag)(\"x\")) #(s.annot)(\"x\", cetz, draw) $])\n"
+      },
+      "config": "rule-set=\"pde\"\ninclude=[\"**/*.typ\",\"**/*.md\"]\n",
+      "normative_diagnostics": 0,
+      "note": "",
+      "intentional_parse_error": false,
+      "scenario_heading": "Non-violation with either marker API"
+    },
+    {
+      "id": "core.unique-scope-namespace--positive",
+      "rule_id": "core.unique-scope-namespace",
+      "kind": "positive",
+      "files": {
+        "main.typ": "#import \"@local/scoped-annotations:0.3.0\": *\n#import \"@preview/mannot:0.4.0\": mark, annot-cetz\n#local-tag-scope(s => [], prefix: \"detail\")\n#local-tag-scope(s => [], prefix: \"detail\")\n"
+      },
+      "config": "rule-set=\"pde\"\ninclude=[\"**/*.typ\",\"**/*.md\"]\n",
+      "normative_diagnostics": 1,
+      "note": "",
+      "intentional_parse_error": false,
+      "scenario_heading": "Violation with explicit collisions"
+    },
+    {
+      "id": "core.unique-scope-namespace--negative",
+      "rule_id": "core.unique-scope-namespace",
+      "kind": "negative",
+      "files": {
+        "main.typ": "#import \"@local/scoped-annotations:0.3.0\": *\n#import \"@preview/mannot:0.4.0\": mark, annot-cetz\n#local-tag-scope(s => [$ x $ #(s.tag)(\"x\")])\n#local-tag-scope(s => [$ x $ #(s.tag)(\"x\")])\n"
+      },
+      "config": "rule-set=\"pde\"\ninclude=[\"**/*.typ\",\"**/*.md\"]\n",
+      "normative_diagnostics": 0,
+      "note": "",
+      "intentional_parse_error": false,
+      "scenario_heading": "Non-violation across automatic scopes"
+    },
+    {
+      "id": "core.project-ref-arguments--positive",
+      "rule_id": "core.project-ref-arguments",
+      "kind": "positive",
+      "files": {
+        "main.typ": "#import \"@local/project-references:0.1.0\": project-ref\n#project-ref(\"pde\", \"1.1.1\")\n",
+        "catalog.json": "{\"schema\": 1, \"projects\": {\"pde\": {\"references\": {\"energy\": {\"page\": 1, \"text\": \"1.1\"}, \"zero_acceleration\": {\"page\": 2, \"text\": \"1.2\"}}, \"ambiguous_labels\": [\"duplicate\"]}}}"
+      },
+      "config": "rule-set=\"pde\"\ninclude=[\"**/*.typ\",\"**/*.md\"]\ncatalog=\"catalog.json\"\n",
+      "normative_diagnostics": 1,
+      "note": "Catalog is an isolated valid snapshot, not a claim about the published PDF. Syntax-valid string-target violation; the bare @energy repair spelling is audited separately as a spec conflict.",
+      "intentional_parse_error": false,
+      "scenario_heading": "Violation with extra or wrong arguments"
+    },
+    {
+      "id": "core.project-ref-arguments--negative",
+      "rule_id": "core.project-ref-arguments",
+      "kind": "negative",
+      "files": {
+        "main.typ": "#import \"@local/project-references:0.1.0\": project-ref\n#project-ref(\"pde\", <energy>)\n",
+        "catalog.json": "{\"schema\": 1, \"projects\": {\"pde\": {\"references\": {\"energy\": {\"page\": 1, \"text\": \"1.1\"}, \"zero_acceleration\": {\"page\": 2, \"text\": \"1.2\"}}, \"ambiguous_labels\": [\"duplicate\"]}}}"
+      },
+      "config": "rule-set=\"pde\"\ninclude=[\"**/*.typ\",\"**/*.md\"]\ncatalog=\"catalog.json\"\n",
+      "normative_diagnostics": 0,
+      "note": "Catalog is an isolated valid snapshot, not a claim about the published PDF.",
+      "intentional_parse_error": false,
+      "scenario_heading": "Non-violation with a global label"
+    },
+    {
+      "id": "core.project-ref-catalog-target--positive",
+      "rule_id": "core.project-ref-catalog-target",
+      "kind": "positive",
+      "files": {
+        "main.typ": "#import \"@local/project-references:0.1.0\": project-ref\n#project-ref(\"pde\", <missing>)\n#project-ref(\"pde\", <duplicate>)\n#project-ref(\"absent\", <energy>)\n",
+        "catalog.json": "{\"schema\": 1, \"projects\": {\"pde\": {\"references\": {\"energy\": {\"page\": 1, \"text\": \"1.1\"}, \"zero_acceleration\": {\"page\": 2, \"text\": \"1.2\"}}, \"ambiguous_labels\": [\"duplicate\"]}}}"
+      },
+      "config": "rule-set=\"pde\"\ninclude=[\"**/*.typ\",\"**/*.md\"]\ncatalog=\"catalog.json\"\n",
+      "normative_diagnostics": 3,
+      "note": "",
+      "intentional_parse_error": false,
+      "scenario_heading": "Violation against a supplied snapshot"
+    },
+    {
+      "id": "core.project-ref-catalog-target--negative",
+      "rule_id": "core.project-ref-catalog-target",
+      "kind": "negative",
+      "files": {
+        "main.typ": "#import \"@local/project-references:0.1.0\": project-ref\n#project-ref(\"pde\", <energy>)\n",
+        "catalog.json": "{\"schema\": 1, \"projects\": {\"pde\": {\"references\": {\"energy\": {\"page\": 1, \"text\": \"1.1\"}, \"zero_acceleration\": {\"page\": 2, \"text\": \"1.2\"}}, \"ambiguous_labels\": [\"duplicate\"]}}}"
+      },
+      "config": "rule-set=\"pde\"\ninclude=[\"**/*.typ\",\"**/*.md\"]\ncatalog=\"catalog.json\"\n",
+      "normative_diagnostics": 0,
+      "note": "",
+      "intentional_parse_error": false,
+      "scenario_heading": "Non-violation against a supplied snapshot"
+    },
+    {
+      "id": "core.single-book-show--positive",
+      "rule_id": "core.single-book-show",
+      "kind": "positive",
+      "files": {
+        "main.typ": "#import \"@local/math-book:0.2.0\": apply-math-book\n#import \"@local/math-blocks:0.2.0\": *\n#show: apply-math-book.with(title: \"Notes\")\n#show: apply-math-book.with(title: \"Notes\")\n"
+      },
+      "config": "rule-set=\"pde\"\ninclude=[\"**/*.typ\",\"**/*.md\"]\nentrypoint=\"main.typ\"\n",
+      "normative_diagnostics": 1,
+      "note": "",
+      "intentional_parse_error": false,
+      "scenario_heading": "Violation with layered document show rules"
+    },
+    {
+      "id": "core.single-book-show--negative",
+      "rule_id": "core.single-book-show",
+      "kind": "negative",
+      "files": {
+        "main.typ": "#import \"@local/math-book:0.2.0\": apply-math-book\n#import \"@local/math-blocks:0.2.0\": *\n#show: apply-math-book.with(title: \"Notes\")\n"
+      },
+      "config": "rule-set=\"pde\"\ninclude=[\"**/*.typ\",\"**/*.md\"]\nentrypoint=\"main.typ\"\n",
+      "normative_diagnostics": 0,
+      "note": "",
+      "intentional_parse_error": false,
+      "scenario_heading": "Non-violation with one owner"
+    },
+    {
+      "id": "core.no-duplicate-book-reset--positive",
+      "rule_id": "core.no-duplicate-book-reset",
+      "kind": "positive",
+      "files": {
+        "main.typ": "#import \"@local/math-book:0.2.0\": apply-math-book\n#import \"@local/math-blocks:0.2.0\": *\n#show: apply-math-book.with(title: \"Notes\")\n#show: apply-math-block-reset\n"
+      },
+      "config": "rule-set=\"pde\"\ninclude=[\"**/*.typ\",\"**/*.md\"]\nentrypoint=\"main.typ\"\n",
+      "normative_diagnostics": 1,
+      "note": "",
+      "intentional_parse_error": false,
+      "scenario_heading": "Violation with duplicate reset ownership"
+    },
+    {
+      "id": "core.no-duplicate-book-reset--negative",
+      "rule_id": "core.no-duplicate-book-reset",
+      "kind": "negative",
+      "files": {
+        "main.typ": "#import \"@local/math-book:0.2.0\": apply-math-book\n#import \"@local/math-blocks:0.2.0\": *\n#show: apply-math-book.with(title: \"Notes\", reset-math-blocks: false)\n#show: apply-math-block-reset\n"
+      },
+      "config": "rule-set=\"pde\"\ninclude=[\"**/*.typ\",\"**/*.md\"]\nentrypoint=\"main.typ\"\n",
+      "normative_diagnostics": 0,
+      "note": "",
+      "intentional_parse_error": false,
+      "scenario_heading": "Non-violation with an explicit transfer"
+    },
+    {
+      "id": "core.no-set-theme--positive",
+      "rule_id": "core.no-set-theme",
+      "kind": "positive",
+      "files": {
+        "main.typ": "#import \"@local/math-blocks:0.2.0\": *\n#let theme = light-theme\n#set theme(fill: red)\n"
+      },
+      "config": "rule-set=\"pde\"\ninclude=[\"**/*.typ\",\"**/*.md\"]\n",
+      "normative_diagnostics": 1,
+      "note": "",
+      "intentional_parse_error": false,
+      "scenario_heading": "Violation with a nonsettable target"
+    },
+    {
+      "id": "core.no-set-theme--negative",
+      "rule_id": "core.no-set-theme",
+      "kind": "negative",
+      "files": {
+        "main.typ": "#import \"@local/math-blocks:0.2.0\": *\n#let theme = light-theme\n#set page(fill: theme.page)\n#set text(fill: theme.text)\n"
+      },
+      "config": "rule-set=\"pde\"\ninclude=[\"**/*.typ\",\"**/*.md\"]\n",
+      "normative_diagnostics": 0,
+      "note": "",
+      "intentional_parse_error": false,
+      "scenario_heading": "Non-violation with settable elements"
+    },
+    {
+      "id": "core.theme-in-context--positive",
+      "rule_id": "core.theme-in-context",
+      "kind": "positive",
+      "files": {
+        "main.typ": "#import \"@local/math-blocks:0.2.0\": *\n#let mybox(body) = { let theme = theme-from-text-fill(); block(fill: theme.page, body) }\n#mybox[Notes]\n"
+      },
+      "config": "rule-set=\"pde\"\ninclude=[\"**/*.typ\",\"**/*.md\"]\n",
+      "normative_diagnostics": 1,
+      "note": "",
+      "intentional_parse_error": false,
+      "scenario_heading": "Violation without contextual resolution"
+    },
+    {
+      "id": "core.theme-in-context--negative",
+      "rule_id": "core.theme-in-context",
+      "kind": "negative",
+      "files": {
+        "main.typ": "#import \"@local/math-blocks:0.2.0\": *\n#let mybox(body) = context { let theme = theme-from-text-fill(); block(fill: theme.page, body) }\n#mybox[Notes]\n"
+      },
+      "config": "rule-set=\"pde\"\ninclude=[\"**/*.typ\",\"**/*.md\"]\n",
+      "normative_diagnostics": 0,
+      "note": "",
+      "intentional_parse_error": false,
+      "scenario_heading": "Non-violation with contextual resolution"
+    },
+    {
+      "id": "pde.import-order--positive",
+      "rule_id": "pde.import-order",
+      "kind": "positive",
+      "files": {
+        "main.typ": "#import \"@preview/mannot:0.4.0\": *\n#import \"figures.typ\": *\n#import \"Styles/styles.typ\": *\n",
+        "Styles/styles.typ": "#import \"@local/scoped-annotations:0.3.0\": *\n#import \"@preview/mannot:0.4.0\": mark, annot-cetz\n#import \"@local/text-utils:0.1.2\": paragraph_tab, apply-paragraph-tabs\n#show: apply-paragraph-tabs\n#set text(lang: \"en\")\n",
+        "Styles/local_tags.typ": "#import \"@local/scoped-annotations:0.3.0\": *\n",
+        "figures.typ": "// Empty local figure fixture.\n"
+      },
+      "config": "rule-set=\"pde\"\ninclude=[\"**/*.typ\",\"**/*.md\"]\n",
+      "normative_diagnostics": 1,
+      "note": "Root-relative analogue of the normative ../Styles path; local re-export proof and import-order backend are unavailable.",
+      "intentional_parse_error": false,
+      "scenario_heading": "Violation with a reversed import group"
+    },
+    {
+      "id": "pde.import-order--negative",
+      "rule_id": "pde.import-order",
+      "kind": "negative",
+      "files": {
+        "main.typ": "#import \"Styles/styles.typ\": *\n#import \"figures.typ\": *\n#import \"@preview/mannot:0.4.0\": *\n",
+        "Styles/styles.typ": "#import \"@local/scoped-annotations:0.3.0\": *\n#import \"@preview/mannot:0.4.0\": mark, annot-cetz\n#import \"@local/text-utils:0.1.2\": paragraph_tab, apply-paragraph-tabs\n#show: apply-paragraph-tabs\n#set text(lang: \"en\")\n",
+        "Styles/local_tags.typ": "#import \"@local/scoped-annotations:0.3.0\": *\n",
+        "figures.typ": "// Empty local figure fixture.\n"
+      },
+      "config": "rule-set=\"pde\"\ninclude=[\"**/*.typ\",\"**/*.md\"]\n",
+      "normative_diagnostics": 0,
+      "note": "Root-relative analogue of the normative ../Styles path; local re-export proof and import-order backend are unavailable.",
+      "intentional_parse_error": false,
+      "scenario_heading": "Non-violation with the existing grouping"
+    },
+    {
+      "id": "pde.no-redundant-facade-import--positive",
+      "rule_id": "pde.no-redundant-facade-import",
+      "kind": "positive",
+      "files": {
+        "main.typ": "#import \"Styles/styles.typ\": *\n#import \"Styles/local_tags.typ\": *\n",
+        "Styles/styles.typ": "#import \"@local/scoped-annotations:0.3.0\": *\n#import \"@preview/mannot:0.4.0\": mark, annot-cetz\n#import \"@local/text-utils:0.1.2\": paragraph_tab, apply-paragraph-tabs\n#show: apply-paragraph-tabs\n#set text(lang: \"en\")\n",
+        "Styles/local_tags.typ": "#import \"@local/scoped-annotations:0.3.0\": *\n",
+        "figures.typ": "// Empty local figure fixture.\n"
+      },
+      "config": "rule-set=\"pde\"\ninclude=[\"**/*.typ\",\"**/*.md\"]\n",
+      "normative_diagnostics": 1,
+      "note": "Re-export graph is deliberately present as files but not evaluated; overlapping exports require an unimplemented resolver.",
+      "intentional_parse_error": false,
+      "scenario_heading": "Violation with redundant compatibility imports"
+    },
+    {
+      "id": "pde.no-redundant-facade-import--negative",
+      "rule_id": "pde.no-redundant-facade-import",
+      "kind": "negative",
+      "files": {
+        "main.typ": "#import \"Styles/local_tags.typ\": *\n",
+        "Styles/styles.typ": "#import \"@local/scoped-annotations:0.3.0\": *\n#import \"@preview/mannot:0.4.0\": mark, annot-cetz\n#import \"@local/text-utils:0.1.2\": paragraph_tab, apply-paragraph-tabs\n#show: apply-paragraph-tabs\n#set text(lang: \"en\")\n",
+        "Styles/local_tags.typ": "#import \"@local/scoped-annotations:0.3.0\": *\n",
+        "figures.typ": "// Empty local figure fixture.\n"
+      },
+      "config": "rule-set=\"pde\"\ninclude=[\"**/*.typ\",\"**/*.md\"]\n",
+      "normative_diagnostics": 0,
+      "note": "Re-export graph is deliberately present as files but not evaluated; overlapping exports require an unimplemented resolver.",
+      "intentional_parse_error": false,
+      "scenario_heading": "Non-violation preserving compatibility"
+    },
+    {
+      "id": "pde.paragraph-marker-gap--positive",
+      "rule_id": "pde.paragraph-marker-gap",
+      "kind": "positive",
+      "files": {
+        "main.typ": "#import \"@local/text-utils:0.1.2\": paragraph_tab, apply-paragraph-tabs\n#show: apply-paragraph-tabs\n#set text(lang: \"en\")\nFirst idea.\n#paragraph_tab\nSecond idea.\n"
+      },
+      "config": "rule-set=\"pde\"\ninclude=[\"**/*.typ\",\"**/*.md\"]\n",
+      "normative_diagnostics": 1,
+      "note": "",
+      "intentional_parse_error": false,
+      "expected_candidate": {
+        "main.typ": "#import \"@local/text-utils:0.1.2\": paragraph_tab, apply-paragraph-tabs\n#show: apply-paragraph-tabs\n#set text(lang: \"en\")\nFirst idea.\n\n#paragraph_tab\nSecond idea.\n"
+      },
+      "scenario_heading": "Violation with an adjacent marker"
+    },
+    {
+      "id": "pde.paragraph-marker-gap--negative",
+      "rule_id": "pde.paragraph-marker-gap",
+      "kind": "negative",
+      "files": {
+        "main.typ": "#import \"@local/text-utils:0.1.2\": paragraph_tab, apply-paragraph-tabs\n#show: apply-paragraph-tabs\n#set text(lang: \"en\")\nFirst idea.\n\n#paragraph_tab\nSecond idea.\n"
+      },
+      "config": "rule-set=\"pde\"\ninclude=[\"**/*.typ\",\"**/*.md\"]\n",
+      "normative_diagnostics": 0,
+      "note": "",
+      "intentional_parse_error": false,
+      "scenario_heading": "Non-violation with the required source gap"
+    },
+    {
+      "id": "pde.paragraph-marker-target--positive",
+      "rule_id": "pde.paragraph-marker-target",
+      "kind": "positive",
+      "files": {
+        "main.typ": "#import \"@local/text-utils:0.1.2\": paragraph_tab, apply-paragraph-tabs\n#show: apply-paragraph-tabs\n#set text(lang: \"en\")\n\n#paragraph_tab\n= A heading\n"
+      },
+      "config": "rule-set=\"pde\"\ninclude=[\"**/*.typ\",\"**/*.md\"]\n",
+      "normative_diagnostics": 1,
+      "note": "",
+      "intentional_parse_error": false,
+      "scenario_heading": "Violation before structural content"
+    },
+    {
+      "id": "pde.paragraph-marker-target--negative",
+      "rule_id": "pde.paragraph-marker-target",
+      "kind": "negative",
+      "files": {
+        "main.typ": "#import \"@local/text-utils:0.1.2\": paragraph_tab, apply-paragraph-tabs\n#show: apply-paragraph-tabs\n#set text(lang: \"en\")\n\n#paragraph_tab\nWe now study the boundary.\n"
+      },
+      "config": "rule-set=\"pde\"\ninclude=[\"**/*.typ\",\"**/*.md\"]\n",
+      "normative_diagnostics": 0,
+      "note": "",
+      "intentional_parse_error": false,
+      "scenario_heading": "Non-violation before prose"
+    },
+    {
+      "id": "pde.prose-paragraph-marker--positive",
+      "rule_id": "pde.prose-paragraph-marker",
+      "kind": "positive",
+      "files": {
+        "main.typ": "#import \"@local/text-utils:0.1.2\": paragraph_tab, apply-paragraph-tabs\n#show: apply-paragraph-tabs\n#set text(lang: \"en\")\nFirst idea.\n\nSecond idea.\n"
+      },
+      "config": "rule-set=\"pde\"\ninclude=[\"**/*.typ\",\"**/*.md\"]\n",
+      "normative_diagnostics": 1,
+      "note": "",
+      "intentional_parse_error": false,
+      "scenario_heading": "Violation with an unmarked new paragraph"
+    },
+    {
+      "id": "pde.prose-paragraph-marker--negative",
+      "rule_id": "pde.prose-paragraph-marker",
+      "kind": "negative",
+      "files": {
+        "main.typ": "#import \"@local/text-utils:0.1.2\": paragraph_tab, apply-paragraph-tabs\n#show: apply-paragraph-tabs\n#set text(lang: \"en\")\nFirst idea.\n\n#paragraph_tab\nSecond idea.\n"
+      },
+      "config": "rule-set=\"pde\"\ninclude=[\"**/*.typ\",\"**/*.md\"]\n",
+      "normative_diagnostics": 0,
+      "note": "",
+      "intentional_parse_error": false,
+      "scenario_heading": "Non-violation with continuity or an explicit marker"
+    },
+    {
+      "id": "pde.continuation-line--positive",
+      "rule_id": "pde.continuation-line",
+      "kind": "positive",
+      "files": {
+        "main.typ": "It is smooth and compactly supported.\nThe calculation can therefore be written as follows.\n"
+      },
+      "config": "rule-set=\"pde\"\ninclude=[\"**/*.typ\",\"**/*.md\"]\n",
+      "normative_diagnostics": 1,
+      "note": "",
+      "intentional_parse_error": false,
+      "scenario_heading": "Violation with split continuation sentences"
+    },
+    {
+      "id": "pde.continuation-line--negative",
+      "rule_id": "pde.continuation-line",
+      "kind": "negative",
+      "files": {
+        "main.typ": "It is smooth and compactly supported. The calculation can therefore be written as follows.\n"
+      },
+      "config": "rule-set=\"pde\"\ninclude=[\"**/*.typ\",\"**/*.md\"]\n",
+      "normative_diagnostics": 0,
+      "note": "",
+      "intentional_parse_error": false,
+      "scenario_heading": "Non-violation with continuous source prose"
+    },
+    {
+      "id": "pde.display-continuation-gap--positive",
+      "rule_id": "pde.display-continuation-gap",
+      "kind": "positive",
+      "files": {
+        "main.typ": "$ A = B $\n\nHence the identity holds.\n"
+      },
+      "config": "rule-set=\"pde\"\ninclude=[\"**/*.typ\",\"**/*.md\"]\n",
+      "normative_diagnostics": 1,
+      "note": "",
+      "intentional_parse_error": false,
+      "scenario_heading": "Violation with an unmarked gap"
+    },
+    {
+      "id": "pde.display-continuation-gap--negative",
+      "rule_id": "pde.display-continuation-gap",
+      "kind": "negative",
+      "files": {
+        "main.typ": "$ A = B $\nHence the identity holds.\n"
+      },
+      "config": "rule-set=\"pde\"\ninclude=[\"**/*.typ\",\"**/*.md\"]\n",
+      "normative_diagnostics": 0,
+      "note": "",
+      "intentional_parse_error": false,
+      "scenario_heading": "Non-violation for continuation or a new marked idea"
+    },
+    {
+      "id": "pde.proof-trailing-gap--positive",
+      "rule_id": "pde.proof-trailing-gap",
+      "kind": "positive",
+      "files": {
+        "main.typ": "#import \"@local/math-blocks:0.2.0\": *\n#proof[The claim follows.]\n$ A = B $\n"
+      },
+      "config": "rule-set=\"pde\"\ninclude=[\"**/*.typ\",\"**/*.md\"]\n",
+      "normative_diagnostics": 1,
+      "note": "",
+      "intentional_parse_error": false,
+      "scenario_heading": "Violation with adjacent content"
+    },
+    {
+      "id": "pde.proof-trailing-gap--negative",
+      "rule_id": "pde.proof-trailing-gap",
+      "kind": "negative",
+      "files": {
+        "main.typ": "#import \"@local/math-blocks:0.2.0\": *\n#proof[The claim follows.]\n\n$ A = B $\n"
+      },
+      "config": "rule-set=\"pde\"\ninclude=[\"**/*.typ\",\"**/*.md\"]\n",
+      "normative_diagnostics": 0,
+      "note": "",
+      "intentional_parse_error": false,
+      "scenario_heading": "Non-violation with a source gap"
+    },
+    {
+      "id": "pde.footnote-trailing-gap--positive",
+      "rule_id": "pde.footnote-trailing-gap",
+      "kind": "positive",
+      "files": {
+        "main.typ": "#import \"@local/text-utils:0.1.2\": paragraph_tab, apply-paragraph-tabs\n#show: apply-paragraph-tabs\n#set text(lang: \"en\")\nThis holds.#footnote[Reason.]\n\n#paragraph_tab\nA new idea.\n"
+      },
+      "config": "rule-set=\"pde\"\ninclude=[\"**/*.typ\",\"**/*.md\"]\n",
+      "normative_diagnostics": 1,
+      "note": "",
+      "intentional_parse_error": false,
+      "scenario_heading": "Violation after a source-line footnote"
+    },
+    {
+      "id": "pde.footnote-trailing-gap--negative",
+      "rule_id": "pde.footnote-trailing-gap",
+      "kind": "negative",
+      "files": {
+        "main.typ": "#import \"@local/text-utils:0.1.2\": paragraph_tab, apply-paragraph-tabs\n#show: apply-paragraph-tabs\n#set text(lang: \"en\")\nThis holds.#footnote[Reason.]\n#parbreak()\n\n#paragraph_tab\nA new idea.\n"
+      },
+      "config": "rule-set=\"pde\"\ninclude=[\"**/*.typ\",\"**/*.md\"]\n",
+      "normative_diagnostics": 0,
+      "note": "",
+      "intentional_parse_error": false,
+      "scenario_heading": "Non-violation using an explicit break"
+    },
+    {
+      "id": "pde.prose-footnote-punctuation--positive",
+      "rule_id": "pde.prose-footnote-punctuation",
+      "kind": "positive",
+      "files": {
+        "main.typ": "This holds. #footnote[Reason.]\n"
+      },
+      "config": "rule-set=\"pde\"\ninclude=[\"**/*.typ\",\"**/*.md\"]\n",
+      "normative_diagnostics": 1,
+      "note": "",
+      "intentional_parse_error": false,
+      "scenario_heading": "Violation with whitespace or misplaced punctuation"
+    },
+    {
+      "id": "pde.prose-footnote-punctuation--negative",
+      "rule_id": "pde.prose-footnote-punctuation",
+      "kind": "negative",
+      "files": {
+        "main.typ": "This holds,#footnote[Reason.] and continues.#footnote[More detail.]\n"
+      },
+      "config": "rule-set=\"pde\"\ninclude=[\"**/*.typ\",\"**/*.md\"]\n",
+      "normative_diagnostics": 0,
+      "note": "",
+      "intentional_parse_error": false,
+      "scenario_heading": "Non-violation after either permitted punctuation mark"
+    },
+    {
+      "id": "pde.aligned-footnote-spacer--positive",
+      "rule_id": "pde.aligned-footnote-spacer",
+      "kind": "positive",
+      "files": {
+        "main.typ": "#import \"@local/math-blocks:0.2.0\": *\n$ A &= B #footnote[Reason.] $\n"
+      },
+      "config": "rule-set=\"pde\"\ninclude=[\"**/*.typ\",\"**/*.md\"]\n",
+      "normative_diagnostics": 1,
+      "note": "",
+      "intentional_parse_error": false,
+      "scenario_heading": "Violation in either kind of aligned display"
+    },
+    {
+      "id": "pde.aligned-footnote-spacer--negative",
+      "rule_id": "pde.aligned-footnote-spacer",
+      "kind": "negative",
+      "files": {
+        "main.typ": "#import \"@local/math-blocks:0.2.0\": *\n$ A &= B #dots_space #footnote[Reason.] $\n"
+      },
+      "config": "rule-set=\"pde\"\ninclude=[\"**/*.typ\",\"**/*.md\"]\n",
+      "normative_diagnostics": 0,
+      "note": "",
+      "intentional_parse_error": false,
+      "scenario_heading": "Non-violation with the required spacer"
+    },
+    {
+      "id": "pde.unaligned-footnote-no-spacer--positive",
+      "rule_id": "pde.unaligned-footnote-no-spacer",
+      "kind": "positive",
+      "files": {
+        "main.typ": "#import \"@local/math-blocks:0.2.0\": *\n$ omega = sqrt(det(g)) #dots_space #footnote[Reason.] $\n"
+      },
+      "config": "rule-set=\"pde\"\ninclude=[\"**/*.typ\",\"**/*.md\"]\n",
+      "normative_diagnostics": 1,
+      "note": "",
+      "intentional_parse_error": false,
+      "scenario_heading": "Violation in a single-line unaligned display"
+    },
+    {
+      "id": "pde.unaligned-footnote-no-spacer--negative",
+      "rule_id": "pde.unaligned-footnote-no-spacer",
+      "kind": "negative",
+      "files": {
+        "main.typ": "#import \"@local/math-blocks:0.2.0\": *\n$ omega = sqrt(det(g)) #footnote[Reason.] $\n"
+      },
+      "config": "rule-set=\"pde\"\ninclude=[\"**/*.typ\",\"**/*.md\"]\n",
+      "normative_diagnostics": 0,
+      "note": "",
+      "intentional_parse_error": false,
+      "scenario_heading": "Non-violation without a spacer"
+    },
+    {
+      "id": "pde.prose-footnote-no-spacer--positive",
+      "rule_id": "pde.prose-footnote-no-spacer",
+      "kind": "positive",
+      "files": {
+        "main.typ": "#import \"@local/math-blocks:0.2.0\": *\nThis holds.#dots_space #footnote[Reason.]\n"
+      },
+      "config": "rule-set=\"pde\"\ninclude=[\"**/*.typ\",\"**/*.md\"]\n",
+      "normative_diagnostics": 1,
+      "note": "",
+      "intentional_parse_error": false,
+      "scenario_heading": "Violation with a prose spacer"
+    },
+    {
+      "id": "pde.prose-footnote-no-spacer--negative",
+      "rule_id": "pde.prose-footnote-no-spacer",
+      "kind": "negative",
+      "files": {
+        "main.typ": "#import \"@local/math-blocks:0.2.0\": *\nFor $x^(2)$, this holds.#footnote[Reason.]\n"
+      },
+      "config": "rule-set=\"pde\"\ninclude=[\"**/*.typ\",\"**/*.md\"]\n",
+      "normative_diagnostics": 0,
+      "note": "",
+      "intentional_parse_error": false,
+      "scenario_heading": "Non-violation with an ordinary prose footnote"
+    },
+    {
+      "id": "pde.standalone-display--positive",
+      "rule_id": "pde.standalone-display",
+      "kind": "positive",
+      "files": {
+        "main.typ": "Thus $ A = B $ and the claim follows.\n"
+      },
+      "config": "rule-set=\"pde\"\ninclude=[\"**/*.typ\",\"**/*.md\"]\n",
+      "normative_diagnostics": 1,
+      "note": "",
+      "intentional_parse_error": false,
+      "scenario_heading": "Violation with prose on the display line"
+    },
+    {
+      "id": "pde.standalone-display--negative",
+      "rule_id": "pde.standalone-display",
+      "kind": "negative",
+      "files": {
+        "main.typ": "Thus\n$ A = B $ <identity>\nand the claim follows.\n"
+      },
+      "config": "rule-set=\"pde\"\ninclude=[\"**/*.typ\",\"**/*.md\"]\n",
+      "normative_diagnostics": 0,
+      "note": "",
+      "intentional_parse_error": false,
+      "scenario_heading": "Non-violation with separate source lines"
+    },
+    {
+      "id": "pde.text-only-highlight--positive",
+      "rule_id": "pde.text-only-highlight",
+      "kind": "positive",
+      "files": {
+        "main.typ": "#highlight[The term $x^(2)$ matters.]\n"
+      },
+      "config": "rule-set=\"pde\"\ninclude=[\"**/*.typ\",\"**/*.md\"]\n",
+      "normative_diagnostics": 1,
+      "note": "",
+      "intentional_parse_error": false,
+      "scenario_heading": "Violation highlighting math"
+    },
+    {
+      "id": "pde.text-only-highlight--negative",
+      "rule_id": "pde.text-only-highlight",
+      "kind": "negative",
+      "files": {
+        "main.typ": "#highlight[The convention is the key observation.]\n\n$ A &= B $\n"
+      },
+      "config": "rule-set=\"pde\"\ninclude=[\"**/*.typ\",\"**/*.md\"]\n",
+      "normative_diagnostics": 0,
+      "note": "",
+      "intentional_parse_error": false,
+      "scenario_heading": "Non-violation with separate math"
+    },
+    {
+      "id": "pde.theme-cancelmark--positive",
+      "rule_id": "pde.theme-cancelmark",
+      "kind": "positive",
+      "files": {
+        "main.typ": "#import \"@local/math-blocks:0.2.0\": *\n$ cancel(x) + y $\n"
+      },
+      "config": "rule-set=\"pde\"\ninclude=[\"**/*.typ\",\"**/*.md\"]\n",
+      "normative_diagnostics": 1,
+      "note": "cancelmark facade export/signature proof is not implemented; math-blocks alone is not asserted to provide it.",
+      "intentional_parse_error": false,
+      "scenario_heading": "Violation using the bare cancellation element"
+    },
+    {
+      "id": "pde.theme-cancelmark--negative",
+      "rule_id": "pde.theme-cancelmark",
+      "kind": "negative",
+      "files": {
+        "main.typ": "#import \"@local/math-blocks:0.2.0\": *\n$ cancelmark(x) + cancelmark(y, cross: true, stroke: blue) $\n"
+      },
+      "config": "rule-set=\"pde\"\ninclude=[\"**/*.typ\",\"**/*.md\"]\n",
+      "normative_diagnostics": 0,
+      "note": "cancelmark facade export/signature proof is not implemented; math-blocks alone is not asserted to provide it.",
+      "intentional_parse_error": false,
+      "scenario_heading": "Non-violation with the shared helper"
+    },
+    {
+      "id": "pde.flowbox-colored-border--positive",
+      "rule_id": "pde.flowbox-colored-border",
+      "kind": "positive",
+      "files": {
+        "main.typ": "#import \"@local/math-blocks:0.2.0\": *\n#let flowbox(body) = context { let theme = theme-from-text-fill(); block(stroke: 1pt, body) }\n"
+      },
+      "config": "rule-set=\"pde\"\ninclude=[\"**/*.typ\",\"**/*.md\"]\n",
+      "normative_diagnostics": 1,
+      "note": "Normative implementation fragment, not provenance proof from its local spelling. Requires reviewed implementation-owner resolution.",
+      "intentional_parse_error": false,
+      "scenario_heading": "Violation with a width-only border"
+    },
+    {
+      "id": "pde.flowbox-colored-border--negative",
+      "rule_id": "pde.flowbox-colored-border",
+      "kind": "negative",
+      "files": {
+        "main.typ": "#import \"@local/math-blocks:0.2.0\": *\n#let flowbox(body) = context { let theme = theme-from-text-fill(); block(stroke: 1pt + theme.rule, body) }\n"
+      },
+      "config": "rule-set=\"pde\"\ninclude=[\"**/*.typ\",\"**/*.md\"]\n",
+      "normative_diagnostics": 0,
+      "note": "Normative implementation fragment, not provenance proof from its local spelling. Requires reviewed implementation-owner resolution.",
+      "intentional_parse_error": false,
+      "scenario_heading": "Non-violation using the active palette"
+    },
+    {
+      "id": "pde.paragraph-capitalization--positive",
+      "rule_id": "pde.paragraph-capitalization",
+      "kind": "positive",
+      "files": {
+        "main.typ": "#import \"@local/text-utils:0.1.2\": paragraph_tab, apply-paragraph-tabs\n#show: apply-paragraph-tabs\n#set text(lang: \"en\")\n\n#paragraph_tab\ntherefore $x = y$ follows.\n"
+      },
+      "config": "rule-set=\"pde\"\ninclude=[\"**/*.typ\",\"**/*.md\"]\n",
+      "normative_diagnostics": 1,
+      "note": "",
+      "intentional_parse_error": false,
+      "expected_candidate": {
+        "main.typ": "#import \"@local/text-utils:0.1.2\": paragraph_tab, apply-paragraph-tabs\n#show: apply-paragraph-tabs\n#set text(lang: \"en\")\n\n#paragraph_tab\nTherefore $x = y$ follows.\n"
+      },
+      "scenario_heading": "Supported English paragraph starter"
+    },
+    {
+      "id": "pde.paragraph-capitalization--negative",
+      "rule_id": "pde.paragraph-capitalization",
+      "kind": "negative",
+      "files": {
+        "main.typ": "#import \"@local/text-utils:0.1.2\": paragraph_tab, apply-paragraph-tabs\n#show: apply-paragraph-tabs\n#set text(lang: \"en\")\n\n#paragraph_tab\nTherefore $x = y$ follows.\n"
+      },
+      "config": "rule-set=\"pde\"\ninclude=[\"**/*.typ\",\"**/*.md\"]\n",
+      "normative_diagnostics": 0,
+      "note": "",
+      "intentional_parse_error": false,
+      "scenario_heading": null
+    },
+    {
+      "id": "core.parenthesized-scripts--chains",
+      "rule_id": "core.parenthesized-scripts",
+      "kind": "chains",
+      "files": {
+        "main.typ": "$x^y^z + x_i' + x^a/b + α^β$\n"
+      },
+      "config": "rule-set=\"pde\"\ninclude=[\"**/*.typ\",\"**/*.md\"]\n",
+      "normative_diagnostics": null,
+      "note": "",
+      "intentional_parse_error": false,
+      "expected_candidate": {
+        "main.typ": "$x^(y^(z)) + x_(i') + x^(a)/b + α^(β)$\n"
+      },
+      "scenario_heading": null
+    },
+    {
+      "id": "core.parenthesized-scripts--comment-preservation",
+      "rule_id": "core.parenthesized-scripts",
+      "kind": "comment-preservation",
+      "files": {
+        "main.typ": "// Leave this $x^i$ example.\n$X^i$\n"
+      },
+      "config": "rule-set=\"pde\"\ninclude=[\"**/*.typ\",\"**/*.md\"]\n",
+      "normative_diagnostics": null,
+      "note": "",
+      "intentional_parse_error": false,
+      "expected_candidate": {
+        "main.typ": "// Leave this $x^i$ example.\n$X^(i)$\n"
+      },
+      "scenario_heading": null
+    },
+    {
+      "id": "core.parenthesized-scripts--bom-crlf",
+      "rule_id": "core.parenthesized-scripts",
+      "kind": "bom-crlf",
+      "files": {
+        "main.typ": "﻿// α\r\nText $α^β$.\r\n"
+      },
+      "config": "rule-set=\"pde\"\ninclude=[\"**/*.typ\",\"**/*.md\"]\n",
+      "normative_diagnostics": null,
+      "note": "",
+      "intentional_parse_error": false,
+      "expected_candidate": {
+        "main.typ": "﻿// α\r\nText $α^(β)$.\r\n"
+      },
+      "scenario_heading": null
+    },
+    {
+      "id": "core.parenthesized-scripts--markdown-violation",
+      "rule_id": "core.parenthesized-scripts",
+      "kind": "markdown-violation",
+      "files": {
+        "main.md": "```typst\n$X^i$\n```\n"
+      },
+      "config": "rule-set=\"pde\"\ninclude=[\"**/*.typ\",\"**/*.md\"]\n",
+      "normative_diagnostics": 1,
+      "note": "Included guide example is normative but Markdown extraction is unsupported.",
+      "intentional_parse_error": false,
+      "scenario_heading": null
+    },
+    {
+      "id": "core.parenthesized-scripts--markdown-teaching",
+      "rule_id": "core.parenthesized-scripts",
+      "kind": "markdown-teaching",
+      "files": {
+        "main.md": "Do not write bare scripts such as `$X^i$` or `$X_j$`.\n"
+      },
+      "config": "rule-set=\"pde\"\ninclude=[\"**/*.typ\",\"**/*.md\"]\n",
+      "normative_diagnostics": 0,
+      "note": "No diagnostic without Markdown extraction is unsupported, not evidence the exact teaching exemption works.",
+      "intentional_parse_error": false,
+      "scenario_heading": "Non-violation in the teaching line"
+    },
+    {
+      "id": "core.parenthesized-scripts--malformed-refusal",
+      "rule_id": "core.parenthesized-scripts",
+      "kind": "malformed-refusal",
+      "files": {
+        "main.typ": "$x^$\n"
+      },
+      "config": "rule-set=\"pde\"\ninclude=[\"**/*.typ\",\"**/*.md\"]\n",
+      "normative_diagnostics": null,
+      "note": "Refusal fixture; never counted as a semantic positive/negative success.",
+      "intentional_parse_error": true,
+      "scenario_heading": null
+    },
+    {
+      "id": "core.parenthesized-scripts--escaped-operand-refusal",
+      "rule_id": "core.parenthesized-scripts",
+      "kind": "escaped-operand-refusal",
+      "files": {
+        "main.typ": "$x^#i$\n"
+      },
+      "config": "rule-set=\"pde\"\ninclude=[\"**/*.typ\",\"**/*.md\"]\n",
+      "normative_diagnostics": null,
+      "note": "Unsupported operand extent must stay unedited; not semantic completion.",
+      "intentional_parse_error": false,
+      "scenario_heading": null
+    },
+    {
+      "id": "pde.paragraph-marker-gap--body-start",
+      "rule_id": "pde.paragraph-marker-gap",
+      "kind": "body-start",
+      "files": {
+        "main.typ": "#import \"@local/text-utils:0.1.2\": paragraph_tab, apply-paragraph-tabs\n#show: apply-paragraph-tabs\n#set text(lang: \"en\")\n#block[#paragraph_tab\nTherefore holds.]\n"
+      },
+      "config": "rule-set=\"pde\"\ninclude=[\"**/*.typ\",\"**/*.md\"]\n",
+      "normative_diagnostics": 1,
+      "note": "Normative body-start case is unsupported because nested prose cannot yet be certified.",
+      "intentional_parse_error": false,
+      "scenario_heading": null
+    },
+    {
+      "id": "pde.paragraph-marker-gap--footnote-combined",
+      "rule_id": "pde.paragraph-marker-gap",
+      "kind": "footnote-combined",
+      "files": {
+        "main.typ": "#import \"@local/text-utils:0.1.2\": paragraph_tab, apply-paragraph-tabs\n#show: apply-paragraph-tabs\n#set text(lang: \"en\")\nThis holds.#footnote[Reason.]\n#paragraph_tab\nTherefore holds.\n"
+      },
+      "config": "rule-set=\"pde\"\ninclude=[\"**/*.typ\",\"**/*.md\"]\n",
+      "normative_diagnostics": 1,
+      "note": "Detection can work but required parbreak+blank-line repair is unavailable.",
+      "intentional_parse_error": false,
+      "scenario_heading": null
+    },
+    {
+      "id": "pde.paragraph-marker-gap--comment-refusal",
+      "rule_id": "pde.paragraph-marker-gap",
+      "kind": "comment-refusal",
+      "files": {
+        "main.typ": "#import \"@local/text-utils:0.1.2\": paragraph_tab, apply-paragraph-tabs\n#show: apply-paragraph-tabs\n#set text(lang: \"en\")\nFirst.\n// keep attachment\n#paragraph_tab\nTherefore holds.\n"
+      },
+      "config": "rule-set=\"pde\"\ninclude=[\"**/*.typ\",\"**/*.md\"]\n",
+      "normative_diagnostics": 1,
+      "note": "Preserve comment attachment; repair unavailable is expected.",
+      "intentional_parse_error": false,
+      "scenario_heading": null
+    },
+    {
+      "id": "pde.paragraph-marker-gap--whitespace-blank",
+      "rule_id": "pde.paragraph-marker-gap",
+      "kind": "whitespace-blank",
+      "files": {
+        "main.typ": "#import \"@local/text-utils:0.1.2\": paragraph_tab, apply-paragraph-tabs\n#show: apply-paragraph-tabs\n#set text(lang: \"en\")\nFirst.\n \t\n#paragraph_tab\nTherefore holds.\n"
+      },
+      "config": "rule-set=\"pde\"\ninclude=[\"**/*.typ\",\"**/*.md\"]\n",
+      "normative_diagnostics": 0,
+      "note": "",
+      "intentional_parse_error": false,
+      "scenario_heading": null
+    },
+    {
+      "id": "pde.paragraph-capitalization--math-first",
+      "rule_id": "pde.paragraph-capitalization",
+      "kind": "math-first",
+      "files": {
+        "main.typ": "#import \"@local/text-utils:0.1.2\": paragraph_tab, apply-paragraph-tabs\n#show: apply-paragraph-tabs\n#set text(lang: \"en\")\n\n#paragraph_tab\n$x$ is positive.\n"
+      },
+      "config": "rule-set=\"pde\"\ninclude=[\"**/*.typ\",\"**/*.md\"]\n",
+      "normative_diagnostics": 0,
+      "note": "No edit required; report may honestly record a bounded applicability skip.",
+      "intentional_parse_error": false,
+      "scenario_heading": "Preserve math, names and language boundaries"
+    },
+    {
+      "id": "pde.paragraph-capitalization--name-iphone",
+      "rule_id": "pde.paragraph-capitalization",
+      "kind": "name-iphone",
+      "files": {
+        "main.typ": "#import \"@local/text-utils:0.1.2\": paragraph_tab, apply-paragraph-tabs\n#show: apply-paragraph-tabs\n#set text(lang: \"en\")\n\n#paragraph_tab\niPhone remains unchanged.\n"
+      },
+      "config": "rule-set=\"pde\"\ninclude=[\"**/*.typ\",\"**/*.md\"]\n",
+      "normative_diagnostics": 0,
+      "note": "No edit required; report may honestly record a bounded applicability skip.",
+      "intentional_parse_error": false,
+      "scenario_heading": "Preserve math, names and language boundaries"
+    },
+    {
+      "id": "pde.paragraph-capitalization--name-ebay",
+      "rule_id": "pde.paragraph-capitalization",
+      "kind": "name-ebay",
+      "files": {
+        "main.typ": "#import \"@local/text-utils:0.1.2\": paragraph_tab, apply-paragraph-tabs\n#show: apply-paragraph-tabs\n#set text(lang: \"en\")\n\n#paragraph_tab\neBay remains unchanged.\n"
+      },
+      "config": "rule-set=\"pde\"\ninclude=[\"**/*.typ\",\"**/*.md\"]\n",
+      "normative_diagnostics": 0,
+      "note": "No edit required; report may honestly record a bounded applicability skip.",
+      "intentional_parse_error": false,
+      "scenario_heading": "Preserve math, names and language boundaries"
+    },
+    {
+      "id": "pde.paragraph-capitalization--non-ascii",
+      "rule_id": "pde.paragraph-capitalization",
+      "kind": "non-ascii",
+      "files": {
+        "main.typ": "#import \"@local/text-utils:0.1.2\": paragraph_tab, apply-paragraph-tabs\n#show: apply-paragraph-tabs\n#set text(lang: \"en\")\n\n#paragraph_tab\nélan remains unchanged.\n"
+      },
+      "config": "rule-set=\"pde\"\ninclude=[\"**/*.typ\",\"**/*.md\"]\n",
+      "normative_diagnostics": 0,
+      "note": "No edit required; report may honestly record a bounded applicability skip.",
+      "intentional_parse_error": false,
+      "scenario_heading": "Preserve math, names and language boundaries"
+    },
+    {
+      "id": "pde.paragraph-capitalization--unknown-starter",
+      "rule_id": "pde.paragraph-capitalization",
+      "kind": "unknown-starter",
+      "files": {
+        "main.typ": "#import \"@local/text-utils:0.1.2\": paragraph_tab, apply-paragraph-tabs\n#show: apply-paragraph-tabs\n#set text(lang: \"en\")\n\n#paragraph_tab\ntheorem holds.\n"
+      },
+      "config": "rule-set=\"pde\"\ninclude=[\"**/*.typ\",\"**/*.md\"]\n",
+      "normative_diagnostics": 0,
+      "note": "No edit required; report may honestly record a bounded applicability skip.",
+      "intentional_parse_error": false,
+      "scenario_heading": "Preserve math, names and language boundaries"
+    },
+    {
+      "id": "pde.paragraph-capitalization--quote-first",
+      "rule_id": "pde.paragraph-capitalization",
+      "kind": "quote-first",
+      "files": {
+        "main.typ": "#import \"@local/text-utils:0.1.2\": paragraph_tab, apply-paragraph-tabs\n#show: apply-paragraph-tabs\n#set text(lang: \"en\")\n\n#paragraph_tab\n\"therefore holds.\"\n"
+      },
+      "config": "rule-set=\"pde\"\ninclude=[\"**/*.typ\",\"**/*.md\"]\n",
+      "normative_diagnostics": 0,
+      "note": "No edit required; report may honestly record a bounded applicability skip.",
+      "intentional_parse_error": false,
+      "scenario_heading": "Preserve math, names and language boundaries"
+    },
+    {
+      "id": "pde.paragraph-capitalization--raw-first",
+      "rule_id": "pde.paragraph-capitalization",
+      "kind": "raw-first",
+      "files": {
+        "main.typ": "#import \"@local/text-utils:0.1.2\": paragraph_tab, apply-paragraph-tabs\n#show: apply-paragraph-tabs\n#set text(lang: \"en\")\n\n#paragraph_tab\n`therefore holds.`\n"
+      },
+      "config": "rule-set=\"pde\"\ninclude=[\"**/*.typ\",\"**/*.md\"]\n",
+      "normative_diagnostics": 0,
+      "note": "No edit required; report may honestly record a bounded applicability skip.",
+      "intentional_parse_error": false,
+      "scenario_heading": "Preserve math, names and language boundaries"
+    },
+    {
+      "id": "pde.paragraph-capitalization--call-first",
+      "rule_id": "pde.paragraph-capitalization",
+      "kind": "call-first",
+      "files": {
+        "main.typ": "#import \"@local/text-utils:0.1.2\": paragraph_tab, apply-paragraph-tabs\n#show: apply-paragraph-tabs\n#set text(lang: \"en\")\n\n#paragraph_tab\n#text[therefore holds.]\n"
+      },
+      "config": "rule-set=\"pde\"\ninclude=[\"**/*.typ\",\"**/*.md\"]\n",
+      "normative_diagnostics": 0,
+      "note": "No edit required; report may honestly record a bounded applicability skip.",
+      "intentional_parse_error": false,
+      "scenario_heading": "Preserve math, names and language boundaries"
+    },
+    {
+      "id": "pde.paragraph-capitalization--reference-first",
+      "rule_id": "pde.paragraph-capitalization",
+      "kind": "reference-first",
+      "files": {
+        "main.typ": "#import \"@local/text-utils:0.1.2\": paragraph_tab, apply-paragraph-tabs\n#show: apply-paragraph-tabs\n#set text(lang: \"en\")\n\n#paragraph_tab\n@energy therefore holds.\n"
+      },
+      "config": "rule-set=\"pde\"\ninclude=[\"**/*.typ\",\"**/*.md\"]\n",
+      "normative_diagnostics": 0,
+      "note": "No edit required; report may honestly record a bounded applicability skip.",
+      "intentional_parse_error": false,
+      "scenario_heading": "Preserve math, names and language boundaries"
+    },
+    {
+      "id": "pde.paragraph-capitalization--single-letter",
+      "rule_id": "pde.paragraph-capitalization",
+      "kind": "single-letter",
+      "files": {
+        "main.typ": "#import \"@local/text-utils:0.1.2\": paragraph_tab, apply-paragraph-tabs\n#show: apply-paragraph-tabs\n#set text(lang: \"en\")\n\n#paragraph_tab\nx holds.\n"
+      },
+      "config": "rule-set=\"pde\"\ninclude=[\"**/*.typ\",\"**/*.md\"]\n",
+      "normative_diagnostics": 0,
+      "note": "No edit required; report may honestly record a bounded applicability skip.",
+      "intentional_parse_error": false,
+      "scenario_heading": "Preserve math, names and language boundaries"
+    },
+    {
+      "id": "pde.paragraph-capitalization--non-english",
+      "rule_id": "pde.paragraph-capitalization",
+      "kind": "non-english",
+      "files": {
+        "main.typ": "#import \"@local/text-utils:0.1.2\": paragraph_tab, apply-paragraph-tabs\n#show: apply-paragraph-tabs\n#set text(lang: \"en\")\n#set text(lang: \"ko\")\n\n#paragraph_tab\ntherefore holds.\n"
+      },
+      "config": "rule-set=\"pde\"\ninclude=[\"**/*.typ\",\"**/*.md\"]\n[capitalization]\nlanguage=\"en\"\n",
+      "normative_diagnostics": 0,
+      "note": "",
+      "intentional_parse_error": false,
+      "scenario_heading": "Source language overrides configuration"
+    },
+    {
+      "id": "pde.paragraph-capitalization--dynamic-language",
+      "rule_id": "pde.paragraph-capitalization",
+      "kind": "dynamic-language",
+      "files": {
+        "main.typ": "#import \"@local/text-utils:0.1.2\": paragraph_tab, apply-paragraph-tabs\n#show: apply-paragraph-tabs\n#set text(lang: \"en\")\n#set text(lang: language)\n\n#paragraph_tab\ntherefore holds.\n"
+      },
+      "config": "rule-set=\"pde\"\ninclude=[\"**/*.typ\",\"**/*.md\"]\n[capitalization]\nlanguage=\"en\"\n",
+      "normative_diagnostics": 0,
+      "note": "",
+      "intentional_parse_error": false,
+      "scenario_heading": "Source language overrides configuration"
+    },
+    {
+      "id": "pde.paragraph-capitalization--unknown-language",
+      "rule_id": "pde.paragraph-capitalization",
+      "kind": "unknown-language",
+      "files": {
+        "main.typ": "#import \"@local/text-utils:0.1.2\": paragraph_tab, apply-paragraph-tabs\n#show: apply-paragraph-tabs\n\n#paragraph_tab\ntherefore holds.\n"
+      },
+      "config": "rule-set=\"pde\"\ninclude=[\"**/*.typ\",\"**/*.md\"]\n",
+      "normative_diagnostics": 0,
+      "note": "",
+      "intentional_parse_error": false,
+      "scenario_heading": "Preserve math, names and language boundaries"
+    },
+    {
+      "id": "pde.paragraph-capitalization--intentional-lowercase",
+      "rule_id": "pde.paragraph-capitalization",
+      "kind": "intentional-lowercase",
+      "files": {
+        "main.typ": "#import \"@local/text-utils:0.1.2\": paragraph_tab, apply-paragraph-tabs\n#show: apply-paragraph-tabs\n#set text(lang: \"en\")\n// typst-lint: ignore-next pde.paragraph-capitalization -- intentional lowercase\n#paragraph_tab\ntherefore holds.\n"
+      },
+      "config": "rule-set=\"pde\"\ninclude=[\"**/*.typ\",\"**/*.md\"]\n",
+      "normative_diagnostics": 0,
+      "note": "Suppression must hide only capitalization; marker-gap remains independently active.",
+      "intentional_parse_error": false,
+      "scenario_heading": "Explicit intentional lowercase"
+    },
+    {
+      "id": "pde.paragraph-capitalization--nested-context",
+      "rule_id": "pde.paragraph-capitalization",
+      "kind": "nested-context",
+      "files": {
+        "main.typ": "#import \"@local/text-utils:0.1.2\": paragraph_tab, apply-paragraph-tabs\n#show: apply-paragraph-tabs\n#set text(lang: \"en\")\n#block[\n#paragraph_tab\ntherefore holds.\n]\n"
+      },
+      "config": "rule-set=\"pde\"\ninclude=[\"**/*.typ\",\"**/*.md\"]\n",
+      "normative_diagnostics": 1,
+      "note": "Reference intent is English ordinary nested prose; current effective context proof cannot establish that, so this is unsupported, not a false pass.",
+      "intentional_parse_error": false,
+      "scenario_heading": null
+    },
+    {
+      "id": "pde.paragraph-capitalization--missing-package-path",
+      "rule_id": "pde.paragraph-capitalization",
+      "kind": "missing-package-path",
+      "files": {
+        "main.typ": "#import \"@local/text-utils:0.1.2\": paragraph_tab, apply-paragraph-tabs\n#show: apply-paragraph-tabs\n#set text(lang: \"en\")\n\n#paragraph_tab\ntherefore holds.\n"
+      },
+      "config": "rule-set=\"pde\"\ninclude=[\"**/*.typ\",\"**/*.md\"]\n",
+      "normative_diagnostics": 1,
+      "note": "The runner deliberately omits --package-path: matching import spelling alone cannot prove the helper.",
+      "intentional_parse_error": false,
+      "scenario_heading": null
+    },
+    {
+      "id": "pde.paragraph-capitalization--shadowed-marker",
+      "rule_id": "pde.paragraph-capitalization",
+      "kind": "shadowed-marker",
+      "files": {
+        "main.typ": "#import \"@local/text-utils:0.1.2\": paragraph_tab, apply-paragraph-tabs\n#show: apply-paragraph-tabs\n#set text(lang: \"en\")\n#let paragraph_tab = \"unrelated\"\n\n#paragraph_tab\ntherefore holds.\n"
+      },
+      "config": "rule-set=\"pde\"\ninclude=[\"**/*.typ\",\"**/*.md\"]\n",
+      "normative_diagnostics": 0,
+      "note": "",
+      "intentional_parse_error": false,
+      "scenario_heading": null
+    },
+    {
+      "id": "pde.paragraph-capitalization--new-marker-convergence",
+      "rule_id": "pde.paragraph-capitalization",
+      "kind": "new-marker-convergence",
+      "files": {
+        "main.typ": "#import \"@local/text-utils:0.1.2\": paragraph_tab, apply-paragraph-tabs\n#show: apply-paragraph-tabs\n#set text(lang: \"en\")\nFirst idea.\n\nthis consequence follows.\n"
+      },
+      "config": "rule-set=\"pde\"\ninclude=[\"**/*.typ\",\"**/*.md\"]\n",
+      "normative_diagnostics": null,
+      "note": "The missing prose-paragraph-marker backend prevents the required insert-then-capitalize convergence chain.",
+      "intentional_parse_error": false,
+      "scenario_heading": "A new marker and capitalization converge"
+    },
+    {
+      "id": "pde.paragraph-capitalization--crlf",
+      "rule_id": "pde.paragraph-capitalization",
+      "kind": "crlf",
+      "files": {
+        "main.typ": "#import \"@local/text-utils:0.1.2\": paragraph_tab, apply-paragraph-tabs\r\n#show: apply-paragraph-tabs\r\n#set text(lang: \"en\")\r\n\r\n#paragraph_tab\r\n\t therefore holds.\r\n"
+      },
+      "config": "rule-set=\"pde\"\ninclude=[\"**/*.typ\",\"**/*.md\"]\n",
+      "normative_diagnostics": 1,
+      "note": "",
+      "intentional_parse_error": false,
+      "expected_candidate": {
+        "main.typ": "#import \"@local/text-utils:0.1.2\": paragraph_tab, apply-paragraph-tabs\r\n#show: apply-paragraph-tabs\r\n#set text(lang: \"en\")\r\n\r\n#paragraph_tab\r\n\t Therefore holds.\r\n"
+      },
+      "scenario_heading": null
+    },
+    {
+      "id": "pde.paragraph-capitalization--three-rule-composition",
+      "rule_id": "pde.paragraph-capitalization",
+      "kind": "three-rule-composition",
+      "files": {
+        "main.typ": "#import \"@local/text-utils:0.1.2\": paragraph_tab, apply-paragraph-tabs\n#show: apply-paragraph-tabs\n#set text(lang: \"en\")\nBaseline.\n#paragraph_tab\ntherefore $x^i_j$ holds.\n\n#paragraph_tab\niPhone remains unchanged.\n"
+      },
+      "config": "rule-set=\"pde\"\ninclude=[\"**/*.typ\",\"**/*.md\"]\n",
+      "normative_diagnostics": 1,
+      "note": "Exact composed in-memory candidate only; never source application or full rule coverage.",
+      "intentional_parse_error": false,
+      "expected_candidate": {
+        "main.typ": "#import \"@local/text-utils:0.1.2\": paragraph_tab, apply-paragraph-tabs\n#show: apply-paragraph-tabs\n#set text(lang: \"en\")\nBaseline.\n\n#paragraph_tab\nTherefore $x^(i)_(j)$ holds.\n\n#paragraph_tab\niPhone remains unchanged.\n"
+      },
+      "scenario_heading": null
+    },
+    {
+      "id": "core.project-ref-arguments--spec-conflict-ref-recovery",
+      "rule_id": "core.project-ref-arguments",
+      "kind": "spec-conflict-ref-recovery",
+      "files": {
+        "main.typ": "#import \"@local/project-references:0.1.0\": project-ref\n#project-ref(\"pde\", @energy)\n",
+        "catalog.json": "{\"schema\": 1, \"projects\": {\"pde\": {\"references\": {\"energy\": {\"page\": 1, \"text\": \"1.1\"}, \"zero_acceleration\": {\"page\": 2, \"text\": \"1.2\"}}, \"ambiguous_labels\": [\"duplicate\"]}}}"
+      },
+      "config": "rule-set=\"pde\"\ninclude=[\"**/*.typ\",\"**/*.md\"]\ncatalog=\"catalog.json\"\n",
+      "normative_diagnostics": null,
+      "note": "Normative repair row uses bare @energy in code arguments. Official syntax reports Error(@); global recovery policy allows only dictionary field calls, so this repair contract conflicts with the parse policy. No recovery or semantic success is claimed.",
+      "intentional_parse_error": true,
+      "scenario_heading": "Violation with extra or wrong arguments"
+    }
+  ]
+}
