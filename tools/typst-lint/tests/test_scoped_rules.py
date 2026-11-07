@@ -84,6 +84,22 @@ class ScopedRulesTests(unittest.TestCase):
         body = b'#import "@preview/mannot:0.4.0": *\n#mannot-scope(s => [#s.tag("x")])'
         self.assertFalse(self.run_rules(body)[CALL].diagnostics)
 
+    def test_namespace_requires_proven_output_ownership(self):
+        examples = (
+            b'#let a = [#local-tag-scope(s => [], prefix: "p")]\n'
+            b'#let b = [#local-tag-scope(s => [], prefix: "p")]',
+            b'#unknown([#local-tag-scope(s => [], prefix: "p")], '
+            b'[#local-tag-scope(s => [], prefix: "p")])',
+            b'#local-tag-scope(s => { let a = [#local-tag-scope(t => [], prefix: "p")]; '
+            b'let b = [#local-tag-scope(t => [], prefix: "p")]; [] })',
+            b'#local-tag-scope(s => [], prefix: "p")\n'
+            b'#let b = [#local-tag-scope(s => [], prefix: "p")]',
+        )
+        for body in examples:
+            result = self.run_rules(body)[UNIQUE]
+            self.assertFalse(result.diagnostics, body)
+            self.assertTrue(any('ownership is unproven' in skip for skip in result.skips))
+
     def test_suppression_and_comment_preservation(self):
         body = b'#local-tag-scope(s => [\n// typst-lint: ignore-next core.scoped-function-call -- test\n#s.tag("x")\n])'
         result = self.run_rules(body)[CALL]

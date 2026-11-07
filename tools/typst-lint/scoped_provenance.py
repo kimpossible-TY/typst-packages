@@ -5,17 +5,12 @@ Raw mannot reexports and facade imports are deliberately not certified. Scope
 callback execution is recognized only for one literal, single-parameter closure.
 Nested arbitrary closures, context expressions, mutation and includes stay opaque.
 """
-from static_resolver import (_Resolver, Binding, ReviewedPackage, PackageSource,
-                             _literal_string)
-from typst_lint import digest
+from static_resolver import (_Resolver, Binding, _literal_string,
+                             SCOPED_ANNOTATIONS as PACKAGE,
+                             SCOPED_ANNOTATIONS_SOURCE_SHA256 as SOURCE_SHA256)
 
-PACKAGE = '@local/scoped-annotations:0.3.0'
-SOURCE_SHA256 = 'eb8e7ff7b31238c8fa4b996deb9502fec0ae4610240427a8b40873708e509203'
-EXPORTS = ('local-tag-scope', 'local-scope-annotations', 'mannot-scope', 'annot-cetz-local')
-CONTRACT = ReviewedPackage(PACKAGE, SOURCE_SHA256, tuple((x, x) for x in EXPORTS),
-                           'local', 'scoped-annotations', '0.3.0', 'lib.typ')
 FIELDS = frozenset(('tag', 'tags', 'name', 'names', 'anchor', 'ref', 'node', 'annot', 'mark'))
-SCOPES = frozenset(EXPORTS[:3])
+SCOPES = frozenset(('local-tag-scope', 'local-scope-annotations', 'mannot-scope'))
 
 
 def arguments(resolver, i):
@@ -26,11 +21,8 @@ def arguments(resolver, i):
 class ScopedResolver(_Resolver):
     def __init__(self, tree, packages):
         super().__init__(tree, None, packages)
-        for package in packages:
-            if (type(package) is PackageSource and package.import_path == PACKAGE
-                    and digest(package.source) == SOURCE_SHA256):
-                self.packages[PACKAGE] = (package, CONTRACT)
         self.scope_calls = {}
+        self.callback_bodies = {}
         self.state.bind('ref', Binding('builtin', 'ref'))
 
     def import_node(self, i, state):
@@ -75,6 +67,7 @@ class ScopedResolver(_Resolver):
                                 self.visit(arg, state)
                         identity = f'scope:{node.start}'
                         self.scope_calls[i] = identity
+                        self.callback_bodies[i] = closure[2]
                         nested = state.nested()
                         nested.bind(self.text(params[0]), Binding(
                             'tag-scope' if callee.name == 'local-tag-scope' else 'annotation-scope',

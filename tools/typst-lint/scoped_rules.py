@@ -49,6 +49,28 @@ def analyze(tree, path, *, packages=()):
                 return True
         return False
 
+    def owned_scope(i):
+        """Only direct root output and direct literal scope callback output.
+
+        Stored content, argument content of arbitrary wrappers, code-block
+        return values and nested ordinary closures are not document-graph
+        membership evidence. Even two calls under the same opaque wrapper do
+        not establish whether both are rendered, or in the same graph.
+        """
+        parent = parents.get(i)
+        if parent == 0:
+            return tree.mode == 'markup' and tree.nodes[0].kind == 'Markup'
+        if parent is None or tree.nodes[parent].kind != 'Markup':
+            return False
+        body = parents.get(parent)
+        if body is None or tree.nodes[body].kind != 'ContentBlock':
+            return False
+        closure = parents.get(body)
+        args = parents.get(closure)
+        outer = parents.get(args)
+        return (outer in r.callback_bodies and r.callback_bodies[outer] == body
+                and owned_scope(outer))
+
     for i, node in enumerate(tree.nodes):
         if node.kind != 'FuncCall':
             continue
@@ -73,6 +95,9 @@ def analyze(tree, path, *, packages=()):
                     add(REFERENCE, i, 'Use the corresponding scope ref helper for a generated local target')
                     break
         if i in r.scope_calls:
+            if not owned_scope(i):
+                r.note(i, 'Namespace collision skipped: output/document-graph ownership is unproven')
+                continue
             named = {r.text(r.sig(a)[0]): r.sig(a)[-1] for a in arguments(r, parts[1])
                      if tree.nodes[a].kind == 'Named'}
             prefix = _literal_string(tree, named['prefix']) if 'prefix' in named else None
@@ -91,7 +116,7 @@ def analyze(tree, path, *, packages=()):
                 else:
                     namespaces[key] = node.start
     skips = tuple(dict.fromkeys((*r.skips,
-        'Partial: direct reviewed scoped package imports only; no facade, raw mannot, graph-wide collision or reference repair coverage')))
+        'Partial: direct reviewed scoped package imports only; no facade, raw mannot, graph-wide collision or reference repair coverage; namespace checks require direct root or literal callback output')))
     errors = tuple((n.start, n.end) for n in tree.nodes if n.kind == 'Error')
     return {rid: ScopedResult(tuple(diagnostics[rid]), tuple(edits[rid]), skips, errors,
                                tuple(suppressed[rid])) for rid in RULE_IDS}
