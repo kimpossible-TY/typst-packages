@@ -75,10 +75,11 @@ class ContinuationIntegrationTests(unittest.TestCase):
                 (root / 'main.typ').write_bytes(source)
                 result = report(root, 'dry-run')
                 self.assertFalse([e for e in result['proposed_edits'] if e['rule_id'] in (ALIGNED, UNALIGNED, PROSE)])
-                self.assertNotIn(UNALIGNED, result['coverage']['available_backends'])
-                self.assertNotIn(PROSE, result['coverage']['available_backends'])
+                self.assertIn(UNALIGNED, result['coverage']['available_backends'])
+                self.assertIn(PROSE, result['coverage']['available_backends'])
                 rows = {r['rule_id']: r for r in result['coverage']['files']}
-                self.assertEqual(rows[ALIGNED]['status'], 'partial')
+                for rid in (ALIGNED, UNALIGNED, PROSE):
+                    self.assertEqual(rows[rid]['status'], 'partial')
                 self.assertEqual(rows[CONTINUATION]['status'], 'partial')
 
     def test_gap_suppression_remains_owned_by_footnote(self):

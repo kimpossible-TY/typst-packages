@@ -3,7 +3,7 @@
 This is the implementation draft for the reviewed
 [`typst-style-linter` design](../../openspec/changes/typst-style-linter/design.md).
 **This is not a production linter or build gate.** Selected script, reference,
-paragraph and display rules produce diagnostics and partial in-memory repair
+paragraph, display, highlight, theme and scoped-helper rules produce diagnostics and partial in-memory repair
 plans from real Typst parsing and narrowly proven contexts.
 Other required rules, protected runtime writes and compilation remain incomplete.
 Every real CLI run still returns **2**, including an empty selection. No source
@@ -58,8 +58,11 @@ bounded resolver reads only AST-requested reviewed artifacts below it. There is
 no implicit lookup in the package owner's checkout, home directory, installed
 packages, caches or environment variable. Reviewed contracts cover the exact
 `@local/text-utils:0.1.2` and `@local/project-references:0.1.0` definition sources
-shipped here; both manifest identity and actual source bytes are checked. Neither
-definition source imports another module. The reference function's runtime
+shipped here; both manifest identity and actual source bytes are checked. The text-utils and project-references definition sources import no other module.
+Bounded contracts also recognize math-blocks 0.2.0 theme/spacer values and the locally
+defined scoped-annotations 0.3.0 wrappers. Those packages import other modules;
+only the reviewed local definitions are certified, not arbitrary re-exports or
+the runtime dependency graph. The reference function's runtime
 `projects.json` is never loaded or evaluated by this analyzer. A matching package name/version
 alone is insufficient. Other versions, modified source and local facades remain
 unresolved, not version-style violations. Missing/unsafe/malformed requested
@@ -149,10 +152,10 @@ Limitations remain explicit:
   static resolver. General import/include graphs and local facade exports remain
   unsupported. Unknown wildcard imports, bindings, dynamic language, show/output
   effects and deferred bodies cannot certify paragraph prose or language.
-- Root prose with proven canonical paragraph markers supports two paragraph
-  rules, reviewed root project-reference calls support two reference rules, and
-  typed displays support two source-layout rules as described below. Other
-  binding/graph-dependent rules remain unavailable.
+- Root prose with proven canonical paragraph markers supports three paragraph
+  rules. Reviewed root project-reference calls, typed displays, bounded theme APIs,
+  scope callbacks and text highlighting have the additional backends described
+  below. Availability never implies full graph or rule-contract coverage.
   Zero diagnostics never implies full rule coverage.
 
 Reports include deterministic findings, suppressions, file-specific coverage,
@@ -295,6 +298,61 @@ only exposes a continuation-gap fix on the next pass, current composition refuse
 the entire proposed edit set instead of applying an incompletely checked result.
 The isolated display render/query test verifies text order and that the semantic
 label remains attached to the block equation. No existing consumer document is compiled.
+
+## Structural markers, highlights, themes and scoped helpers
+
+`pde.paragraph-marker-target` diagnoses proven standalone root markers before
+heading or display siblings, skipping only whitespace and comments. It removes
+only the marker token, keeping its original line, comments, CRLF/BOM and structural
+separation. It avoids redundant gap/casing proposals for a marker that should be
+removed. A directive targeting that marker, even for another rule, refuses removal
+rather than acquiring a different target. Nested bodies and facade/alias forms
+remain unsupported by this bounded paragraph contract.
+
+`pde.text-only-highlight` diagnoses direct rendered math inside builtin `highlight`
+or the reviewed text-utils `highlighted` helper. The simple content-only repair
+changes wrapper bytes, retaining every prose/math byte and allowing independent
+script operand edits. It never treats math in option expressions or stored code
+values as highlighted content. Options, nested styles/calls, labels, comments,
+directives and ambiguous arguments block extraction. Extracting a display that
+needs a second formatting pass still refuses the combined proposal.
+An isolated real-compiler test verifies both helper forms retain their prose
+highlights and equation structure after extraction. It uses an empty package
+cache and a private copy of the reviewed text-utils source; no existing consumer
+or installed package is changed. Exact render geometry is not claimed.
+
+The two theme rules use exact math-blocks 0.2.0 source evidence, aliases and a
+narrow immutable capture proof. They diagnose setting a custom palette as an
+element and using `theme-from-text-fill` outside lexical context within a reusable
+helper. Shadowing, parameter bindings and mutation invalidate evidence. They do
+not insert `context`: content-return and all-call-site proof remains unavailable.
+See [the theme contract](THEME_CONTRACT.md).
+
+Four scoped-helper backends use exact scoped-annotations 0.3.0 wrapper evidence
+and a literal one-parameter callback. They diagnose dictionary function-call
+syntax, generated scoped targets passed directly to `ref`, overlays outside a
+display, and duplicate literal namespaces in proven direct output. Only dictionary
+callee parenthesization is proposed automatically. Arguments and their comments
+are retained. Stored content and arbitrary wrappers cannot establish namespace
+graph membership. Wildcard re-exports, raw mannot APIs, dynamic execution,
+mutations, facades, general document graphs and reference repairs remain unsupported.
+No caller receives a scope binding based on variable spelling alone.
+
+## Proven footnote spacer proposals
+
+All five footnote backends now run with bounded root-context coverage. The
+resolver supplies exact source-bound evidence for the locally defined
+math-blocks 0.2.0 `dots_space` value. Direct imports, immutable aliases and module
+access can prove an existing spacer; insertion additionally requires the
+canonical `dots_space` name to be in scope. A name alone, unknown wildcard,
+modified package, facade or deferred capture supplies no such proof.
+
+Direct aligned display footnotes can propose insertion. Direct unaligned
+footnotes can propose removal, and root prose removal preserves existing comma
+or period adjacency. Ambiguous punctuation, nested context and paragraph-marker
+composition stay explicitly unsupported. These proposals go through the common
+candidate parser, coverage-retention and idempotence checks. See the
+[footnote contract](FOOTNOTE_CONTRACT.md) for precise scope and render limits.
 
 ## Verification
 

@@ -2,12 +2,14 @@
 
 SpacerProof must be created by a resolver which proves the actual helper and
 insertion scope; mere identifier spelling or a package path is not such proof.
-The dispatcher supplies no synthetic proof. See FOOTNOTE_CONTRACT.md.
+The dispatcher uses Resolution.spacer_proof, produced from reviewed package
+bytes and lexical AST facts. It supplies no synthetic proof. See FOOTNOTE_CONTRACT.md.
 """
 from dataclasses import dataclass
 import re
 
 from edit_plan import Edit
+from static_resolver import SpacerProof
 from suppression import resolve as resolve_suppressions
 from typst_lint import Diagnostic, digest, load_rules
 
@@ -17,18 +19,6 @@ ALIGNED = 'pde.aligned-footnote-spacer'
 UNALIGNED = 'pde.unaligned-footnote-no-spacer'
 PROSE = 'pde.prose-footnote-no-spacer'
 RULE_IDS = (GAP, PUNCT, ALIGNED, UNALIGNED, PROSE)
-
-
-@dataclass(frozen=True)
-class SpacerProof:
-    """Trusted resolver attestations, bound to source bytes and syntax node IDs.
-
-    existing contains IDs of helper expressions with proven identity; available
-    contains IDs of footnote calls at which the canonical spelling is in scope.
-    """
-    source_sha256: str
-    existing: frozenset[int] = frozenset()
-    available: frozenset[int] = frozenset()
 
 
 @dataclass(frozen=True)

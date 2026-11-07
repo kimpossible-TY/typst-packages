@@ -29,7 +29,17 @@ MATH_BLOCKS = '@local/math-blocks:0.2.0'
 MATH_BLOCKS_SOURCE_SHA256 = '542c7ce1ebfc6fbd51a7fefb2b55405a968a951b61d49170e49ef331948f36ff'
 # Deliberately partial namespace. Wildcards invalidate other names below.
 MATH_BLOCKS_EXPORTS = tuple((name, name) for name in
-                           ('light-theme', 'dark-theme', 'theme-from-text-fill'))
+                           ('light-theme', 'dark-theme', 'theme-from-text-fill', 'dots_space'))
+
+
+def is_spacer_binding(binding):
+    # This exact entrypoint defines an immutable content value using only math
+    # builtins: $& wide dots.h.c thin$. Its named dependency imports cannot
+    # redefine those names. No facade, other version or function result is
+    # inferred. See FOOTNOTE_CONTRACT.md for the reviewed dependency boundary.
+    return bool(binding and binding.kind == 'api' and binding.name == 'dots_space'
+                and binding.package == MATH_BLOCKS
+                and binding.source_sha256 == MATH_BLOCKS_SOURCE_SHA256)
 
 
 def is_theme_binding(binding):
@@ -39,6 +49,14 @@ def is_theme_binding(binding):
                       ('light-theme', 'dark-theme', 'theme-from-text-fill'))
                      or binding.kind in ('module', 'palette')))
 
+
+SCOPED_ANNOTATIONS = '@local/scoped-annotations:0.3.0'
+SCOPED_ANNOTATIONS_SOURCE_SHA256 = 'eb8e7ff7b31238c8fa4b996deb9502fec0ae4610240427a8b40873708e509203'
+# Only the locally defined wrappers are reviewed. Re-exported @preview/mannot
+# symbols do not inherit this provenance.
+SCOPED_ANNOTATIONS_EXPORTS = tuple((name, name) for name in
+                                 ('local-tag-scope', 'local-scope-annotations',
+                                  'mannot-scope', 'annot-cetz-local'))
 
 PROJECT_REFERENCES = '@local/project-references:0.1.0'
 PROJECT_REFERENCES_SOURCE_SHA256 = '94b5f60db26e97faa511285fecd92a0f2afed708c8d56b1ed252cce3458a1720'
@@ -69,6 +87,8 @@ class ReviewedPackage:
 
 
 REVIEWED_PACKAGES = (
+    ReviewedPackage(SCOPED_ANNOTATIONS, SCOPED_ANNOTATIONS_SOURCE_SHA256, SCOPED_ANNOTATIONS_EXPORTS,
+                    'local', 'scoped-annotations', '0.3.0', 'lib.typ'),
     ReviewedPackage(MATH_BLOCKS, MATH_BLOCKS_SOURCE_SHA256, MATH_BLOCKS_EXPORTS,
                     'local', 'math-blocks', '0.2.0', 'lib.typ'),
     ReviewedPackage(TEXT_UTILS, TEXT_UTILS_SOURCE_SHA256, TEXT_UTILS_EXPORTS,
@@ -99,12 +119,27 @@ class Facts:
 
 
 @dataclass(frozen=True)
+class SpacerProof:
+    """Source-bound resolver attestations, not a complete evaluation proof.
+
+    existing names expressions whose values are the reviewed spacer, never
+    function calls merely invoking a same-bound callee. available names builtin
+    footnote calls where the canonical spelling is in scope before evaluation.
+    Deferred execution and unknown output/style effects cannot prove insertion.
+    """
+    source_sha256: str
+    existing: frozenset[int] = frozenset()
+    available: frozenset[int] = frozenset()
+
+
+@dataclass(frozen=True)
 class Resolution:
     source_sha256: str
     facts: tuple[Facts, ...]
     skips: tuple[str, ...]
     # Even with no skips, graph/evaluation coverage has not been implemented.
     complete: bool = False
+    spacer_proof: SpacerProof | None = None
 
     def binding_for(self, node_id: int) -> Binding | None:
         return self.facts[node_id].binding
@@ -239,6 +274,7 @@ class _Resolver:
         self.tree = tree
         self.nodes = tree.nodes
         self.facts = [Facts() for _ in tree.nodes]
+        self.available_spacers = set()
         self.skips = []
         self.packages = {}
         seen = set()
@@ -358,9 +394,18 @@ class _Resolver:
         if kind == 'FuncCall':
             binding = self.visit(children[0], state) if len(children) == 2 and self.nodes[children[1]].kind == 'Args' else None
             self.set_binding(i, binding)
+            # The inserted expression executes before this call's arguments.
+            # Capture the lexical value here, not after walking a content body
+            # which may invalidate an outer binding. Aliases of dots_space are
+            # sufficient for removal, but not for inserting its canonical name.
+            if (not state.deferred and not state.styles_unknown
+                    and binding and binding.kind == 'builtin' and binding.name == 'footnote'
+                    and is_spacer_binding(state.lookup('dots_space'))):
+                self.available_spacers.add(i)
             if len(children) == 2:
                 self.visit(children[1], state)
-            if output and not self.plain_footnote(binding, children):
+            if output and not (self.plain_footnote(binding, children)
+                               or self.plain_highlight(binding, children)):
                 self.unknown_output(i, state)
             # Only this exact reviewed zero-argument palette selector has a
             # known result. Arbitrary calls still never establish provenance.
@@ -480,6 +525,31 @@ class _Resolver:
         return all(self.nodes[c].kind in ('Text', 'Space', 'Parbreak')
                    for c in self.nodes[content[1]].children)
 
+    def plain_highlight(self, binding, children):
+        # Only called for immediate root output. The builtin and reviewed
+        # text-utils wrapper scope their presentation to literal body content;
+        # neither changes the following root's bindings or text language.
+        supported = bool(binding and (
+            (binding.kind == 'builtin' and binding.name == 'highlight') or
+            (binding.kind == 'api' and binding.name == 'highlighted'
+             and binding.package == TEXT_UTILS
+             and binding.source_sha256 == TEXT_UTILS_SOURCE_SHA256)))
+        if not supported or len(children) != 2:
+            return False
+        # Deliberately reject options, parentheses, comments and extra arguments.
+        args = self.nodes[children[1]].children
+        if len(args) != 1 or self.nodes[args[0]].kind != 'ContentBlock':
+            return False
+        content = self.nodes[args[0]].children
+        if len(content) != 3 or [self.nodes[c].kind for c in content] != ['LeftBracket', 'Markup', 'RightBracket']:
+            return False
+        # Certify only the text-only fragments generated by extraction. The
+        # original math-containing call remains unknown; even literal equations
+        # do not broaden this bounded output contract. Existing unknown styles
+        # are never reset by this exception.
+        return all(self.nodes[c].kind in ('Text', 'Space')
+                   for c in self.nodes[content[1]].children)
+
     def destruct_mutation(self, target, state):
         kind = self.nodes[target].kind
         parts = self.sig(target)
@@ -545,9 +615,9 @@ class _Resolver:
         items = next((c for c in children if self.nodes[c].kind == 'ImportItems'), None)
         if any(self.nodes[c].kind == 'Star' for c in children):
             if module:
-                if path == MATH_BLOCKS:
+                if path in (MATH_BLOCKS, SCOPED_ANNOTATIONS):
                     state.unknown_wildcard()
-                    self.note(i, 'Reviewed theme contract has a partial export namespace')
+                    self.note(i, 'Reviewed package contract has a partial export namespace')
                 for name, _ in self.packages[path][1].exports:
                     state.bind(name, self.package_binding(path, name))
             else:
@@ -664,4 +734,9 @@ def resolve(tree: Tree, *, fallback_language=None, packages=()) -> Resolution:
         resolver.state.prose_safe = False
         resolver.state.language_supported = False
     resolver.visit(0, resolver.state)
-    return Resolution(digest(tree.source), tuple(resolver.facts), tuple(dict.fromkeys(resolver.skips)))
+    existing = frozenset(i for i, fact in enumerate(resolver.facts)
+                         if tree.nodes[i].kind in ('Ident', 'FieldAccess', 'Parenthesized')
+                         and not fact.deferred and is_spacer_binding(fact.binding))
+    proof = SpacerProof(digest(tree.source), existing, frozenset(resolver.available_spacers))
+    return Resolution(digest(tree.source), tuple(resolver.facts), tuple(dict.fromkeys(resolver.skips)),
+                      spacer_proof=proof)

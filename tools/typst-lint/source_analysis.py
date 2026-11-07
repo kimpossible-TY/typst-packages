@@ -5,37 +5,41 @@ Successful verification here therefore yields partial proposals only.
 """
 from collections import Counter
 from dataclasses import replace
+import re
 
 from continuation_rules import RULE_ID as CONTINUATION, analyze as continuation
 from edit_plan import plan
+from highlight_rules import RULE_ID as HIGHLIGHT, analyze as highlights
 from display_rules import RULE_IDS as DISPLAY_RULES, analyze as displays
-from footnote_rules import GAP as FOOTNOTE_GAP, PUNCT as FOOTNOTE_PUNCT, ALIGNED as FOOTNOTE_ALIGNED, analyze as footnotes
+from footnote_rules import RULE_IDS as FOOTNOTE_RULES, analyze as footnotes
 from paragraph_rules import RULE_IDS as PARAGRAPH_RULES, analyze as paragraphs
 from reference_rules import RULE_IDS as REFERENCE_RULES, analyze as references
 from script_rule import RULE_ID as SCRIPT, analyze as scripts
+from scoped_rules import RULE_IDS as SCOPED_RULES, analyze as scoped
 from static_resolver import resolve
 from syntax_client import parse
+from theme_rules import RULE_IDS as THEME_RULES, analyze as themes
 from typst_lint import SafetyError
 
 
 def rule_ids(pack):
-    core = (SCRIPT, *REFERENCE_RULES)
+    core = (SCRIPT, *REFERENCE_RULES, *THEME_RULES, *SCOPED_RULES)
     return (*core, *PARAGRAPH_RULES, *DISPLAY_RULES, CONTINUATION,
-            FOOTNOTE_GAP, FOOTNOTE_PUNCT, FOOTNOTE_ALIGNED) if pack == 'pde' else core
+            *FOOTNOTE_RULES, HIGHLIGHT) if pack == 'pde' else core
 
 
 def _analyze(tree, path, pack, fallback_language, packages, reference_catalog):
     results = {SCRIPT: scripts(tree, path, _verify=False)}
     resolution = resolve(tree, fallback_language=fallback_language, packages=packages)
     results.update(references(tree, path, resolution, reference_catalog))
+    results.update(themes(tree, path, resolution))
+    results.update(scoped(tree, path, packages=packages))
     if pack == 'pde':
         results.update(paragraphs(tree, path, resolution))
+        results[HIGHLIGHT] = highlights(tree, path, resolution)
         results.update(displays(tree, path, resolution))
         results[CONTINUATION] = continuation(tree, path, resolution)
-        # No trusted dots_space producer exists yet. Only register the rules
-        # that can detect something without synthetic spacer provenance.
-        footnote_results = footnotes(tree, path, resolution)
-        results.update({rid: footnote_results[rid] for rid in (FOOTNOTE_GAP, FOOTNOTE_PUNCT, FOOTNOTE_ALIGNED)})
+        results.update(footnotes(tree, path, resolution, resolution.spacer_proof))
     return results
 
 
@@ -87,6 +91,21 @@ merely because an earlier script or blank line changed its coordinates.
         def mapped(position):
             return position + sum(len(edit.replacement) - (edit.end - edit.start)
                                   for edit in planned.edits if edit.end <= position)
+
+        # A zero-edit candidate cannot certify idempotence if it merely lost
+        # the static facts needed to analyze a rule. Preserve every baseline
+        # rule and refuse newly unsupported regions, mapping existing offsets
+        # through the same byte plan used for diagnostic ownership.
+        if final.keys() != results.keys():
+            raise SafetyError('Combined candidate changed available rule coverage')
+        for rid, original in results.items():
+            if final[rid].parse_errors:
+                raise SafetyError('Combined candidate has rule parse failures')
+            previous = Counter(re.sub(r'at byte (\d+)',
+                lambda match: f'at byte {mapped(int(match.group(1)))}', reason)
+                for reason in original.skips)
+            if Counter(final[rid].skips) - previous:
+                raise SafetyError('Combined candidate introduces an analysis refusal')
 
         before = _findings(tree.source, results, ignored, mapped)
         after = _findings(candidate, final, ignored)

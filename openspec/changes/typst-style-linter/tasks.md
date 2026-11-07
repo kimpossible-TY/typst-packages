@@ -118,3 +118,13 @@ The design follow-up is reviewed and merged first. Groups 2–7 are authorized i
 - [x] 16.1 Run 136 isolated fixtures through 159 real CLI invocations, indexing all 72 current normative scenario headings. Report 26 NOT_IMPLEMENTED, 7 PARTIAL and 0 COMPLETE, with no unsupported negative case counted as a semantic pass.
 - [x] 16.2 Separate four expected invalid-catalog input refusals and two expected parser refusals. The corrected reference contract removes the earlier SPEC_CONFLICT classification; no destination or malformed repair is guessed.
 - [x] 16.3 Retain immutable candidate-proof checks, all package artifact fingerprints, available-backend versus evaluated-coverage distinctions, and no source writes or compiler invocation. Regenerate final evidence after this status update before committing the checkpoint.
+
+
+## 17. Extend bounded rule coverage and recovery evidence
+
+- [x] 17.1 Verify real SIGKILL transaction recovery in separate interpreters at pre/post-rename boundaries and during recovery; preserve later edits and same-byte replacement conflicts. These tests do not establish power-loss durability or an editor lease.
+- [x] 17.2 Wire bounded continuation, footnote, structural-marker, theme, highlight and four scoped-helper backends through the real CLI, while leaving all write/compile routes fail-closed.
+- [x] 17.3 Preserve diagnostic and directive ownership across byte shifts, and require candidate rule/parse/refusal coverage retention instead of accepting a zero-edit result that lost analysis facts.
+- [x] 17.4 Verify builtin and reviewed text-utils highlight candidates with isolated real compile/query evidence. Certify only text-only generated fragments as bounded transparent output; retain unknown nested/option/show cases.
+- [x] 17.5 Add actual resolver-produced math-blocks spacer identity and canonical insertion proofs, verify aliases/shadowing/mutation, integrate all five footnote backends and independently review exact proposals.
+- [x] 17.6 Regenerate all 33-rule evidence and run final local checks before publishing the draft checkpoint. Final local checks: 356 Python tests (355 passed, one filesystem setuid skip), four Rust tests, formatting/Clippy, strict OpenSpec and whitespace checks. Audit: 202 CLI invocations, 21 PARTIAL / 12 NOT_IMPLEMENTED / 0 COMPLETE, with no audit invariant failures. Consumer rollout and complete rule acceptance remain outside this checkpoint.

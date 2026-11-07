@@ -366,7 +366,8 @@
       "normative_diagnostics": 1,
       "note": "",
       "intentional_parse_error": false,
-      "scenario_heading": "Violation with a nonsettable target"
+      "scenario_heading": "Violation with a nonsettable target",
+      "assert_normative_count": true
     },
     {
       "id": "core.no-set-theme--negative",
@@ -379,7 +380,8 @@
       "normative_diagnostics": 0,
       "note": "",
       "intentional_parse_error": false,
-      "scenario_heading": "Non-violation with settable elements"
+      "scenario_heading": "Non-violation with settable elements",
+      "assert_normative_count": true
     },
     {
       "id": "core.theme-in-context--positive",
@@ -392,7 +394,8 @@
       "normative_diagnostics": 1,
       "note": "",
       "intentional_parse_error": false,
-      "scenario_heading": "Violation without contextual resolution"
+      "scenario_heading": "Violation without contextual resolution",
+      "assert_normative_count": true
     },
     {
       "id": "core.theme-in-context--negative",
@@ -405,7 +408,8 @@
       "normative_diagnostics": 0,
       "note": "",
       "intentional_parse_error": false,
-      "scenario_heading": "Non-violation with contextual resolution"
+      "scenario_heading": "Non-violation with contextual resolution",
+      "assert_normative_count": true
     },
     {
       "id": "pde.import-order--positive",
@@ -817,7 +821,11 @@
       "normative_diagnostics": 1,
       "note": "",
       "intentional_parse_error": false,
-      "scenario_heading": "Violation highlighting math"
+      "scenario_heading": "Violation highlighting math",
+      "assert_normative_count": true,
+      "expected_candidate": {
+        "main.typ": "#highlight[The term ]$x^(2)$#highlight[ matters.]\n"
+      }
     },
     {
       "id": "pde.text-only-highlight--negative",
@@ -830,7 +838,8 @@
       "normative_diagnostics": 0,
       "note": "",
       "intentional_parse_error": false,
-      "scenario_heading": "Non-violation with separate math"
+      "scenario_heading": "Non-violation with separate math",
+      "assert_normative_count": true
     },
     {
       "id": "pde.theme-cancelmark--positive",
@@ -2100,6 +2109,350 @@
       "scenario_heading": "Violation before structural content",
       "assert_normative_count": true,
       "expected_no_target_edits": true
+    },
+    {
+      "id": "core.no-set-theme--reviewed-alias",
+      "rule_id": "core.no-set-theme",
+      "kind": "reviewed-alias",
+      "files": {
+        "main.typ": "#import \"@local/math-blocks:0.2.0\": theme-from-text-fill, light-theme\n#let theme = light-theme\n#set theme(fill: red)\n"
+      },
+      "config": "rule-set=\"pde\"\ninclude=[\"**/*.typ\",\"**/*.md\"]\n",
+      "normative_diagnostics": 1,
+      "note": "",
+      "intentional_parse_error": false,
+      "scenario_heading": "Violation with a nonsettable target",
+      "assert_normative_count": true,
+      "expected_no_target_edits": true
+    },
+    {
+      "id": "core.no-set-theme--shadowed",
+      "rule_id": "core.no-set-theme",
+      "kind": "shadowed",
+      "files": {
+        "main.typ": "#import \"@local/math-blocks:0.2.0\": theme-from-text-fill, light-theme\n#let light-theme = text\n#set light-theme(fill: red)\n"
+      },
+      "config": "rule-set=\"pde\"\ninclude=[\"**/*.typ\",\"**/*.md\"]\n",
+      "normative_diagnostics": 0,
+      "note": "",
+      "intentional_parse_error": false,
+      "scenario_heading": "Non-violation with settable elements",
+      "assert_normative_count": true,
+      "expected_no_target_edits": true
+    },
+    {
+      "id": "core.theme-in-context--captured-alias",
+      "rule_id": "core.theme-in-context",
+      "kind": "captured-alias",
+      "files": {
+        "main.typ": "#import \"@local/math-blocks:0.2.0\": theme-from-text-fill, light-theme\n#let palette = theme-from-text-fill\n#let helper(body) = { let theme = palette(); body }\n"
+      },
+      "config": "rule-set=\"pde\"\ninclude=[\"**/*.typ\",\"**/*.md\"]\n",
+      "normative_diagnostics": 1,
+      "note": "",
+      "intentional_parse_error": false,
+      "scenario_heading": "Violation without contextual resolution",
+      "assert_normative_count": true,
+      "expected_no_target_edits": true
+    },
+    {
+      "id": "core.theme-in-context--parameter-shadow",
+      "rule_id": "core.theme-in-context",
+      "kind": "parameter-shadow",
+      "files": {
+        "main.typ": "#import \"@local/math-blocks:0.2.0\": theme-from-text-fill, light-theme\n#let helper(theme-from-text-fill) = { theme-from-text-fill() }\n"
+      },
+      "config": "rule-set=\"pde\"\ninclude=[\"**/*.typ\",\"**/*.md\"]\n",
+      "normative_diagnostics": 0,
+      "note": "",
+      "intentional_parse_error": false,
+      "scenario_heading": "Non-violation with contextual resolution",
+      "assert_normative_count": true,
+      "expected_no_target_edits": true
+    },
+    {
+      "id": "core.theme-in-context--explicit-context",
+      "rule_id": "core.theme-in-context",
+      "kind": "explicit-context",
+      "files": {
+        "main.typ": "#import \"@local/math-blocks:0.2.0\": theme-from-text-fill, light-theme\n#let helper(body) = context { let theme = theme-from-text-fill(); body }\n"
+      },
+      "config": "rule-set=\"pde\"\ninclude=[\"**/*.typ\",\"**/*.md\"]\n",
+      "normative_diagnostics": 0,
+      "note": "",
+      "intentional_parse_error": false,
+      "scenario_heading": "Non-violation with contextual resolution",
+      "assert_normative_count": true,
+      "expected_no_target_edits": true
+    },
+    {
+      "id": "pde.text-only-highlight--script-composition",
+      "rule_id": "pde.text-only-highlight",
+      "kind": "script-composition",
+      "files": {
+        "main.typ": "#highlight[The $x^2$ term.]\n"
+      },
+      "config": "rule-set=\"pde\"\ninclude=[\"**/*.typ\",\"**/*.md\"]\n",
+      "normative_diagnostics": 1,
+      "note": "",
+      "intentional_parse_error": false,
+      "scenario_heading": "Violation highlighting math",
+      "assert_normative_count": true,
+      "expected_candidate": {
+        "main.typ": "#highlight[The ]$x^(2)$#highlight[ term.]\n"
+      }
+    },
+    {
+      "id": "pde.text-only-highlight--math-option",
+      "rule_id": "pde.text-only-highlight",
+      "kind": "math-option",
+      "files": {
+        "main.typ": "#highlight(fill: $x$)[plain]\n"
+      },
+      "config": "rule-set=\"pde\"\ninclude=[\"**/*.typ\",\"**/*.md\"]\n",
+      "normative_diagnostics": 0,
+      "note": "",
+      "intentional_parse_error": false,
+      "scenario_heading": "Non-violation with separate math",
+      "assert_normative_count": true,
+      "expected_no_target_edits": true
+    },
+    {
+      "id": "pde.text-only-highlight--stored-math",
+      "rule_id": "pde.text-only-highlight",
+      "kind": "stored-math",
+      "files": {
+        "main.typ": "#highlight[#let stored = [$x$]]\n"
+      },
+      "config": "rule-set=\"pde\"\ninclude=[\"**/*.typ\",\"**/*.md\"]\n",
+      "normative_diagnostics": 0,
+      "note": "",
+      "intentional_parse_error": false,
+      "scenario_heading": "Non-violation with separate math",
+      "assert_normative_count": true,
+      "expected_no_target_edits": true
+    },
+    {
+      "id": "pde.text-only-highlight--unrelated-directive",
+      "rule_id": "pde.text-only-highlight",
+      "kind": "unrelated-directive",
+      "files": {
+        "main.typ": "// typst-lint: ignore-next core.parenthesized-scripts -- intentional\n#highlight[$x$]\n"
+      },
+      "config": "rule-set=\"pde\"\ninclude=[\"**/*.typ\",\"**/*.md\"]\n",
+      "normative_diagnostics": 1,
+      "note": "",
+      "intentional_parse_error": false,
+      "scenario_heading": "Violation highlighting math",
+      "assert_normative_count": true,
+      "expected_no_target_edits": true
+    },
+    {
+      "id": "core.scoped-function-call--reviewed-callback",
+      "rule_id": "core.scoped-function-call",
+      "kind": "reviewed-callback",
+      "files": {
+        "main.typ": "#import \"@local/scoped-annotations:0.3.0\": local-tag-scope, mannot-scope\n#local-tag-scope(t => [#t.tag(/* retain */ \"x\")])\n"
+      },
+      "config": "rule-set=\"pde\"\ninclude=[\"**/*.typ\",\"**/*.md\"]\n",
+      "normative_diagnostics": 1,
+      "note": "",
+      "intentional_parse_error": false,
+      "scenario_heading": "Violation with field-call syntax",
+      "assert_normative_count": true,
+      "expected_candidate": {
+        "main.typ": "#import \"@local/scoped-annotations:0.3.0\": local-tag-scope, mannot-scope\n#local-tag-scope(t => [#(t.tag)(/* retain */ \"x\")])\n"
+      }
+    },
+    {
+      "id": "core.scoped-function-call--shadowed-receiver",
+      "rule_id": "core.scoped-function-call",
+      "kind": "shadowed-receiver",
+      "files": {
+        "main.typ": "#import \"@local/scoped-annotations:0.3.0\": local-tag-scope, mannot-scope\n#local-tag-scope(s => { let s = (:); s.tag(\"x\") })\n"
+      },
+      "config": "rule-set=\"pde\"\ninclude=[\"**/*.typ\",\"**/*.md\"]\n",
+      "normative_diagnostics": 0,
+      "note": "",
+      "intentional_parse_error": false,
+      "scenario_heading": "Non-violation with receiver binding",
+      "assert_normative_count": true,
+      "expected_no_target_edits": true
+    },
+    {
+      "id": "core.scoped-reference-access--reviewed-callback",
+      "rule_id": "core.scoped-reference-access",
+      "kind": "reviewed-callback",
+      "files": {
+        "main.typ": "#import \"@local/scoped-annotations:0.3.0\": local-tag-scope, mannot-scope\n#local-tag-scope(s => [#ref((s.tag)(\"x\"))])\n"
+      },
+      "config": "rule-set=\"pde\"\ninclude=[\"**/*.typ\",\"**/*.md\"]\n",
+      "normative_diagnostics": 1,
+      "note": "",
+      "intentional_parse_error": false,
+      "scenario_heading": "Violation using the generated label",
+      "assert_normative_count": true,
+      "expected_no_target_edits": true
+    },
+    {
+      "id": "core.annotation-in-display--reviewed-callback",
+      "rule_id": "core.annotation-in-display",
+      "kind": "reviewed-callback",
+      "files": {
+        "main.typ": "#import \"@local/scoped-annotations:0.3.0\": local-tag-scope, mannot-scope\n#mannot-scope(s => [#(s.annot)(\"x\", c, d)])\n"
+      },
+      "config": "rule-set=\"pde\"\ninclude=[\"**/*.typ\",\"**/*.md\"]\n",
+      "normative_diagnostics": 1,
+      "note": "",
+      "intentional_parse_error": false,
+      "scenario_heading": "Violation after the equation",
+      "assert_normative_count": true,
+      "expected_no_target_edits": true
+    },
+    {
+      "id": "core.annotation-in-display--inside-display",
+      "rule_id": "core.annotation-in-display",
+      "kind": "inside-display",
+      "files": {
+        "main.typ": "#import \"@local/scoped-annotations:0.3.0\": local-tag-scope, mannot-scope\n#mannot-scope(s => [$ x #(s.annot)(\"x\", c, d) $])\n"
+      },
+      "config": "rule-set=\"pde\"\ninclude=[\"**/*.typ\",\"**/*.md\"]\n",
+      "normative_diagnostics": 0,
+      "note": "",
+      "intentional_parse_error": false,
+      "scenario_heading": "Non-violation inside the equation",
+      "assert_normative_count": true,
+      "expected_no_target_edits": true
+    },
+    {
+      "id": "core.unique-scope-namespace--direct-prefix",
+      "rule_id": "core.unique-scope-namespace",
+      "kind": "direct-prefix",
+      "files": {
+        "main.typ": "#import \"@local/scoped-annotations:0.3.0\": local-tag-scope, mannot-scope\n#local-tag-scope(s => [], prefix: \"p\")\n#local-tag-scope(t => [], prefix: \"p\")\n"
+      },
+      "config": "rule-set=\"pde\"\ninclude=[\"**/*.typ\",\"**/*.md\"]\n",
+      "normative_diagnostics": 1,
+      "note": "",
+      "intentional_parse_error": false,
+      "scenario_heading": "Violation with explicit collisions",
+      "assert_normative_count": true,
+      "expected_no_target_edits": true
+    },
+    {
+      "id": "core.unique-scope-namespace--stored-unrelated",
+      "rule_id": "core.unique-scope-namespace",
+      "kind": "stored-unrelated",
+      "files": {
+        "main.typ": "#import \"@local/scoped-annotations:0.3.0\": local-tag-scope, mannot-scope\n#let a = [#local-tag-scope(s => [], prefix: \"p\")]\n#let b = [#local-tag-scope(t => [], prefix: \"p\")]\n"
+      },
+      "config": "rule-set=\"pde\"\ninclude=[\"**/*.typ\",\"**/*.md\"]\n",
+      "normative_diagnostics": 0,
+      "note": "",
+      "intentional_parse_error": false,
+      "scenario_heading": "Non-violation across automatic scopes",
+      "assert_normative_count": true,
+      "expected_no_target_edits": true
+    },
+    {
+      "id": "core.unique-scope-namespace--sibling-name",
+      "rule_id": "core.unique-scope-namespace",
+      "kind": "sibling-name",
+      "files": {
+        "main.typ": "#import \"@local/scoped-annotations:0.3.0\": local-tag-scope, mannot-scope\n#mannot-scope(s => [#mannot-scope(t => [], parent: s, name: \"n\") #mannot-scope(u => [], parent: s, name: \"n\")])\n"
+      },
+      "config": "rule-set=\"pde\"\ninclude=[\"**/*.typ\",\"**/*.md\"]\n",
+      "normative_diagnostics": 1,
+      "note": "",
+      "intentional_parse_error": false,
+      "scenario_heading": "Violation with explicit collisions",
+      "assert_normative_count": true,
+      "expected_no_target_edits": true
+    },
+    {
+      "id": "core.unique-scope-namespace--earlier-script-composition",
+      "rule_id": "core.unique-scope-namespace",
+      "kind": "script-composition",
+      "files": {
+        "main.typ": "#import \"@local/scoped-annotations:0.3.0\": local-tag-scope\n$x^i$\n#local-tag-scope(s => [], prefix: \"p\")\n#local-tag-scope(t => [], prefix: \"p\")\n"
+      },
+      "config": "rule-set=\"core\"\n",
+      "normative_diagnostics": 1,
+      "note": "An existing namespace finding survives coordinate shifts from an independent script edit.",
+      "intentional_parse_error": false,
+      "scenario_heading": "Violation with explicit collisions",
+      "assert_normative_count": true,
+      "expected_candidate": {
+        "main.typ": "#import \"@local/scoped-annotations:0.3.0\": local-tag-scope\n$x^(i)$\n#local-tag-scope(s => [], prefix: \"p\")\n#local-tag-scope(t => [], prefix: \"p\")\n"
+      }
+    },
+    {
+      "id": "pde.text-only-highlight--reviewed-helper-extraction",
+      "rule_id": "pde.text-only-highlight",
+      "kind": "reviewed-helper-extraction",
+      "files": {
+        "main.typ": "#import \"@local/text-utils:0.1.2\": highlighted\n#highlighted[The term $x^i$ matters.]\n"
+      },
+      "config": "rule-set=\"pde\"\n",
+      "normative_diagnostics": 1,
+      "note": "Exact source-bound helper identity, retained equations and text-only output facts.",
+      "intentional_parse_error": false,
+      "scenario_heading": "Violation highlighting math",
+      "assert_normative_count": true,
+      "expected_candidate": {
+        "main.typ": "#import \"@local/text-utils:0.1.2\": highlighted\n#highlighted[The term ]$x^(i)$#highlighted[ matters.]\n"
+      }
+    },
+    {
+      "id": "pde.aligned-footnote-spacer--direct-reviewed-repair",
+      "rule_id": "pde.aligned-footnote-spacer",
+      "kind": "direct-reviewed-repair",
+      "files": {
+        "main.typ": "#import \"@local/math-blocks:0.2.0\": dots_space\n$ A &= B #footnote[Reason.] $\n"
+      },
+      "config": "rule-set=\"pde\"\n",
+      "normative_diagnostics": 1,
+      "note": "Actual resolver-produced exact math-blocks spacer proof; no facade or wildcard namespace assumption.",
+      "intentional_parse_error": false,
+      "scenario_heading": "Violation in either kind of aligned display",
+      "assert_normative_count": true,
+      "expected_candidate": {
+        "main.typ": "#import \"@local/math-blocks:0.2.0\": dots_space\n$ A &= B #dots_space #footnote[Reason.] $\n"
+      }
+    },
+    {
+      "id": "pde.unaligned-footnote-no-spacer--direct-reviewed-repair",
+      "rule_id": "pde.unaligned-footnote-no-spacer",
+      "kind": "direct-reviewed-repair",
+      "files": {
+        "main.typ": "#import \"@local/math-blocks:0.2.0\": dots_space\n$ A = B #dots_space #footnote[Reason.] $\n"
+      },
+      "config": "rule-set=\"pde\"\n",
+      "normative_diagnostics": 1,
+      "note": "Actual resolver-produced exact math-blocks spacer proof; no facade or wildcard namespace assumption.",
+      "intentional_parse_error": false,
+      "scenario_heading": "Violation in a single-line unaligned display",
+      "assert_normative_count": true,
+      "expected_candidate": {
+        "main.typ": "#import \"@local/math-blocks:0.2.0\": dots_space\n$ A = B #footnote[Reason.] $\n"
+      }
+    },
+    {
+      "id": "pde.prose-footnote-no-spacer--direct-reviewed-repair",
+      "rule_id": "pde.prose-footnote-no-spacer",
+      "kind": "direct-reviewed-repair",
+      "files": {
+        "main.typ": "#import \"@local/math-blocks:0.2.0\": dots_space\nThis holds.#dots_space #footnote[Reason.]\n"
+      },
+      "config": "rule-set=\"pde\"\n",
+      "normative_diagnostics": 1,
+      "note": "Actual resolver-produced exact math-blocks spacer proof; no facade or wildcard namespace assumption.",
+      "intentional_parse_error": false,
+      "scenario_heading": "Violation with a prose spacer",
+      "assert_normative_count": true,
+      "expected_candidate": {
+        "main.typ": "#import \"@local/math-blocks:0.2.0\": dots_space\nThis holds.#footnote[Reason.]\n"
+      }
     }
   ]
 }

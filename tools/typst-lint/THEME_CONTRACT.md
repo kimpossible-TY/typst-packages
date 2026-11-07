@@ -12,13 +12,14 @@ The existing explicit package-path loader verifies manifest identity, retained
 file descriptors and exact source bytes. There is no cache search or import
 execution. Versions, paths or spellings alone never establish semantics.
 
-Only `light-theme`, `dark-theme` and `theme-from-text-fill` have exported
-contracts. The palettes are literal dictionaries. The zero-argument selector
+The theme contract exports only `light-theme`, `dark-theme` and
+`theme-from-text-fill`. The separate [footnote contract](FOOTNOTE_CONTRACT.md)
+certifies the locally defined `dots_space` value from this same artifact. The palettes are literal dictionaries. The zero-argument selector
 reads `text.fill` and returns one of those dictionaries. Its imported helpers
 (`capitalize-title`, `is-numeric-title`, `project-ref`) are neither used by nor
 allowed to redefine those palette bindings. Their dependency contents are not
 loaded or certified. Other exports remain unresolved. A wildcard import thus
-invalidates all existing names before establishing just these three exports.
+invalidates all existing names before establishing just these four independently reviewed exports.
 
 Direct imports, renamed imports, module access, parentheses and local immutable
 aliases reuse the resolver's lexical binding machinery. The palette result is

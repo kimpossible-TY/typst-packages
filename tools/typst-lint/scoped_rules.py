@@ -112,7 +112,7 @@ def analyze(tree, path, *, packages=()):
                     key = ('child', parent.source_identity, name)
             if key is not None:
                 if key in namespaces:
-                    add(UNIQUE, i, f'Duplicate literal scope namespace; first declaration at byte {namespaces[key]}')
+                    add(UNIQUE, i, 'Duplicate literal scope namespace in proven document output')
                 else:
                     namespaces[key] = node.start
     skips = tuple(dict.fromkeys((*r.skips,
