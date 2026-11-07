@@ -348,6 +348,13 @@ namespace graph membership. Wildcard re-exports, raw mannot APIs, dynamic execut
 mutations, facades, general document graphs and other reference forms remain unsupported.
 No caller receives a scope binding based on variable spelling alone.
 
+`pde.prose-paragraph-marker` diagnoses existing blank-line boundaries between
+literal root prose paragraphs. A marker proposal requires the canonical reviewed
+text-utils value and an already installed reviewed paragraph show, unchanged
+directive targets and a stable capitalization preflight. It does not add imports
+or show rules, guess nested/structural boundaries, or introduce a second-pass
+casing repair. See the [prose marker contract](PROSE_MARKER_CONTRACT.md).
+
 `pde.proof-trailing-gap` recognizes the reviewed math-blocks proof helper only
 at a proven standalone root call. It proposes a blank source line before the
 next supported prose or structural sibling, after one unambiguous attached label.

@@ -136,3 +136,12 @@ The design follow-up is reviewed and merged first. Groups 2–7 are authorized i
 - [x] 18.2 Retain the first namespace declaration in diagnostics while mapping only that trusted related-location format through preceding edits. Never reinterpret literal catalog project text as a source offset.
 - [x] 18.3 Require a separately reviewed mannot public namespace snapshot before repairing the exact local scoped-reference form. Keep its fixed optional loader evidence separate from raw API bindings and retain safe descriptor traversal, refusal and race tests.
 - [x] 18.4 Complete independent review and final local checks: 411 Python tests (410 passed, one filesystem setuid skip), four Rust tests, formatting/Clippy, strict OpenSpec and whitespace checks. Refreshed audit: 172 fixtures, 212 CLI invocations, 37 verified candidate reanalyses, 22 PARTIAL / 11 NOT_IMPLEMENTED / 0 COMPLETE, with no invariant failures. Preserve fail-closed source writes and compiler dispatch; keep consumer rollout separate.
+
+
+## 19. Prove bounded prose marker insertion
+
+- [x] 19.1 Track exact canonical marker availability and an already installed reviewed paragraph-tab show transformation in source-bound immutable resolver evidence. Preserve lexical alias/shadowing/mutation and unknown-output refusals.
+- [x] 19.2 Diagnose literal root prose boundaries separated by existing source paragraph breaks and propose only composition-stable insertions. Preserve source bytes, indentation, effective language and every directive target; do not manufacture imports, show rules or casing edits.
+- [x] 19.3 Integrate explicit backend coverage, focused CLI/render regressions and all-rule audit fixtures without weakening candidate coverage checks. Keep nested/structural/footnote boundaries and unsupported starter composition explicit.
+- [x] 19.4 Complete independent review, 438 Python tests (437 passed, one filesystem setuid skip), four Rust tests, formatting/Clippy, strict OpenSpec and whitespace checks. Audit: 177 fixtures, 219 CLI invocations, 39 verified candidate reanalyses, 23 PARTIAL / 10 NOT_IMPLEMENTED / 0 COMPLETE, with no invariant failures. A 1,000-paragraph independent probe completed backend analysis in 0.287s and fully verified shared analysis in 0.94s. Production source writes and compiler dispatch remain closed.
+- [ ] 19.5 Publish this checkpoint and verify both CI jobs for its exact PR head.

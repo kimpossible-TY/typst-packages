@@ -2573,6 +2573,82 @@
       "scenario_heading": "Violation using the generated label",
       "assert_normative_count": true,
       "expected_no_target_edits": true
+    },
+    {
+      "id": "pde.prose-paragraph-marker--direct-reviewed-repair",
+      "rule_id": "pde.prose-paragraph-marker",
+      "kind": "direct-reviewed-repair",
+      "files": {
+        "main.typ": "#import \"@local/text-utils:0.1.2\": paragraph_tab, apply-paragraph-tabs\n#show: apply-paragraph-tabs\n#set text(lang: \"en\")\nFirst idea.\n\nThis consequence follows.\n"
+      },
+      "config": "rule-set=\"pde\"\n",
+      "normative_diagnostics": 1,
+      "note": "Already-uppercase eligible English starter; source marker and active show are explicitly proven.",
+      "intentional_parse_error": false,
+      "scenario_heading": "Violation with an unmarked new paragraph",
+      "assert_normative_count": true,
+      "expected_candidate": {
+        "main.typ": "#import \"@local/text-utils:0.1.2\": paragraph_tab, apply-paragraph-tabs\n#show: apply-paragraph-tabs\n#set text(lang: \"en\")\nFirst idea.\n\n#paragraph_tab\nThis consequence follows.\n"
+      }
+    },
+    {
+      "id": "pde.prose-paragraph-marker--lowercase-composition-refusal",
+      "rule_id": "pde.prose-paragraph-marker",
+      "kind": "composition-refusal",
+      "files": {
+        "main.typ": "#import \"@local/text-utils:0.1.2\": paragraph_tab, apply-paragraph-tabs\n#show: apply-paragraph-tabs\n#set text(lang: \"en\")\nFirst idea.\n\nthis consequence follows.\n"
+      },
+      "config": "rule-set=\"pde\"\n",
+      "normative_diagnostics": 1,
+      "note": "Do not unlock a second-pass capitalization repair or silently change the prose.",
+      "intentional_parse_error": false,
+      "scenario_heading": "Violation with an unmarked new paragraph",
+      "assert_normative_count": true
+    },
+    {
+      "id": "pde.prose-paragraph-marker--missing-show-proof",
+      "rule_id": "pde.prose-paragraph-marker",
+      "kind": "proof-refusal",
+      "files": {
+        "main.typ": "#import \"@local/text-utils:0.1.2\": paragraph_tab, apply-paragraph-tabs\n#set text(lang: \"en\")\nFirst idea.\n\nThis consequence follows.\n"
+      },
+      "config": "rule-set=\"pde\"\n",
+      "normative_diagnostics": 1,
+      "note": "Canonical marker availability alone cannot establish an installed paragraph show.",
+      "intentional_parse_error": false,
+      "scenario_heading": "Violation with an unmarked new paragraph",
+      "assert_normative_count": true
+    },
+    {
+      "id": "pde.prose-paragraph-marker--display-boundary-refusal",
+      "rule_id": "pde.prose-paragraph-marker",
+      "kind": "structural-negative",
+      "files": {
+        "main.typ": "#import \"@local/text-utils:0.1.2\": paragraph_tab, apply-paragraph-tabs\n#show: apply-paragraph-tabs\n#set text(lang: \"en\")\n$ A = B $\n\nThis consequence follows.\n"
+      },
+      "config": "rule-set=\"pde\"\n",
+      "normative_diagnostics": 0,
+      "note": "A display boundary does not imply a new prose paragraph marker.",
+      "intentional_parse_error": false,
+      "scenario_heading": "Non-violation with continuity or an explicit marker",
+      "assert_normative_count": true
+    },
+    {
+      "id": "pde.prose-paragraph-marker--retained-later-refusal",
+      "rule_id": "pde.prose-paragraph-marker",
+      "kind": "direct-reviewed-repair",
+      "files": {
+        "main.typ": "#import \"@local/text-utils:0.1.2\": paragraph_tab, apply-paragraph-tabs\n#show: apply-paragraph-tabs\n#set text(lang: \"en\")\nFirst idea.\n\nThis consequence follows.\n\nSecond idea.\n"
+      },
+      "config": "rule-set=\"pde\"\n",
+      "normative_diagnostics": 2,
+      "note": "An earlier safe insertion must retain the later Second diagnostic and its capitalization refusal without weakening composition guards.",
+      "intentional_parse_error": false,
+      "scenario_heading": "Violation with an unmarked new paragraph",
+      "assert_normative_count": true,
+      "expected_candidate": {
+        "main.typ": "#import \"@local/text-utils:0.1.2\": paragraph_tab, apply-paragraph-tabs\n#show: apply-paragraph-tabs\n#set text(lang: \"en\")\nFirst idea.\n\n#paragraph_tab\nThis consequence follows.\n\nSecond idea.\n"
+      }
     }
   ]
 }

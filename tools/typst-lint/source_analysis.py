@@ -14,6 +14,7 @@ from display_rules import RULE_IDS as DISPLAY_RULES, analyze as displays
 from footnote_rules import RULE_IDS as FOOTNOTE_RULES, analyze as footnotes
 from paragraph_rules import RULE_IDS as PARAGRAPH_RULES, analyze as paragraphs
 from proof_rules import RULE_ID as PROOF, analyze as proofs
+from prose_marker_rules import RULE_ID as PROSE_MARKER, analyze as prose_markers
 from reference_rules import RULE_IDS as REFERENCE_RULES, analyze as references
 from script_rule import RULE_ID as SCRIPT, analyze as scripts
 from scoped_rules import RULE_IDS as SCOPED_RULES, analyze as scoped
@@ -26,7 +27,7 @@ from typst_lint import SafetyError
 def rule_ids(pack):
     core = (SCRIPT, *REFERENCE_RULES, *THEME_RULES, *SCOPED_RULES)
     return (*core, *PARAGRAPH_RULES, *DISPLAY_RULES, CONTINUATION,
-            *FOOTNOTE_RULES, HIGHLIGHT, PROOF) if pack == 'pde' else core
+            *FOOTNOTE_RULES, HIGHLIGHT, PROOF, PROSE_MARKER) if pack == 'pde' else core
 
 
 def _analyze(tree, path, pack, fallback_language, packages, reference_catalog):
@@ -38,6 +39,7 @@ def _analyze(tree, path, pack, fallback_language, packages, reference_catalog):
     if pack == 'pde':
         results.update(paragraphs(tree, path, resolution))
         results[PROOF] = proofs(tree, path, resolution)
+        results[PROSE_MARKER] = prose_markers(tree, path, resolution)
         results[HIGHLIGHT] = highlights(tree, path, resolution)
         results.update(displays(tree, path, resolution))
         results[CONTINUATION] = continuation(tree, path, resolution)

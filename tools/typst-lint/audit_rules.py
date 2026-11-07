@@ -363,6 +363,7 @@ def observe(fixture):
 
 
 MODULES = {
+    'pde.prose-paragraph-marker': ['prose_marker_rules.py', 'capitalization.py', 'static_resolver.py', 'source_analysis.py'],
     'pde.proof-trailing-gap': ['proof_rules.py', 'static_resolver.py', 'source_analysis.py'],
     'core.scoped-function-call': ['scoped_rules.py', 'scoped_provenance.py', 'source_analysis.py'],
     'core.scoped-reference-access': ['scoped_rules.py', 'scoped_provenance.py', 'source_analysis.py'],
@@ -387,6 +388,7 @@ MODULES = {
     'pde.paragraph-capitalization': ['capitalization.py', 'paragraph_rules.py', 'static_resolver.py', 'package_loader.py', 'source_analysis.py'],
 }
 TESTS = {
+    'pde.prose-paragraph-marker': ['tests/test_prose_marker_rules.py', 'tests/test_prose_marker_integration.py', 'tests/test_prose_marker_render.py'],
     'pde.proof-trailing-gap': ['tests/test_proof_rules.py', 'tests/test_proof_integration.py', 'tests/test_proof_render.py'],
     'core.scoped-function-call': ['tests/test_scoped_rules.py', 'tests/test_new_rule_integration.py'],
     'core.scoped-reference-access': ['tests/test_scoped_rules.py', 'tests/test_scoped_reference_repairs.py', 'tests/test_scoped_namespace_loader.py', 'tests/test_new_rule_integration.py'],
@@ -411,6 +413,7 @@ TESTS = {
     'pde.paragraph-capitalization': ['tests/test_capitalization.py', 'tests/test_source_rules.py', 'tests/test_source_rules_render.py'],
 }
 LIMITS = {
+    'pde.prose-paragraph-marker': 'Existing whitespace-only boundaries between literal root prose paragraphs only. Insertions require exact canonical text-utils marker availability and an already installed reviewed show, unchanged directive targets, preserved prose and capitalization preflight with no later edits or new refusals. Nested bodies, explicit break calls, inline content, structural boundaries and unsupported starter composition remain partial.',
     'pde.proof-trailing-gap': 'Exact reviewed math-blocks proof helper at standalone root output only, with incoming safe style facts and a proven next sibling. No synthetic EOF paragraph, nested/deferred/facade ownership or ambiguous comment/label attachment. Candidate non-whitespace syntax must remain identical.',
     'core.scoped-function-call': 'Exact reviewed scoped-annotations wrapper imports and literal one-parameter callbacks only. No raw mannot, facade or graph-wide namespace coverage; reference repair requires one literal tag target, its exact scope receiver and explicit reviewed mannot namespace evidence. Mutations, includes and dynamic branches withhold scope proofs.',
     'core.scoped-reference-access': 'Exact reviewed scoped-annotations wrapper imports and literal one-parameter callbacks only. No raw mannot, facade or graph-wide namespace coverage; reference repair requires one literal tag target, its exact scope receiver and explicit reviewed mannot namespace evidence. Mutations, includes and dynamic branches withhold scope proofs.',

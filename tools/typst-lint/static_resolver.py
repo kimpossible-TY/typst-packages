@@ -156,6 +156,17 @@ class SpacerProof:
 
 
 @dataclass(frozen=True)
+class ParagraphInsertionProof:
+    """Root Text nodes where the canonical marker and reviewed show are ready.
+
+    This attests availability at that lexical point, not the existence of a
+    paragraph boundary, casing eligibility or permission to apply an edit.
+    """
+    source_sha256: str
+    available: frozenset[int] = frozenset()
+
+
+@dataclass(frozen=True)
 class Resolution:
     source_sha256: str
     facts: tuple[Facts, ...]
@@ -163,6 +174,7 @@ class Resolution:
     # Even with no skips, graph/evaluation coverage has not been implemented.
     complete: bool = False
     spacer_proof: SpacerProof | None = None
+    paragraph_insertion_proof: ParagraphInsertionProof | None = None
 
     def binding_for(self, node_id: int) -> Binding | None:
         return self.facts[node_id].binding
@@ -239,6 +251,7 @@ class _State:
         self.prose_safe = True
         self.in_context = False
         self.deferred = False
+        self.paragraph_tabs_active = False
 
     def nested(self, *, deferred=False, contextual=False):
         new = _State()
@@ -298,6 +311,8 @@ class _Resolver:
         self.nodes = tree.nodes
         self.facts = [Facts() for _ in tree.nodes]
         self.available_spacers = set()
+        self.available_paragraph_markers = set()
+        self.root_children = frozenset(tree.nodes[0].children) if tree.mode == 'markup' else frozenset()
         self.skips = []
         self.packages = {}
         seen = set()
@@ -334,6 +349,13 @@ class _Resolver:
     def record(self, i, state, binding=None):
         self.facts[i] = Facts(binding, None if state.styles_unknown or state.deferred or not state.language_supported else state.language,
                               state.in_context, state.deferred, state.prose_safe and not state.styles_unknown and not state.deferred)
+        marker = state.lookup('paragraph_tab')
+        if (i in self.root_children and self.nodes[i].kind == 'Text'
+                and self.facts[i].prose_safe and state.paragraph_tabs_active
+                and marker and marker.kind == 'api' and marker.name == 'paragraph_tab'
+                and marker.package == TEXT_UTILS
+                and marker.source_sha256 == TEXT_UTILS_SOURCE_SHA256):
+            self.available_paragraph_markers.add(i)
 
     def set_binding(self, i, binding):
         self.facts[i] = replace(self.facts[i], binding=binding)
@@ -730,12 +752,19 @@ class _Resolver:
         if len(children) == 3 and self.nodes[children[1]].kind == 'Colon' and self.nodes[children[2]].kind in ('Ident', 'FieldAccess'):
             binding = self.visit(children[2], state)
             self.set_binding(i, binding)
-            supported = bool(binding and binding.kind == 'api' and binding.package == TEXT_UTILS and binding.name == 'apply-paragraph-tabs')
+            supported = bool(binding and binding.kind == 'api' and binding.package == TEXT_UTILS
+                             and binding.source_sha256 == TEXT_UTILS_SOURCE_SHA256
+                             and binding.name == 'apply-paragraph-tabs')
         else:
             nested = state.nested(deferred=True)
             for child in self.nodes[i].children:
                 self.visit(child, nested)
-        if not supported:
+        if supported:
+            # The show captures its current function value. Rebinding its name
+            # later does not uninstall it; unknown effects still block proofs.
+            state.paragraph_tabs_active = True
+        else:
+            state.paragraph_tabs_active = False
             state.styles_unknown = True
             state.prose_safe = False
             self.note(i, 'Unknown show transformation may change language/body ownership')
@@ -767,5 +796,6 @@ def resolve(tree: Tree, *, fallback_language=None, packages=()) -> Resolution:
                          if tree.nodes[i].kind in ('Ident', 'FieldAccess', 'Parenthesized')
                          and not fact.deferred and is_spacer_binding(fact.binding))
     proof = SpacerProof(digest(tree.source), existing, frozenset(resolver.available_spacers))
+    paragraph_proof = ParagraphInsertionProof(digest(tree.source), frozenset(resolver.available_paragraph_markers))
     return Resolution(digest(tree.source), tuple(resolver.facts), tuple(dict.fromkeys(resolver.skips)),
-                      spacer_proof=proof)
+                      spacer_proof=proof, paragraph_insertion_proof=paragraph_proof)
