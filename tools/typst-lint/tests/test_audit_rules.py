@@ -11,7 +11,9 @@ sys.path.insert(0, str(TOOL))
 from audit_rules import candidate_verdict, expected_input_refusal, observe, run_cli, snapshot, spec_index
 from static_resolver import (MANNOT_NAMESPACE, MANNOT_NAMESPACE_MANIFEST_SHA256,
                              MANNOT_NAMESPACE_SOURCE_SHA256, SCOPED_ANNOTATIONS, TEXT_UTILS)
-from syntax_client import EXECUTABLE
+from syntax_client import EXECUTABLE, parse
+from source_analysis import AnalysisContext
+from typst_lint import digest
 
 SCRIPT = 'core.parenthesized-scripts'
 CAP = 'pde.paragraph-capitalization'
@@ -23,8 +25,8 @@ def pair():
     baseline = {
         'phase': 'analysis', 'parse_failures': [], 'configuration_failures': [],
         'diagnostics': [], 'proposed_edits': [
-            {'path': 'main.typ', 'rule_id': SCRIPT, 'start': 3, 'end': 3, 'replacement': '('},
-            {'path': 'main.typ', 'rule_id': SCRIPT, 'start': 4, 'end': 4, 'replacement': ')'}],
+            {'path': 'main.typ', 'rule_id': SCRIPT, 'start': 3, 'end': 3, 'replacement': '(', 'baseline_sha256': digest(SOURCE['main.typ'].encode())},
+            {'path': 'main.typ', 'rule_id': SCRIPT, 'start': 4, 'end': 4, 'replacement': ')', 'baseline_sha256': digest(SOURCE['main.typ'].encode())}],
         'coverage': {'complete': False, 'enabled': [SCRIPT, CAP], 'files': [
             {'path': 'main.typ', 'rule_id': SCRIPT, 'status': 'evaluated', 'reasons': []},
             {'path': 'main.typ', 'rule_id': CAP, 'status': 'partial',
@@ -37,7 +39,8 @@ def pair():
 
 class CandidateCoverageTests(unittest.TestCase):
     def verdict(self, baseline, candidate):
-        return candidate_verdict(baseline, candidate, SOURCE, CANDIDATE)
+        return candidate_verdict(baseline, candidate, SOURCE, CANDIDATE,
+            analysis_contexts={'main.typ': AnalysisContext(parse(SOURCE['main.typ'].encode()), 'main.typ')})
 
     def test_valid_partial_other_rule_and_global_incomplete_are_allowed(self):
         baseline, candidate = pair()
@@ -128,12 +131,12 @@ class CandidateCoverageTests(unittest.TestCase):
             report['coverage'] = {'enabled': [rid], 'files': [
                 {'path': 'main.typ', 'rule_id': rid, 'status': 'partial', 'reasons': []}]}
         baseline['proposed_edits'] = [dict(path='main.typ', rule_id=rid, start=0,
-            end=len(source.rstrip('\n')), replacement=expected.rstrip('\n'))]
+            end=len(source.rstrip('\n')), replacement=expected.rstrip('\n'), baseline_sha256=digest(source.encode()))]
         candidate['proposed_edits'] = []
         bad = {'main.typ': '#import "different.typ": token\n'}
         result = candidate_verdict(baseline, candidate, {'main.typ': source}, bad)
         self.assertEqual(result['status'], 'BLOCKED_ANALYSIS')
-        self.assertIn('movement ownership', ' '.join(result['reasons']))
+        self.assertIn('repair ownership', ' '.join(result['reasons']))
         for target, error in (('syntax_client.parse', AdapterError('adapter unavailable')),
                               ('source_analysis._import_statement_moves', SafetyError('ambiguous identity'))):
             with patch(target, side_effect=error):

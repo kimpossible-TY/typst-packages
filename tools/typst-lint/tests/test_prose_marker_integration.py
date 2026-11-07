@@ -40,7 +40,7 @@ class ProseMarkerIntegrationTests(unittest.TestCase):
         self.assertFalse(any(result.edits or result.diagnostics for result in final.values()))
 
     def test_diagnostic_only_initials_do_not_cancel_independent_script_repair(self):
-        for word in (b'this', b'Second', b'iPhone'):
+        for word in (b'Second', b'iPhone'):
             source = PREFIX + b'$x^i$\n\nFirst idea.\n\n' + word + b' consequence follows.\n'
             results = self.result(source)
             self.assertEqual(len(results[RULE_ID].diagnostics), 1)

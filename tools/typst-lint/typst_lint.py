@@ -275,7 +275,7 @@ def diagnostics(findings, config, rules):
     return tuple(sorted(active, key=key)), tuple(sorted(suppressed, key=key))
 
 
-def report(root, mode, *, package_path=None):
+def report(root, mode, *, package_path=None, _verify=True, _analysis_observer=None):
     catalog, rule_hash = load_rules()
     config = read_config(root, catalog['rules'])
     enabled = [r for r in catalog['rules'] if r['id'].split('.')[0] in catalog['packs'][config.pack]]
@@ -302,7 +302,7 @@ def report(root, mode, *, package_path=None):
     reference_hash = reference_catalog.sha256 if reference_catalog is not None else None
     # Imported here to keep pure configuration/edit primitives independent of the adapter.
     from syntax_client import AdapterError, parse
-    from source_analysis import analyze, rule_ids
+    from source_analysis import AnalysisContext, analyze, rule_ids
     from static_resolver import imported_paths
     from package_loader import load_packages
     from suppression import SuppressionError
@@ -311,6 +311,7 @@ def report(root, mode, *, package_path=None):
     suppressed_count = 0
     suppressed_by_rule = {}
     configuration_failures = []
+    convergence_evidence = []
     evaluated, parsed = [], {}
     for item in selected_sources:
         name = item.path
@@ -353,11 +354,15 @@ def report(root, mode, *, package_path=None):
             continue
         ignored = frozenset(rid for ignore in config.ignores if any(matches(name, glob) for glob in ignore.paths)
                             for rid in ignore.rules)
+        if _analysis_observer is not None:
+            _analysis_observer(name, AnalysisContext(parsed[name], name, config.pack,
+                config.capitalization_language, tuple(package_sources), reference_catalog,
+                entrypoint, import_graph, ignored))
         try:
             results = analyze(parsed[name], name, pack=config.pack,
                               fallback_language=config.capitalization_language,
                               packages=package_sources, reference_catalog=reference_catalog,
-                              entrypoint=entrypoint, import_graph=import_graph, ignored=ignored)
+                              entrypoint=entrypoint, import_graph=import_graph, ignored=ignored, _verify=_verify)
         except SuppressionError as error:
             configuration_failures.append(dict(path=name, error=str(error)))
             file_coverage.extend(dict(path=name, rule_id=rid, status='configuration-failure', reasons=[str(error)])
@@ -367,6 +372,17 @@ def report(root, mode, *, package_path=None):
             file_coverage.extend(dict(path=name, rule_id=rid, status='unsupported', reasons=[str(error)])
                                  for rid in backends)
             continue
+        steps = next((getattr(result, 'repair_steps', ()) for result in results.values()
+                      if getattr(result, 'repair_passes', 0) > 1), ())
+        if steps:
+            convergence_evidence.append(dict(path=name, baseline_sha256=item['sha256'],
+                candidate_sha256=digest(steps[-1].after), passes=len(steps),
+                steps=[dict(before_sha256=digest(step.before), after_sha256=digest(step.after),
+                    applied=[dict(start=a.edit.start, end=a.edit.end,
+                                  replacement=a.edit.replacement.decode('utf-8'),
+                                  rule_id=a.primary_rule_id, rule_ids=list(a.rule_ids))
+                             for a in step.applied],
+                    moves=[list(move) for move in step.moves]) for step in steps]))
         errors = sorted({span for result in results.values() for span in result.parse_errors})
         if errors:
             parse_failures.append(dict(path=name, spans=[dict(start=a, end=b) for a, b in errors]))
@@ -381,10 +397,18 @@ def report(root, mode, *, package_path=None):
             else:
                 evaluated.append(dict(path=name, rule_id=rid))
                 file_coverage.append(dict(path=name, rule_id=rid, status='evaluated', reasons=[]))
-            if active and not hidden:
-                proposals.extend(dict(path=name, start=e.start, end=e.end,
-                                      replacement=e.replacement.decode('utf-8'), rule_id=rid,
-                                      baseline_sha256=item['sha256']) for e in result.edits)
+            if result.edits and rid not in ignored:
+                attributed = {a.edit: a for a in getattr(result, 'attributed_edits', ())}
+                for e in result.edits:
+                    record = dict(path=name, start=e.start, end=e.end,
+                                  replacement=e.replacement.decode('utf-8'), rule_id=rid,
+                                  baseline_sha256=item['sha256'])
+                    proof = attributed.get(e)
+                    if proof is not None and len(proof.rule_ids) > 1:
+                        record['rule_ids'] = list(proof.rule_ids)
+                    if getattr(result, 'repair_passes', 0) > 1:
+                        record['repair_passes'] = result.repair_passes
+                    proposals.append(record)
     active_findings.sort(key=lambda d: (d.path, d.line, d.column, d.rule_id))
     proposals.sort(key=lambda e: (e['path'], e['start'], e['end'], e['rule_id']))
     complete_backends = {rid for rid in backends if inputs and
@@ -411,7 +435,8 @@ def report(root, mode, *, package_path=None):
                               optional_skips=[] if config.catalog else [dict(check='catalog-membership', reason='No catalog configured')]),
                 blockers=['Required rule coverage remains incomplete; Markdown, general dependency resolution and full rule acceptance are unavailable',
                           'Protected source transactions and immutable compile snapshots are unavailable'],
-                routes=dict(cli='unmanaged', ci='unmanaged', watch='unmanaged', editor='unmanaged'))
+                routes=dict(cli='unmanaged', ci='unmanaged', watch='unmanaged', editor='unmanaged'),
+                **({'convergence_evidence': convergence_evidence} if convergence_evidence else {}))
 
 
 def main(argv=None, *, gate=False):

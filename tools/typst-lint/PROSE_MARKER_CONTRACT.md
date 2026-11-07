@@ -1,6 +1,7 @@
 # Partial prose paragraph marker contract
 
-`prose_marker_rules.analyze(tree, path, resolution)` implements bounded
+`prose_marker_rules.analyze(tree, path, resolution, *,
+allow_followup_casing=False)` implements bounded
 `pde.prose-paragraph-marker` findings and in-memory insertion proposals. It
 never changes files, installs dependencies or invokes a compiler. Production
 source writes and compiler dispatch remain closed.
@@ -75,22 +76,38 @@ The separate capitalization policy is reused through its pure evaluator, not
 copied or weakened. The original parser and insertion/language proofs certify
 the local marker/first-word preflight; the final real parse verifies its syntax.
 The immutable marker value cannot
-change effective language. Initially, insertion is proposed only when the
-evaluator returns `already-uppercase`: explicit effective English, a complete
-uppercase starter from its exact existing allowlist, and its exact source-gap
-requirements. This avoids unlocking a new capitalization repair or a new
-applicability skip under the current strict whole-candidate guards.
+change effective language. By default, insertion is proposed only when the
+pure evaluator returns `already-uppercase`: explicit effective English, a
+complete uppercase starter from its exact existing allowlist, and its exact
+source-gap requirements. Existing direct callers retain that behavior.
 
-Thus `This consequence follows.` can be repaired; normative `Second idea.`,
-lowercase `this`, protected names, unknown/non-English language and unsupported
+The explicit `allow_followup_casing=True` opt-in also admits an evaluator result
+with its actual diagnostic, no skip, and exactly one replacement of the first
+lowercase ASCII source byte by its uppercase byte. The marker backend still
+returns only insertion. Its preflight neither returns the capitalization edit
+nor claims a subsequent parser/resolver pass has occurred. No new word list,
+language policy, protected-name recasing or broad ownership inference is added.
+The original complete paragraphs, package value/show proof, literal Text spans
+and directive targets remain required and verified exactly as above.
+
+Thus `This consequence follows.` is eligible by default. Opt-in composition
+can also insert before `this consequence follows.`, preserving that lowercase
+byte until a real next pass. Normative `Second idea.`, protected names such as
+`iPhone` and `eBay`, mixed case, unknown/non-English language and unsupported
 initials remain diagnosed with explicit repair refusal. This restriction is a
 composition limit, not a new style policy or permission to capitalize names.
 
-The shared source analyzer still reparses and rechecks all wired rules, rejects
-new findings/refusals or second-pass edits, preserves suppressed findings and
-requires deterministic results. Conflicts with other proposals refuse the
-combined proposal rather than weakening those checks. The rule and complete
-linter acceptance both remain PARTIAL.
+The shared source analyzer opts into the preflight and then reparses, resolves
+and runs the actual paragraph backend on each candidate. Only its real
+capitalization result can supply the second-pass byte edit. Bounded convergence
+retains each pass's actual rule contributors and exact source replay, preserves
+suppressed findings and directive ownership, and requires independent final
+zero-edit reanalysis. A new finding must be resolved by the final candidate;
+new refusals, changed directive targets, nonconvergence or conflicting edits
+without provable progress refuse the combined proposal. Config ignores remain
+in effect in every pass: ignoring capitalization can permit marker-only
+insertion without recasing the intentionally ignored word. The rule and
+complete linter acceptance both remain PARTIAL.
 
 ## Verification
 
@@ -98,7 +115,12 @@ Focused tests use the pinned syntax adapter and immutable reviewed sources.
 They cover show ordering/capture, aliases, canonical availability, shadowing,
 mutation, source replacement, stale proofs, full paragraph classification,
 suppression targets, exact bytes/newlines/BOM, casing refusals, repeated
-analysis and script/display/footnote composition. Real CLI tests verify check,
+analysis and script/display/footnote composition. `test_marker_followup.py`
+adds all 26 lowercase starters, authentic subsequent capitalization proposals,
+two-pass source replay/attribution, unchanged default and uppercase behavior,
+source/fallback languages, protected names, inline/config ignores, immutable
+and stale provenance, candidate Text reinterpretation, BOM/CRLF and exact
+source bytes. Real CLI tests verify check,
 dry-run, fix and compile interfaces remain read-only with exit 2.
 
 The opt-in rendering fixture applies an actual CLI proposal only to a temporary

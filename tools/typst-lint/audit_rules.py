@@ -88,7 +88,7 @@ def expected_input_refusal(fixture, report):
                 expected in report.get('error', ''))
 
 
-def run_cli(fixture, mode='dry-run', source_files=None):
+def run_cli(fixture, mode='dry-run', source_files=None, *, _analysis_contexts=None):
     with tempfile.TemporaryDirectory(prefix='typst-rule-audit-') as directory, \
             tempfile.TemporaryDirectory(prefix='typst-rule-package-snapshot-') as package_directory:
         root = Path(directory).resolve()
@@ -197,6 +197,22 @@ def run_cli(fixture, mode='dry-run', source_files=None):
             if not record[field]:
                 issues.append(field + ' invariant failed')
         record['invariant_issues'] = issues
+        if _analysis_contexts is not None and report is not None and report.get('phase') == 'analysis':
+            # Capture an independent raw-analysis context while exact temporary
+            # fixture resources still exist. Its subsequent candidate analyses
+            # use immutable bytes only; contexts never enter serialized reports.
+            from typst_lint import report as capture_report
+            captured = capture_report(root, 'check',
+                package_path=None if fixture['kind'] == 'missing-package-path' else package_root or REPO,
+                _verify=False, _analysis_observer=_analysis_contexts.__setitem__)
+            if (captured.get('hashes') != report.get('hashes')
+                    or captured.get('inputs') != report.get('inputs')
+                    or json.loads(json.dumps(captured.get('package_evidence'))) != report.get('package_evidence')
+                    or any(digest((root / name).read_bytes()) != expected for name, expected in before.items())
+                    or any(digest((package_root / name).read_bytes()) != expected
+                           for name, expected in package_before.items())):
+                issues.append('Independent analysis capture differs from actual CLI resource snapshot')
+                _analysis_contexts.clear()
         return record
 
 
@@ -219,7 +235,7 @@ def apply_proposals(fixture, report):
     return files
 
 
-def candidate_verdict(baseline, candidate, source_files, candidate_files):
+def candidate_verdict(baseline, candidate, source_files, candidate_files, *, analysis_contexts=None):
     """Verify zero edits only when all repaired analysis remains supported.
 
     Globally incomplete coverage is expected. Existing bounded partial skips can
@@ -228,33 +244,73 @@ def candidate_verdict(baseline, candidate, source_files, candidate_files):
     through the proposed edits instead of mistaking shifts for new refusals.
     """
     blocked, mismatches = [], []
-    edits = baseline.get('proposed_edits', [])
-    repaired = {(e['path'], e['rule_id']) for e in edits}
-
-    moves = {}
-    for path in {e['path'] for e in edits if e['rule_id'] == 'pde.import-order'}:
-        from edit_plan import Edit
-        from source_analysis import _import_statement_moves
-        from syntax_client import parse
-        convert = lambda e: Edit(e['start'], e['end'], e['replacement'].encode('utf-8'))
-        from syntax_client import AdapterError
-        from typst_lint import InputError, SafetyError
-        try:
-            moves[path] = _import_statement_moves(parse(source_files[path].encode()),
-                parse(candidate_files[path].encode()),
-                tuple(convert(e) for e in edits if e['path'] == path),
-                tuple(convert(e) for e in edits if e['path'] == path and e['rule_id'] == 'pde.import-order'))
-        except (AdapterError, InputError, SafetyError, KeyError, TypeError, ValueError) as error:
-            # A missing map can never certify fallback ownership. Retain an
-            # unconditional blocked result while collecting other evidence.
-            blocked.append(f'Cannot verify import movement ownership for {path}: {error}')
+    edits, repaired, replays = [], set(), {}
+    from syntax_client import AdapterError
+    from typst_lint import InputError, SafetyError, load_rules
+    from edit_plan import Edit, plan
+    from convergence_evidence import authenticate_candidate
+    try:
+        proposals = baseline.get('proposed_edits', [])
+        if type(proposals) is not list:
+            raise SafetyError('Proposals must be a list')
+        known = {r['id'] for r in load_rules()[0]['rules']}
+        for edit in proposals:
+            if (type(edit) is not dict or type(edit.get('path')) is not str
+                    or type(edit.get('rule_id')) is not str or edit['rule_id'] not in known):
+                raise SafetyError('Malformed proposal identity')
+            ids = edit.get('rule_ids', [edit['rule_id']])
+            if (type(ids) is not list or not ids
+                    or any(type(rid) is not str or rid not in known for rid in ids)
+                    or ids != sorted(set(ids)) or edit['rule_id'] not in ids):
+                raise SafetyError('Malformed proposal attribution')
+            if ('repair_passes' in edit and (type(edit['repair_passes']) is not int
+                    or not 1 <= edit['repair_passes'] <= 8)):
+                raise SafetyError('Invalid proposal pass count')
+            raw = source_files[edit['path']].encode()
+            if edit.get('baseline_sha256') != digest(raw):
+                raise SafetyError('Proposal baseline hash is missing or mismatched')
+            plan(raw, (Edit(edit['start'], edit['end'], edit['replacement'].encode()),))
+            edits.append(edit)
+            repaired.update((edit['path'], rid) for rid in ids)
+        evidence = baseline.get('convergence_evidence', [])
+        if type(evidence) is not list:
+            raise SafetyError('Convergence evidence must be a list')
+        records = {}
+        for record in evidence:
+            if type(record) is not dict or type(record.get('path')) is not str or record['path'] in records:
+                raise SafetyError('Malformed or duplicate convergence evidence path')
+            records[record['path']] = record
+        paths = {edit['path'] for edit in edits}
+        if set(records) - paths:
+            raise SafetyError('Convergence evidence has no repaired input')
+        if paths and not isinstance(analysis_contexts, dict):
+            raise SafetyError('Independent captured raw-analysis context is required')
+        for path in paths:
+            original, final = source_files[path].encode(), candidate_files[path].encode()
+            selected = [e for e in edits if e['path'] == path]
+            result = plan(original, (Edit(e['start'], e['end'], e['replacement'].encode()) for e in selected))
+            if result.deferred or result.candidate() != final:
+                raise SafetyError('Reported baseline plan differs from candidate')
+            context = analysis_contexts.get(path)
+            if getattr(context, 'path', None) != path:
+                raise SafetyError('Independent context path does not match repaired input')
+            proof = authenticate_candidate(context, original, final, records.get(path))
+            actual = sorted((e['start'], e['end'], e['replacement'].encode(), e['rule_id'],
+                             tuple(e.get('rule_ids', [e['rule_id']]))) for e in selected)
+            expected = sorted((a.edit.start, a.edit.end, a.edit.replacement, a.primary_rule_id, a.rule_ids)
+                              for a in proof.edits)
+            if actual != expected or any(e.get('repair_passes', 1) != proof.passes for e in selected):
+                raise SafetyError('Proposal attribution/pass count differs from independently recomputed lineage')
+            replays[path] = proof
+    except (AdapterError, InputError, SafetyError, KeyError, TypeError, ValueError, AttributeError) as error:
+        blocked.append(f'Cannot verify candidate repair ownership: {error}')
 
     def mapped(path, position):
-        for start, end, target in moves.get(path, ()):
-            if start <= position < end:
-                return target + position - start
-        return position + sum(len(e['replacement'].encode('utf-8')) - (e['end'] - e['start'])
-                              for e in edits if e['path'] == path and e['end'] <= position)
+        if path in replays:
+            return replays[path].map_offset(position)
+        # Failure above permanently blocks certification. Keep collecting other
+        # report issues without inventing an ownership map for the missing proof.
+        return position
 
     def coverage_rows(report):
         rows = {}
@@ -330,14 +386,16 @@ def candidate_verdict(baseline, candidate, source_files, candidate_files):
 
 
 def observe(fixture):
+    analysis_contexts = {}
     result = {'fixture_id': fixture['id'], 'rule_id': fixture['rule_id'], 'kind': fixture['kind'],
-              'normative_diagnostics': fixture['normative_diagnostics'], 'run': run_cli(fixture)}
+              'normative_diagnostics': fixture['normative_diagnostics'],
+              'run': run_cli(fixture, _analysis_contexts=analysis_contexts)}
     run = result['run']
     report = run['report'] or {}
     rid = fixture['rule_id']
     rows = [r for r in report.get('coverage', {}).get('files', []) if r['rule_id'] == rid]
     findings = [r for r in report.get('diagnostics', []) if r['rule_id'] == rid]
-    edits = [r for r in report.get('proposed_edits', []) if r['rule_id'] == rid]
+    edits = [r for r in report.get('proposed_edits', []) if rid in r.get('rule_ids', [r['rule_id']])]
     result.update(target_findings=len(findings), target_edits=len(edits), target_coverage=rows,
                   backend_observed=bool(rows), expected_candidate_verified=None,
                   candidate_idempotence_verified=None)
@@ -368,8 +426,6 @@ def observe(fixture):
         result['observation'] = 'MISMATCH'
     if fixture.get('expected_input_error') and not expected_input_refusal(fixture, report):
         result['observation'] = 'MISMATCH'
-    if fixture['kind'] == 'new-marker-convergence':
-        result['observation'] = 'BLOCKED_COMPOSITION'
     if fixture.get('expected_candidate') is not None:
         candidate = apply_proposals(fixture, report)
         result['candidate_hashes'] = {name: digest(source.encode()) for name, source in candidate.items()}
@@ -377,7 +433,8 @@ def observe(fixture):
         candidate_run = run_cli(fixture, source_files=candidate)
         result['candidate_reanalysis'] = candidate_run
         candidate_report = candidate_run['report'] or {}
-        verdict = candidate_verdict(report, candidate_report, fixture['files'], candidate)
+        verdict = candidate_verdict(report, candidate_report, fixture['files'], candidate,
+                                    analysis_contexts=analysis_contexts)
         if candidate_run['invariant_issues']:
             verdict.update(status='BLOCKED_ANALYSIS', verified=False,
                            reasons=verdict['reasons'] + candidate_run['invariant_issues'])
@@ -474,7 +531,7 @@ LIMITS = {
     'pde.theme-cancelmark': 'Proven builtin math cancellation in real mathematical source only, with distinct math/code namespace lookup and verified lexical/module aliases. Shadowed, unknown wildcard, dynamic/deferred and higher-order cases remain unresolved. No cancelmark replacement, facade identity or palette effect is certified.',
     'core.single-book-show': 'Explicit immutable configured root and paired reviewed book/blocks sources only. Direct root book/reset transform identity with bounded literal metadata/reset options; duplicate owners and adjacent same-reset ownership only. No missing-owner, included-file/graph claims, broad wildcard proofs or reset deletion without full body transformation equivalence.',
     'core.no-duplicate-book-reset': 'Explicit immutable configured root and paired reviewed book/blocks sources only. Direct root book/reset transform identity with bounded literal metadata/reset options; duplicate owners and adjacent same-reset ownership only. No missing-owner, included-file/graph claims, broad wildcard proofs or reset deletion without full body transformation equivalence.',
-    'pde.prose-paragraph-marker': 'Existing whitespace-only boundaries between literal root prose paragraphs only. Insertions require exact canonical text-utils marker availability and an already installed reviewed show, unchanged directive targets, preserved prose and capitalization preflight with no later edits or new refusals. Nested bodies, explicit break calls, inline content, structural boundaries and unsupported starter composition remain partial.',
+    'pde.prose-paragraph-marker': 'Existing whitespace-only boundaries between literal root prose paragraphs only. Insertions require exact canonical text-utils marker availability and an already installed reviewed show, unchanged directive targets, preserved prose and exact casing preflight; only eligible lowercase starters can obtain a separately parsed one-byte followup under eight-pass ownership checks, with no new final findings/refusals. Nested bodies, explicit break calls, inline content, structural boundaries and unsupported starter composition remain partial.',
     'pde.proof-trailing-gap': 'Exact reviewed math-blocks proof helper at standalone root output only, with incoming safe style facts and a proven next sibling. No synthetic EOF paragraph, nested/deferred/facade ownership or ambiguous comment/label attachment. Candidate non-whitespace syntax must remain identical.',
     'core.scoped-function-call': 'Exact reviewed scoped-annotations wrapper imports and literal one-parameter callbacks only. No raw mannot, facade or graph-wide namespace coverage; reference repair requires one literal tag target, its exact scope receiver and explicit reviewed mannot namespace evidence. Mutations, includes and dynamic branches withhold scope proofs.',
     'core.scoped-reference-access': 'Exact reviewed scoped-annotations wrapper imports and literal one-parameter callbacks only. No raw mannot, facade or graph-wide namespace coverage; reference repair requires one literal tag target, its exact scope receiver and explicit reviewed mannot namespace evidence. Mutations, includes and dynamic branches withhold scope proofs.',
@@ -482,7 +539,7 @@ LIMITS = {
     'core.unique-scope-namespace': 'Exact reviewed scoped-annotations wrapper imports and literal one-parameter callbacks only. No raw mannot, facade or graph-wide namespace coverage; reference repair requires one literal tag target, its exact scope receiver and explicit reviewed mannot namespace evidence. Mutations, includes and dynamic branches withhold scope proofs.',
     'core.no-set-theme': 'Exact reviewed math-blocks 0.2.0 palette/helper values and aliases only; local facades and other versions unresolved. Diagnostic only.',
     'core.theme-in-context': 'Exact theme helper within reusable closure bodies, proven immutable theme captures and lexical context only. No context insertion without complete content-result and call-site proof. Local facades and arbitrary colors are not inferred.',
-    'pde.text-only-highlight': 'Builtin highlight and reviewed text-utils highlighted with literal content. Wrapper-only extraction preserves direct equations and prose bytes. Options, nested styles/calls, comments/directives, labels and ambiguous arguments refuse repair; later-pass display interactions remain blocked.',
+    'pde.text-only-highlight': 'Builtin highlight and reviewed text-utils highlighted with literal content. Wrapper-only extraction preserves direct equations and prose bytes. Options, nested styles/calls, comments/directives, labels and ambiguous arguments refuse repair; bounded later display passes require exact original-source composition and independently authenticated ownership.',
     'pde.paragraph-marker-target': 'Proven canonical standalone root markers before heading/display siblings, across whitespace/comments. Nested, captured, facade and alias forms remain partial. Directives targeting a removed marker refuse repair rather than acquire another target.',
     'core.project-ref-arguments': 'Only proven direct root calls, reviewed project-references package/aliases and bounded literal types. Exact [@label] repair needs an explicit unique catalog target. Facade graphs, nested/captured calls, dynamic types and generated labels remain unsupported.',
     'core.project-ref-catalog-target': 'Immutable explicit catalogs and direct literal project/label calls only. No catalog is an optional skip, not a clean target check. Facades, dynamic/global identity proofs and broader document graphs remain unsupported.',
@@ -498,6 +555,15 @@ LIMITS = {
     'pde.paragraph-marker-gap': 'Only proven root prose with reviewed direct text-utils binding. Nested/body-start contexts and footnote-combined repair unsupported; comments can make repair unavailable.',
     'pde.paragraph-capitalization': 'Only proven root prose, canonical marker spelling, bounded starter/language policy. Nested/dynamic contexts and marker-insertion convergence unsupported.',
 }
+
+
+for _rule_id in MODULES:
+    MODULES[_rule_id] = list(dict.fromkeys([*MODULES[_rule_id], 'candidate_convergence.py']))
+for _rule_id in ('pde.text-only-highlight', 'pde.standalone-display', 'pde.display-continuation-gap',
+                 'core.scoped-function-call', 'core.scoped-reference-access'):
+    TESTS[_rule_id] = [*TESTS[_rule_id], 'tests/test_candidate_convergence.py', 'tests/test_multi_pass_integration.py']
+for _rule_id in ('pde.prose-paragraph-marker', 'pde.paragraph-capitalization'):
+    TESTS[_rule_id] = [*TESTS[_rule_id], 'tests/test_marker_followup.py', 'tests/test_marker_followup_render.py']
 
 
 def summarize(fixtures, results, specs):

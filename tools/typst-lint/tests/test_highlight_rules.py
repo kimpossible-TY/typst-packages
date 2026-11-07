@@ -111,11 +111,13 @@ class HighlightRules(unittest.TestCase):
         self.assertEqual(candidate, b'#highlight[The ]$x^(2)$#highlight[ term.]')
         self.assertFalse(any(r.edits for r in self.composed(candidate).values()))
 
-    def test_display_second_pass_is_conservatively_refused(self):
+    def test_display_second_pass_converges_with_exact_attribution(self):
         source = b'Thus #highlight[$ X=Y $] and more.'
         results = self.composed(source)
-        self.assertFalse(any(r.edits for r in results.values()))
-        self.assertTrue(any('second-pass' in s for r in results.values() for s in r.skips))
+        candidate = plan(source, [e for r in results.values() for e in r.edits]).candidate()
+        self.assertEqual(candidate, b'Thus\n$ X=Y $\nand more.')
+        self.assertEqual(results[RULE_ID].repair_passes, 2)
+        self.assertFalse(any(r.edits for r in self.composed(candidate).values()))
 
 
 if __name__ == '__main__':

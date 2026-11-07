@@ -1323,10 +1323,14 @@
         "main.typ": "#import \"@local/text-utils:0.1.2\": paragraph_tab, apply-paragraph-tabs\n#show: apply-paragraph-tabs\n#set text(lang: \"en\")\nFirst idea.\n\nthis consequence follows.\n"
       },
       "config": "rule-set=\"pde\"\ninclude=[\"**/*.typ\",\"**/*.md\"]\n",
-      "normative_diagnostics": null,
-      "note": "The missing prose-paragraph-marker backend prevents the required insert-then-capitalize convergence chain.",
+      "normative_diagnostics": 0,
+      "note": "Actual marker insertion followed by independently reparsed one-byte capitalization, with captured provenance and authenticated two-pass history.",
       "intentional_parse_error": false,
-      "scenario_heading": "A new marker and capitalization converge"
+      "scenario_heading": "A new marker and capitalization converge",
+      "assert_normative_count": true,
+      "expected_candidate": {
+        "main.typ": "#import \"@local/text-utils:0.1.2\": paragraph_tab, apply-paragraph-tabs\n#show: apply-paragraph-tabs\n#set text(lang: \"en\")\nFirst idea.\n\n#paragraph_tab\nThis consequence follows.\n"
+      }
     },
     {
       "id": "pde.paragraph-capitalization--crlf",
@@ -2592,18 +2596,21 @@
       }
     },
     {
-      "id": "pde.prose-paragraph-marker--lowercase-composition-refusal",
+      "id": "pde.prose-paragraph-marker--lowercase-followup-convergence",
       "rule_id": "pde.prose-paragraph-marker",
-      "kind": "composition-refusal",
+      "kind": "actual-two-pass",
       "files": {
         "main.typ": "#import \"@local/text-utils:0.1.2\": paragraph_tab, apply-paragraph-tabs\n#show: apply-paragraph-tabs\n#set text(lang: \"en\")\nFirst idea.\n\nthis consequence follows.\n"
       },
       "config": "rule-set=\"pde\"\n",
       "normative_diagnostics": 1,
-      "note": "Do not unlock a second-pass capitalization repair or silently change the prose.",
+      "note": "Only the existing pure English casing policy can admit a followup; actual second-pass parsing/resolution supplies the capitalization edit.",
       "intentional_parse_error": false,
       "scenario_heading": "Violation with an unmarked new paragraph",
-      "assert_normative_count": true
+      "assert_normative_count": true,
+      "expected_candidate": {
+        "main.typ": "#import \"@local/text-utils:0.1.2\": paragraph_tab, apply-paragraph-tabs\n#show: apply-paragraph-tabs\n#set text(lang: \"en\")\nFirst idea.\n\n#paragraph_tab\nThis consequence follows.\n"
+      }
     },
     {
       "id": "pde.prose-paragraph-marker--missing-show-proof",
@@ -3154,6 +3161,76 @@
       "intentional_parse_error": false,
       "assert_normative_count": true,
       "scenario_heading": "Non-violation using the active palette"
+    },
+    {
+      "id": "pde.text-only-highlight--actual-two-pass",
+      "rule_id": "pde.text-only-highlight",
+      "kind": "actual-two-pass",
+      "files": {
+        "main.typ": "Thus #highlight[$ X^i=Y $] and more.\n"
+      },
+      "config": "rule-set=\"pde\"\ninclude=[\"main.typ\"]\n",
+      "normative_diagnostics": 1,
+      "note": "Actual parser-backed multi-pass plan; complete per-pass ownership is independently replayed before candidate verification.",
+      "intentional_parse_error": false,
+      "scenario_heading": "Violation highlighting math",
+      "expected_candidate": {
+        "main.typ": "Thus\n$ X^(i)=Y $\nand more.\n"
+      },
+      "assert_normative_count": true
+    },
+    {
+      "id": "pde.standalone-display--actual-two-pass",
+      "rule_id": "pde.standalone-display",
+      "kind": "actual-two-pass",
+      "files": {
+        "main.typ": "Thus $ A=B $\n\nHence the claim.\n"
+      },
+      "config": "rule-set=\"pde\"\ninclude=[\"main.typ\"]\n",
+      "normative_diagnostics": 1,
+      "note": "Actual parser-backed multi-pass plan; complete per-pass ownership is independently replayed before candidate verification.",
+      "intentional_parse_error": false,
+      "scenario_heading": "Violation with prose on the display line",
+      "expected_candidate": {
+        "main.typ": "Thus\n$ A=B $\nHence the claim.\n"
+      },
+      "assert_normative_count": true
+    },
+    {
+      "id": "core.scoped-function-call--actual-reference-followup",
+      "rule_id": "core.scoped-function-call",
+      "kind": "actual-reference-followup",
+      "files": {
+        "main.typ": "#import \"@local/scoped-annotations:0.3.0\": local-tag-scope\n$x^i$\n#local-tag-scope(s => [#ref(s.tag(\"x\"))])\n"
+      },
+      "config": "rule-set=\"pde\"\ninclude=[\"main.typ\"]\n",
+      "normative_diagnostics": 1,
+      "note": "Actual parser-backed multi-pass plan; complete per-pass ownership is independently replayed before candidate verification.",
+      "intentional_parse_error": false,
+      "scenario_heading": "Violation with field-call syntax",
+      "expected_candidate": {
+        "main.typ": "#import \"@local/scoped-annotations:0.3.0\": local-tag-scope\n$x^(i)$\n#local-tag-scope(s => [#(s.ref)(\"x\")])\n"
+      },
+      "assert_normative_count": true,
+      "scoped_namespace_evidence": true
+    },
+    {
+      "id": "core.scoped-reference-access--actual-field-call-followup",
+      "rule_id": "core.scoped-reference-access",
+      "kind": "actual-field-call-followup",
+      "files": {
+        "main.typ": "#import \"@local/scoped-annotations:0.3.0\": local-tag-scope\n$x^i$\n#local-tag-scope(s => [#ref(s.tag(\"x\"))])\n"
+      },
+      "config": "rule-set=\"pde\"\ninclude=[\"main.typ\"]\n",
+      "normative_diagnostics": null,
+      "note": "Actual parser-backed multi-pass plan; complete per-pass ownership is independently replayed before candidate verification.",
+      "intentional_parse_error": false,
+      "scenario_heading": "Violation using the generated label",
+      "expected_candidate": {
+        "main.typ": "#import \"@local/scoped-annotations:0.3.0\": local-tag-scope\n$x^(i)$\n#local-tag-scope(s => [#(s.ref)(\"x\")])\n"
+      },
+      "assert_normative_count": true,
+      "scoped_namespace_evidence": true
     }
   ]
 }

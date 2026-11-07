@@ -72,16 +72,17 @@ class DisplayIntegrationTests(unittest.TestCase):
                              ['core.project-ref-catalog-target'])
             self.assertEqual(old_output.read_bytes(), b'previous published output')
 
-    def test_second_pass_requirement_is_explicitly_refused(self):
+    def test_second_pass_requirement_converges_without_writing(self):
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory).resolve()
             source = b'Thus $ A=B $\n\nHence the claim.\n'
             (root/'main.typ').write_bytes(source)
             (root/'.typst-lint.toml').write_text('rule-set="pde"\n')
             result = report(root, 'dry-run')
-            self.assertFalse(result['proposed_edits'])
-            self.assertTrue(any('second-pass' in reason for item in result['coverage']['files']
-                                for reason in item['reasons']))
+            edits = [Edit(e['start'], e['end'], e['replacement'].encode()) for e in result['proposed_edits']]
+            self.assertEqual(plan(source, edits).candidate(), b'Thus\n$ A=B $\nHence the claim.\n')
+            self.assertEqual(result['convergence_evidence'][0]['passes'], 2)
+            self.assertFalse(result['compiler_invoked'] or result['applied_fixes'])
             self.assertEqual((root/'main.typ').read_bytes(), source)
 
     def test_newline_cannot_reinterpret_prose_as_a_heading(self):

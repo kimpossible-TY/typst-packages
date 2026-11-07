@@ -86,12 +86,14 @@ def _literal_paragraph(tree, resolution, indices, *, setup_prefix=False, marker_
         and not resolution.facts[index].deferred for index in paragraph)
 
 
-def _casing_eligibility(tree, resolution, index, edit):
+def _casing_eligibility(tree, resolution, index, edit, *, allow_followup_casing=False):
     """Reuse the pure casing policy on a bounded exact source extraction.
 
     This is only a preflight. The complete batch must subsequently pass real
     parsing and original-Text/marker/target checks before any edit is returned.
     No allowlist, language policy or case behavior is reimplemented here.
+    Opt-in admission of an exact evaluator repair does not return that repair
+    or certify a second pass. The caller must reparse/reanalyze the candidate.
     """
     node = tree.nodes[index]
     word = re.match(rb'[A-Za-z]+', tree.source[node.start:node.end])
@@ -107,6 +109,10 @@ def _casing_eligibility(tree, resolution, index, edit):
                       MarkerBinding.PARAGRAPH_TAB, resolution.language_for(index))
     result = evaluate(fragment, context)
     if result.edit or result.diagnostic:
+        if (allow_followup_casing is True and result.skip_reason is None
+                and result.diagnostic is not None and word[0].islower()
+                and result.edit == Edit(start, start + 1, word[0][:1].upper())):
+            return
         raise SafetyError('Marker insertion requires a later capitalization repair')
     if result.skip_reason != 'already-uppercase':
         raise SafetyError(f'Marker insertion would add capitalization nonapplicability: {result.skip_reason}')
@@ -163,7 +169,9 @@ def _verify_candidate(tree, edits, scopes):
     if actual_scopes != expected_scopes:
         raise SafetyError('Marker insertion would change directive targets')
 
-def analyze(tree, path, resolution):
+
+def analyze(tree, path, resolution, *, allow_followup_casing=False):
+    """Return marker-only proposals; opt-in casing needs an actual next pass."""
     source, nodes = tree.source, tree.nodes
     if nodes[0].errors:
         errors = tuple((node.start, node.end) for node in nodes if node.kind == 'Error')
@@ -221,7 +229,8 @@ def analyze(tree, path, resolution):
         newline = b'\r\n' if source[at - 2:at] == b'\r\n' else b'\n'
         edit = Edit(at, at, _MARKER + newline)
         try:
-            _casing_eligibility(tree, resolution, right_id, edit)
+            _casing_eligibility(tree, resolution, right_id, edit,
+                                allow_followup_casing=allow_followup_casing)
         except SafetyError as error:
             skips.append(f'fix_unavailable: {error} at byte {right.start}')
         else:

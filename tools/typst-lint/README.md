@@ -314,9 +314,10 @@ ambiguous/multiple labels are not crossed. Equation contents, labels and text
 remain unchanged. Candidate AST checks also reject a newline that would reinterpret
 literal prose as a heading, list or term item, despite syntactically valid output.
 
-Full multi-pass cross-rule planning remains pending. If a standalone-display fix
-only exposes a continuation-gap fix on the next pass, current composition refuses
-the entire proposed edit set instead of applying an incompletely checked result.
+Bounded multi-pass planning now reparses and reanalyzes up to eight edit passes.
+Standalone-display changes can expose a later continuation-gap repair, and
+highlight extraction can expose display formatting. Repeated states, unresolved
+conflicts, lost coverage, new refusals or new final findings reject the entire plan.
 The isolated display render/query test verifies text order and that the semantic
 label remains attached to the block equation. No existing consumer document is compiled.
 
@@ -335,8 +336,8 @@ or the reviewed text-utils `highlighted` helper. The simple content-only repair
 changes wrapper bytes, retaining every prose/math byte and allowing independent
 script operand edits. It never treats math in option expressions or stored code
 values as highlighted content. Options, nested styles/calls, labels, comments,
-directives and ambiguous arguments block extraction. Extracting a display that
-needs a second formatting pass still refuses the combined proposal.
+directives and ambiguous arguments block extraction. Extracting a display may require a separately parsed formatting pass; the
+composed baseline patch retains both contributing rule identities.
 An isolated real-compiler test verifies both helper forms retain their prose
 highlights and equation structure after extraction. It uses an empty package
 cache and a private copy of the reviewed text-utils source; no existing consumer
@@ -380,9 +381,11 @@ and heading transformation equivalence is not yet certified. See the
 `pde.prose-paragraph-marker` diagnoses existing blank-line boundaries between
 literal root prose paragraphs. A marker proposal requires the canonical reviewed
 text-utils value and an already installed reviewed paragraph show, unchanged
-directive targets and a stable capitalization preflight. It does not add imports
-or show rules, guess nested/structural boundaries, or introduce a second-pass
-casing repair. See the [prose marker contract](PROSE_MARKER_CONTRACT.md).
+directive targets and a stable capitalization preflight. The combined pipeline
+may admit exactly the existing policy's eligible lowercase starter, then obtains
+the actual one-byte uppercase edit from an independent second parse/resolution.
+The direct backend remains opt-in for this followup. It does not add imports or
+show rules, guess nested/structural boundaries, or recase protected names. See the [prose marker contract](PROSE_MARKER_CONTRACT.md).
 
 `pde.proof-trailing-gap` recognizes the reviewed math-blocks proof helper only
 at a proven standalone root call. It proposes a blank source line before the
@@ -436,6 +439,32 @@ candidate parser, coverage-retention and idempotence checks. See the
 
 These are partial implementations, not 33 fully accepted rules. Production
 writes, compiler execution and all-project rollout remain disabled.
+
+## Multi-pass proposal evidence
+
+The candidate planner retains each pass's actual edits and exact original-byte
+mapping. It composes nonoverlapping baseline patches without diff-based identity
+guesses. A merged patch retains its first causal `rule_id` and all contributing
+`rule_ids`; `repair_passes` identifies followup work even when that rule had no
+finding in the original source. Original findings remain original-source findings.
+
+Multi-pass reports include `convergence_evidence` with baseline/candidate hashes,
+per-pass hashes, applied attributed edits and independently checked AST import
+movement proofs. Serialization alone is not a semantic proof. The audit captures
+an independent immutable analysis context from the same isolated fixture and
+recomputes actual per-pass rules and convergence, including a final independent
+zero-edit analysis. Stripped or changed history, false rule attribution, malformed
+primitive types, source hash mismatches and wrong pass counts block verification.
+
+Every step preserves analysis coverage, existing refusal ownership and directive
+scope, syntax kind and a surviving target-origin token. Final findings must be a
+subset of original mapped findings; suppressed findings cannot silently change.
+Packages, catalogs, configured entrypoint and relative import evidence are rebased
+from the same captured bytes without per-pass filesystem rereads. See
+[CANDIDATE_CONVERGENCE_CONTRACT.md](CANDIDATE_CONVERGENCE_CONTRACT.md).
+
+These remain in-memory partial proposals. Eight-pass success does not certify
+complete required analysis, an editor lease, protected CLI writes or compilation.
 
 ## Verification
 

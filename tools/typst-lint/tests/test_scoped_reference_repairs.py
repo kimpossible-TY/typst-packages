@@ -189,15 +189,17 @@ class ScopedReferenceRepairTests(unittest.TestCase):
         self.assertFalse(any(r.edits for r in final.values()))
         self.assertEqual(len(final[REFERENCE].suppressed), 1)
 
-    def test_nonparenthesized_tag_cannot_sneak_through_a_second_rule(self):
+    def test_nonparenthesized_tag_requires_reparsed_second_rule_proof(self):
         source = IMPORT + b'$x^i$\n#local-tag-scope(s => [#ref(s.tag("x"))])'
         individual = analyze(parse(source), 'main.typ', packages=PACKAGES)
         self.assertTrue(individual[CALL].edits)
         self.assertFalse(individual[REFERENCE].edits)
         self.assertTrue(any('direct parenthesized' in reason for reason in individual[REFERENCE].skips))
         whole = combined(parse(source), 'main.typ', packages=PACKAGES)
-        self.assertFalse(any(r.edits for r in whole.values()))
-        self.assertTrue(all(any('second-pass edits' in reason for reason in r.skips) for r in whole.values()))
+        candidate = plan(source, [e for r in whole.values() for e in r.edits]).candidate()
+        self.assertEqual(candidate, IMPORT + b'$x^(i)$\n#local-tag-scope(s => [#(s.ref)("x")])')
+        self.assertEqual(whole[CALL].repair_passes, 2)
+        self.assertFalse(any(r.edits for r in combined(parse(candidate), 'main.typ', packages=PACKAGES).values()))
 
     def test_mutation_dynamic_execution_and_parse_errors_withhold_all_proof(self):
         for body in (b'#local-tag-scope(s => { s.ref = x => x; ref((s.tag)("x")) })',
