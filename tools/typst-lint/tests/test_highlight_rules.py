@@ -42,7 +42,7 @@ class HighlightRules(unittest.TestCase):
     def test_refusals_still_diagnose(self):
         for source in (
             b'#highlight(fill: red)[A $x$]', b'#highlight([A $x$], [B])',
-            b'#highlight[A *bold* $x$]', b'#highlight[A _emph_ $x$]',
+            b'#highlight[A *bold* $x$]', b'#highlight[*bold $x$*]', b'#highlight[A _emph_ $x$]',
             b'#highlight[A // attached\n$x$]', b'#highlight[A /* comment */ $x$]',
             b'#highlight[$x$ <eq>]', b'#highlight[$x$] <label>',
             b'#highlight[A #text[B] $x$]', b'#highlight[$#foo()$]',
@@ -57,10 +57,15 @@ class HighlightRules(unittest.TestCase):
 
     def test_unknown_and_shadowed_are_not_guessed(self):
         for source in (b'#highlighted[$x$]', b'#let highlight(x) = x\n#highlight[$x$]',
-                       b'#import "unknown.typ": *\n#highlight[$x$]', b'#foo[$x$]', b'#highlight[plain]', b'#highlight(fill: $x$)[plain]', b'#let f() = [#highlight[$x$]]'):
+                       b'#import "unknown.typ": *\n#highlight[$x$]', b'#highlight[#let x = [$x$]]', b'#highlight(..args)[A $x$]', b'#foo[$x$]', b'#highlight[plain]', b'#highlight(fill: $x$)[plain]', b'#let f() = [#highlight[$x$]]'):
             result = self.run_source(source)
             self.assertFalse(result.diagnostics)
             self.assertFalse(result.edits)
+
+    def test_nested_highlight_does_not_duplicate_outer_diagnosis(self):
+        result = self.run_source(b'#highlight[A #highlight[$x$]]')
+        self.assertEqual(len(result.diagnostics), 1)
+        self.assertFalse(result.edits)
 
     def test_reviewed_package_alias(self):
         package = PackageSource(TEXT_UTILS, 'reviewed-test', (TOOL.parents[1]/'local/text-utils/0.1.2/lib.typ').read_bytes())

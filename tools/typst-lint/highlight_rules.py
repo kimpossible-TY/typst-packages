@@ -50,6 +50,14 @@ def analyze(tree, path, resolution):
             yield child
             pending.extend(nodes[child].children)
 
+    def rendered_math(index):
+        node = nodes[index]
+        if node.kind == 'Equation':
+            return True
+        if node.kind not in ('ContentBlock', 'Markup', 'Strong', 'Emph'):
+            return False
+        return any(rendered_math(c) for c in node.children)
+
     for index, call in enumerate(nodes):
         if call.kind != 'FuncCall' or not _supported(resolution.binding_for(index)):
             continue
@@ -58,7 +66,10 @@ def analyze(tree, path, resolution):
         args = nodes[children[1]] if len(children) == 2 and nodes[children[1]].kind == 'Args' else None
         # An equation used as an option is not highlighted body content.
         content_args = [c for c in args.children if nodes[c].kind == 'ContentBlock'] if args else []
-        if not any(nodes[c].kind == 'Equation' for body_id in content_args for c in descendants(body_id)):
+        if args and any(nodes[c].kind not in ('ContentBlock', 'Space', 'LeftParen', 'RightParen', 'Comma', 'Named', 'LineComment', 'BlockComment') for c in args.children):
+            skips.append(f'Unsupported dynamic highlight arguments at byte {call.start}')
+            continue
+        if not any(rendered_math(body_id) for body_id in content_args):
             continue
         line = source[:call.start].count(b'\n') + 1
         column = len(source[source.rfind(b'\n', 0, call.start) + 1:call.start].decode('utf-8')) + 1
