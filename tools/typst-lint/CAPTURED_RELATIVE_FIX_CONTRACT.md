@@ -137,4 +137,18 @@ punctuation strings, BOM/CRLF/no-op, exact callback evidence, actual rule failur
 replay and graph-budget disagreement, reflective/copy/expiry/bypass attacks,
 preapply/postcommit source/evidence/identity drift, and existing transaction fault
 and recovery behavior. Graph compiler acceptance is tested separately under its
-own contract. Public CLI composition and graph PDF publication remain separate.
+own contract. Public CLI composition remains separate.
+
+
+## Private prepare-before-validation publication composition
+
+The separate graph publisher privately borrows the original session-owned
+transaction through `_borrow_publication_transaction()`. The bridge checks its
+original issued identity, active capture/selection binding, current original
+inputs and pristine state. Monotonic validation/application attempt flags refuse
+late preparation even when an early failed attempt produced no history or token.
+The publisher rechecks pristine ownership after preparation callbacks. No public
+transaction property, transaction injection, ownership transfer or second lock is
+introduced. After successful source application, committed graph authority, not
+original-baseline capture currentness, guards compilation and publication. See
+[CAPTURED_RELATIVE_PUBLISH_CONTRACT.md](CAPTURED_RELATIVE_PUBLISH_CONTRACT.md).

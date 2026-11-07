@@ -9,6 +9,7 @@ from dataclasses import dataclass, field, replace
 from pathlib import Path
 from types import MappingProxyType
 from typing import Mapping
+import weakref
 
 import captured_relative_core as core
 from captured_relative_inputs import CapturedRelativeInputSession
@@ -179,6 +180,7 @@ class ProtectedCapturedRelativeFix:
                                      self.module_grammar_version, self.parser_contract)
         self._selection_facts = _retain_authority(self._selection)
         self._owner = object()
+        self._bridge_identity = weakref.ref(self)
         self._active = False
         self._tx = self._capture = self._baseline_graph = None
         self._capture_facts = None
@@ -187,6 +189,36 @@ class ProtectedCapturedRelativeFix:
         self._applied_validation = self._committed = self._committed_facts = None
         self._receipt = self._summary = self._validated_summary = None
         self._history = []
+        # Monotonic admission facts: even a refusal before history/candidate
+        # issuance means output preparation can no longer precede validation.
+        self._validation_attempt_started = self._apply_attempt_started = False
+
+    def _assert_publication_pristine(self):
+        """Private pre-validation gate; never a post-apply baseline refresh."""
+        identity = getattr(self, '_bridge_identity', None)
+        _require(type(self) is ProtectedCapturedRelativeFix
+                 and type(identity) is weakref.ReferenceType and identity() is self,
+                 'An exact original active relative bridge is required for publication')
+        self._assert_capture_binding()
+        tx = self._tx
+        _require(self._validation_attempt_started is False
+                 and self._apply_attempt_started is False
+                 and not self._history
+                 and all(getattr(self, name) is None for name in (
+                     '_candidate', '_validation', '_validation_facts', '_validation_pins',
+                     '_applied_validation', '_committed', '_committed_facts', '_receipt',
+                     '_summary', '_validated_summary'))
+                 and tx._issued is None and tx._issued_facts is None
+                 and tx._committed_receipt is None and tx._committed_graph is None
+                 and tx._committed_files is None and tx._committed_evidence is None,
+                 'Publication preparation must precede every validation or apply attempt')
+        self._session.assert_current(self._capture)
+        tx._check_active()
+
+    def _borrow_publication_transaction(self):
+        """Borrow only this session's original pristine locked transaction."""
+        self._assert_publication_pristine()
+        return self._tx
 
     def _assert_selection(self):
         _require(_matches_authority(self._selection, self._selection_facts)
@@ -359,6 +391,7 @@ class ProtectedCapturedRelativeFix:
         return replay
 
     def validate(self):
+        self._validation_attempt_started = True
         self._assert_capture_binding()
         _require(self._applied_validation is None, 'A relative bridge cannot be reused after apply')
         self._session.assert_current(self._capture)
@@ -438,6 +471,7 @@ class ProtectedCapturedRelativeFix:
             raise CapturedRelativeFixError(f'Retained candidate proof changed: {error}') from error
 
     def apply(self, candidate):
+        self._apply_attempt_started = True
         _require(self._active and type(candidate) is CapturedRelativeFixCandidate
                  and candidate is self._candidate and self._applied_validation is None,
                  'Only this active bridge\'s original unused candidate may be applied')

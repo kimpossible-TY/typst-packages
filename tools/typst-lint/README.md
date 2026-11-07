@@ -155,15 +155,26 @@ artifact expires with the bridge; valid source fixes survive compiler failures.
 Private native tests exercise ASCII and dependency-only Korean graphs, actual PDF
 text/boxes/raster/fonts, and zero-launch rejection under the ASCII resource profile.
 
+The separate internal `PreparedCapturedRelativePdfPublication` prepares one
+output baseline before any validation or application attempt, under the same
+source transaction and a separate output-exclusivity assertion. It owns one graph
+compile and publishes only its genuine guarded artifact through the unchanged
+PDF store. All dependencies participate in collision checks and live authority.
+Failure handling retains original session ownership and actual compiler/resource
+facts. Output-only recovery preserves committed source repairs and later edits;
+durable publication is final. Existing schema-1 historical recovery does not
+require current graph sources or resources.
+
 The identity `captured-relative-core-v1` is **not** registered or exposed by a CLI.
 Existing public profiles still refuse imports. The older single-source compiler
-and publisher do not accept graph receipts or artifacts. Graph PDF publication
-and public CLI composition remain separate work. No consumer documents or
-installed build routes are changed.
+and publisher do not accept graph receipts or artifacts. Public graph CLI
+composition remains separate work. No consumer documents or installed build
+routes are changed.
 See [CAPTURED_RELATIVE_CORE_CONTRACT.md](CAPTURED_RELATIVE_CORE_CONTRACT.md),
 [CAPTURED_RELATIVE_INPUT_CONTRACT.md](CAPTURED_RELATIVE_INPUT_CONTRACT.md),
-[CAPTURED_RELATIVE_FIX_CONTRACT.md](CAPTURED_RELATIVE_FIX_CONTRACT.md) and
-[CAPTURED_RELATIVE_COMPILE_CONTRACT.md](CAPTURED_RELATIVE_COMPILE_CONTRACT.md).
+[CAPTURED_RELATIVE_FIX_CONTRACT.md](CAPTURED_RELATIVE_FIX_CONTRACT.md),
+[CAPTURED_RELATIVE_COMPILE_CONTRACT.md](CAPTURED_RELATIVE_COMPILE_CONTRACT.md) and
+[CAPTURED_RELATIVE_PUBLISH_CONTRACT.md](CAPTURED_RELATIVE_PUBLISH_CONTRACT.md).
 
 ## Explicit offline source profiles
 

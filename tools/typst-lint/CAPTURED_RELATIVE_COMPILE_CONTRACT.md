@@ -145,4 +145,8 @@ alive. Already-read bytes cannot be revoked, and this cooperative trusted Python
 API is not a defense against arbitrary malicious reflection or an adversarial OS.
 The private workspace is removed before return. Its file and directory evidence
 remains historical report data and is never reopened as current after cleanup.
-PDF publication and destination selection remain separate future work.
+PDF publication and destination selection are owned by the separate internal
+`PreparedCapturedRelativePdfPublication`, which must prepare before source
+validation/application and owns its compiler call. It does not accept an artifact
+compiled earlier or by another session. See
+[CAPTURED_RELATIVE_PUBLISH_CONTRACT.md](CAPTURED_RELATIVE_PUBLISH_CONTRACT.md).
