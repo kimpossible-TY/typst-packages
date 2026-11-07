@@ -1,7 +1,8 @@
 """Internal root-only paragraph capitalization over transaction-retained inputs.
 
 This bridge owns one capture session, permits one ASCII case repair pass and
-never supplies compiler, artifact, package-write or public CLI authority.
+supplies a distinct live committed receipt after successful apply. It never
+writes package evidence or admits older compiler/profile authority.
 """
 from __future__ import annotations
 
@@ -28,7 +29,7 @@ from protected_fix import (_matches_authority as _matches_base,
 from script_rule import RULE_ID as SCRIPT, ScriptResult, analyze as analyze_script
 from static_resolver import PackageSource, TEXT_UTILS, resolve
 from syntax_client import AdapterError, Tree, parse
-from transactions import (DEFAULT_READ_LIMITS, GraphAnalysis, GraphSnapshot,
+from transactions import (DEFAULT_READ_LIMITS, CommittedSnapshot, GraphAnalysis, GraphSnapshot,
                           SourceEdit, TransactionError)
 from typst_lint import InputError, SafetyError, digest
 
@@ -36,6 +37,9 @@ PROSE_MARKER = 'pde.prose-paragraph-marker'
 EVALUATED_RULE_IDS = core.EVALUATED_RULE_IDS
 REQUIRED_RULE_IDS = frozenset(core.RULE_IDS)
 _SEAL = object()
+# Issuer-owned chronology survives reflective resetting of bridge attributes.
+_ATTEMPTS = weakref.WeakKeyDictionary()
+_COMMITTED_BINDINGS = weakref.WeakKeyDictionary()
 
 
 class CapturedTextUtilsParagraphFixError(TransactionError):
@@ -107,6 +111,93 @@ def _matches_authority(value, retained):
     return _matches_base(value, retained)
 
 
+def _retain_original_graph(roots):
+    """Pin each original immutable DAG object once, with independent field facts.
+
+    This runs only after full independent semantic verification. Compound edges
+    pin identity, while each distinct record's finite original fields are stored
+    separately. Shared package nodes are not recursively copied/rechecked many
+    times through every replay/history/proof edge on a compiler callback.
+    """
+    records, seen = [], set()
+
+    def edge(value):
+        kind = type(value)
+        if kind in (str, bytes, int, bool, type(None), object) or isinstance(value, Enum):
+            return False, kind, value
+        identity = id(value)
+        if identity not in seen:
+            seen.add(identity)
+            if kind is MappingProxyType:
+                expected = tuple((edge(key), edge(item)) for key, item in value.items())
+                shape = 'mapping'
+            elif kind in (tuple, list, frozenset):
+                expected = tuple(edge(item) for item in value)
+                shape = 'sequence'
+            elif isinstance(value, Path):
+                # Match the same bounded original Path backing fields as the
+                # established authority helper, including mutable list storage.
+                str(value)
+                names = ('_raw_paths', '_parts', '_pparts', '_cached_cparts',
+                         '_drv', '_root', '_tail_cached', '_str',
+                         '_str_normcase_cached', '_parts_normcase_cached', '_hash')
+                expected = tuple((name, edge(getattr(value, name)))
+                                 for name in names if hasattr(value, name))
+                shape = 'fields'
+            else:
+                _require(is_dataclass(value) and value.__dataclass_params__.frozen,
+                         'Original frozen committed record required')
+                expected = tuple((item.name, edge(object.__getattribute__(value, item.name)))
+                                 for item in fields(value))
+                shape = 'fields'
+            records.append((value, kind, shape, expected))
+        return True, kind, value
+
+    for root in roots:
+        edge(root)
+    return tuple(records)
+
+
+def _matches_original_graph(records):
+    """Walk only independently retained finite shapes; never refresh a seal."""
+    def same(value, fact):
+        compound, kind, expected = fact
+        if type(value) is not kind:
+            return False
+        if compound or kind is object or issubclass(kind, Enum):
+            return value is expected
+        return value == expected
+
+    for value, kind, shape, expected in records:
+        if type(value) is not kind:
+            return False
+        if shape == 'fields':
+            try:
+                state = getattr(value, '__dict__', None)
+                if (not isinstance(value, Path) and state is not None
+                        and (type(state) is not dict or len(state) != len(expected)
+                             or any(name not in state for name, _ in expected))):
+                    return False
+                if not all(same(object.__getattribute__(value, name), fact)
+                           for name, fact in expected):
+                    return False
+            except AttributeError:
+                return False
+        elif shape == 'mapping':
+            if len(value) != len(expected) or not all(
+                    same(key, key_fact) and same(item, item_fact)
+                    for (key, item), (key_fact, item_fact) in zip(value.items(), expected)):
+                return False
+        elif len(value) != len(expected):
+            return False
+        elif kind is frozenset:
+            if not all(any(same(item, fact) for fact in expected) for item in value):
+                return False
+        elif not all(same(item, fact) for item, fact in zip(value, expected)):
+            return False
+    return True
+
+
 def _exact(value, other):
     if type(value) is MappingProxyType and type(other) is MappingProxyType:
         return _exact(tuple(value.items()), tuple(other.items()))
@@ -140,6 +231,7 @@ class CapturedTextUtilsParagraphFixSummary:
     package_sha256: str
     modified_paths: tuple[str, ...] = ()
     journal_id: str | None = None
+    package_files: tuple[tuple[str, str, int], ...] = ()
 
 
 def _restore_summary(retained):
@@ -192,6 +284,39 @@ class _Validation:
     summary: CapturedTextUtilsParagraphFixSummary
 
 
+@dataclass(frozen=True, slots=True, init=False, eq=False)
+class CapturedTextUtilsParagraphCommittedSnapshot:
+    """Opaque same-live-bridge postimage, never a bare transaction capability."""
+    root: Path
+    target: str
+    source_profile: str
+    grammar_version: str
+    parser_contract: tuple[str, ...]
+    tree: Tree = field(repr=False)
+    sources: Mapping[str, bytes] = field(repr=False)
+    evidence: Mapping[str, bytes] = field(repr=False)
+    proof: core.CapturedTextUtilsParagraphProof
+    required_rule_ids: tuple[str, ...]
+    evaluated_rule_ids: tuple[str, ...]
+    structural_reasons: tuple[tuple[str, str], ...]
+    package: PackageSource = field(repr=False)
+    manifest: bytes = field(repr=False)
+    package_tree: Tree = field(repr=False)
+    initializer: InitializerCertificate
+    config: object
+    catalog: tuple = field(repr=False)
+    dependency_evidence: Mapping[str, str]
+    config_sha256: str
+    catalog_sha256: str
+    _receipt: CommittedSnapshot = field(repr=False)
+    _validation: _Validation = field(repr=False)
+    _owner: object = field(repr=False)
+    _seal: object = field(repr=False)
+
+    def __init__(self, *args, **kwargs):
+        raise TypeError('Committed snapshots require this live paragraph bridge\'s successful apply')
+
+
 class ProtectedCapturedTextUtilsParagraphFix:
     """Privately borrow exactly the one transaction owned by a new input session.
 
@@ -224,6 +349,45 @@ class ProtectedCapturedTextUtilsParagraphFix:
         self._applied_validation = self._summary = self._summary_facts = None
         self._history = []
         self._history_facts = ()
+        self._committed = self._committed_facts = self._receipt = None
+        self._validation_attempt_started = self._apply_attempt_started = False
+        _ATTEMPTS[self] = (False, False)
+
+    def _mark_attempt(self, position):
+        self._assert_original_identity()
+        previous = _ATTEMPTS.get(self)
+        _require(type(previous) is tuple and len(previous) == 2,
+                 'Original paragraph attempt chronology required')
+        _ATTEMPTS[self] = tuple(True if index == position else value
+                                for index, value in enumerate(previous))
+        if position == 0:
+            self._validation_attempt_started = True
+        else:
+            self._apply_attempt_started = True
+
+    def _assert_publication_pristine(self):
+        """Output preparation follows entry admission but precedes every attempt."""
+        self._assert_capture_binding()
+        tx = self._tx
+        _require(_ATTEMPTS.get(self) == (False, False)
+                 and self._validation_attempt_started is False
+                 and self._apply_attempt_started is False
+                 and not self._history and not self._history_facts
+                 and all(getattr(self, name) is None for name in (
+                     '_candidate', '_validation', '_validation_facts', '_validation_pins',
+                     '_applied_validation', '_committed', '_committed_facts', '_receipt',
+                     '_summary', '_summary_facts'))
+                 and tx._issued is None and tx._issued_facts is None
+                 and tx._committed_receipt is None and tx._committed_graph is None
+                 and tx._committed_files is None and tx._committed_evidence is None,
+                 'Publication preparation must precede every validation or apply attempt')
+        self._session.assert_current(self._capture)
+        tx._check_active()
+
+    def _borrow_publication_transaction(self):
+        """Private pristine borrow of exactly this bridge's original transaction."""
+        self._assert_publication_pristine()
+        return self._tx
 
     def _assert_original_identity(self):
         identity = getattr(self, '_bridge_identity', None)
@@ -271,6 +435,7 @@ class ProtectedCapturedTextUtilsParagraphFix:
         self._assert_original_identity()
         self._active = False
         self._candidate = self._validation_facts = self._validation_pins = None
+        self._committed_facts = None
         return self._session.__exit__(exc_type, exc, tb)
 
     def _assert_capture_binding(self):
@@ -634,6 +799,7 @@ class ProtectedCapturedTextUtilsParagraphFix:
                  'Returned final Tree differs from independent exact parsing')
 
     def validate(self):
+        self._mark_attempt(0)
         self._assert_capture_binding()
         _require(self._applied_validation is None, 'Paragraph bridge cannot be reused after apply')
         self._session.assert_current(self._capture)
@@ -679,7 +845,8 @@ class ProtectedCapturedTextUtilsParagraphFix:
             tuple(AppliedCapitalization(self.target, item.edit.start, item.edit.end,
                                         item.edit.replacement) for item in replay.edits),
             self.grammar_version, self.parser_contract, report.config_sha256,
-            report.catalog_sha256, digest(self._capture.package.source))
+            report.catalog_sha256, digest(self._capture.package.source),
+            package_files=report.package_files)
         validation = _Validation(candidate, replay, proof, tuple(self._history), summary)
         self._candidate, self._validation = candidate, validation
         self._validation_facts = (validation, _retain_authority(validation))
@@ -688,7 +855,8 @@ class ProtectedCapturedTextUtilsParagraphFix:
         self._assert_validation(validation)
         return candidate
 
-    def _assert_validation(self, validation):
+    def _assert_validation_binding(self, validation):
+        """Check original finite facts without rebuilding an identical proof."""
         facts = self._validation_facts
         _require(facts is not None and validation is facts[0]
                  and _matches_authority(validation, facts[1]),
@@ -706,11 +874,14 @@ class ProtectedCapturedTextUtilsParagraphFix:
                  and validation.candidate._seal is _SEAL
                  and validation.candidate.sources is validation.candidate._token.sources,
                  'Paragraph original candidate/replay/tree/proof identities changed')
+    def _assert_validation(self, validation):
+        self._assert_validation_binding(validation)
         proof = self._certify(validation.replay.final_tree)
         _require(_exact(proof, validation.proof), 'Retained paragraph proof no longer independently verifies')
         self._compare_candidate(validation.replay.final_tree, validation.proof)
 
     def apply(self, candidate):
+        self._mark_attempt(1)
         _require(self._active and type(candidate) is CapturedTextUtilsParagraphFixCandidate
                  and candidate is self._candidate and self._applied_validation is None,
                  'Only this active paragraph bridge\'s original unused candidate may be applied')
@@ -738,3 +909,75 @@ class ProtectedCapturedTextUtilsParagraphFix:
         if not _matches_authority(self._summary, self._summary_facts):
             self._summary = _restore_summary(self._summary_facts)
         return self._summary
+
+    def _assert_committed_binding(self, snapshot):
+        binding = _COMMITTED_BINDINGS.get(self)
+        _require(binding is not None, 'Original committed paragraph binding required')
+        original, validation, capture, baseline, baseline_proof, selection, facts = binding
+        _require(self._active and type(snapshot) is CapturedTextUtilsParagraphCommittedSnapshot
+                 and snapshot is original is self._committed
+                 and self._applied_validation is validation is self._validation
+                 and self._capture is capture and self._baseline_graph is baseline
+                 and self._baseline_proof is baseline_proof and self._selection is selection
+                 and self._committed_facts is facts and _matches_original_graph(facts),
+                 'Only this active paragraph bridge\'s unchanged committed snapshot is authoritative')
+        # The independently verified semantics and all original nested fields
+        # are sealed above, once per distinct object. Never rebuild identical
+        # proofs here or call original-baseline filesystem revalidation.
+        self._assert_selection()
+        self._session._assert_binding(capture)
+        _require(self._tx is self._session._tx
+                 and snapshot._owner is self._owner and snapshot._seal is _SEAL
+                 and snapshot._receipt is self._receipt,
+                 'Committed paragraph original provenance changed')
+
+    def committed_snapshot(self):
+        validation = self._applied_validation
+        _require(self._active and validation is not None,
+                 'This paragraph bridge\'s successful independently validated apply is required')
+        self._assert_validation(validation)
+        if self._committed is not None:
+            self._assert_committed_binding(self._committed)
+        try:
+            receipt = self._tx.committed_snapshot()
+        except (AttributeError, TypeError, ValueError) as error:
+            raise CapturedTextUtilsParagraphFixError('Committed paragraph transaction receipt changed') from error
+        baseline, capture = self._baseline_graph, self._capture
+        _require(type(receipt) is CommittedSnapshot and receipt.root is baseline.root
+                 and type(receipt.sources) is MappingProxyType
+                 and len(receipt.sources) == 1 and tuple(receipt.sources) == (self.target,)
+                 and type(receipt.sources[self.target]) is bytes
+                 and receipt.sources[self.target] == validation.replay.content
+                 and receipt.sources[self.target] == validation.candidate._token.sources[self.target]
+                 and validation.replay.final_tree.source is validation.replay.content
+                 and type(receipt.evidence) is MappingProxyType
+                 and len(receipt.evidence) == 4 and tuple(receipt.evidence) == tuple(baseline.evidence)
+                 and all(receipt.evidence[path] is baseline.evidence[path] for path in baseline.evidence),
+                 'Committed paragraph postimage/evidence differs from the independently replayed result')
+        if self._committed is None:
+            self._receipt = receipt
+            report = capture.report
+            snapshot = _issued(CapturedTextUtilsParagraphCommittedSnapshot,
+                root=baseline.root, target=self.target, source_profile=self.source_profile,
+                grammar_version=self.grammar_version, parser_contract=self.parser_contract,
+                tree=validation.replay.final_tree, sources=receipt.sources, evidence=receipt.evidence,
+                proof=validation.proof, required_rule_ids=tuple(sorted(REQUIRED_RULE_IDS)),
+                evaluated_rule_ids=EVALUATED_RULE_IDS,
+                structural_reasons=tuple(validation.proof.structural_reasons),
+                package=capture.package, manifest=capture.manifest, package_tree=capture.package_tree,
+                initializer=capture.initializer, config=capture.config, catalog=capture.catalog,
+                dependency_evidence=capture.dependency_evidence,
+                config_sha256=report.config_sha256, catalog_sha256=report.catalog_sha256,
+                _receipt=receipt, _validation=validation, _owner=self._owner, _seal=_SEAL)
+            facts = _retain_original_graph((snapshot, validation, capture, baseline,
+                                             self._baseline_proof, self._selection))
+            self._committed, self._committed_facts = snapshot, facts
+            _COMMITTED_BINDINGS[self] = (snapshot, validation, capture, baseline,
+                self._baseline_proof, self._selection, facts)
+        _require(receipt is self._receipt, 'Committed paragraph transaction generation changed')
+        self.assert_committed_current(self._committed)
+        return self._committed
+
+    def assert_committed_current(self, snapshot):
+        self._assert_committed_binding(snapshot)
+        self._tx.assert_current(snapshot._receipt)

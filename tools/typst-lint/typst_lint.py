@@ -493,6 +493,8 @@ def main(argv=None, *, gate=False):
         'Explicit offline routes: fix --profile closed-core-v1 --offline-exclusive --target main.typ; '
         'compile --profile closed-core-v1 --resource-profile embedded-ascii-v1 '
         '--offline-exclusive --offline-output-exclusive --target main.typ --output build/main.pdf; '
+        'Paragraph fix/compile selects --profile captured-text-utils-paragraph-v1 with '
+        'explicit canonical --package-path /absolute/packages; compile requires embedded-ascii-v1. '
         'journal-status; recover --offline-exclusive --target main.typ --journal-id ID; '
         'output-status; recover-output --offline-output-exclusive --output build/main.pdf --journal-id ID. '
         'Use COMMAND --help for the offline route options.')

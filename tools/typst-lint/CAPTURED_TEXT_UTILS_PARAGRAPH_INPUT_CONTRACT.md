@@ -1,9 +1,10 @@
 # Internal captured text-utils paragraph inputs
 
 `captured_text_utils_paragraph_inputs.py` owns the input boundary for the new
-internal identity `captured-text-utils-paragraph-v1`. It does not register a
-public source profile or CLI route. It grants no write, compiler, resource,
-publication or helper-call capability. Historical profiles, graph modules,
+identity `captured-text-utils-paragraph-v1`. Capture itself grants no write,
+compiler, resource, publication or helper-call capability. The separately
+composed explicit CLI uses the repair bridge and package compiler/publisher;
+this capture module does not register or authorize those routes. Historical profiles, graph modules,
 transaction/recovery formats and package bytes are unchanged.
 
 ## One transaction and five files

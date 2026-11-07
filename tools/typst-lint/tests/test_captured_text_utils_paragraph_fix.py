@@ -248,16 +248,17 @@ class CapturedTextUtilsParagraphFixTests(unittest.TestCase):
                 self.assertFalse(getattr(f, role).exists())
                 self.no_manifest(f)
 
-    def test_internal_profile_has_no_public_profile_or_cli_authority(self):
-        self.assertFalse(source_profiles.is_offline_source_profile(core.SOURCE_PROFILE))
+    def test_paragraph_offline_profile_stays_out_of_single_source_registry(self):
+        self.assertTrue(source_profiles.is_offline_source_profile(core.SOURCE_PROFILE))
         with self.assertRaises(ValueError):
             source_profiles.grammar_for_source_profile(core.SOURCE_PROFILE)
         self.assertNotIn(core.SOURCE_PROFILE, source_profiles.KNOWN_SOURCE_PROFILES)
-        self.assertNotIn(core.SOURCE_PROFILE, source_profiles.KNOWN_OFFLINE_SOURCE_PROFILES)
+        self.assertIn(core.SOURCE_PROFILE, source_profiles.KNOWN_OFFLINE_SOURCE_PROFILES)
         with self.context() as fix:
             candidate = fix.validate()
             self.assertFalse(hasattr(fix, 'committed_graph_snapshot'))
-            self.assertFalse(hasattr(fix, 'committed_snapshot'))
+            with self.assertRaises(TransactionError):
+                fix.committed_snapshot()
             self.assertIsNot(candidate, fix._capture)
 
     def test_copied_bridge_cannot_close_original_session_or_acquire_its_authority(self):

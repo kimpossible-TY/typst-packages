@@ -19,6 +19,10 @@ from closed_core import ClosedCoreError
 from captured_relative_core import canonical_path
 from captured_relative_fix import (CapturedRelativeFixError, CapturedRelativeFixSummary,
                                    ProtectedCapturedRelativeFix)
+from captured_text_utils_paragraph_fix import (CapturedTextUtilsParagraphFixError,
+    CapturedTextUtilsParagraphFixSummary, ProtectedCapturedTextUtilsParagraphFix)
+from captured_text_utils_paragraph_inputs import _literal_target as _paragraph_target
+from captured_text_utils_paragraph_core import _canonical_package_identity
 from fixed_journal import (JournalInventoryError, fixed_journal_directory,
                            inventory_json, journal_inventory,
                            recovery_report_json)
@@ -26,10 +30,11 @@ from protected_fix import (ProtectedCoreError, ProtectedCoreFix,
                            ProtectedCoreInputError, _literal_target)
 from syntax_client import AdapterError
 from source_profiles import (CAPTURED_RELATIVE_SOURCE_PROFILE,
+    CAPTURED_TEXT_UTILS_PARAGRAPH_SOURCE_PROFILE,
     CLOSED_CORE_SOURCE_PROFILE, KNOWN_OFFLINE_SOURCE_PROFILES, is_offline_source_profile)
 from transactions import (OfflineExclusive, ProtectedTransaction,
                           RecoveryRequired, SourceEncodingError, TransactionError,
-                          TransactionFailure)
+                          TransactionFailure, _absolute)
 from typst_lint import InputError, SafetyError, VERSION
 
 PROFILE = CLOSED_CORE_SOURCE_PROFILE
@@ -119,8 +124,23 @@ def _arguments(arguments, gate):
     args = parser.parse_args(arguments)
     if gate or args.command == 'check':
         parser.error('Explicit offline routes are unavailable for check/typst-style compile')
-    if args.dry_run or args.package_path is not None:
-        parser.error('Offline routes do not accept --dry-run or --package-path')
+    if args.dry_run:
+        parser.error('Offline routes do not accept --dry-run')
+    if (args.command in ('fix', 'compile')
+            and args.profile == CAPTURED_TEXT_UTILS_PARAGRAPH_SOURCE_PROFILE):
+        if args.package_path is None:
+            parser.error('The paragraph profile requires explicit --package-path')
+        try:
+            # Validate the original spelling before Path could normalize it.
+            # No resolve, stat, discovery or ambient cache occurs here.
+            package_path = _absolute(args.package_path)
+            if not _canonical_package_identity(str(package_path / 'local/text-utils/0.1.2/lib.typ')):
+                raise ValueError('Paragraph --package-path must have bounded canonical UTF-8 spelling')
+            args.package_path = package_path
+        except (TypeError, ValueError, UnicodeError, TransactionError) as error:
+            parser.error(str(error))
+    elif args.package_path is not None:
+        parser.error('--package-path is available only for explicit paragraph fix/compile')
     if args.command in ('compile', 'output-status', 'recover-output'):
         from offline_compile_cli import validate_arguments
         validate_arguments(args, parser)
@@ -138,11 +158,13 @@ def _arguments(arguments, gate):
         _literal_target(args.target)
         if args.command == 'fix':
             if not is_offline_source_profile(args.profile):
-                parser.error('fix requires --profile closed-core-v1, structured-core-v1 or captured-relative-core-v1')
-            if args.profile == CAPTURED_RELATIVE_SOURCE_PROFILE:
+                parser.error('fix requires an explicit known --profile')
+            if args.profile in (CAPTURED_RELATIVE_SOURCE_PROFILE,
+                                CAPTURED_TEXT_UTILS_PARAGRAPH_SOURCE_PROFILE):
                 try:
-                    canonical_path(args.target)
-                except (SafetyError, ValueError) as error:
+                    (_paragraph_target if args.profile == CAPTURED_TEXT_UTILS_PARAGRAPH_SOURCE_PROFILE
+                     else canonical_path)(args.target)
+                except (InputError, SafetyError, ValueError) as error:
                     parser.error(str(error))
             if args.journal_id is not None:
                 parser.error('--journal-id is available only for recover')
@@ -166,6 +188,9 @@ def _source_selection_json(summary):
                     root_grammar_version=summary.root_grammar_version,
                     module_grammar_version=summary.module_grammar_version,
                     parser_contract=list(summary.parser_contract))
+    if summary.profile == CAPTURED_TEXT_UTILS_PARAGRAPH_SOURCE_PROFILE:
+        return dict(profile=summary.profile, root_grammar_version=summary.grammar_version,
+                    parser_contract=list(summary.parser_contract))
     return dict(profile=summary.profile, grammar_version=summary.grammar_version)
 
 
@@ -173,6 +198,9 @@ def _source_selection_text(summary):
     if summary['profile'] == CAPTURED_RELATIVE_SOURCE_PROFILE:
         return (f"{summary['profile']} (root {summary['root_grammar_version']}; "
                 f"module {summary['module_grammar_version']}; "
+                f"parser {', '.join(summary['parser_contract'])})")
+    if summary['profile'] == CAPTURED_TEXT_UTILS_PARAGRAPH_SOURCE_PROFILE:
+        return (f"{summary['profile']} (root {summary['root_grammar_version']}; "
                 f"parser {', '.join(summary['parser_contract'])})")
     return f"{summary['profile']} ({summary['grammar_version']})"
 
@@ -186,6 +214,29 @@ def _print_graph_sources(summary):
 
 def _summary_json(summary):
     """Explicit primitive output conversion; never consumed by the writer."""
+    if summary.profile == CAPTURED_TEXT_UTILS_PARAGRAPH_SOURCE_PROFILE:
+        return dict(**_source_selection_json(summary), target=summary.target,
+            original_sha256=summary.original_sha256, final_sha256=summary.final_sha256,
+            config_sha256=summary.config_sha256, catalog_sha256=summary.catalog_sha256,
+            package_sha256=summary.package_sha256,
+            package_identity=dict(namespace='local', name='text-utils', version='0.1.2',
+                role='read-only-semantic-evidence',
+                files=[dict(path=path, sha256=sha256, size=size)
+                       for path, sha256, size in summary.package_files]),
+            required_rule_ids=list(summary.required_rule_ids),
+            evaluated_rule_ids=list(summary.evaluated_rule_ids),
+            not_applicable=[dict(rule_id=rid, reason=reason)
+                            for rid, reason in summary.structural_reasons],
+            applied_edits=[dict(path=e.path, start=e.start, end=e.end,
+                replacement=e.replacement.decode('utf-8'), rule_id=e.rule_id)
+                for e in summary.applied_edits],
+            modified_paths=list(summary.modified_paths), journal_id=summary.journal_id,
+            final_findings=[], coverage=dict(input_profile_complete=True,
+                input_profile_rule_count=len(summary.required_rule_ids),
+                evaluated_rule_count=len(summary.evaluated_rule_ids),
+                structurally_discharged_rule_count=len(summary.structural_reasons), global_complete=False,
+                global_rule_status='PARTIAL', global_complete_rule_count=0,
+                global_partial_rule_count=33))
     result = dict(**_source_selection_json(summary), target=summary.target,
                 original_sha256=summary.original_sha256, final_sha256=summary.final_sha256,
                 required_rule_ids=list(summary.required_rule_ids),
@@ -214,11 +265,12 @@ def _applied_summary(fix):
     """Retain known apply facts even if a later bridge safety check refused."""
     try:
         summary = fix.summary
-        # Only this exact finite graph report contains primitive frozen records.
+        # These exact finite graph/paragraph reports contain primitive frozen records.
         # Detach it now: later compiler/cleanup callbacks can still hold the
         # bridge's returned summary and reflectively mutate nested records.
-        return deepcopy(summary) if type(summary) is CapturedRelativeFixSummary else summary
-    except (ProtectedCoreError, CapturedRelativeFixError):
+        return deepcopy(summary) if type(summary) in (CapturedRelativeFixSummary,
+            CapturedTextUtilsParagraphFixSummary) else summary
+    except (ProtectedCoreError, CapturedRelativeFixError, CapturedTextUtilsParagraphFixError):
         return None
 
 
@@ -336,7 +388,11 @@ def main(arguments=None, *, gate=False):
             lease = OfflineExclusive.assert_editors_watchers_closed_and_no_other_writers()
             if command == 'fix':
                 phase = 'capture'
-                if args.profile == CAPTURED_RELATIVE_SOURCE_PROFILE:
+                if args.profile == CAPTURED_TEXT_UTILS_PARAGRAPH_SOURCE_PROFILE:
+                    context = ProtectedCapturedTextUtilsParagraphFix(root, args.target,
+                        package_path=args.package_path, journal_directory=store,
+                        lease=lease, create_journal_directory=True, source_profile=args.profile)
+                elif args.profile == CAPTURED_RELATIVE_SOURCE_PROFILE:
                     context = ProtectedCapturedRelativeFix(root, args.target, journal_directory=store,
                         lease=lease, create_journal_directory=True, source_profile=args.profile)
                 else:

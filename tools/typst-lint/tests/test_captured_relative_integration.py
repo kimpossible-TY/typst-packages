@@ -710,7 +710,8 @@ class CapturedRelativeIntegrationTests(unittest.TestCase):
         self.assertEqual(source_profiles.KNOWN_SOURCE_PROFILES, {'closed-core-v1', 'structured-core-v1'})
         self.assertNotIn(core.SOURCE_PROFILE, source_profiles.KNOWN_SOURCE_PROFILES)
         self.assertEqual(source_profiles.KNOWN_OFFLINE_SOURCE_PROFILES,
-                         source_profiles.KNOWN_SOURCE_PROFILES | {core.SOURCE_PROFILE})
+                         source_profiles.KNOWN_SOURCE_PROFILES | {core.SOURCE_PROFILE,
+                             'captured-text-utils-paragraph-v1'})
         self.assertEqual(source_profiles.CAPTURED_RELATIVE_SOURCE_PROFILE, core.SOURCE_PROFILE)
         self.assertTrue(source_profiles.is_offline_source_profile(core.SOURCE_PROFILE))
         for profile in (core.SOURCE_PROFILE.upper(), ' ' + core.SOURCE_PROFILE,

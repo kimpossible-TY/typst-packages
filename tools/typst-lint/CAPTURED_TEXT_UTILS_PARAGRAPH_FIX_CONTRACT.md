@@ -1,10 +1,11 @@
-# Internal captured text-utils paragraph repair
+# Captured text-utils paragraph repair
 
-`captured_text_utils_paragraph_fix.py` is an internal, in-process protected
-repair bridge for `captured-text-utils-paragraph-v1`. It adds one genuinely
-applied rule, `pde.paragraph-capitalization`, without registering a public source
-profile, changing ordinary analysis completeness, invoking a compiler, publishing
-an artifact, or admitting another package or project grammar. Existing profiles,
+`captured_text_utils_paragraph_fix.py` is the in-process protected repair bridge
+for `captured-text-utils-paragraph-v1`. It genuinely applies
+`pde.paragraph-capitalization` within the bounded grammar below. The separately
+selected explicit CLI can compose it with the package compiler and prepared
+publisher. This bridge does not itself invoke a compiler or publish an artifact.
+Existing profiles, ordinary analysis completeness, admitted package/root grammar,
 transactions and schema-1 recovery are unchanged.
 
 ## Selection, capture and initial admission
@@ -126,3 +127,22 @@ does not undo valid committed fixes, erase known success or mint new authority.
 The `summary` property restores its original finite reporting facts if an exposed
 summary is reflectively altered and remains available after the context ends.
 It provides no compiler or artifact receipt and no permission for subsequent work.
+
+
+## Distinct committed receipt and publication ordering
+
+`committed_snapshot()` separately issues the bridge's original opaque
+`CapturedTextUtilsParagraphCommittedSnapshot` only after its own genuine
+successful `apply()`. It binds the transaction's committed postimage, independently
+replayed proof and Trees, and all retained config/catalog/package evidence.
+`assert_committed_current(snapshot)` requires the original live owner, identities
+and immutable facts, plus current committed source/evidence/ancestry. A historical
+summary, standalone proof or bare transaction receipt is not a substitute.
+
+The private publication borrower grants the original locked transaction only
+while the bridge is pristine. Independently retained monotonic facts forbid
+preparation after any `validate()` or `apply()` attempt, including a failed one.
+Initial bridge entry already performs read-only admission, so this is preparation
+before validation/candidate/application attempts, not before every analysis.
+See [CAPTURED_TEXT_UTILS_PARAGRAPH_COMPILE_CONTRACT.md](CAPTURED_TEXT_UTILS_PARAGRAPH_COMPILE_CONTRACT.md)
+and [CAPTURED_TEXT_UTILS_PARAGRAPH_PUBLISH_CONTRACT.md](CAPTURED_TEXT_UTILS_PARAGRAPH_PUBLISH_CONTRACT.md).

@@ -1,9 +1,11 @@
 # Internal captured text-utils paragraph proof
 
 `captured_text_utils_paragraph_core` provides a pure, private proof for the exact
-internal profile `captured-text-utils-paragraph-v1`. It is not registered as a
-public source grammar and adds no CLI, compiler, transaction, source store,
-installation, or publication route. All 33 global rule statuses remain PARTIAL.
+profile `captured-text-utils-paragraph-v1`. The proof itself adds no CLI,
+compiler, transaction, source store, installation or publication authority.
+A separate explicit offline selection composes this proof with the protected
+repair and package compiler/publisher. The older single-source grammar registry
+remains unchanged. All 33 global rule statuses remain PARTIAL.
 A proof does not authorize a consumer write, establish parser provenance, prove
 that actual analyzers ran, authorize compilation, or waive an ordinary skip.
 

@@ -132,7 +132,8 @@ class GraphCliArgumentTests(_GraphCliFixtures):
         self.assertEqual(source_profiles.KNOWN_SOURCE_PROFILES,
                          {'closed-core-v1', 'structured-core-v1'})
         self.assertEqual(source_profiles.KNOWN_OFFLINE_SOURCE_PROFILES,
-                         {'closed-core-v1', 'structured-core-v1', PROFILE})
+                         {'closed-core-v1', 'structured-core-v1', PROFILE,
+                          'captured-text-utils-paragraph-v1'})
         with self.assertRaises(ValueError):
             source_profiles.grammar_for_source_profile(PROFILE)
         for value in (None, True, [], PROFILE.upper(), ' ' + PROFILE, PROFILE + ' ', 'captured-relative'):

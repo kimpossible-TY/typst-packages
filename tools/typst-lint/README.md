@@ -8,7 +8,7 @@ plans from real Typst parsing and narrowly proven contexts.
 All 33 rules have bounded backends; full rule acceptance and compilation remain incomplete.
 Ordinary analysis/fix/compile modes return **2**, including an empty selection,
 without changing source or invoking a compiler. A separate explicit offline
-source profile can apply a narrowly proven script repair. With additional
+source profile can apply narrowly proven script or paragraph repairs. With additional
 explicit output/resource opt-ins, it can compile and publish one guarded PDF
 under the ASCII or narrowly reviewed Korean resource profile. These are not
 all-project writers. Help/version return 0.
@@ -177,7 +177,7 @@ See [CAPTURED_RELATIVE_CORE_CONTRACT.md](CAPTURED_RELATIVE_CORE_CONTRACT.md),
 [CAPTURED_RELATIVE_PUBLISH_CONTRACT.md](CAPTURED_RELATIVE_PUBLISH_CONTRACT.md) and
 [CAPTURED_RELATIVE_CLI_CONTRACT.md](CAPTURED_RELATIVE_CLI_CONTRACT.md).
 
-## Internal captured paragraph capitalization
+## Captured paragraph capitalization
 
 A separate `ProtectedCapturedTextUtilsParagraphFix` can repair a deliberately
 bounded root document using the exact reviewed text-utils 0.1.2 paragraph marker
@@ -193,8 +193,31 @@ other source bytes and package files remain unchanged; successful repairs and
 honest historical summaries survive later rejected operations. Existing
 transaction recovery remains separate from live input authority.
 
-This profile is internal. It grants no compiler receipt, public CLI selection,
-package installation or consumer rollout. Private native characterization of
+The explicit offline selection `captured-text-utils-paragraph-v1` requires a
+canonical absolute `--package-path` and the exact PDE/English configuration in
+the contracts below. Its separate live committed receipt, private package
+compiler and prepared publisher support only `embedded-ascii-v1`. The compiler
+stages the retained root and exact manifest/lib bytes, requires all three actual
+observed dependencies, and never loads an ambient package. Output preparation
+precedes every validation/application attempt. Ordinary routes and old profiles
+remain unchanged; no package installation or consumer rollout is performed.
+
+For the exact admitted root and PDE/English configuration:
+
+```sh
+/path/to/typst-packages/tools/typst-lint/typst-lint fix --root /path/to/project --profile captured-text-utils-paragraph-v1 --package-path /path/to/typst-packages --target main.typ --offline-exclusive --format json
+/path/to/typst-packages/tools/typst-lint/typst-lint compile --root /path/to/project --profile captured-text-utils-paragraph-v1 --package-path /path/to/typst-packages --target main.typ --output main.pdf --resource-profile embedded-ascii-v1 --offline-exclusive --offline-output-exclusive --format json
+```
+
+These assertions require the caller to stop all source/output writers. They do
+not establish editor coordination or authorize a general all-project wrapper.
+Private public-CLI tests verify nested targets and space-containing paths,
+source-only/no-op repair, existing/new PDF publication, exact observed package
+dependencies and resource-independent recovery under the unchanged 10-second
+compiler deadline. A repertoire refusal preserves committed source fixes and
+the prior PDF without launching a compiler.
+
+Private source-repair characterization of
 LF/CRLF and four horizontal-spacing variants observes lowercase original
 rendering and the intended uppercase rendering after repair. Both preserve
 1.5em indentation, line positions and the remaining text; subsequent words
@@ -202,8 +225,10 @@ shift only by the changed first word's advance. PDF/raster bytes are expected
 to differ. This is independent test evidence, not production package-compilation
 authority or a general rendering-equivalence claim.
 See [CAPTURED_TEXT_UTILS_PARAGRAPH_INPUT_CONTRACT.md](CAPTURED_TEXT_UTILS_PARAGRAPH_INPUT_CONTRACT.md),
-[CAPTURED_TEXT_UTILS_PARAGRAPH_CORE_CONTRACT.md](CAPTURED_TEXT_UTILS_PARAGRAPH_CORE_CONTRACT.md) and
-[CAPTURED_TEXT_UTILS_PARAGRAPH_FIX_CONTRACT.md](CAPTURED_TEXT_UTILS_PARAGRAPH_FIX_CONTRACT.md).
+[CAPTURED_TEXT_UTILS_PARAGRAPH_CORE_CONTRACT.md](CAPTURED_TEXT_UTILS_PARAGRAPH_CORE_CONTRACT.md),
+[CAPTURED_TEXT_UTILS_PARAGRAPH_FIX_CONTRACT.md](CAPTURED_TEXT_UTILS_PARAGRAPH_FIX_CONTRACT.md),
+[CAPTURED_TEXT_UTILS_PARAGRAPH_COMPILE_CONTRACT.md](CAPTURED_TEXT_UTILS_PARAGRAPH_COMPILE_CONTRACT.md) and
+[CAPTURED_TEXT_UTILS_PARAGRAPH_PUBLISH_CONTRACT.md](CAPTURED_TEXT_UTILS_PARAGRAPH_PUBLISH_CONTRACT.md).
 
 ## Explicit offline source profiles
 
@@ -212,7 +237,7 @@ protected transaction for deliberately closed input languages. The separately
 selected CLI profiles below expose that engine. Ordinary `check`, dry-run,
 `fix` without the profile, and unprofiled `compile` remain read-only with exit 2.
 
-Both profiles require one literal `.typ` target in an explicit core-only config,
+The two single-source profiles below require one literal `.typ` target in an explicit core-only config,
 with no broader globs, excludes, ignores, packages or catalogs. An optional
 entrypoint must be that target. The explicit source selection determines the
 recursive official-AST grammar:

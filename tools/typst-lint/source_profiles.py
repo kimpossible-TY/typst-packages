@@ -1,14 +1,15 @@
 """Pure exact offline selections and single-source grammar version selection.
 
 Historical names are immutable language choices, not aliases for the broadest
-available grammar. The separate graph selection has no single-source grammar
-mapping. No parsing, filesystem access or resource lookup occurs here.
+available grammar. The separate graph and package-paragraph selections have no
+single-source grammar mapping. No parsing, filesystem access or resource lookup occurs here.
 """
 from types import MappingProxyType
 
 CLOSED_CORE_SOURCE_PROFILE = 'closed-core-v1'
 STRUCTURED_CORE_SOURCE_PROFILE = 'structured-core-v1'
 CAPTURED_RELATIVE_SOURCE_PROFILE = 'captured-relative-core-v1'
+CAPTURED_TEXT_UTILS_PARAGRAPH_SOURCE_PROFILE = 'captured-text-utils-paragraph-v1'
 CLOSED_CORE_GRAMMAR_VERSION = 'closed-core-markup-v1'
 STRUCTURED_CORE_GRAMMAR_VERSION = 'closed-core-markup-v2'
 GRAMMAR_VERSIONS = MappingProxyType({
@@ -17,8 +18,9 @@ GRAMMAR_VERSIONS = MappingProxyType({
 })
 KNOWN_SOURCE_PROFILES = frozenset(GRAMMAR_VERSIONS)
 # Public offline selection is wider than the single-source grammar API. The
-# graph profile has separate root/module grammars and must never enter that API.
-KNOWN_OFFLINE_SOURCE_PROFILES = KNOWN_SOURCE_PROFILES | frozenset((CAPTURED_RELATIVE_SOURCE_PROFILE,))
+# graph and package-paragraph profiles have separate admission and never enter it.
+KNOWN_OFFLINE_SOURCE_PROFILES = KNOWN_SOURCE_PROFILES | frozenset((
+    CAPTURED_RELATIVE_SOURCE_PROFILE, CAPTURED_TEXT_UTILS_PARAGRAPH_SOURCE_PROFILE))
 
 
 def is_offline_source_profile(profile):

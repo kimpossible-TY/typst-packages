@@ -18,14 +18,18 @@ import threading
 import closed_core_compile as compiler
 from captured_relative_fix import ProtectedCapturedRelativeFix
 from captured_relative_publish import PreparedCapturedRelativePdfPublication
+from captured_text_utils_paragraph_fix import ProtectedCapturedTextUtilsParagraphFix
+from captured_text_utils_paragraph_publish import PreparedCapturedTextUtilsParagraphPdfPublication
 from closed_core_publish import PreparedPdfPublication
 from fixed_journal import fixed_journal_directory, journal_inventory, recovery_report_json
 import offline_cli as offline
 from pdf_publication_store import (OfflineOutputExclusive, PublicationError,
     PublicationPending, PublicationReport, inventory_publications, literal_destination, recover_publication)
 from protected_fix import ProtectedCoreFix, _literal_target
-from resource_profiles import APPLEGOTHIC_RESOURCE_PROFILE, validate_resource_profile
-from source_profiles import CAPTURED_RELATIVE_SOURCE_PROFILE, is_offline_source_profile
+from resource_profiles import (APPLEGOTHIC_RESOURCE_PROFILE, ASCII_RESOURCE_PROFILE,
+                               validate_resource_profile)
+from source_profiles import (CAPTURED_RELATIVE_SOURCE_PROFILE,
+    CAPTURED_TEXT_UTILS_PARAGRAPH_SOURCE_PROFILE, is_offline_source_profile)
 from transactions import OfflineExclusive, RecoveryRequired, TransactionFailure
 from typst_lint import InputError, SafetyError
 
@@ -61,11 +65,14 @@ def validate_arguments(args, parser):
             parser.error('recover-output requires --journal-id with exactly 32 lowercase hexadecimal characters')
         return
     if not is_offline_source_profile(args.profile):
-        parser.error('compile requires --profile closed-core-v1, structured-core-v1 or captured-relative-core-v1')
+        parser.error('compile requires an explicit known --profile')
     try:
         validate_resource_profile(args.resource_profile)
     except ValueError:
         parser.error('compile requires an explicit known --resource-profile')
+    if (args.profile == CAPTURED_TEXT_UTILS_PARAGRAPH_SOURCE_PROFILE
+            and args.resource_profile != ASCII_RESOURCE_PROFILE):
+        parser.error('The paragraph profile requires --resource-profile embedded-ascii-v1')
     if not args.offline_exclusive:
         parser.error('--offline-exclusive is required; all source writers must remain stopped')
     if args.target is None:
@@ -74,6 +81,8 @@ def validate_arguments(args, parser):
         _literal_target(args.target)
         if args.profile == CAPTURED_RELATIVE_SOURCE_PROFILE:
             offline.canonical_path(args.target)
+        elif args.profile == CAPTURED_TEXT_UTILS_PARAGRAPH_SOURCE_PROFILE:
+            offline._paragraph_target(args.target)
     except (InputError, SafetyError, ValueError) as error:
         parser.error(str(error))
     if args.journal_id is not None:
@@ -129,6 +138,30 @@ def graph_observation_json(observation):
         scalar_budget=dict(policy=budget.policy, limit=budget.limit,
             total_charge=budget.total_charge, use_count=budget.use_count,
             origin_count=budget.origin_count))
+
+
+def package_observation_json(observation):
+    """Detached original staged bytes and exact observed package dependencies."""
+    if observation is None:
+        return None
+    def source(value):
+        return dict(path=value.path, sha256=value.sha256, size=value.size,
+                    private=_file_evidence_json(value.private))
+    return dict(source_profile=observation.source_profile,
+        root_grammar_version=observation.grammar_version,
+        parser_contract=list(observation.parser_contract),
+        config_sha256=observation.config_sha256, catalog_sha256=observation.catalog_sha256,
+        evidence_hashes=[dict(path=path, sha256=sha256)
+                         for path, sha256 in observation.evidence_hashes],
+        dependency_paths=list(observation.dependency_paths),
+        dependencies=_file_evidence_json(observation.dependencies),
+        root_source=source(observation.root_source),
+        package_identity=dict(namespace='local', name='text-utils', version='0.1.2',
+            role='read-only-semantic-evidence'),
+        package_sources=[source(value) for value in observation.package_sources],
+        package_directories=[dict(path=value.path, identity=list(value.identity),
+            parents=[[path, list(identity)] for path, identity in value.parents])
+            for value in observation.package_directories])
 
 
 def compile_report_json(report):
@@ -331,6 +364,13 @@ def _print(result, json_format):
             print(f"Compiler-observed dependencies: {', '.join(observation['dependency_paths'])}")
             budget = observation['scalar_budget']
             print(f"Scalar render budget ({budget['policy']}): {budget['total_charge']} of {budget['limit']} bytes")
+    if 'package_observation_available' in result:
+        observation = result['package_observation']
+        if observation is None:
+            print(result['package_observation_note'])
+        else:
+            print(f"Compiler-observed dependencies: {', '.join(observation['dependency_paths'])}")
+            print('Captured package: @local/text-utils:0.1.2; read-only semantic evidence')
     if 'known_resource_profile_limitation' in result:
         limitation = result['known_resource_profile_limitation']
         print(f"Known resource-profile limitation ({limitation['profile']}): {limitation['note']}")
@@ -377,7 +417,12 @@ def main(arguments=None, *, gate=False):
             phase = 'capture'
             source_lease = OfflineExclusive.assert_editors_watchers_closed_and_no_other_writers()
             output_lease = OfflineOutputExclusive.assert_exporters_watchers_closed_and_no_other_writers()
-            if args.profile == CAPTURED_RELATIVE_SOURCE_PROFILE:
+            if args.profile == CAPTURED_TEXT_UTILS_PARAGRAPH_SOURCE_PROFILE:
+                context = ProtectedCapturedTextUtilsParagraphFix(root, args.target,
+                    package_path=args.package_path,
+                    journal_directory=fixed_journal_directory(root), lease=source_lease,
+                    create_journal_directory=True, source_profile=args.profile)
+            elif args.profile == CAPTURED_RELATIVE_SOURCE_PROFILE:
                 context = ProtectedCapturedRelativeFix(root, args.target,
                     journal_directory=fixed_journal_directory(root), lease=source_lease,
                     create_journal_directory=True, source_profile=args.profile)
@@ -388,7 +433,10 @@ def main(arguments=None, *, gate=False):
             with _tracked(context, cleanup, 'source') as fix:
                 _cancelled()
                 phase = 'output-prepare'
-                if args.profile == CAPTURED_RELATIVE_SOURCE_PROFILE:
+                if args.profile == CAPTURED_TEXT_UTILS_PARAGRAPH_SOURCE_PROFILE:
+                    publication = PreparedCapturedTextUtilsParagraphPdfPublication(fix,
+                        destination=args.output, lease=output_lease)
+                elif args.profile == CAPTURED_RELATIVE_SOURCE_PROFILE:
                     publication = PreparedCapturedRelativePdfPublication(fix,
                         destination=args.output, lease=output_lease)
                 else:
@@ -406,7 +454,9 @@ def main(arguments=None, *, gate=False):
                         summary = offline._applied_summary(fix)
                     _cancelled()
                     phase = 'compile'
-                    snapshot = (fix.committed_graph_snapshot()
+                    snapshot = (fix.committed_snapshot()
+                        if args.profile == CAPTURED_TEXT_UTILS_PARAGRAPH_SOURCE_PROFILE else
+                        fix.committed_graph_snapshot()
                         if args.profile == CAPTURED_RELATIVE_SOURCE_PROFILE else fix.compile_snapshot())
                     publication_report = publication.compile_and_publish(snapshot,
                         profile=args.resource_profile, deadline_seconds=10.0,
@@ -494,6 +544,13 @@ def main(arguments=None, *, gate=False):
                 graph_observation_note=('Original compiler-observed dependency evidence and scalar render budget'
                     if observation is not None else
                     'Compiler-observed dependency evidence is unavailable; no validated graph artifact was obtained'))
+    if command == 'compile' and selected_source_profile == CAPTURED_TEXT_UTILS_PARAGRAPH_SOURCE_PROFILE:
+        observation = None if publication is None else publication.package_observation
+        result.update(package_observation=package_observation_json(observation),
+            package_observation_available=observation is not None,
+            package_observation_note=('Original compiler-observed root and text-utils package dependencies'
+                if observation is not None else
+                'Compiler-observed package dependencies are unavailable; no validated paragraph artifact was obtained'))
     if publication_report is not None:
         historical = command == 'recover-output'
         result['publication_report'] = publication_report_json(publication_report, historical=historical)
