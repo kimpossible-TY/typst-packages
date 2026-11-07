@@ -148,8 +148,9 @@ Source/evidence, metadata and journal reads have explicit bounds, including
 revalidation, staging and recovery. Existing journals retain schema 1; an
 oversized historical journal refuses rather than truncating, with deliberately
 larger explicit limits available for recovery. This is process-crash recovery,
-not a claim of power-loss durability, arbitrary editor exclusion or an immutable
-compiler snapshot. No user project, installed package or build route is enabled.
+not a claim of power-loss durability or arbitrary editor exclusion. The internal
+committed-source compiler experiment below is separate from CLI dispatch. No
+user project, installed package or build route is enabled.
 See [CLOSED_CORE_CONTRACT.md](CLOSED_CORE_CONTRACT.md),
 [PROTECTED_CORE_CONTRACT.md](PROTECTED_CORE_CONTRACT.md) and
 [TRANSACTION_BOUNDS_CONTRACT.md](TRANSACTION_BOUNDS_CONTRACT.md).
@@ -385,9 +386,39 @@ Read-only source modes are refused for normal mutation without chmod; read-only
 evidence and reconciliation of existing recovery journals remain supported.
 Replacement timestamps intentionally change. Staged bytes and metadata are checked
 again after content writes and fsync, including before recovery replacement.
-The original snapshot is a baseline, not a compiler-ready snapshot; validated
-candidate sources describe postimages. Compiler resource capture, output
-publication, editor version integration and general project writer coverage remain absent.
+The original snapshot remains a baseline. After successful durable apply (including
+no-op), a separate session-bound receipt retains the already verified postimage
+records. Its guard revalidates the exact source, evidence, parents and metadata;
+it never refreshes authority from later bytes. Bridge-owned compile snapshots
+also require the actual independently validated applied candidate. Post-commit
+handoff failures cannot roll back committed fixes. See
+[COMMITTED_SNAPSHOT_CONTRACT.md](COMMITTED_SNAPSHOT_CONTRACT.md).
+
+## Internal committed-source compiler experiment
+
+`closed_core_compile.py` is an internal API, not a CLI compile route. It accepts
+only a live bridge-owned committed snapshot and the explicitly required resource
+profile `embedded-ascii-v1`. ASCII source with an optional leading UTF-8 BOM is
+supported. Broader Unicode source refuses: embedded-only fonts did not preserve
+Korean text in characterization, so no system-font or Unicode fidelity is claimed.
+
+The experiment uses the exact reviewed Mac arm64 Typst 0.15.1 executable hash,
+a private verified executable/input copy, an empty environment with allowlisted
+private directories, and embedded fonts only. Unknown compiler bytes refuse
+before probing. Source/config/catalog/compiler identities are checked before and
+after execution. Root-to-leaf descriptor capture, retained output descriptors,
+bounded diagnostics/artifacts, cancellation and exact relative dependency evidence
+protect the internal result. Trusted OS libraries and sampled workspace limits
+are explicit boundaries, not a complete OS or network sandbox.
+
+A successful invocation returns immutable, session-bound PDF bytes and execution
+evidence. It does not accept a user PDF destination or publish a file. Artifact
+access rechecks live authority; valid committed source fixes survive compiler
+failure or later staleness. Actual temporary native fixtures verify ASCII prose
+and math, including nested non-ASCII/space filenames. External-font capture,
+output publication, CLI compiler dispatch, editor version integration and general
+project writer coverage remain separate work. See
+[CLOSED_CORE_COMPILE_CONTRACT.md](CLOSED_CORE_COMPILE_CONTRACT.md).
 
 ## Bounded prose footnote boundaries
 
@@ -611,7 +642,8 @@ candidate parser, coverage-retention and idempotence checks. See the
 
 These are partial implementations, not 33 fully accepted rules. Their ordinary
 CLI plans remain unapplied; the separate closed-core profile admits only its
-strict input language. Compiler execution and all-project rollout remain disabled.
+strict input language. CLI compiler dispatch and all-project rollout remain disabled;
+the internal ASCII compiler experiment above is separately scoped.
 
 ## Multi-pass proposal evidence
 
@@ -681,5 +713,6 @@ publishes/deploys anything. Renderer-dependent characterization is separate.
 Next work: extend only provable directive scopes and Markdown extraction contexts; expand
 verified package/local-facade graphs and paragraph ownership; implement
 the remaining rule contracts; validate protected writer/editor transactions and
-immutable compiler snapshots; then verify CI/watch/Tinymist adapters. AGENTS.md
+broader compiler resources and recoverable output publication; then verify
+CI/watch/Tinymist adapters. AGENTS.md
 or a shell wrapper alone cannot claim native editor enforcement.

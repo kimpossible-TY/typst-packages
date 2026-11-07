@@ -112,6 +112,7 @@ class TransactionFailure(TransactionError):
 
 _LEASE_SEAL = object()
 _TOKEN_SEAL = object()
+_COMMITTED_SEAL = object()
 
 
 @dataclass(frozen=True, init=False)
@@ -193,6 +194,24 @@ class ValidatedCandidate:
     passes: int
     _owner: object = field(repr=False)
     _seal: object = field(repr=False)
+
+
+@dataclass(frozen=True, slots=True, init=False, eq=False)
+class CommittedSnapshot:
+    """Opaque live-session receipt for already verified committed source bytes.
+
+    These views share immutable captured bytes. They are not a serialization or
+    an assertion about compiler resources. Only the issuing active transaction
+    can guard this receipt; constructing an equivalent value grants nothing.
+    """
+    root: Path
+    sources: Mapping[str, bytes] = field(repr=False)
+    evidence: Mapping[str, bytes | None] = field(repr=False)
+    _owner: object = field(repr=False)
+    _seal: object = field(repr=False)
+
+    def __init__(self, *args, **kwargs):
+        raise TypeError('CommittedSnapshot is issued only after successful apply')
 
 
 @dataclass(frozen=True)
@@ -801,6 +820,10 @@ class ProtectedTransaction(_JournalReader):
         self._active = False
         self._files: dict[str, _File] = {}
         self._evidence: dict[str, _File] = {}
+        self._committed_files: Mapping[str, _File] | None = None
+        self._committed_evidence: Mapping[str, _File] | None = None
+        self._committed_graph: GraphSnapshot | None = None
+        self._committed_receipt: CommittedSnapshot | None = None
         self._namespace_name = 'root-' + _hash(os.fsencode(self.root))
         self._namespace = self.store / self._namespace_name
         self._event_number = 0
@@ -951,11 +974,12 @@ class ProtectedTransaction(_JournalReader):
             finally:
                 os.close(fd)
 
-    def _revalidate(self, expected: Mapping[str, _File] | None = None) -> None:
+    def _revalidate(self, expected: Mapping[str, _File] | None = None, *,
+                    evidence: Mapping[str, _File] | None = None) -> None:
         self._check_active()
         budget = _ReadBudget(self.limits.max_capture_bytes)
         for sources, values in ((True, (self._files if expected is None else expected).values()),
-                                (False, self._evidence.values())):
+                                (False, (self._evidence if evidence is None else evidence).values())):
             for value in values:
                 try:
                     now = _read(value.path, missing=value.data is None, utf8=sources,
@@ -988,6 +1012,48 @@ class ProtectedTransaction(_JournalReader):
     def _graph(self, sources: Mapping[str, bytes]) -> GraphSnapshot:
         return GraphSnapshot(self.root, MappingProxyType(dict(sources)),
                              MappingProxyType({p: f.data for p, f in self._evidence.items()}))
+
+    def _retain_committed(self, expected: Mapping[str, _File]) -> None:
+        # No live recapture: changed files are the exact verified postimages
+        # already retained by apply; unchanged/no-op files remain the baseline.
+        # This runs OUTSIDE the rollback handler, after the durable commit.
+        self._committed_files = MappingProxyType(dict(expected))
+        self._committed_evidence = MappingProxyType(dict(self._evidence))
+        graph = GraphSnapshot(self.root,
+            MappingProxyType({p: value.data for p, value in expected.items()}),
+            MappingProxyType({p: value.data for p, value in self._committed_evidence.items()}))
+        receipt = object.__new__(CommittedSnapshot)
+        for name, value in dict(root=graph.root, sources=graph.sources, evidence=graph.evidence,
+                                _owner=self._owner, _seal=_COMMITTED_SEAL).items():
+            object.__setattr__(receipt, name, value)
+        self._committed_graph = graph
+        self._committed_receipt = receipt
+
+    def committed_snapshot(self) -> CommittedSnapshot:
+        """Return this apply's receipt only if its retained postimages are current.
+
+        A later stale generation refuses handoff without undoing committed fixes
+        or blessing fresh live bytes. The baseline ``snapshot`` stays unchanged.
+        """
+        receipt = self._committed_receipt
+        self.assert_current(receipt)
+        return receipt
+
+    def assert_current(self, receipt: CommittedSnapshot) -> None:
+        """Revalidate a genuine issued receipt under the existing root lock."""
+        self._check_active()
+        _fail(not self.recovery_only and self._used
+              and receipt is not None and receipt is self._committed_receipt
+              and type(receipt) is CommittedSnapshot
+              and receipt._owner is self._owner and receipt._seal is _COMMITTED_SEAL
+              and self._committed_files is not None and self._committed_evidence is not None
+              and self._committed_graph is not None,
+              'Only this active session\'s successful apply has a committed snapshot')
+        graph = self._committed_graph
+        _fail(receipt.root == graph.root == self.root
+              and receipt.sources is graph.sources and receipt.evidence is graph.evidence,
+              'Committed snapshot receipt changed')
+        self._revalidate(self._committed_files, evidence=self._committed_evidence)
 
     def validate(self, analyze: Callable[[GraphSnapshot], GraphAnalysis], *,
                  required_rules: frozenset[str]) -> ValidatedCandidate:
@@ -1140,6 +1206,7 @@ class ProtectedTransaction(_JournalReader):
         self._used = True
         self._issued = None
         if not changed:
+            self._retain_committed(self._files)
             return ApplyResult(None, (), candidate.findings)
         journal = uuid.uuid4().hex
         self._journal = journal
@@ -1196,7 +1263,6 @@ class ProtectedTransaction(_JournalReader):
             self._hit('before_final_validation', None)
             self._revalidate(expected)
             self._event('committed')
-            return ApplyResult(journal, changed, candidate.findings)
         except Exception as error:
             # Best-effort rollback is not completion: an explicit recovery pass
             # must reconcile the durable record before another transaction.
@@ -1213,6 +1279,11 @@ class ProtectedTransaction(_JournalReader):
                 report = RecoveryReport(journal, unresolved=changed,
                                         errors=(f'{type(recovery_error).__name__}: {recovery_error}',))
             raise TransactionFailure(f'{type(error).__name__}: {error}', report) from error
+        # A successful durable committed event is the source-commit boundary.
+        # Snapshot allocation, handoff and later currentness checks must NEVER
+        # enter the source rollback/recovery path above.
+        self._retain_committed(expected)
+        return ApplyResult(journal, changed, candidate.findings)
 
     def recover(self, journal: str, *,
                 preserve_conflicts: Mapping[str, Fingerprint] | None = None) -> RecoveryReport:

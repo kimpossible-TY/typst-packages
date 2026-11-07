@@ -7,10 +7,11 @@ The caller must hold the real offline-exclusive assertion for the whole context.
 """
 from __future__ import annotations
 
-from dataclasses import dataclass, replace
+from dataclasses import dataclass, field, replace
 from pathlib import Path
 import tomllib
 from types import MappingProxyType
+from typing import Mapping
 
 from candidate_convergence import converge
 from closed_core import (CORE_RULE_IDS as ADMISSION_CORE_RULE_IDS,
@@ -18,7 +19,7 @@ from closed_core import (CORE_RULE_IDS as ADMISSION_CORE_RULE_IDS,
 from edit_plan import plan
 from script_rule import RULE_ID as SCRIPT, ScriptResult, analyze as analyze_script
 from syntax_client import parse
-from transactions import (DEFAULT_READ_LIMITS, EvidenceInput, GraphAnalysis,
+from transactions import (DEFAULT_READ_LIMITS, CommittedSnapshot, EvidenceInput, GraphAnalysis,
                           GraphSnapshot, ProtectedTransaction, SourceEdit,
                           TransactionError)
 from typst_lint import CATALOG, InputError, digest, parse_rules, relative
@@ -227,6 +228,40 @@ class ProtectedCoreSummary:
     journal_id: str | None = None
 
 
+@dataclass(frozen=True, slots=True)
+class _CompileValidation:
+    """The actual independently checked candidate/replay, never report data."""
+    candidate: object
+    replay: object
+    proof: object
+    root: Path
+    target: str
+    evidence: Mapping[str, bytes | None]
+    config_sha256: str
+    catalog_sha256: str
+
+
+@dataclass(frozen=True, slots=True, init=False, eq=False)
+class ClosedCoreCompileSnapshot:
+    """Opaque live bridge receipt, not a compiler/resource-profile certificate."""
+    root: Path
+    target: str
+    source: bytes = field(repr=False)
+    source_sha256: str
+    evidence: Mapping[str, bytes | None] = field(repr=False)
+    required_rule_ids: tuple[str, ...]
+    evaluated_rule_ids: tuple[str, ...]
+    structural_reasons: tuple[tuple[str, str], ...]
+    config_sha256: str
+    catalog_sha256: str
+    _receipt: CommittedSnapshot = field(repr=False)
+    _validation: _CompileValidation = field(repr=False)
+    _owner: object = field(repr=False)
+
+    def __init__(self, *args, **kwargs):
+        raise TypeError('ClosedCoreCompileSnapshot is issued only by compile_snapshot()')
+
+
 class ProtectedCoreFix:
     """One internal closed-core transaction with independent provenance replay.
 
@@ -252,6 +287,11 @@ class ProtectedCoreFix:
         self._history = []
         self._validated_summary = None
         self._summary = None
+        self._compile_owner = object()
+        self._compile_validation = None
+        self._applied_validation = None
+        self._compile_snapshot = None
+        self._compile_receipt = None
 
     @property
     def transaction(self):
@@ -352,6 +392,10 @@ class ProtectedCoreFix:
         self._history = []
         self._validated_summary = None
         self._summary = None
+        self._compile_validation = None
+        self._applied_validation = None
+        self._compile_snapshot = None
+        self._compile_receipt = None
         snapshot = self._tx.snapshot
         token = self._tx.validate(self._analyze_graph, required_rules=CORE_RULE_IDS)
         _require(not token.findings and token.passes <= 1,
@@ -383,15 +427,86 @@ class ProtectedCoreFix:
             tuple(proof.structural_reasons),
             tuple(AppliedInsertion(self.target, item.edit.start, item.edit.end,
                                    item.edit.replacement) for item in replay.edits))
+        self._compile_validation = _CompileValidation(token, replay, proof,
+            snapshot.root, self.target, snapshot.evidence,
+            digest(snapshot.evidence[self._config_path]),
+            digest(snapshot.evidence[self._catalog_path]))
         self._candidate = token
         return token
 
     def apply(self, candidate):
         _require(self._active and candidate is not None and candidate is self._candidate,
                  'Only this bridge session\'s independently validated candidate may be applied')
+        validation = self._compile_validation
+        _require(validation is not None and validation.candidate is candidate,
+                 'Independent protected candidate provenance required')
         self._candidate = None
         result = self._tx.apply(candidate)
+        # Only this bridge's successful actual apply establishes authority. A
+        # transaction receipt obtained through the inspection property does not.
+        self._applied_validation = validation
         # This reporting-only value is never an input to token validation/apply.
         self._summary = replace(self._validated_summary, modified_paths=result.modified,
                                 journal_id=result.journal)
         return result
+
+    def _assert_compile_binding(self, snapshot):
+        validation = self._applied_validation
+        _require(self._active and validation is not None
+                 and snapshot is not None and snapshot is self._compile_snapshot
+                 and type(snapshot) is ClosedCoreCompileSnapshot
+                 and snapshot._owner is self._compile_owner
+                 and snapshot._validation is validation,
+                 'Only this active bridge\'s independently applied candidate has a compile snapshot')
+        receipt, proof, replay = snapshot._receipt, validation.proof, validation.replay
+        _require(type(receipt) is CommittedSnapshot and receipt is self._compile_receipt,
+                 'Compile snapshot transaction receipt changed')
+        # Recheck retained proof/tree binding only. No live-file parsing or
+        # reanalysis can manufacture a new successful candidate at handoff.
+        verify_proof(proof, replay.final_tree, validation.target)
+        _require(receipt.root == snapshot.root == validation.root
+                 and snapshot.target == validation.target
+                 and frozenset(receipt.sources) == frozenset((validation.target,))
+                 and snapshot.source is receipt.sources[validation.target]
+                 and snapshot.source == validation.candidate.sources[validation.target] == replay.content
+                 and proof.source_sha256 == snapshot.source_sha256 == digest(snapshot.source)
+                 and proof.source_bytes == len(snapshot.source)
+                 and snapshot.evidence is receipt.evidence
+                 and snapshot.evidence == validation.evidence
+                 and snapshot.required_rule_ids == tuple(sorted(CORE_RULE_IDS))
+                 and snapshot.evaluated_rule_ids == tuple(proof.evaluated_rule_ids)
+                 and snapshot.structural_reasons == tuple(proof.structural_reasons)
+                 and snapshot.config_sha256 == validation.config_sha256
+                 and snapshot.catalog_sha256 == validation.catalog_sha256,
+                 'Compile snapshot differs from retained independent candidate/proof/evidence')
+
+    def compile_snapshot(self) -> ClosedCoreCompileSnapshot:
+        """Guard and expose the exact postimage of this bridge's own apply.
+
+        No compiler is invoked, no resources are captured and no artifact is
+        published. Reporting summaries and bare transaction receipts are not
+        accepted as authority. Post-commit refusal never rolls back valid fixes.
+        """
+        validation = self._applied_validation
+        _require(self._active and validation is not None,
+                 'A successful independently validated bridge apply is required for a compile snapshot')
+        receipt = self._tx.committed_snapshot()
+        if self._compile_snapshot is None:
+            self._compile_receipt = receipt
+            snapshot = object.__new__(ClosedCoreCompileSnapshot)
+            for name, value in dict(root=validation.root, target=validation.target,
+                    source=receipt.sources[validation.target], source_sha256=validation.proof.source_sha256,
+                    evidence=receipt.evidence, required_rule_ids=tuple(sorted(CORE_RULE_IDS)),
+                    evaluated_rule_ids=tuple(validation.proof.evaluated_rule_ids),
+                    structural_reasons=tuple(validation.proof.structural_reasons),
+                    config_sha256=validation.config_sha256, catalog_sha256=validation.catalog_sha256,
+                    _receipt=receipt, _validation=validation, _owner=self._compile_owner).items():
+                object.__setattr__(snapshot, name, value)
+            self._compile_snapshot = snapshot
+        self._assert_compile_binding(self._compile_snapshot)
+        return self._compile_snapshot
+
+    def assert_compile_current(self, snapshot: ClosedCoreCompileSnapshot) -> None:
+        """Refuse stale or foreign generations without touching committed work."""
+        self._assert_compile_binding(snapshot)
+        self._tx.assert_current(snapshot._receipt)
