@@ -191391,7 +191391,7 @@
       "target_findings": 0
     }
   ],
-  "generated_utc": "2026-11-07T12:00:21.198155+00:00",
+  "generated_utc": "2026-11-07T12:30:30.299171+00:00",
   "mode_probes": [
     {
       "command": [
@@ -193371,7 +193371,7 @@
   "revision_after": {
     "adapter_sha256": "0cad7e5b07bfe7fb96c089d02671f063aa992ac946a03bd25d5dd2063631cae8",
     "branch": "feat/typst-lint",
-    "commit": "50110d0c47e9cf83f91172edf0831fcc2afa0a84",
+    "commit": "37f8c54524647022ceefac37a69f06cbae007154",
     "files": {
       "local/cetz-helpers/0.1.0/lib.typ": "94ebe31ac523c3bafa6827b83abaef3412c749f042b181f9fa4f634c8f061f3b",
       "local/cetz-helpers/0.1.0/typst.toml": "3de4c5311119c6c465c337e1850065a4b3840e7e8b12462f0cbd719a637c5792",
@@ -193410,7 +193410,7 @@
       "openspec/changes/typst-style-linter/specs/typst-lint-autofix/spec.md": "f014b980e9a1bce73619bc8ce39aa3e17f74b8e7ab99835cdcfd772e97bd1483",
       "openspec/changes/typst-style-linter/specs/typst-lint-configuration/spec.md": "08fe436fb2e26f010b134193cdcdf0a2757d3ec5592277a9af51f1aaf74e6d8c",
       "openspec/changes/typst-style-linter/specs/typst-pde-style/spec.md": "eadd50ca4d105d4a3b9c711cfa119085e39f07e53e3d068ba5f4094da93a77d0",
-      "openspec/changes/typst-style-linter/tasks.md": "059b72b7e2cb7ee74f2f561a28d708c469090c0d394deec047fea076bff11b42",
+      "openspec/changes/typst-style-linter/tasks.md": "671d3e9585aea45d7b5d222ee7518da16132d9232179c9b2db404c3482ece0e0",
       "tools/typst-lint/anchor_overlay_rules.py": "ccdcd4ad70b7e9af2fc6e5ee9380aa005d66cf4e7223a764e5160cbbd49869df",
       "tools/typst-lint/audit/fixtures.json": "1e871d5bdee6e79dd7cefdb32fd46c378ea90116025a208994d3d64ef8975a1b",
       "tools/typst-lint/audit_rules.py": "3e44f3b3e22ae769d5815fdc31fbd66cf2568c0083579ed45dc7954d407bb57c",
@@ -193420,7 +193420,7 @@
       "tools/typst-lint/candidate_convergence.py": "5cf35337c0a1eaef90f5e9be7d9c0f811aa48ca5a20362567be9b678986f0989",
       "tools/typst-lint/capitalization.py": "133300240578238184d71109720f3889e96c95dd67ab5044d5c4e1a814fb5f2f",
       "tools/typst-lint/closed_core.py": "1d2901587a2a70b797f4e6b6f269ef7c53a1aa184b2dee99b04a9aa82d4bf08f",
-      "tools/typst-lint/closed_core_compile.py": "8fb9562e37a0b9aaf5edaecc2a96c201a03d7607d0ad0bc9cea901013d823564",
+      "tools/typst-lint/closed_core_compile.py": "8b7e153981677f505991c9aefc6eb583be917b33ea0e772956e0f971993e8e10",
       "tools/typst-lint/closed_core_publish.py": "05fed5295b833c0283ee8e99b9feeb706e4bd46b03a33ccbf2398b53ff87b560",
       "tools/typst-lint/continuation_rules.py": "b43f24fd6a966a1b0636b904a8d62d11ff40005ed5932478fc776293aa3c4861",
       "tools/typst-lint/convergence_evidence.py": "e246af243bde2d4c8a29346da11d45d89af95d7589245a72949e52228ea52562",
@@ -193435,7 +193435,8 @@
       "tools/typst-lint/import_rules.py": "8df7c70d01e72210aa0cdc17ef0cdeb506eedb473e9d210fd00b2903cad6d328",
       "tools/typst-lint/markdown_scripts.py": "57cc8d55350ab9dac800fbd3c18512afd62bd5eefacf83e2d7695e48081fc138",
       "tools/typst-lint/marker_bounds_rules.py": "b928474d74d91e8d4d86b4e16799c9d38e5fbb1bca288fb50415951dc2ce8015",
-      "tools/typst-lint/offline_cli.py": "fb757cf2ed61f99ea6b031b846275423122099ffef383d0ab6b013c7ae0bd819",
+      "tools/typst-lint/offline_cli.py": "d3244270a1ffcd883add3819b1c90111bdee6ef2e187a68dbf11bca32ed1a5e0",
+      "tools/typst-lint/offline_compile_cli.py": "ead2de53a826d043a1cc8d4bd7ea5f4dc34b2b7fcdf8e5bc3f3d3e7cdbd064f7",
       "tools/typst-lint/package_artifacts.py": "9939e8de013b2badb256863bb02a3014702d51fab0f97f0fc2696a89dc2b3669",
       "tools/typst-lint/package_loader.py": "160d97ce16e1a1318615b1d24753fb763ed1e6f99fc83ad57f98a1e066a55983",
       "tools/typst-lint/paragraph_rules.py": "ffbcb9803c7cf392aa5c32264417bf934dbdd1f17176fe450e33dcad8c6edb81",
@@ -193483,6 +193484,7 @@
       "tools/typst-lint/tests/fixtures/scoped-reference-packages/preview/mannot/0.4.0/src/lib.typ": "288027cea059b327bf3253c44ae975339e7afc0f149375d9d87ca1c1fe739f57",
       "tools/typst-lint/tests/fixtures/scoped-reference-packages/preview/mannot/0.4.0/typst.toml": "aef4310b36955dc98d8b03ec4abf17d45777d0a08b65d6e67214752e57647545",
       "tools/typst-lint/tests/offline_cli_process_worker.py": "3c28b08e2db2304a18ef2b84655e69c8a8a9b1e0e955e2bc20f1e598ba897d33",
+      "tools/typst-lint/tests/offline_compile_process_worker.py": "3e7db375d7610f75ec764b57e2745357edf9d067a8f7b5735ec5597a41703f34",
       "tools/typst-lint/tests/pdf_publication_process_worker.py": "13f31b412c898e0d910badd0a12cb5acafe0f5a39b27f568cb71f14c0fb7241e",
       "tools/typst-lint/tests/protected_fix_process_worker.py": "4d53941702ce40fb229ece214476903c4c1c9fb9d45e5f863aed69e904ba2e02",
       "tools/typst-lint/tests/test_adapter_artifact.py": "bbef8bf98ce51be8175d91452c293def6e32e63b2744bfa347ce5e1b7e662743",
@@ -193502,7 +193504,7 @@
       "tools/typst-lint/tests/test_closed_core_compile.py": "dd3acaddd940e72f0179d80817a79fd35a8719a8f763174490f40713128c0f56",
       "tools/typst-lint/tests/test_committed_compile_integration.py": "817c77b0390a646dc37cc4770d68e8facf3834637b31e4656ee805e515c345e5",
       "tools/typst-lint/tests/test_committed_snapshot.py": "fb13e1b2afccca3468c1a3a67dec2f2ec17b8a792cc2d4c8776ed8781813565f",
-      "tools/typst-lint/tests/test_compile_attempt_reporting.py": "3a29c261356a696168e841f9f683ca3ff0e0d7ca5aa36435489fb083c0ee2d08",
+      "tools/typst-lint/tests/test_compile_attempt_reporting.py": "603115959fccb01b114d5ebf5ba7c8619a18ef38320571086fbe3e8a46aa6aa1",
       "tools/typst-lint/tests/test_continuation_integration.py": "4974a42fbc10e9d5bb8150d785042002d3cafe09a241929cbd552edc43b27f6f",
       "tools/typst-lint/tests/test_continuation_rules.py": "d26ba7c8161b88bc71085ec1b8cc2e89241694973776b5457d13b8e794868737",
       "tools/typst-lint/tests/test_display_integration.py": "a9c6571724e14138dd5d87fb425168b543ee0e1fa65da6fb8e222b274d7b67a8",
@@ -193535,6 +193537,9 @@
       "tools/typst-lint/tests/test_new_rule_integration.py": "56a994d880cc2aab13ccc461a6d40ef3af913fbb39f54211cd7bf86daeda442f",
       "tools/typst-lint/tests/test_offline_cli.py": "56f610350e9b98fcdac46d32d38b8f6d6b2d965e025d9b8d1ed62404bcd9cfc4",
       "tools/typst-lint/tests/test_offline_cli_integration.py": "e291ebb02213a8ab3b71372da7976dceae7674236952f4278b36483099172a6f",
+      "tools/typst-lint/tests/test_offline_compile_cli.py": "7bd808691445b22c3d3ed6047a474e7a43b9ccb6ad676c2a192828eb488c564d",
+      "tools/typst-lint/tests/test_offline_compile_integration.py": "71c6028b6e611437e1e1822669c64dcceb230ce54dbdbd93e55dc1e4ea178780",
+      "tools/typst-lint/tests/test_offline_compile_signals.py": "568dd9929f256ade2758b56f56a00268ad8ea0dcbb0837f18f41f9966d7457a4",
       "tools/typst-lint/tests/test_package_loader.py": "ac85f0d048b7154e2a849c37f1e06fb881351f0a7483e9725d745dec116ce701",
       "tools/typst-lint/tests/test_paragraph_target.py": "ba6f911dcab86687db0f218e4feddece148ecdc20a9a5c291a61c4b4e631e955",
       "tools/typst-lint/tests/test_pdf_publication.py": "2bdb949c481ad6e36d0a60ebc514ca41cf18c4094931ac5264a5a1a47680bcce",
@@ -193570,16 +193575,16 @@
       "tools/typst-lint/tests/transaction_process_worker.py": "2643646f2f9d4c442dc4b8c320835e50626100c27afdc070437d37a56b14402e",
       "tools/typst-lint/theme_rules.py": "b4c701ddb2dfb2a1ae74a890662473279fc38f8e4c0f3016490edeb7661c5b16",
       "tools/typst-lint/transactions.py": "b41093d345bd53202a7e8a91a97fa6d3c0be540c2a4df4a6a111a56177fee55c",
-      "tools/typst-lint/typst-lint": "7eb22174f6f88ea4947e23698722759f80c8a93e3518194bff37082f6629e97c",
+      "tools/typst-lint/typst-lint": "f35963787fda9f1a245856919879154c348fc41945d69d5b841f64a5ba293d5c",
       "tools/typst-lint/typst-style": "85b580f715ecebb291eb4686715249349bf4080ced715d5837b7e36fc5655f31",
-      "tools/typst-lint/typst_lint.py": "0d70b753a2000205d563ae160d095a7aea5300553cc2698580193ab7b4541411"
+      "tools/typst-lint/typst_lint.py": "b8436c4d41e39799b8dac5fc4ae0ce445c0c14825f5c62f0853d291869f1c0de"
     },
-    "working_tree_sha256": "a850e6e79c992ad2a9a4be8fd893e2cc6a413174272e6e2a99829e35a292641f"
+    "working_tree_sha256": "a8d00ee74f9650da365c8122c8b23473af5cf909921abc355af79b89d754b2ec"
   },
   "revision_before": {
     "adapter_sha256": "0cad7e5b07bfe7fb96c089d02671f063aa992ac946a03bd25d5dd2063631cae8",
     "branch": "feat/typst-lint",
-    "commit": "50110d0c47e9cf83f91172edf0831fcc2afa0a84",
+    "commit": "37f8c54524647022ceefac37a69f06cbae007154",
     "files": {
       "local/cetz-helpers/0.1.0/lib.typ": "94ebe31ac523c3bafa6827b83abaef3412c749f042b181f9fa4f634c8f061f3b",
       "local/cetz-helpers/0.1.0/typst.toml": "3de4c5311119c6c465c337e1850065a4b3840e7e8b12462f0cbd719a637c5792",
@@ -193618,7 +193623,7 @@
       "openspec/changes/typst-style-linter/specs/typst-lint-autofix/spec.md": "f014b980e9a1bce73619bc8ce39aa3e17f74b8e7ab99835cdcfd772e97bd1483",
       "openspec/changes/typst-style-linter/specs/typst-lint-configuration/spec.md": "08fe436fb2e26f010b134193cdcdf0a2757d3ec5592277a9af51f1aaf74e6d8c",
       "openspec/changes/typst-style-linter/specs/typst-pde-style/spec.md": "eadd50ca4d105d4a3b9c711cfa119085e39f07e53e3d068ba5f4094da93a77d0",
-      "openspec/changes/typst-style-linter/tasks.md": "059b72b7e2cb7ee74f2f561a28d708c469090c0d394deec047fea076bff11b42",
+      "openspec/changes/typst-style-linter/tasks.md": "671d3e9585aea45d7b5d222ee7518da16132d9232179c9b2db404c3482ece0e0",
       "tools/typst-lint/anchor_overlay_rules.py": "ccdcd4ad70b7e9af2fc6e5ee9380aa005d66cf4e7223a764e5160cbbd49869df",
       "tools/typst-lint/audit/fixtures.json": "1e871d5bdee6e79dd7cefdb32fd46c378ea90116025a208994d3d64ef8975a1b",
       "tools/typst-lint/audit_rules.py": "3e44f3b3e22ae769d5815fdc31fbd66cf2568c0083579ed45dc7954d407bb57c",
@@ -193628,7 +193633,7 @@
       "tools/typst-lint/candidate_convergence.py": "5cf35337c0a1eaef90f5e9be7d9c0f811aa48ca5a20362567be9b678986f0989",
       "tools/typst-lint/capitalization.py": "133300240578238184d71109720f3889e96c95dd67ab5044d5c4e1a814fb5f2f",
       "tools/typst-lint/closed_core.py": "1d2901587a2a70b797f4e6b6f269ef7c53a1aa184b2dee99b04a9aa82d4bf08f",
-      "tools/typst-lint/closed_core_compile.py": "8fb9562e37a0b9aaf5edaecc2a96c201a03d7607d0ad0bc9cea901013d823564",
+      "tools/typst-lint/closed_core_compile.py": "8b7e153981677f505991c9aefc6eb583be917b33ea0e772956e0f971993e8e10",
       "tools/typst-lint/closed_core_publish.py": "05fed5295b833c0283ee8e99b9feeb706e4bd46b03a33ccbf2398b53ff87b560",
       "tools/typst-lint/continuation_rules.py": "b43f24fd6a966a1b0636b904a8d62d11ff40005ed5932478fc776293aa3c4861",
       "tools/typst-lint/convergence_evidence.py": "e246af243bde2d4c8a29346da11d45d89af95d7589245a72949e52228ea52562",
@@ -193643,7 +193648,8 @@
       "tools/typst-lint/import_rules.py": "8df7c70d01e72210aa0cdc17ef0cdeb506eedb473e9d210fd00b2903cad6d328",
       "tools/typst-lint/markdown_scripts.py": "57cc8d55350ab9dac800fbd3c18512afd62bd5eefacf83e2d7695e48081fc138",
       "tools/typst-lint/marker_bounds_rules.py": "b928474d74d91e8d4d86b4e16799c9d38e5fbb1bca288fb50415951dc2ce8015",
-      "tools/typst-lint/offline_cli.py": "fb757cf2ed61f99ea6b031b846275423122099ffef383d0ab6b013c7ae0bd819",
+      "tools/typst-lint/offline_cli.py": "d3244270a1ffcd883add3819b1c90111bdee6ef2e187a68dbf11bca32ed1a5e0",
+      "tools/typst-lint/offline_compile_cli.py": "ead2de53a826d043a1cc8d4bd7ea5f4dc34b2b7fcdf8e5bc3f3d3e7cdbd064f7",
       "tools/typst-lint/package_artifacts.py": "9939e8de013b2badb256863bb02a3014702d51fab0f97f0fc2696a89dc2b3669",
       "tools/typst-lint/package_loader.py": "160d97ce16e1a1318615b1d24753fb763ed1e6f99fc83ad57f98a1e066a55983",
       "tools/typst-lint/paragraph_rules.py": "ffbcb9803c7cf392aa5c32264417bf934dbdd1f17176fe450e33dcad8c6edb81",
@@ -193691,6 +193697,7 @@
       "tools/typst-lint/tests/fixtures/scoped-reference-packages/preview/mannot/0.4.0/src/lib.typ": "288027cea059b327bf3253c44ae975339e7afc0f149375d9d87ca1c1fe739f57",
       "tools/typst-lint/tests/fixtures/scoped-reference-packages/preview/mannot/0.4.0/typst.toml": "aef4310b36955dc98d8b03ec4abf17d45777d0a08b65d6e67214752e57647545",
       "tools/typst-lint/tests/offline_cli_process_worker.py": "3c28b08e2db2304a18ef2b84655e69c8a8a9b1e0e955e2bc20f1e598ba897d33",
+      "tools/typst-lint/tests/offline_compile_process_worker.py": "3e7db375d7610f75ec764b57e2745357edf9d067a8f7b5735ec5597a41703f34",
       "tools/typst-lint/tests/pdf_publication_process_worker.py": "13f31b412c898e0d910badd0a12cb5acafe0f5a39b27f568cb71f14c0fb7241e",
       "tools/typst-lint/tests/protected_fix_process_worker.py": "4d53941702ce40fb229ece214476903c4c1c9fb9d45e5f863aed69e904ba2e02",
       "tools/typst-lint/tests/test_adapter_artifact.py": "bbef8bf98ce51be8175d91452c293def6e32e63b2744bfa347ce5e1b7e662743",
@@ -193710,7 +193717,7 @@
       "tools/typst-lint/tests/test_closed_core_compile.py": "dd3acaddd940e72f0179d80817a79fd35a8719a8f763174490f40713128c0f56",
       "tools/typst-lint/tests/test_committed_compile_integration.py": "817c77b0390a646dc37cc4770d68e8facf3834637b31e4656ee805e515c345e5",
       "tools/typst-lint/tests/test_committed_snapshot.py": "fb13e1b2afccca3468c1a3a67dec2f2ec17b8a792cc2d4c8776ed8781813565f",
-      "tools/typst-lint/tests/test_compile_attempt_reporting.py": "3a29c261356a696168e841f9f683ca3ff0e0d7ca5aa36435489fb083c0ee2d08",
+      "tools/typst-lint/tests/test_compile_attempt_reporting.py": "603115959fccb01b114d5ebf5ba7c8619a18ef38320571086fbe3e8a46aa6aa1",
       "tools/typst-lint/tests/test_continuation_integration.py": "4974a42fbc10e9d5bb8150d785042002d3cafe09a241929cbd552edc43b27f6f",
       "tools/typst-lint/tests/test_continuation_rules.py": "d26ba7c8161b88bc71085ec1b8cc2e89241694973776b5457d13b8e794868737",
       "tools/typst-lint/tests/test_display_integration.py": "a9c6571724e14138dd5d87fb425168b543ee0e1fa65da6fb8e222b274d7b67a8",
@@ -193743,6 +193750,9 @@
       "tools/typst-lint/tests/test_new_rule_integration.py": "56a994d880cc2aab13ccc461a6d40ef3af913fbb39f54211cd7bf86daeda442f",
       "tools/typst-lint/tests/test_offline_cli.py": "56f610350e9b98fcdac46d32d38b8f6d6b2d965e025d9b8d1ed62404bcd9cfc4",
       "tools/typst-lint/tests/test_offline_cli_integration.py": "e291ebb02213a8ab3b71372da7976dceae7674236952f4278b36483099172a6f",
+      "tools/typst-lint/tests/test_offline_compile_cli.py": "7bd808691445b22c3d3ed6047a474e7a43b9ccb6ad676c2a192828eb488c564d",
+      "tools/typst-lint/tests/test_offline_compile_integration.py": "71c6028b6e611437e1e1822669c64dcceb230ce54dbdbd93e55dc1e4ea178780",
+      "tools/typst-lint/tests/test_offline_compile_signals.py": "568dd9929f256ade2758b56f56a00268ad8ea0dcbb0837f18f41f9966d7457a4",
       "tools/typst-lint/tests/test_package_loader.py": "ac85f0d048b7154e2a849c37f1e06fb881351f0a7483e9725d745dec116ce701",
       "tools/typst-lint/tests/test_paragraph_target.py": "ba6f911dcab86687db0f218e4feddece148ecdc20a9a5c291a61c4b4e631e955",
       "tools/typst-lint/tests/test_pdf_publication.py": "2bdb949c481ad6e36d0a60ebc514ca41cf18c4094931ac5264a5a1a47680bcce",
@@ -193778,11 +193788,11 @@
       "tools/typst-lint/tests/transaction_process_worker.py": "2643646f2f9d4c442dc4b8c320835e50626100c27afdc070437d37a56b14402e",
       "tools/typst-lint/theme_rules.py": "b4c701ddb2dfb2a1ae74a890662473279fc38f8e4c0f3016490edeb7661c5b16",
       "tools/typst-lint/transactions.py": "b41093d345bd53202a7e8a91a97fa6d3c0be540c2a4df4a6a111a56177fee55c",
-      "tools/typst-lint/typst-lint": "7eb22174f6f88ea4947e23698722759f80c8a93e3518194bff37082f6629e97c",
+      "tools/typst-lint/typst-lint": "f35963787fda9f1a245856919879154c348fc41945d69d5b841f64a5ba293d5c",
       "tools/typst-lint/typst-style": "85b580f715ecebb291eb4686715249349bf4080ced715d5837b7e36fc5655f31",
-      "tools/typst-lint/typst_lint.py": "0d70b753a2000205d563ae160d095a7aea5300553cc2698580193ab7b4541411"
+      "tools/typst-lint/typst_lint.py": "b8436c4d41e39799b8dac5fc4ae0ce445c0c14825f5c62f0853d291869f1c0de"
     },
-    "working_tree_sha256": "a850e6e79c992ad2a9a4be8fd893e2cc6a413174272e6e2a99829e35a292641f"
+    "working_tree_sha256": "a8d00ee74f9650da365c8122c8b23473af5cf909921abc355af79b89d754b2ec"
   },
   "revision_stable": true,
   "rules": [

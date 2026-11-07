@@ -2,9 +2,9 @@
 
 **This is an incomplete implementation, not 33 passing rules.**
 
-- Tested commit: `50110d0c47e9cf83f91172edf0831fcc2afa0a84`.
-- Working-tree content fingerprint: `a850e6e79c992ad2a9a4be8fd893e2cc6a413174272e6e2a99829e35a292641f` (exact file hashes in the JSON).
-- Generated: 2026-11-07T12:00:21.198155+00:00.
+- Tested commit: `37f8c54524647022ceefac37a69f06cbae007154`.
+- Working-tree content fingerprint: `a8d00ee74f9650da365c8122c8b23473af5cf909921abc355af79b89d754b2ec` (exact file hashes in the JSON).
+- Generated: 2026-11-07T12:30:30.299171+00:00.
 - Rule status: {'PARTIAL': 33}. No rule is classified COMPLETE.
 - 232 fixture executions; 297 real CLI invocations including isolated candidate reanalysis and mode probes.
 - Observation counts: {'OBSERVED_SUBSET': 39, 'PARTIAL_CASE': 186, 'EXPECTED_PARSE_REFUSAL': 3, 'EXPECTED_INPUT_REFUSAL': 4}.
