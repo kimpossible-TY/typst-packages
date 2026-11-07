@@ -2,7 +2,7 @@
 
 `typst-lint inspect-document --root /absolute/project --entrypoint main.typ`
 provides an explicit literal-include inventory, syntax-local math-script
-proposals and source display-gap diagnostics. `--format json` returns schema 1;
+proposals and source display-layout diagnostics. `--format json` returns schema 1;
 the default text format prints
 findings with their source paths, lines and columns.
 
@@ -22,7 +22,8 @@ command does not use its proposals.
 
 The default `--rule-set core` inspects each unique captured source once for
 `core.parenthesized-scripts`. Explicit `--rule-set pde` also enables
-`pde.display-continuation-gap`; `rule_set` and `coverage.available_backends`
+`pde.standalone-display` and `pde.display-continuation-gap`;
+`rule_set` and `coverage.available_backends`
 record that selection. Inline suppression directives are honored for both rules.
 Consumer configuration is deliberately not loaded, so its include/exclude and
 path-ignore settings do not select or suppress this explicit document inventory.
@@ -41,9 +42,9 @@ JSON includes:
   for that source. Candidates require a successful reparse and a second script
   analysis with no findings, edits, unsupported operands or suppression loss.
   `candidate_verification_rules` explicitly limits that check to the script
-  rule. The display-gap row is always diagnostic-only with no candidate hash.
+  rule. Both display-layout rows are diagnostic-only with no candidate hash.
 - `coverage.enabled` and `coverage.uninspected` list the selected pack's rules
-  and those not inspected by this command (14/15 core or 31/33 PDE).
+  and those not inspected by this command (14/15 core or 30/33 PDE).
 - `coverage.global_complete=false`: other rules, imports, execution context,
   resources, source transactions and compiler snapshots remain unresolved.
 
@@ -54,7 +55,7 @@ an inventory. A successfully produced incomplete report returns status 2, even
 when it contains zero findings. It grants no source-application or compilation
 authority.
 
-## Display-gap source inspection
+## Display-layout source inspection
 
 A typed standalone display and following literal Text must be direct siblings
 in the same Markup body. Only Space/Parbreak siblings may separate them, and
@@ -70,11 +71,32 @@ package identity, ordinary rendered-prose proof or repair authorization. The
 diagnostic and suppression anchor is the display's opening delimiter; a
 directive on later prose does not suppress the preceding display gap.
 
-The PDE snapshot produces 63 findings and retains 565 unsupported display
-contexts explicitly. Normalizing only the 63 matched gaps in a private copy
-produced a byte-identical 302-page PDF; the second gap analysis had zero findings
-and the same mapped unsupported contexts. These exploratory copy edits are not
-returned by the public command. See `audit/document-display-evidence.json`.
+The earlier PDE gap snapshot produced 63 findings and retained 565 unsupported
+contexts. Narrowing prose admission leaves all 63 findings and adds one explicit
+punctuation refusal (566 total). Standalone inspection separately finds seven
+displays and retains 306 unsupported contexts. Normalizing the seven matched
+standalone displays in a private copy preserved every original equation and
+label byte, literal Text ownership and the complete 302-page PDF. These
+exploratory copy edits are not returned by the public command. See
+`audit/document-layout-evidence.json` and the earlier gap evidence in
+`audit/document-display-evidence.json`.
+In the same private copy, a second gap-normalization phase removes the 63 gap
+findings after standalone normalization. Both known source-layout findings then
+reach zero, while the script findings remain explicit; the complete 302-page
+PDF is byte-identical to the original snapshot. This remains a characterization
+of owned copies, not public edit output or source-application authority.
+
+`pde.standalone-display` reports one finding per typed display when direct
+literal prose shares its opening or closing source line, including after its
+attached semantic label. A finding on either proven side is sufficient; an
+unknown construct on another side remains an explicit coverage refusal. Text
+must contain at least one Unicode letter. Punctuation-only and numeric-only
+Text cannot establish ordinary source prose, for either display rule. In
+particular, a label's following period does not become a standalone violation.
+
+`document_display.analyze` retains the GAP-only API, including explicit catalogs
+that contain only that rule. `analyze_all` returns separate immutable results
+for both source-display rules using one shared scan.
 
 The backend returns no edits. Explicit temporary render characterization covers
 LF/CRLF, light/dark, the genuine paragraph show and scoped PDE wrappers; it does

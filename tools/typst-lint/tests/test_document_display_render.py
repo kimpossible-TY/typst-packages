@@ -1,4 +1,4 @@
-"""Opt-in native observation of one owned, nested display-gap fixture.
+"""Opt-in native observations of owned, nested display-source fixtures.
 
 The diagnostic backend grants no edit authority. The explicitly spelled-out
 comparison fixture below is an experiment, not a general layout-equivalence
@@ -16,7 +16,7 @@ import xml.etree.ElementTree as ET
 TOOL = Path(__file__).resolve().parents[1]
 REPO = TOOL.parents[1]
 sys.path.insert(0, str(TOOL))
-from document_display import RULE_ID, analyze
+from document_display import RULE_ID, STANDALONE, analyze, analyze_all
 from static_resolver import TEXT_UTILS_SOURCE_SHA256
 from syntax_client import EXECUTABLE, parse
 from typst_lint import digest
@@ -61,6 +61,30 @@ AFTER = b'''#import "@local/text-utils:0.1.2": paragraph_tab
     x^(2) = 1
   $ <energy>
   Hence this consequence follows.
+
+  #paragraph_tab
+  New idea remains marked.
+])
+'''
+
+STANDALONE_BEFORE = b'''#import "@local/text-utils:0.1.2": paragraph_tab
+#let scope(body) = body((:))
+// This unrelated source comment must survive the experiment.
+#scope(s => [
+  Thus $ x^(2)=1 $ <energy> and the claim follows.
+
+  #paragraph_tab
+  New idea remains marked.
+])
+'''
+
+STANDALONE_AFTER = b'''#import "@local/text-utils:0.1.2": paragraph_tab
+#let scope(body) = body((:))
+// This unrelated source comment must survive the experiment.
+#scope(s => [
+  Thus
+  $ x^(2)=1 $ <energy>
+  and the claim follows.
 
   #paragraph_tab
   New idea remains marked.
@@ -174,6 +198,57 @@ class DocumentDisplayRenderTests(unittest.TestCase):
                         marked = original[words.index('New')][1]
                         self.assertAlmostEqual(float(hence['xMin']), 30.0, delta=0.01)
                         self.assertAlmostEqual(float(marked['xMin']) - float(hence['xMin']),
+                                               18.0, delta=0.01)
+
+    def test_nested_inline_labeled_display_observation_preserves_fixture_layout_and_indent(self):
+        for newline, label in ((b'\n', 'lf'), (b'\r\n', 'crlf')):
+            with self.subTest(newline=label):
+                main = MAIN.replace(b'\n', newline)
+                before = STANDALONE_BEFORE.replace(b'\n', newline)
+                after = STANDALONE_AFTER.replace(b'\n', newline)
+                inline = b'  Thus $ x^(2)=1 $ <energy> and the claim follows.'
+                separate = newline.join((b'  Thus', b'  $ x^(2)=1 $ <energy>',
+                                         b'  and the claim follows.'))
+                # The independently written comparison fixture changes only
+                # these two word separators in our own temporary child source.
+                self.assertEqual(before.count(inline), 1)
+                prefix, suffix = before.split(inline)
+                self.assertEqual(after, prefix + separate + suffix)
+
+                tree = parse(before)
+                self.assertFalse(tree.nodes[0].errors)
+                self.assertEqual(sum(node.kind == 'Equation' and node.display
+                                     for node in tree.nodes), 1)
+                self.assertEqual(sum(node.kind == 'Label' for node in tree.nodes), 1)
+                results = analyze_all(tree, 'child.typ')
+                self.assertEqual(set(results), {STANDALONE, RULE_ID})
+                finding, = results[STANDALONE].diagnostics
+                self.assertEqual(finding.rule_id, STANDALONE)
+                self.assertFalse(results[RULE_ID].diagnostics)
+                for result in results.values():
+                    self.assertEqual(result.edits, ())
+                    self.assertFalse(result.parse_errors or result.skips or result.suppressed)
+
+                # This is a fresh parse of fixed fixture bytes, with no edit
+                # proposal, candidate, or claimed repair proof from the backend.
+                for result in analyze_all(parse(after), 'child.typ').values():
+                    self.assertFalse(result.diagnostics or result.edits or result.parse_errors
+                                     or result.skips or result.suppressed)
+
+                for theme in ('light', 'dark'):
+                    with self.subTest(theme=theme):
+                        original = self.render(f'standalone-{label}-{theme}-before',
+                                               theme, main, before)
+                        compared = self.render(f'standalone-{label}-{theme}-after',
+                                               theme, main, after)
+                        self.assertEqual(original, compared)
+                        words = [word for word, _ in original]
+                        for word in ('Main', 'Thus', 'and', 'claim', 'follows.', 'New', 'marked.'):
+                            self.assertIn(word, words)
+                        continuation = original[words.index('and')][1]
+                        marked = original[words.index('New')][1]
+                        self.assertAlmostEqual(float(continuation['xMin']), 30.0, delta=0.01)
+                        self.assertAlmostEqual(float(marked['xMin']) - float(continuation['xMin']),
                                                18.0, delta=0.01)
 
 

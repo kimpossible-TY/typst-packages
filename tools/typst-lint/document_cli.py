@@ -1,6 +1,6 @@
 """Read-only literal-include inventory and source-style checks for one document.
 
-Math scripts have verified in-memory proposals; display continuation gaps
+Math scripts have verified in-memory proposals; display source layout rules
 have source-level diagnostics. Neither grants source or compilation authority.
 """
 from __future__ import annotations
@@ -12,7 +12,8 @@ import os
 import sys
 
 from edit_plan import plan
-from document_display import RULE_ID as DISPLAY_GAP, analyze as analyze_display_source
+from document_display import (RULE_ID as DISPLAY_GAP, STANDALONE,
+                              analyze_all as analyze_display_source)
 import include_context
 from package_loader import PackageInputError, _absolute_root, read_snapshot_file
 from script_rule import RULE_ID, analyze
@@ -49,7 +50,7 @@ def report_document(root, entrypoint, *, rule_set='core'):
     catalog, catalog_hash = load_rules()
     enabled = [rule['id'] for rule in catalog['rules']
                if rule['id'].split('.')[0] in catalog['packs'][rule_set]]
-    backends = [RULE_ID, DISPLAY_GAP] if rule_set == 'pde' else [RULE_ID]
+    backends = [RULE_ID, STANDALONE, DISPLAY_GAP] if rule_set == 'pde' else [RULE_ID]
     findings, proposed, suppressed, files = [], [], [], []
     items = len(captured.sources) + len(captured.edges) + len(captured.occurrences) + len(captured.unresolved)
     for item in captured.sources:
@@ -67,7 +68,8 @@ def report_document(root, entrypoint, *, rule_set='core'):
         items += (len(result.diagnostics) + len(result.edits) + len(result.suppressed)
                   + len(result.skips))
         if displays is not None:
-            items += len(displays.diagnostics) + len(displays.suppressed) + len(displays.skips)
+            items += sum(len(value.diagnostics) + len(value.suppressed) + len(value.skips)
+                         for value in displays.values())
         require(items <= MAX_REPORT_ITEMS, 'Document inspection report item limit exceeded')
         reasons = list(result.skips)
         if result.skips and result.edits:
@@ -89,8 +91,9 @@ def report_document(root, entrypoint, *, rule_set='core'):
         findings.extend(asdict(finding) for finding in result.diagnostics)
         suppressed.extend(asdict(finding) for finding in result.suppressed)
         if displays is not None:
-            findings.extend(asdict(finding) for finding in displays.diagnostics)
-            suppressed.extend(asdict(finding) for finding in displays.suppressed)
+            for value in displays.values():
+                findings.extend(asdict(finding) for finding in value.diagnostics)
+                suppressed.extend(asdict(finding) for finding in value.suppressed)
         proposed.extend(dict(path=item.path, start=edit.start, end=edit.end,
                              replacement=edit.replacement.decode('utf-8'), rule_id=RULE_ID,
                              baseline_sha256=item.identity.source_sha256)
@@ -106,13 +109,14 @@ def report_document(root, entrypoint, *, rule_set='core'):
             candidate_verification='parse-and-rule-idempotence-checked' if verified else 'no-candidate',
             candidate_verification_rules=[RULE_ID] if verified else []))
         if displays is not None:
-            files.append(dict(path=item.path, source_sha256=item.identity.source_sha256,
-                tree_sha256=item.identity.tree_sha256, bytes=len(item.source), nodes=len(item.tree.nodes),
-                rule_id=DISPLAY_GAP, status='partial' if displays.skips else 'evaluated',
-                analysis_scope='literal-markup-source-pattern', reasons=list(displays.skips),
-                diagnostics=len(displays.diagnostics), suppressed=len(displays.suppressed),
-                proposed_edits=0, candidate_sha256=None,
-                candidate_verification='diagnostic-only', candidate_verification_rules=[]))
+            for rid, value in displays.items():
+                files.append(dict(path=item.path, source_sha256=item.identity.source_sha256,
+                    tree_sha256=item.identity.tree_sha256, bytes=len(item.source), nodes=len(item.tree.nodes),
+                    rule_id=rid, status='partial' if value.skips else 'evaluated',
+                    analysis_scope='literal-markup-source-pattern', reasons=list(value.skips),
+                    diagnostics=len(value.diagnostics), suppressed=len(value.suppressed),
+                    proposed_edits=0, candidate_sha256=None,
+                    candidate_verification='diagnostic-only', candidate_verification_rules=[]))
     findings.sort(key=lambda row: (row['path'], row['line'], row['column'], row['rule_id']))
     suppressed.sort(key=lambda row: (row['path'], row['line'], row['column'], row['rule_id']))
     edges = []
@@ -139,7 +143,7 @@ def report_document(root, entrypoint, *, rule_set='core'):
             unresolved_obligations=['other-style-rules', 'import-and-package-resolution',
                 'include-runtime-execution', 'render-context-and-resources',
                 'protected-source-transaction', 'compiler-snapshot']),
-        blockers=[('Only math scripts and source display-continuation gaps are inspected; full rule coverage is incomplete'
+        blockers=[('Only math scripts and source display layout are inspected; full rule coverage is incomplete'
                    if rule_set == 'pde' else
                    'Only core.parenthesized-scripts is inspected; full document rule coverage is incomplete'),
                   'Literal include reachability does not establish runtime execution or imported dependencies',
@@ -154,7 +158,7 @@ def main(arguments=None):
     parser.add_argument('--root', required=True, help='Canonical absolute consumer root')
     parser.add_argument('--entrypoint', required=True, help='Canonical project-relative .typ entrypoint')
     parser.add_argument('--rule-set', choices=('core', 'pde'), default='core',
-                        help='Explicit source checks: core (scripts) or pde (also display gaps); default core')
+                        help='Explicit source checks: core (scripts) or pde (also display layout); default core')
     parser.add_argument('--format', choices=('json', 'text'), default='text')
     args = parser.parse_args(sys.argv[1:] if arguments is None else arguments)
     try:

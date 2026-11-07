@@ -1,9 +1,9 @@
-"""Diagnostic-only display gaps in direct, possibly nested markup bodies.
+"""Diagnostic-only display source style in direct, possibly nested markup bodies.
 
 These are source-style observations, independent of whether an enclosing call
 or closure executes. No helper binding, rendering context or repair is proved.
 """
-from display_rules import (CONTINUATION_GAP as RULE_ID, DisplayResult,
+from display_rules import (CONTINUATION_GAP as RULE_ID, STANDALONE, DisplayResult,
                            _diagnostic, _horizontal, _line_prefix, _line_suffix)
 from suppression import resolve as resolve_suppressions
 from typst_lint import load_rules
@@ -13,15 +13,29 @@ _EXCLUDED_ANCESTORS = frozenset(('Equation', 'Math', 'Code', 'CodeBlock',
     'Heading', 'ListItem', 'EnumItem', 'TermItem', 'Raw', 'Str'))
 _STRUCTURAL = frozenset(('Heading', 'ListItem', 'EnumItem', 'TermItem',
                          'Raw', 'Linebreak'))
+RULE_IDS = (STANDALONE, RULE_ID)
+_BOM = b'\xef\xbb\xbf'
 
 
 def analyze(tree, path, *, catalog=None):
-    """Inspect immediate source siblings only; return no edits or candidates."""
+    """Return the existing gap-only result, including with a gap-only catalog."""
+    return _analyze(tree, path, catalog=catalog, rule_ids=(RULE_ID,))[RULE_ID]
+
+
+def analyze_all(tree, path, *, catalog=None):
+    """Inspect both source rules in one scan; return no edits or candidates."""
+    return _analyze(tree, path, catalog=catalog, rule_ids=RULE_IDS)
+
+
+def _analyze(tree, path, *, catalog, rule_ids):
     source, nodes = tree.source, tree.nodes
     if nodes[0].errors:
         errors = tuple((node.start, node.end) for node in nodes if node.kind == 'Error')
-        return DisplayResult(skips=('Malformed Typst syntax; no source-gap diagnosis',),
-                             parse_errors=errors or ((0, len(source)),))
+        return {rid: DisplayResult(
+                    skips=(('Malformed Typst syntax; no source-gap diagnosis' if rid == RULE_ID
+                            else 'Malformed Typst syntax; no source-standalone diagnosis'),),
+                    parse_errors=errors or ((0, len(source)),))
+                for rid in rule_ids}
     catalog = load_rules()[0]['rules'] if catalog is None else catalog
     rules = {rule['id']: rule for rule in catalog}
     scopes = resolve_suppressions(tree, set(rules))
@@ -33,16 +47,43 @@ def analyze(tree, path, *, catalog=None):
         parent = parents.get(index)
         excluded[index] = (parent is not None and
             (excluded[parent] or nodes[parent].kind in _EXCLUDED_ANCESTORS))
-    findings, suppressed, skips = [], [], []
+    findings = {rid: [] for rid in rule_ids}
+    suppressed = {rid: [] for rid in rule_ids}
+    skips = {rid: [] for rid in rule_ids}
 
-    def skip(equation, reason):
-        skips.append(f'{reason} at byte {equation.start}')
+    def skip(rid, equation, reason):
+        skips[rid].append(f'{reason} at byte {equation.start}')
 
-    def following(siblings, position):
-        position += 1
-        while position < len(siblings) and nodes[siblings[position]].kind in _WHITESPACE:
-            position += 1
-        return position if position < len(siblings) else None
+    def neighbor(siblings, position, direction):
+        position += direction
+        while 0 <= position < len(siblings) and nodes[siblings[position]].kind in _WHITESPACE:
+            position += direction
+        return position if 0 <= position < len(siblings) else None
+
+    def literal_prose(index):
+        node = nodes[index]
+        if node.kind != 'Text':
+            return False
+        raw = source[node.start:node.end]
+        if node.start == 0 and raw.startswith(_BOM):
+            raw = raw[len(_BOM):]
+        text = raw.decode('utf-8')
+        # A punctuation-only Text (for example a period after an attached
+        # equation label) does not establish adjacent prose for this rule.
+        return (bool(text) and not text[0].isspace() and not text[-1].isspace()
+                and any(character.isalpha() for character in text))
+
+    def unknown_neighbor(index):
+        node = nodes[index]
+        return not (node.kind in _STRUCTURAL or (node.kind == 'Equation' and node.display)
+                    or literal_prose(index))
+
+    def add(rid, equation, explanation):
+        finding = _diagnostic(source, path, rules[rid], equation.start, explanation)
+        if any(scope.covers(rid, equation.start) for scope in scopes):
+            suppressed[rid].append(finding)
+        else:
+            findings[rid].append(finding)
 
     for index, equation in enumerate(nodes):
         if equation.kind != 'Equation' or not equation.display:
@@ -50,50 +91,84 @@ def analyze(tree, path, *, catalog=None):
         parent = parents.get(index)
         if (tree.mode != 'markup' or parent is None or nodes[parent].kind != 'Markup'
                 or excluded[index]):
-            skip(equation, 'Display is outside an ordinary source Markup body')
+            for rid in rule_ids:
+                skip(rid, equation, 'Display is outside an ordinary source Markup body')
             continue
         siblings = nodes[parent].children
-        after_position = following(siblings, positions[index])
-        if after_position is None:
-            continue
+        after_position = neighbor(siblings, positions[index], 1)
         end = equation.end
-        after = nodes[siblings[after_position]]
-        if after.kind == 'Label':
+        if after_position is not None and nodes[siblings[after_position]].kind == 'Label':
+            after = nodes[siblings[after_position]]
             if not _horizontal(source[end:after.start]):
-                skip(equation, 'Semantic label is not attached on the display closing line')
+                for rid in rule_ids:
+                    skip(rid, equation, 'Semantic label is not attached on the display closing line')
                 continue
             end = after.end
-            after_position = following(siblings, after_position)
-            if after_position is None:
+            after_position = neighbor(siblings, after_position, 1)
+            if after_position is not None and nodes[siblings[after_position]].kind == 'Label':
+                for rid in rule_ids:
+                    skip(rid, equation, 'Multiple semantic labels have unresolved display ownership')
                 continue
-            after = nodes[siblings[after_position]]
-            if after.kind == 'Label':
-                skip(equation, 'Multiple semantic labels have unresolved display ownership')
-                continue
+
+        if STANDALONE in rule_ids:
+            violation = False
+            before_position = neighbor(siblings, positions[index], -1)
+            if before_position is not None:
+                before_id = siblings[before_position]
+                before = nodes[before_id]
+                separator = source[before.end:equation.start]
+                if _horizontal(separator):
+                    if literal_prose(before_id):
+                        violation = True
+                    elif (_line_prefix(source, equation.start).strip(b' \t')
+                          and unknown_neighbor(before_id)):
+                        skip(STANDALONE, equation,
+                             'Preceding inline construct/comment is not direct literal prose; no boundary crossed')
+                elif b'\n' not in separator:
+                    skip(STANDALONE, equation, 'Display separator contains unsupported whitespace or bare CR')
+            if after_position is not None:
+                after_id = siblings[after_position]
+                after = nodes[after_id]
+                separator = source[end:after.start]
+                if _horizontal(separator):
+                    if literal_prose(after_id):
+                        violation = True
+                    elif unknown_neighbor(after_id):
+                        skip(STANDALONE, equation,
+                             'Following inline construct/comment is not direct literal prose; no boundary crossed')
+                elif b'\n' not in separator:
+                    skip(STANDALONE, equation, 'Display separator contains unsupported whitespace or bare CR')
+            if violation:
+                add(STANDALONE, equation,
+                    'Place display delimiters on source lines separate from adjacent prose.')
+
+        if RULE_ID not in rule_ids or after_position is None:
+            continue
+        after = nodes[siblings[after_position]]
         gap = source[end:after.start]
         if after.kind in _STRUCTURAL or (after.kind == 'Equation' and after.display):
             continue
         if after.kind != 'Text':
-            skip(equation, 'Following construct is not direct literal unmarked prose; no boundary crossed')
+            skip(RULE_ID, equation, 'Following construct is not direct literal unmarked prose; no boundary crossed')
             continue
         literal = source[after.start:after.end].decode('utf-8')
         if not literal or literal[0].isspace() or literal[-1].isspace():
-            skip(equation, 'Following Text does not have a direct literal prose start')
+            skip(RULE_ID, equation, 'Following Text does not have a direct literal prose start')
+            continue
+        if not any(character.isalpha() for character in literal):
+            skip(RULE_ID, equation, 'Following Text contains no Unicode letter; prose continuation is unresolved')
             continue
         if gap.strip(b' \t\r\n') or b'\r' in gap.replace(b'\r\n', b''):
-            skip(equation, 'Display gap contains unsupported whitespace or bare CR')
+            skip(RULE_ID, equation, 'Display gap contains unsupported whitespace or bare CR')
             continue
         if gap.count(b'\n') < 2:
             continue
         if (_line_prefix(source, equation.start).strip(b' \t')
                 or _line_suffix(source, end).strip(b' \t\r')):
-            skip(equation, 'Display delimiters are not already on standalone source lines')
+            skip(RULE_ID, equation, 'Display delimiters are not already on standalone source lines')
             continue
-        finding = _diagnostic(source, path, rules[RULE_ID], equation.start,
+        add(RULE_ID, equation,
             'Use one source newline between a standalone display and its unmarked prose continuation.')
-        if any(scope.covers(RULE_ID, equation.start) for scope in scopes):
-            suppressed.append(finding)
-        else:
-            findings.append(finding)
-    return DisplayResult(diagnostics=tuple(findings), suppressed=tuple(suppressed),
-                         skips=tuple(dict.fromkeys(skips)))
+    return {rid: DisplayResult(diagnostics=tuple(findings[rid]), suppressed=tuple(suppressed[rid]),
+                               skips=tuple(dict.fromkeys(skips[rid])))
+            for rid in rule_ids}

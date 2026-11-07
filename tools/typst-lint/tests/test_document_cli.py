@@ -235,7 +235,7 @@ class DocumentCliTests(unittest.TestCase):
         result = self.run_cli('--rule-set', 'pde')
         self.assertEqual(result['rule_set'], 'pde')
         self.assertEqual(len(result['coverage']['enabled']), 33)
-        self.assertEqual(len(result['coverage']['uninspected']), 31)
+        self.assertEqual(len(result['coverage']['uninspected']), 30)
         self.assertEqual([row['rule_id'] for row in result['diagnostics']].count(
             'core.parenthesized-scripts'), 1)
         self.assertEqual([row['rule_id'] for row in result['diagnostics']].count(
@@ -267,6 +267,24 @@ class DocumentCliTests(unittest.TestCase):
         self.assertEqual(result['suppressed_count'], 1)
         self.assertEqual(result['suppressed'][0]['rule_id'], 'pde.display-continuation-gap')
         self.assertFalse(result['coverage']['global_complete'])
+
+    def test_nested_standalone_display_is_diagnostic_only(self):
+        source = (b'#local-scope-annotations(s => [\n'
+                  b'  Thus $ x^i = 1 $ <identity> and the claim follows.\n])\n')
+        target = self.write('main.typ', source)
+        result = self.run_cli('--rule-set', 'pde')
+        self.assertEqual({d['rule_id'] for d in result['diagnostics']},
+                         {'core.parenthesized-scripts', 'pde.standalone-display'})
+        standalone, = [d for d in result['diagnostics'] if d['rule_id'] == 'pde.standalone-display']
+        self.assertEqual(standalone['line'], 2)
+        self.assertEqual(len(result['proposed_edits']), 2)
+        self.assertTrue(all(e['rule_id'] == 'core.parenthesized-scripts' for e in result['proposed_edits']))
+        coverage = next(row for row in result['coverage']['files']
+                        if row['rule_id'] == 'pde.standalone-display')
+        self.assertEqual(coverage['diagnostics'], 1)
+        self.assertEqual(coverage['proposed_edits'], 0)
+        self.assertIsNone(coverage['candidate_sha256'])
+        self.assertEqual(target.read_bytes(), source)
 
     def test_display_gap_does_not_cross_marker_or_comment(self):
         for following in (b'#paragraph-tab\n  New idea.', b'/* note */\n  Prose.'):

@@ -65,7 +65,8 @@ inspection route:
 This route captures literal relative includes with the fixed `book-v1` budget
 (64 source files and 400,000 syntax nodes), retains separate repeated include
 occurrences, and checks math scripts once per captured source. The explicit
-`--rule-set pde` selection also checks source display-continuation gaps; omission
+`--rule-set pde` selection also checks standalone display lines and source
+display-continuation gaps; omission
 retains the script-only `core` inspection. Consumer configuration is not loaded.
 Its byte offsets, baseline/candidate hashes and in-memory edit proposals can be
 inspected even when includes occur inside `book-part` or other opaque wrappers.
@@ -76,12 +77,17 @@ diagnostic-only source patterns: only math scripts have in-memory edit proposals
 with their verified rule IDs stated in the report. Those wrappers retain
 unresolved execution context. Imports, other style rules, runtime resources and
 actual rendering are outside this inspection.
+`pde.standalone-display` diagnoses literal prose sharing the display's source
+line, retaining one attached semantic label. Text without a Unicode letter,
+such as a label's following period, stays unresolved rather than being moved
+onto its own line.
 The report keeps global coverage incomplete and exits 2; it never applies the
 proposals or invokes Typst compilation. Unsafe paths, malformed sources and
 exhausted budgets return an input error rather than a truncated document report.
 See [DOCUMENT_INSPECTION_CONTRACT.md](DOCUMENT_INSPECTION_CONTRACT.md) and the
 [local script characterization](audit/document-inspection-evidence.json) and
-[display-gap characterization](audit/document-display-evidence.json).
+[display-gap characterization](audit/document-display-evidence.json), plus the
+[combined source-layout characterization](audit/document-layout-evidence.json).
 
 The ordinary modes above remain read-only. Reports may include AST-backed proposed edits
 with baseline hashes, but label them `partial-not-applicable-transaction`.
