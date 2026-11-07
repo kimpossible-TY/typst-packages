@@ -152,4 +152,13 @@ The design follow-up is reviewed and merged first. Groups 2–7 are authorized i
 - [x] 20.1 Add exact paired math-book and math-blocks source provenance, immediate root show-transform evidence and literal reset-option ownership without broadening wildcard or call-result assumptions.
 - [x] 20.2 Carry an explicit immutable configured-entrypoint snapshot through selected source analysis and validated candidate reanalysis. Do not infer ownership for unrelated, excluded or included files.
 - [x] 20.3 Diagnose proven duplicate book owners and separate reset ownership; retain an explicit reset-removal refusal because full-body heading/reference transformation equivalence remains unproven. Keep missing-owner and graph-wide claims unavailable.
-- [ ] 20.4 Verify independent review, focused parser/CLI/render evidence, full local checks and refreshed all-rule audit before publishing the next checkpoint. Keep production source writes and compiler dispatch closed.
+- [x] 20.4 Complete independent review and focused parser/CLI/render evidence, including secure configured-entrypoint symlink/FIFO reread regressions. Combined local verification and all-rule audit are recorded in section 21. Keep production source writes and compiler dispatch closed.
+
+
+## 21. Recognize builtin mathematical cancellation
+
+- [x] 21.1 Implement distinct mathematical/code lookup and actual builtin module/member identity, preserving lexical aliases, shadowing, wildcard uncertainty and source-order effects. Do not infer a global math module inside math fallback.
+- [x] 21.2 Diagnose proven cancellation calls without inventing cancelmark replacement or palette semantics. Verify unaliased builtin-module imports preserve their actual source identifier, including the shadow-module regression.
+- [x] 21.3 Review the independent worktree implementation and integrate it with book provenance while retaining math-book partial-wildcard safeguards. Add explicit audit fixtures and no-edit contract documentation.
+- [x] 21.4 Complete combined independent review, 483 Python tests (482 passed, one filesystem setuid skip), four Rust tests, formatting/Clippy, strict OpenSpec and whitespace checks. Audit: 191 fixtures, 233 CLI invocations, 39 verified candidate reanalyses, 26 PARTIAL / 7 NOT_IMPLEMENTED / 0 COMPLETE, with no invariant failures. Keep consumer rollout and production gates separate.
+- [ ] 21.5 Publish the integrated checkpoint and verify both CI jobs for its exact PR head.

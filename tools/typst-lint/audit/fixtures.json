@@ -2761,6 +2761,91 @@
       "intentional_parse_error": false,
       "scenario_heading": "Non-violation with an explicit transfer",
       "assert_normative_count": true
+    },
+    {
+      "id": "pde.theme-cancelmark--direct-builtin",
+      "rule_id": "pde.theme-cancelmark",
+      "kind": "direct-reviewed-diagnostic",
+      "files": {
+        "main.typ": "$ cancel(x) + y $\n"
+      },
+      "config": "rule-set=\"pde\"\n",
+      "normative_diagnostics": 1,
+      "note": "Actual MathCall and builtin math fallback; no replacement helper is invented.",
+      "intentional_parse_error": false,
+      "scenario_heading": "Violation using the bare cancellation element",
+      "assert_normative_count": true
+    },
+    {
+      "id": "pde.theme-cancelmark--verified-code-alias",
+      "rule_id": "pde.theme-cancelmark",
+      "kind": "direct-reviewed-diagnostic",
+      "files": {
+        "main.typ": "#let crossout = math.cancel\n$ crossout(x) $\n"
+      },
+      "config": "rule-set=\"pde\"\n",
+      "normative_diagnostics": 1,
+      "note": "Code resolves the builtin math module; the copied function remains a proven cancellation in math.",
+      "intentional_parse_error": false,
+      "scenario_heading": "Violation using the bare cancellation element",
+      "assert_normative_count": true
+    },
+    {
+      "id": "pde.theme-cancelmark--lexical-shadow",
+      "rule_id": "pde.theme-cancelmark",
+      "kind": "bounded-negative",
+      "files": {
+        "main.typ": "#let cancel(body) = body\n$ cancel(x) $\n"
+      },
+      "config": "rule-set=\"pde\"\n",
+      "normative_diagnostics": 0,
+      "note": "A same-spelled local function is not the builtin.",
+      "intentional_parse_error": false,
+      "scenario_heading": "Non-violation with the shared helper",
+      "assert_normative_count": true
+    },
+    {
+      "id": "pde.theme-cancelmark--unbound-math-namespace",
+      "rule_id": "pde.theme-cancelmark",
+      "kind": "bounded-negative",
+      "files": {
+        "main.typ": "$ math.cancel(x) $\n"
+      },
+      "config": "rule-set=\"pde\"\n",
+      "normative_diagnostics": 0,
+      "note": "Math fallback does not provide the global math module.",
+      "intentional_parse_error": false,
+      "scenario_heading": "Non-violation with the shared helper",
+      "assert_normative_count": true
+    },
+    {
+      "id": "pde.theme-cancelmark--code-only-unresolved",
+      "rule_id": "pde.theme-cancelmark",
+      "kind": "bounded-negative",
+      "files": {
+        "main.typ": "#cancel[Text]\n"
+      },
+      "config": "rule-set=\"pde\"\n",
+      "normative_diagnostics": 0,
+      "note": "Bare code-mode cancel receives no math fallback and is outside this bounded mathematical-source check.",
+      "intentional_parse_error": false,
+      "scenario_heading": "Non-violation with the shared helper",
+      "assert_normative_count": true
+    },
+    {
+      "id": "pde.theme-cancelmark--unaliased-import-preserves-shadow",
+      "rule_id": "pde.theme-cancelmark",
+      "kind": "bounded-negative",
+      "files": {
+        "main.typ": "#let maths = math\n#import \"shadow.typ\" as math\n#import maths\n$ math.cancel(x) $\n",
+        "shadow.typ": "#let cancel(body) = [Shadow]\n"
+      },
+      "config": "rule-set=\"pde\"\n",
+      "normative_diagnostics": 0,
+      "note": "Unaliased identifier import must preserve maths, not overwrite the actual shadowed math binding.",
+      "intentional_parse_error": false,
+      "scenario_heading": "Non-violation with the shared helper",
+      "assert_normative_count": true
     }
   ]
 }

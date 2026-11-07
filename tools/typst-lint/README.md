@@ -348,6 +348,12 @@ namespace graph membership. Wildcard re-exports, raw mannot APIs, dynamic execut
 mutations, facades, general document graphs and other reference forms remain unsupported.
 No caller receives a scope binding based on variable spelling alone.
 
+`pde.theme-cancelmark` diagnoses verified builtin cancellation calls in real
+mathematical source. It distinguishes math fallback from code lookup and keeps
+lexical/module aliases, shadowing and wildcard uncertainty explicit. There is
+no verified `cancelmark` definition in this checkout, so replacement and palette
+behavior remain unavailable. See the [cancellation contract](CANCEL_CONTRACT.md).
+
 Two book-ownership backends require an explicit configured entrypoint snapshot
 and exact paired math-book/math-blocks package evidence. They diagnose proven
 duplicate root book shows and adjacent reset ownership with bounded literal
