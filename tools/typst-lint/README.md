@@ -122,6 +122,45 @@ that is its package-contract result, not a facade capability or per-rule
 coverage claim. No local file is promoted merely by its spelling. See
 [FACADE_PROVENANCE_CONTRACT.md](FACADE_PROVENANCE_CONTRACT.md).
 
+## Read-only document occurrence context
+
+Two separate internal modules prepare analysis of an entrypoint, its included
+chapters and scoped paragraph bodies. They add no CLI profile or repair/compiler
+permission and leave the existing resolver and ordinary routes unchanged.
+
+`include_context.load_include_context` captures explicitly supplied entrypoints
+and bounded literal relative includes under retained no-follow file/directory
+snapshots. Exact source/tree/node identities and ordered include-site chains
+distinguish repeated inclusions and different entrypoints. Unsafe traversal,
+identity changes and exhausted budgets refuse capture; missing or opaque
+requests remain explicit. Includes do not import parent lexical names or prove
+that content executes. A pure origin assertion authenticates the original
+parser snapshot in memory, not the current filesystem.
+
+`scoped_paragraph_context.analyze_scoped_paragraph_context` consumes that issued
+capture and explicit package Trees without parsing, filesystem access or Typst
+execution. It derives separate conditional binding, language/show, callback
+ownership and invocation-effect facts for a narrow direct include/scope route.
+The initial editorial suggestions require child-owned named helper imports,
+an explicit literal prefix, an owned canonical paragraph marker with a real
+callback-internal paragraph break, and an explicit English/exact paragraph-show
+context. Callback openers, metadata and enclosing includes supply no paragraph
+boundary. Suggestions are informational records,
+not actionable edits or transaction candidates.
+
+Default/auto scope prefixes are modeled as counter/context effects with
+unresolved execution and collision obligations, not immediate callbacks.
+Package definition identity does not prove runtime package selection or complete
+initialization. The scoped package's additional dependencies remain unresolved;
+the existing root profile's structural rule discharges cannot be reused for
+these inputs. Arbitrary wrappers, wildcard facades, book shows, diagrams and
+unknown context do not become supported through these modules. No actual
+consumer, editor setting, package installation or build route is changed.
+
+See [INCLUDE_CONTEXT_CONTRACT.md](INCLUDE_CONTEXT_CONTRACT.md) and
+[SCOPED_PARAGRAPH_CONTEXT_CONTRACT.md](SCOPED_PARAGRAPH_CONTEXT_CONTRACT.md) for
+the exact records, fixed bounds and evidence limitations.
+
 ## Captured relative scalar graphs
 
 A separate internal proof/capture layer now accounts for named relative imports

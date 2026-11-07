@@ -429,14 +429,30 @@ class CompilerAdapterTests(unittest.TestCase):
                 self.assertNotEqual(call.args[0][0], str(self.executable))
         self.program('time.sleep(5)')
         event = threading.Event()
-        timer = threading.Timer(0.4, event.set)
-        timer.start()
-        self.addCleanup(timer.cancel)
-        with self.assertRaises(cc.CompilerFailure) as failed:
+        compile_children = []
+
+        def cancel_compile(*args, **kwargs):
+            process = popen(*args, **kwargs)
+            if args[0][1] == 'compile':
+                compile_children.append(process)
+                # Setup and the version probe must finish before cancellation.
+                event.set()
+            return process
+
+        with mock.patch.object(cc.subprocess, 'Popen', side_effect=cancel_compile), \
+                self.assertRaises(cc.CompilerFailure) as failed:
             self.compile(deadline_seconds=4, cancel_event=event)
         self.assertEqual(failed.exception.reason, 'cancelled')
         self.assertEqual(failed.exception.invocation.purpose, 'compile')
         self.assertEqual(failed.exception.invocation.returncode, -signal.SIGKILL)
+        self.assertTrue(event.is_set())
+        self.assertEqual(len(compile_children), 1)
+        process = compile_children[0]
+        self.assertEqual(process.returncode, -signal.SIGKILL)
+        self.assertTrue(process.stdout.closed)
+        self.assertTrue(process.stderr.closed)
+        with self.assertRaises(ChildProcessError):
+            os.waitpid(process.pid, os.WNOHANG)
 
     def test_workspace_and_executable_limits(self):
         with mock.patch.object(cc, '_MAX_EXECUTABLE', 1):
