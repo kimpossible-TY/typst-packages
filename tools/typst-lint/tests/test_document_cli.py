@@ -40,6 +40,10 @@ class DocumentCliTests(unittest.TestCase):
         self.assertFalse(result.stderr, result.stderr)
         return json.loads(result.stdout) if format == 'json' else result.stdout
 
+    def script_coverage(self, result):
+        return [row for row in result['coverage']['files']
+                if row['rule_id'] == 'core.parenthesized-scripts']
+
     def test_nested_repeated_includes_and_opaque_wrappers_preserve_inventory(self):
         self.write('main.typ', b'#book-part[\n#include "chapter/chapter.typ"\n'
                                b'#include "chapter/chapter.typ"\n]\n')
@@ -81,7 +85,7 @@ class DocumentCliTests(unittest.TestCase):
         candidate = plan(original, edits).candidate()
         self.assertIn(b'$x^(i)_(j)$', candidate)
         self.assertIn(b'/* preserve */\r\n', candidate)
-        file, = before['coverage']['files']
+        file, = self.script_coverage(before)
         self.assertEqual(file['candidate_sha256'], digest(candidate))
         self.assertEqual(file['candidate_verification'], 'parse-and-rule-idempotence-checked')
         self.assertEqual(target.read_bytes(), original)
@@ -151,7 +155,7 @@ class DocumentCliTests(unittest.TestCase):
         result = self.run_cli()
         self.assertEqual(len(result['diagnostics']), 1)
         self.assertEqual(result['proposed_edits'], [])
-        file, = result['coverage']['files']
+        file, = self.script_coverage(result)
         self.assertEqual(file['status'], 'partial')
         self.assertEqual(file['proposed_edits'], 0)
         self.assertIsNone(file['candidate_sha256'])
@@ -174,7 +178,7 @@ class DocumentCliTests(unittest.TestCase):
         self.assertEqual(analyze.call_count, 2)
         self.assertEqual(len(result['diagnostics']), 1)
         self.assertEqual(result['proposed_edits'], [])
-        file, = result['coverage']['files']
+        file, = self.script_coverage(result)
         self.assertEqual(file['status'], 'partial')
         self.assertIsNone(file['candidate_sha256'])
         self.assertEqual(file['candidate_verification'], 'no-candidate')
@@ -214,6 +218,67 @@ class DocumentCliTests(unittest.TestCase):
         text = self.run_cli(format='text', env=env)
         self.assertIn('Global coverage incomplete (exit 2)', text)
         self.assertIn('Only core.parenthesized-scripts', text)
+
+    def test_nested_display_gap_and_script_diagnostics_are_unique_per_source(self):
+        self.write('main.typ', b'#book-part[\n#include "section.typ"\n#include "section.typ"\n]\n')
+        source = (b'#import "Styles/styles.typ": *\n'
+                  b'#local-scope-annotations(s => [\n'
+                  b'  $ x^i = 1 $ <identity>\n\n'
+                  b'  Hence the claim follows.\n])\n')
+        target = self.write('section.typ', source)
+        default = self.run_cli()
+        self.assertEqual(default['rule_set'], 'core')
+        self.assertEqual(default['coverage']['available_backends'], ['core.parenthesized-scripts'])
+        self.assertEqual(len(default['coverage']['enabled']), 15)
+        self.assertEqual(len(default['coverage']['uninspected']), 14)
+        self.assertTrue(all(row['rule_id'] == 'core.parenthesized-scripts' for row in default['diagnostics']))
+        result = self.run_cli('--rule-set', 'pde')
+        self.assertEqual(result['rule_set'], 'pde')
+        self.assertEqual(len(result['coverage']['enabled']), 33)
+        self.assertEqual(len(result['coverage']['uninspected']), 31)
+        self.assertEqual([row['rule_id'] for row in result['diagnostics']].count(
+            'core.parenthesized-scripts'), 1)
+        self.assertEqual([row['rule_id'] for row in result['diagnostics']].count(
+            'pde.display-continuation-gap'), 1)
+        self.assertEqual(len(result['proposed_edits']), 2)
+        self.assertTrue(all(row['rule_id'] == 'core.parenthesized-scripts'
+                            for row in result['proposed_edits']))
+        gaps = [row for row in result['coverage']['files']
+                if row['rule_id'] == 'pde.display-continuation-gap' and row['path'] == 'section.typ']
+        gap, = gaps
+        self.assertEqual(gap['diagnostics'], 1)
+        self.assertEqual(gap['proposed_edits'], 0)
+        self.assertEqual(gap['candidate_verification'], 'diagnostic-only')
+        self.assertEqual(gap['analysis_scope'], 'literal-markup-source-pattern')
+        script = next(row for row in self.script_coverage(result) if row['path'] == 'section.typ')
+        self.assertEqual(script['candidate_verification_rules'], ['core.parenthesized-scripts'])
+        candidate = plan(source, tuple(Edit(e['start'], e['end'], e['replacement'].encode())
+                                      for e in result['proposed_edits'])).candidate()
+        self.assertIn(b'<identity>\n\n  Hence', candidate)
+        self.assertEqual(target.read_bytes(), source)
+
+    def test_nested_display_suppression_is_owned_by_equation(self):
+        self.write('main.typ', b'#unknown(s => [\n'
+                   b'  // typst-lint: ignore-next pde.display-continuation-gap -- intentional new idea\n'
+                   b'  $ x^i = 1 $\n\n'
+                   b'  Hence this source gap is intentional.\n])\n')
+        result = self.run_cli('--rule-set', 'pde')
+        self.assertEqual([row['rule_id'] for row in result['diagnostics']], ['core.parenthesized-scripts'])
+        self.assertEqual(result['suppressed_count'], 1)
+        self.assertEqual(result['suppressed'][0]['rule_id'], 'pde.display-continuation-gap')
+        self.assertFalse(result['coverage']['global_complete'])
+
+    def test_display_gap_does_not_cross_marker_or_comment(self):
+        for following in (b'#paragraph-tab\n  New idea.', b'/* note */\n  Prose.'):
+            with self.subTest(following=following):
+                self.write('main.typ', b'#scope(s => [\n  $ A=B $\n\n  ' + following + b'\n])\n')
+                result = self.run_cli('--rule-set', 'pde')
+                self.assertFalse(result['diagnostics'])
+                self.assertFalse(result['proposed_edits'])
+                gap = next(row for row in result['coverage']['files']
+                           if row['rule_id'] == 'pde.display-continuation-gap')
+                self.assertEqual(gap['status'], 'partial')
+                self.assertTrue(gap['reasons'])
 
     def test_report_budget_refuses_instead_of_truncating(self):
         self.write('main.typ', b'$x^i$\n')

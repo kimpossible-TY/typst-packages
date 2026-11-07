@@ -1,7 +1,7 @@
-"""Read-only literal-include inventory and script proposals for one document.
+"""Read-only literal-include inventory and source-style checks for one document.
 
-This route deliberately evaluates just the syntax-local script rule. Its
-in-memory candidates never authorize a source transaction or compilation.
+Math scripts have verified in-memory proposals; display continuation gaps
+have source-level diagnostics. Neither grants source or compilation authority.
 """
 from __future__ import annotations
 
@@ -12,6 +12,7 @@ import os
 import sys
 
 from edit_plan import plan
+from document_display import RULE_ID as DISPLAY_GAP, analyze as analyze_display_source
 import include_context
 from package_loader import PackageInputError, _absolute_root, read_snapshot_file
 from script_rule import RULE_ID, analyze
@@ -23,13 +24,15 @@ INCLUDE_BUDGET = 'book-v1'
 MAX_REPORT_ITEMS = 100_000
 
 
-def report_document(root, entrypoint):
+def report_document(root, entrypoint, *, rule_set='core'):
     """Inspect retained source bytes without reading consumer configuration.
 
     Literal includes inside unknown containers are inventory entries, not proof
     of execution. Each unique captured source is checked once, while repeated
     include occurrences retain their separate site chains in the report.
     """
+    require(type(rule_set) is str and rule_set in ('core', 'pde'),
+            'Document rule-set must be core or pde')
     raw_root = os.fspath(root)
     require(type(raw_root) is str and len(raw_root) <= include_context.MAX_ROOT_BYTES,
             'Document root must be a bounded canonical absolute path')
@@ -44,11 +47,16 @@ def report_document(root, entrypoint):
     captured = include_context.load_include_context(root, ((entrypoint, source),),
                                                     budget=INCLUDE_BUDGET)
     catalog, catalog_hash = load_rules()
+    enabled = [rule['id'] for rule in catalog['rules']
+               if rule['id'].split('.')[0] in catalog['packs'][rule_set]]
+    backends = [RULE_ID, DISPLAY_GAP] if rule_set == 'pde' else [RULE_ID]
     findings, proposed, suppressed, files = [], [], [], []
     items = len(captured.sources) + len(captured.edges) + len(captured.occurrences) + len(captured.unresolved)
     for item in captured.sources:
         try:
             result = analyze(item.tree, item.path, catalog=catalog['rules'], _verify=False)
+            displays = (analyze_display_source(item.tree, item.path, catalog=catalog['rules'])
+                        if rule_set == 'pde' else None)
         except (InputError, OSError, ValueError) as error:
             raise InputError(f'{item.path}: {error}') from error
         # Keep unsupported baseline operands diagnostic-only, then independently
@@ -56,7 +64,10 @@ def report_document(root, entrypoint):
         edits = () if result.skips else result.edits
         candidate_plan = plan(item.source, edits)
         require(not candidate_plan.deferred, 'Document script proposals contain conflicting edits')
-        items += len(result.diagnostics) + len(result.edits) + len(result.suppressed)
+        items += (len(result.diagnostics) + len(result.edits) + len(result.suppressed)
+                  + len(result.skips))
+        if displays is not None:
+            items += len(displays.diagnostics) + len(displays.suppressed) + len(displays.skips)
         require(items <= MAX_REPORT_ITEMS, 'Document inspection report item limit exceeded')
         reasons = list(result.skips)
         if result.skips and result.edits:
@@ -77,6 +88,9 @@ def report_document(root, entrypoint):
                 edits = ()
         findings.extend(asdict(finding) for finding in result.diagnostics)
         suppressed.extend(asdict(finding) for finding in result.suppressed)
+        if displays is not None:
+            findings.extend(asdict(finding) for finding in displays.diagnostics)
+            suppressed.extend(asdict(finding) for finding in displays.suppressed)
         proposed.extend(dict(path=item.path, start=edit.start, end=edit.end,
                              replacement=edit.replacement.decode('utf-8'), rule_id=RULE_ID,
                              baseline_sha256=item.identity.source_sha256)
@@ -89,7 +103,16 @@ def report_document(root, entrypoint):
             reasons=reasons, diagnostics=len(result.diagnostics),
             suppressed=len(result.suppressed), proposed_edits=len(edits),
             candidate_sha256=digest(candidate_plan.candidate()) if verified else None,
-            candidate_verification='parse-and-rule-idempotence-checked' if verified else 'no-candidate'))
+            candidate_verification='parse-and-rule-idempotence-checked' if verified else 'no-candidate',
+            candidate_verification_rules=[RULE_ID] if verified else []))
+        if displays is not None:
+            files.append(dict(path=item.path, source_sha256=item.identity.source_sha256,
+                tree_sha256=item.identity.tree_sha256, bytes=len(item.source), nodes=len(item.tree.nodes),
+                rule_id=DISPLAY_GAP, status='partial' if displays.skips else 'evaluated',
+                analysis_scope='literal-markup-source-pattern', reasons=list(displays.skips),
+                diagnostics=len(displays.diagnostics), suppressed=len(displays.suppressed),
+                proposed_edits=0, candidate_sha256=None,
+                candidate_verification='diagnostic-only', candidate_verification_rules=[]))
     findings.sort(key=lambda row: (row['path'], row['line'], row['column'], row['rule_id']))
     suppressed.sort(key=lambda row: (row['path'], row['line'], row['column'], row['rule_id']))
     edges = []
@@ -98,7 +121,7 @@ def report_document(root, entrypoint):
         record['raw_request'] = edge.raw_request.decode('utf-8')
         edges.append(record)
     return dict(schema=1, tool_version=VERSION, mode='inspect-document', status=2, phase='analysis',
-        root=str(root), entrypoint=entrypoint, compiler_invoked=False, applied_fixes=[],
+        root=str(root), entrypoint=entrypoint, rule_set=rule_set, compiler_invoked=False, applied_fixes=[],
         consumer_config_loaded=False, package_resolution_performed=False,
         hashes=dict(rules=catalog_hash),
         include_context=dict(budget=captured.budget,
@@ -110,11 +133,15 @@ def report_document(root, entrypoint):
             unresolved=[asdict(record) for record in captured.unresolved]),
         diagnostics=findings, suppressed=suppressed, suppressed_count=len(suppressed),
         proposed_edits=proposed, proposal_status='partial-not-applicable-transaction',
-        coverage=dict(global_complete=False, available_backends=[RULE_ID], files=files,
+        coverage=dict(global_complete=False, enabled=enabled,
+            available_backends=backends, uninspected=[rid for rid in enabled if rid not in backends],
+            files=files,
             unresolved_obligations=['other-style-rules', 'import-and-package-resolution',
                 'include-runtime-execution', 'render-context-and-resources',
                 'protected-source-transaction', 'compiler-snapshot']),
-        blockers=['Only core.parenthesized-scripts is inspected; full document rule coverage is incomplete',
+        blockers=[('Only math scripts and source display-continuation gaps are inspected; full rule coverage is incomplete'
+                   if rule_set == 'pde' else
+                   'Only core.parenthesized-scripts is inspected; full document rule coverage is incomplete'),
                   'Literal include reachability does not establish runtime execution or imported dependencies',
                   'Proposals are read-only; no protected source transaction or compiler is invoked'])
 
@@ -126,10 +153,12 @@ def main(arguments=None):
                'Incomplete global coverage returns 2 even with zero findings.')
     parser.add_argument('--root', required=True, help='Canonical absolute consumer root')
     parser.add_argument('--entrypoint', required=True, help='Canonical project-relative .typ entrypoint')
+    parser.add_argument('--rule-set', choices=('core', 'pde'), default='core',
+                        help='Explicit source checks: core (scripts) or pde (also display gaps); default core')
     parser.add_argument('--format', choices=('json', 'text'), default='text')
     args = parser.parse_args(sys.argv[1:] if arguments is None else arguments)
     try:
-        result = report_document(args.root, args.entrypoint)
+        result = report_document(args.root, args.entrypoint, rule_set=args.rule_set)
     except (InputError, PackageInputError, OSError, ValueError) as error:
         result = dict(schema=1, tool_version=VERSION, mode='inspect-document', status=2,
                       phase='input', compiler_invoked=False, applied_fixes=[], error=str(error))
@@ -141,7 +170,7 @@ def main(arguments=None):
         context = result['include_context']
         print(f"typst-lint inspect-document: {len(context['sources'])} sources, "
               f"{len(context['occurrences'])} include occurrences, "
-              f"{len(result['diagnostics'])} script findings")
+              f"{len(result['diagnostics'])} source-style findings")
         for finding in result['diagnostics']:
             print(f"{finding['path']}:{finding['line']}:{finding['column']}: "
                   f"{finding['rule_id']}: {finding['explanation']}")

@@ -59,20 +59,29 @@ inspection route:
 
 ```sh
 /path/to/typst-packages/tools/typst-lint/typst-lint inspect-document --root /absolute/project --entrypoint main.typ --format json
+/path/to/typst-packages/tools/typst-lint/typst-lint inspect-document --root /absolute/project --entrypoint main.typ --rule-set pde --format json
 ```
 
 This route captures literal relative includes with the fixed `book-v1` budget
 (64 source files and 400,000 syntax nodes), retains separate repeated include
-occurrences, and analyzes `core.parenthesized-scripts` once per captured source.
+occurrences, and checks math scripts once per captured source. The explicit
+`--rule-set pde` selection also checks source display-continuation gaps; omission
+retains the script-only `core` inspection. Consumer configuration is not loaded.
 Its byte offsets, baseline/candidate hashes and in-memory edit proposals can be
 inspected even when includes occur inside `book-part` or other opaque wrappers.
-Those wrappers remain explicit unresolved execution context. Imports, other
-style rules, runtime resources and actual rendering are outside this inspection.
+`pde.display-continuation-gap` also diagnoses a standalone typed display followed
+by a blank source line and direct literal prose in the same root or nested
+Markup body. Comments, markers and wrappers are never crossed. These are
+diagnostic-only source patterns: only math scripts have in-memory edit proposals,
+with their verified rule IDs stated in the report. Those wrappers retain
+unresolved execution context. Imports, other style rules, runtime resources and
+actual rendering are outside this inspection.
 The report keeps global coverage incomplete and exits 2; it never applies the
 proposals or invokes Typst compilation. Unsafe paths, malformed sources and
 exhausted budgets return an input error rather than a truncated document report.
 See [DOCUMENT_INSPECTION_CONTRACT.md](DOCUMENT_INSPECTION_CONTRACT.md) and the
-[local PDE characterization](audit/document-inspection-evidence.json).
+[local script characterization](audit/document-inspection-evidence.json) and
+[display-gap characterization](audit/document-display-evidence.json).
 
 The ordinary modes above remain read-only. Reports may include AST-backed proposed edits
 with baseline hashes, but label them `partial-not-applicable-transaction`.
