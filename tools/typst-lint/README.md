@@ -2,7 +2,7 @@
 
 This is the first implementation slice of the reviewed
 [`typst-style-linter` design](../../openspec/changes/typst-style-linter/design.md).
-**No style rule is implemented yet. This tool cannot approve, repair or compile a
+**No style rule is implemented end-to-end yet. This tool cannot approve, repair or compile a
 Typst document. Do not deploy it as a working project linter or build gate.**
 There are no source writes, compiler calls, network requests, installations or
 editor integrations. All actual runs return **2**, including empty selections.
@@ -71,7 +71,7 @@ Validation does not establish freshness, reference correctness or PDF validity.
 
 ## Implemented boundary
 
-- Shipped versioned `rules/catalog.json`: 15 core + 17 PDE metadata records,
+- Shipped versioned `rules/catalog.json`: 15 core + 18 PDE metadata records,
   grades, original source sections, descriptions and complete repair-policy
   text. Counts are derived from this catalog at runtime, not empty stubs. Tests
   reconcile every record against the normative specs and fix-policy table.
@@ -104,7 +104,7 @@ An empty diagnostics array never means this release checked the document.
 ## Pending work and rollout blockers
 
 1. Select a reliable syntax/span-preserving parser adapter. Do not implement
-   Typst using file-wide regular expressions. All 32 detection/repair rules,
+   Typst using file-wide regular expressions. All 33 end-to-end detection/repair rules,
    binding/graph analysis, Markdown extraction and source positions, inline
    `ignore-next` construct scoping/validation, and dictionary-call recovery are
    pending. Even malformed Typst is presently only covered by the explicit
@@ -120,7 +120,7 @@ An empty diagnostics array never means this release checked the document.
    publication before compiler dispatch. The current stub must remain inert
    until these and complete required analysis are available.
 5. Add CI/watch and a verified versioned Tinymist precompile/export adapter.
-   Installed Tinymist native lint is not this 32-rule policy. An AGENTS.md hint
+   Installed Tinymist native lint is not this 33-rule policy. An AGENTS.md hint
    or shell wrapper cannot establish native editor enforcement. All routes
    currently remain unmanaged; no real-consumer rollout is performed.
 
@@ -129,8 +129,7 @@ Python tree-sitter/Typst parser or cached `typst-syntax` crate. No unreviewed
 parser was installed. Separate fixture testing reported that `text-utils:0.1.2`
 with Typst 0.15.1 indents `paragraph_tab` by 1.5em but does **not** uppercase the
 following lowercase source as its comments suggest. Capitalization remains a
-rendered-effect compatibility issue, not a passed acceptance test. Do not
-compensate by rewriting the author's lowercase source.
+rendered-effect compatibility issue, not a passed acceptance test. The later explicit capitalization request is implemented as a separate bounded source-rule component, not a package show-order fix. Marker insertion still preserves prose; only that rule may edit an eligible initial under its own policy.
 
 ## Verification
 
@@ -152,3 +151,50 @@ is a candidate adapter: it exposes `parse`, `parse_code`, `parse_math`, `Source`
 `SyntaxNode`, `LinkedNode` and `SyntaxKind` without document evaluation. A small
 Rust adapter could return byte spans while Python retains orchestration. This
 candidate has not been built, installed or validated by this foundation.
+
+
+## Paragraph capitalization component (not connected to source parsing)
+
+The author-requested `pde.paragraph-capitalization` adds a 33rd catalog rule. Its
+pure component accepts a parser-certified, hash-bound paragraph context and can
+propose one ASCII initial-letter edit. It does not discover paragraph boundaries,
+resolve marker/helper bindings, infer language, parse ignore directives, write
+source, or enable a working compile gate. Runtime coverage remains zero
+end-to-end rules until those pieces exist.
+
+The supported editorial starters and exclusions are normative in the design.
+Only a direct supported lowercase word after a resolved standalone marker in
+known English ordinary prose is eligible. This first component requires exactly
+one LF/CRLF plus optional horizontal whitespace between marker and word; it
+refuses intervening blank lines/comments rather than crossing a paragraph boundary. Math/code/refs/calls/quotes/wrappers,
+non-English or unknown language, non-ASCII casing, names such as iPhone/eBay,
+unknown words and single-letter notation are unchanged. It never searches past
+an initial math expression for a later prose word. An already-capitalized starter
+is unchanged, and a reasoned suppression disables the casing edit.
+
+Optional configuration declares a default, not a language guess:
+
+```toml
+[capitalization]
+language = "en"
+```
+
+A verified source language overrides this default; dynamic/mixed language stays
+unknown. Marker insertion and capitalization are separate passes with distinct
+preservation contracts. The linter owns the visible source-letter change and the
+package owns indentation; existing packages and consumer documents are not
+modified or installed by this implementation.
+
+
+The optional real-rendering characterization can be run separately with existing
+Typst and pdftotext executables, without installing packages:
+
+```sh
+TYPST_LINT_RENDER_TESTS=1 PYTHONDONTWRITEBYTECODE=1 python3 -m unittest discover -s tools/typst-lint/tests -p 'test_capitalization*.py' -v
+```
+
+It checks explicit uppercase source, the package's 1.5em indentation, and unchanged
+`iPhone` source/rendering. Unit fixtures also test the exact allowlist, supported
+English tags and language/context refusals, one-byte/BOM/CRLF preservation,
+stale spans/hashes, first-math no-forward-search and simulated marker/case
+convergence. These are component and rendering checks, not full parser coverage.

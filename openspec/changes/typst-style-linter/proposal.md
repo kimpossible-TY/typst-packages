@@ -7,7 +7,7 @@ My-Typst-style and the PDE guide contain repeatable source conventions that are 
 ## What Changes
 
 - Initialize OpenSpec with the `spec-driven` schema and no AI tool integrations.
-- Specify 32 source-backed style rules, each with a stable ID, error or warning grade, provenance, and positive and negative scenarios.
+- Specify 33 style rules (32 source-backed rules plus the author-requested capitalization rule), each with a stable ID, error or warning grade, provenance, and positive and negative scenarios.
 - Define reusable `core` and opt-in `pde` rule packs, consumer configuration, diagnostics, and suppression behavior.
 - Separate judgment-only guidance and unsupported inference from executable checks.
 - Define exact automatic rewrites, intentional presentation effects, source protection, and failures for every rule.
@@ -20,7 +20,7 @@ My-Typst-style and the PDE guide contain repeatable source conventions that are 
 
 - `typst-lint-configuration`: Pack selection, input scope, diagnostics, and false-positive controls for consumers of the shared linter.
 - `typst-core-style`: Mechanical math, scope, reference, book-ownership, and theme rules shared across projects (15 rules).
-- `typst-pde-style`: PDE import, paragraph, footnote, highlighting, and theme-helper conventions (17 rules).
+- `typst-pde-style`: PDE import, paragraph, footnote, highlighting, and theme-helper conventions, including the later author-requested source capitalization rule (18 rules).
 
 - `typst-lint-autofix`: Deterministic per-rule repairs, protected transactions, and verifiable failure outcomes.
 - `typst-build-gate`: Precompile enforcement and a project/build-route coverage inventory.

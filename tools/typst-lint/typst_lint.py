@@ -111,6 +111,7 @@ class Config:
     entrypoint: str | None = None
     catalog: str | None = None
     sha256: str | None = None
+    capitalization_language: str | None = None
 
     def selects(self, path):
         return any(matches(path, g) for g in self.include) and not any(matches(path, g) for g in self.exclude)
@@ -136,7 +137,7 @@ def read_config(root, rules):
         return Config()
     raw = checked_path(root, '.typst-lint.toml').read_bytes()
     data = tomllib.loads(raw.decode('utf-8'))
-    require(not (data.keys() - {'rule-set', 'include', 'exclude', 'ignore', 'entrypoint', 'catalog'}), 'Unknown configuration key')
+    require(not (data.keys() - {'rule-set', 'include', 'exclude', 'ignore', 'entrypoint', 'catalog', 'capitalization'}), 'Unknown configuration key')
     pack = data.get('rule-set', 'core')
     require(isinstance(pack, str) and pack in ('core', 'pde'), f'Unknown rule-set: {pack!r}')
     include = strings(data.get('include', ['**/*.typ']), 'include')
@@ -156,10 +157,17 @@ def read_config(root, rules):
         require(set(selected) <= ids, f'Unknown ignore rule IDs: {sorted(set(selected) - ids)}')
         require(isinstance(item['reason'], str) and bool(item['reason'].strip()), 'Ignore requires a reason')
         parsed.append(Ignore(paths, selected, item['reason']))
+    capitalization = data.get('capitalization', {})
+    require(isinstance(capitalization, dict) and not (capitalization.keys() - {'language'}),
+            'Invalid capitalization table or unknown fields')
+    language = capitalization.get('language')
+    if 'language' in capitalization:
+        require(isinstance(language, str) and bool(language.strip()),
+                'capitalization.language must be a nonempty string')
     for key in ('entrypoint', 'catalog'):
         if key in data:
             relative(data[key])
-    return Config(pack, include, exclude, tuple(parsed), data.get('entrypoint'), data.get('catalog'), digest(raw))
+    return Config(pack, include, exclude, tuple(parsed), data.get('entrypoint'), data.get('catalog'), digest(raw), language)
 
 
 def read_reference_catalog(path):

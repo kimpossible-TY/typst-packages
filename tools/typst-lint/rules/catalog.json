@@ -189,7 +189,7 @@
       "description": "At a new prose boundary after existing prose, including boundaries introduced by `block` or `parbreak`, the linter SHALL require `#paragraph_tab` for the new paragraph. Headings, lists, displays, figures, proof/theorem blocks, and document start SHALL not themselves imply an indented prose paragraph.",
       "repair": "conditional",
       "rewrite": "Conditional: insert a standalone `#paragraph_tab` on the existing new-prose boundary, with one preceding blank line; for `block` insert inside its content before the prose.",
-      "preconditions": "Boundary already exists in source and is not a display continuation, document start or structural exclusion. Resolve the marker and active paragraph show rule; never invent an import/show rule or infer an idea change. Preserve every original prose byte. Intentional effect: 1.5em indentation and show-rule capitalization of a following lowercase letter. For a preceding prose footnote use `#parbreak()` plus blank line plus marker."
+      "preconditions": "Boundary already exists in source and is not a display continuation, document start or structural exclusion. Resolve the marker and active paragraph show rule; never invent an import/show rule or infer an idea change. Preserve every original prose byte in this marker repair. Intentional effect: 1.5em indentation; the separate capitalization rule owns an eligible initial-letter source change. For a preceding prose footnote use `#parbreak()` plus blank line plus marker."
     },
     {
       "id": "pde.continuation-line",
@@ -298,6 +298,15 @@
       "repair": "conditional",
       "rewrite": "Conditional: `stroke: 1pt` → `stroke: 1pt + theme.rule` (retain the original literal width).",
       "preconditions": "Inside the resolved flowbox implementation, an existing known lexical-context palette binding exposes `rule`. Use its actual identifier; never introduce a global theme, guess a color or edit arbitrary figure strokes. Preserve border width/body; intended effect is theme-aware border color."
+    },
+    {
+      "id": "pde.paragraph-capitalization",
+      "grade": "warning",
+      "source": "User / Paragraph capitalization (2026-11-07); design / Automatic fixing and compilation.",
+      "description": "The linter SHALL warn and uppercase only the first ASCII byte of an eligible lowercase starter after a resolved paragraph marker. Eligibility and skips SHALL follow the exact English/context/starter policy in `design.md`. This rule, not marker insertion or hidden package rendering, SHALL own the source casing edit.",
+      "repair": "conditional",
+      "rewrite": "Conditional: after a resolved standalone `#paragraph_tab`, `therefore ...` → `Therefore ...` for exactly the supported starter set in `design.md`. Change only the first ASCII byte.",
+      "preconditions": "Same known prose paragraph with exactly one LF/CRLF and optional horizontal whitespace after the marker, direct first literal word, explicit effective English, complete word followed by ordinary whitespace, and no suppression. Preserve every other source byte. Skip unknown/mixed-case words, single-letter notation, non-ASCII or dynamic/non-English language, leading math/code/calls/references/quotes/wrappers, and nonprose bodies. Never search forward or rely on package recasing. This linter-owned source edit is the intended casing effect."
     }
   ]
 }

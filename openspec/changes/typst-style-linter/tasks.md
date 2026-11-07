@@ -6,7 +6,7 @@ The design follow-up is reviewed and merged first. Groups 2–7 are authorized i
 
 - [x] 1.1 Initialize OpenSpec with no tool integrations and minimal config; verify `openspec/config.yaml` contains only `schema: spec-driven` and no unrelated tool folders appear.
 - [x] 1.2 Read all four supplied source documents and author proposal/design; verify source paths, precedence, shared layout, pack selection, config shape, and suppression decisions are recorded.
-- [x] 1.3 Author the configuration spec and all 32 style-rule contracts; verify 15 core and 17 PDE IDs each have a grade, source section, description, violation scenario, and non-violation scenario.
+- [x] 1.3 Author the original configuration spec and 32 style-rule contracts; verify 15 core and 17 PDE IDs each have a grade, source section, description, violation scenario, and non-violation scenario.
 - [x] 1.4 Record judgment-only guidance separately; verify the design has 18 reasoned exclusions without invented thresholds or package pins.
 - [x] 1.5 Run `openspec validate --all --strict` and inspect the diff for specs-only scope; write `/tmp/typst-linter-openspec-report.txt` with created files, counts, validation command/output, and open questions.
 
@@ -32,7 +32,7 @@ The design follow-up is reviewed and merged first. Groups 2–7 are authorized i
 ## 5. Verify consumer integration (separate implementation branch)
 
 - [ ] 5.1 Exercise one isolated consumer fixture selecting core and one selecting PDE; verify pack counts, stable grades/provenance, path boundaries, skipped checks, suppression counts, check/dry-run read-only behavior, protected fixes and accurate partial-coverage reporting across complete runs.
-- [ ] 5.2 Reconcile the implemented catalog with all 32 contracts and 18 exclusions; verify no extra style policy slipped in, run the chosen acceptance suite and OpenSpec strict validation, and report remaining coverage gaps before proposing separately authorized consumer rollout.
+- [ ] 5.2 Reconcile the implemented catalog with all 33 contracts and 18 exclusions; verify no extra style policy slipped in, run the chosen acceptance suite and OpenSpec strict validation, and report remaining coverage gaps before proposing separately authorized consumer rollout.
 
 
 ## 6. Implement automatic repairs and source protection
@@ -56,12 +56,19 @@ The design follow-up is reviewed and merged first. Groups 2–7 are authorized i
 - [x] 8.2 Replace historical read-only restrictions, add all 32 repair policies and protected-fix/build-gate capabilities, retaining 15 core + 17 PDE IDs and 18 judgment exclusions.
 - [x] 8.3 Independently review the exact design diff, resolve findings, and pass OpenSpec strict validation and catalog consistency checks; final review confirmed the compiler/publication status and partial-fix policies.
 - [x] 8.5 Merge the design follow-up after checking the remote head and repository requirements (PR #3, `b8c8f186`).
-- [ ] 8.4 Branch implementation from merged main, start a tested foundation and draft PR, and report implemented versus pending coverage without deploying or mass-editing consumers.
+- [x] 8.4 Branch implementation from merged main, start a tested foundation and draft PR #4, and report implemented versus pending coverage without deploying or mass-editing consumers.
 
 
 ## 9. Initial implementation foundation (partial, not a working linter)
 
-- [x] 9.1 Add shared Python launchers, shipped 32-rule metadata/repair catalog, strict config and read-only selection/catalog reporting. All real runs explicitly fail unsupported analysis with exit 2.
+- [x] 9.1 Add shared Python launchers and the initial 32-rule metadata/repair catalog, strict config and read-only selection/catalog reporting. All real runs explicitly fail unsupported analysis with exit 2.
 - [x] 9.2 Add tested pure diagnostic ordering/path-ignore and immutable byte-edit/convergence primitives. Do not treat these as syntax analysis, actual repairs or protected filesystem writes.
 - [x] 9.3 Verify 22 isolated foundation tests, including compiler non-invocation and previous-output preservation; document 0 implemented rules and remaining parser, transaction, snapshot and route work.
 - [x] 9.4 Correct the design's factual capitalization claim after an isolated Typst 0.15.1 characterization: current text-utils indents but does not uppercase; preserve source bytes and record the compatibility gap without changing packages or consumers.
+
+
+## 10. Add the requested paragraph capitalization rule
+
+- [x] 10.1 Specify the 33rd rule, `pde.paragraph-capitalization`: bounded marked English prose, explicit starter set, source-only initial-byte repair, context/language exclusions and source-vs-helper ownership.
+- [x] 10.2 Implement and test the pure parser-context rule component, explicit language config and preservation/refusal cases. Do not count this as end-to-end rule coverage before a real parser and protected writer are connected.
+- [x] 10.3 Verify marker-plus-capitalization convergence and isolated render fixtures for explicit uppercase source, indentation and protected names; pass independent review and all 33 tests with opt-in rendering enabled. The draft PR remains incomplete end-to-end.

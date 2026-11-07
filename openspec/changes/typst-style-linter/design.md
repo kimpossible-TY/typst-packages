@@ -4,7 +4,7 @@
 
 See `proposal.md` for motivation. The original `openspec/typst-style-linter` design was merged in PR #2 (`ae117126`). This follow-up is based on that merged design and adds the author's requested automatic fixes and precompile enforcement. Existing `tools/project-references/` and `tools/pdf-versioning/` remain untouched. This change defines a future linter and does not implement or run one.
 
-The following supplied texts are the complete style authority for this change:
+The following supplied texts and later explicit author request are the style authority for this change:
 
 | Key used in rule specs | Document | Supplied location |
 | --- | --- | --- |
@@ -12,6 +12,7 @@ The following supplied texts are the complete style authority for this change:
 | Packages | My-Typst-style package reference | `/Users/taeyoung/Developer/agent_skills/my-typst-style/references/typst-packages.md` |
 | Projects | My-Typst-style project-reference guide | `/Users/taeyoung/Developer/agent_skills/my-typst-style/references/project-references.md` |
 | PDE | PDE style guide, supplied latest-main snapshot | `/tmp/pde-typst-code-style-guide.md` |
+| User | Explicit paragraph capitalization request | Author request on 2026-11-07, after the paragraph-helper characterization |
 
 Each rule cites its document key and exact section heading. The PDE heading `spaceing role(including #paragraph_tab role)` retains the source's spelling. Paths above identify the reviewed evidence, not runtime dependencies. The future packs must ship their own provenance metadata; consumer machines must not need these personal absolute paths.
 
@@ -19,7 +20,7 @@ The user's requested automatic fixes, footnote behavior, and teaching-line excep
 
 ## Goals / Non-Goals
 
-Goals are an inspectable catalog of 32 mechanical rules, stable grades and provenance, bounded source analysis, deterministic automatic repairs, small consumer configuration, local exceptions with reasons, and observable precompile enforcement for every registered build route. The core spec owns 15 rules and the PDE spec owns 17. Configuration requirements describe tool behavior and are not additional style rules.
+Goals are an inspectable catalog of 33 mechanical rules, stable grades and provenance, bounded source analysis, deterministic automatic repairs, small consumer configuration, local exceptions with reasons, and observable precompile enforcement for every registered build route. The core spec owns 15 rules and the PDE spec owns 18. Configuration requirements describe tool behavior and are not additional style rules.
 
 This design PR contains only OpenSpec artifacts. Its reviewed merge is authorized, followed by implementation in a separate branch and draft PR. It does not deploy the tool, install packages, change consumer source/configuration or editor settings, or rewrite all projects. Tests use isolated fixtures. The historical specification-only/no-commit restriction is superseded by this workflow.
 
@@ -61,7 +62,7 @@ Globs match paths relative to the selected consumer root, with `**` matching dir
 
 ### Packs, grades, and diagnostics
 
-`core` covers reusable API/structure checks and parenthesized math scripts. `pde` extends core with PDE-specific policies. The full set is exactly the `### Requirement:` entries in the two style specs (15 + 17); their IDs remain stable even if source headings change. Source documents describe intended style; the grades are this design's enforcement decision.
+`core` covers reusable API/structure checks and parenthesized math scripts. `pde` extends core with PDE-specific policies. The full set is exactly the `### Requirement:` entries in the two style specs (15 + 18); their IDs remain stable even if source headings change. Source documents describe intended style; the grades are this design's enforcement decision.
 
 An **error** is a provable API or structural violation, such as a bad public-reference signature, a known namespace collision, or an overlay detached from its display. A **warning** is a style preference or narrowly scoped heuristic, such as source prose wrapping or an intentional raw marker label. No severity override is introduced initially: scoped ignores make exceptions explicit without altering the catalog's meaning. Every finding includes position, ID, grade, explanation, and source section. Suppressed findings are not counted as active findings; a summary records how many were suppressed and which checks were skipped. Warning-only results remain distinguishable from a clean run. Errors and configuration/parse failures are unsuccessful results; neither silence nor warnings prove compilation or rendering success.
 
@@ -151,9 +152,17 @@ Implementation language, parser adapter, distribution, and the exact Tinymist/ed
 
 `typst-lint check --root ROOT` never writes. `typst-lint fix --root ROOT --dry-run` reports the exact prospective patch and blocked repairs. `typst-lint fix --root ROOT` applies eligible repairs only through the protected transaction below. The shared `typst-style compile --root ROOT -- <compiler arguments>` gate fixes first, re-parses and re-lints, then compiles the verified snapshot. It invokes a configured absolute real compiler path as an argument vector, never through shell interpolation or recursive PATH lookup. Preserve Typst arguments, working directory, fonts, package resolution, root, inputs, environment, output format, and output destination; wrapper options precede `--`. Version/help and non-compiling subcommands pass through only by explicit supported command dispatch. Unknown subcommands/options, stdin input, and multi-entrypoint ambiguity fail with an actionable explanation until supported, never silently bypass lint.
 
-`fix-policy.md` is the normative repair catalog for all 32 IDs. Every repair declares its exact replacement, static preconditions, unchanged data, intentional effects, and refusal cases. A rule may be diagnostic-only when no unique repair follows from the source. Safe means within that declared contract, not pixel-identical. A valid suppression removes both the diagnostic and the automatic repair. A diagnostic's grade does not determine repair eligibility. Unresolved repairs are reported with the rule ID and reason.
+`fix-policy.md` is the normative repair catalog for all 33 IDs. Every repair declares its exact replacement, static preconditions, unchanged data, intentional effects, and refusal cases. A rule may be diagnostic-only when no unique repair follows from the source. Safe means within that declared contract, not pixel-identical. A valid suppression removes both the diagnostic and the automatic repair. A diagnostic's grade does not determine repair eligibility. Unresolved repairs are reported with the rule ID and reason.
 
-In particular, text-utils documents `paragraph_tab` as a 1.5em indent plus capitalization of a following lowercase letter. An isolated post-design check with Typst 0.15.1 and this repository's text-utils 0.1.2 confirmed the indent but retained lowercase in same-line, next-line, concatenated-string and literal-marker cases. The documented capitalization is therefore an unresolved helper/runtime compatibility issue, not a verified current effect. Inserting the marker must retain the author's original text bytes and permit the documented rendered capitalization when the helper actually provides it; never silently uppercase source to compensate. Acceptance fixtures must expose this mismatch and verify the supported helper/compiler behavior before claiming the paragraph effect is fully implemented. A blanket render-equality requirement would still incorrectly reject intended style effects.
+In particular, text-utils documents `paragraph_tab` as indentation plus capitalization. A Typst 0.15.1 characterization found 1.5em indentation but unchanged lowercase: the general marker show rule takes precedence over its more specific casing rule. Reversing their order only in a temporary helper made all four test forms uppercase, but would also introduce unbounded hidden recasing. Neither package source nor installed copies are changed here.
+
+The author's subsequent request adds `pde.paragraph-capitalization`, the 33rd rule. The linter owns the new explicit source-letter edit; the paragraph helper owns indentation. Marker insertion alone still preserves all prose bytes, while the separate capitalization rule may change the eligible initial byte on a later convergence pass. Do not repair package show-rule order as a shortcut, and do not rely on hidden rendering-time uppercase. Package/compiler characterization must verify that protected names and notation stay unchanged; a future runtime/helper that silently recases excluded initials is a compatibility blocker, not evidence that the linter's protection works.
+
+Initial supported scope is an explicitly marked PDE prose paragraph, not all natural-language text. Require a resolved standalone marker, the same known prose paragraph, a direct first literal word and an explicitly known English language. The first component requires exactly one LF or CRLF line break with optional horizontal whitespace between marker and word; intervening blank lines/comments or bare CR are unsupported rather than searched across. `[capitalization] language = "en"` supplies a declared language when no source override exists; an effective static source language takes precedence, and a dynamic/mixed source language remains unknown even if config says English. Never infer language from ASCII. Initial support accepts case-insensitive `en` or `en-` tags with one or more 2–8 ASCII-alphanumeric subtags (for example `en-US`/`en-GB`); other languages remain unchanged with an applicability reason.
+
+The versioned editorial starter set is exactly: `an`, `the`, `this`, `these`, `that`, `those`, `we`, `it`, `let`, `assume`, `suppose`, `consider`, `define`, `denote`, `hence`, `thus`, `therefore`, `since`, `if`, `for`, `when`, `then`, `now`, `note`, `recall`, `observe`. A complete ASCII word followed by ordinary whitespace is required. Only its first byte changes. Already-capitalized forms pass. This is an authored convention, not a claim that a dictionary can prove a word is never a name. Existing reasoned suppressions preserve intentional lowercase.
+
+Do not search forward for a letter: leading math, code/raw, escaped text, interpolation/calls, references, links, quotes or formatting wrappers make the candidate unsupported. Also skip headings, lists, captions, unknown helper bodies, Markdown examples, single-letter notation (including ambiguous `a`), non-ASCII casing, unknown words and mixed-case spellings such as `iPhone`/`eBay`. These are explicit initial coverage limits rather than guessed corrections. The parser adapter must certify context and byte spans; a pure rule function fed synthetic contexts does not constitute end-to-end source analysis.
 
 ### Protected source transaction
 

@@ -41,7 +41,7 @@ class ConsumerTests(unittest.TestCase):
     def test_catalog_matches_all_normative_metadata(self):
         spec = TOOL.parents[1] / 'openspec/changes/typst-style-linter'
         expected = {}
-        for pack, count in [('core', 15), ('pde', 17)]:
+        for pack, count in [('core', 15), ('pde', 18)]:
             text = (spec / f'specs/typst-{pack}-style/spec.md').read_text()
             sections = re.findall(r'### Requirement: (\S+)\n(.*?)(?=\n### Requirement:|\Z)', text, re.S)
             self.assertEqual(len(sections), count)
@@ -54,7 +54,7 @@ class ConsumerTests(unittest.TestCase):
             self.assertIn(f"| `{rule['id']}` | {rule['rewrite']} | {rule['preconditions']} |", policy)
 
     def test_pack_counts_and_no_empty_success(self):
-        for config, count in [('', 15), ('rule-set="pde"', 32)]:
+        for config, count in [('', 15), ('rule-set="pde"', 33)]:
             self.config(config)
             result = lint.report(self.root, 'check')
             self.assertEqual(result['status'], 2)

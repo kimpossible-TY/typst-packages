@@ -7,11 +7,11 @@ Let a consumer select shared Typst style packs and inspect actionable diagnostic
 ## ADDED Requirements
 
 ### Requirement: Select shared packs from consumer configuration
-The linter SHALL read `.typst-lint.toml` at an explicitly selected consumer root. `rule-set = "core"` SHALL select the 15 core rules; `rule-set = "pde"` SHALL select core plus the 17 PDE rules. When configuration is absent, the linter SHALL select core. Unknown pack names and rule IDs SHALL be configuration failures, not silently ignored settings.
+The linter SHALL read `.typst-lint.toml` at an explicitly selected consumer root. `rule-set = "core"` SHALL select the 15 core rules; `rule-set = "pde"` SHALL select core plus the 18 PDE rules. When configuration is absent, the linter SHALL select core. Unknown pack names and rule IDs SHALL be configuration failures, not silently ignored settings.
 
 #### Scenario: PDE opts into its conventions
 - **WHEN** a consumer selects `rule-set = "pde"`
-- **THEN** all 32 catalog rules are enabled at their documented grades without requiring consumer-owned rule code.
+- **THEN** all 33 catalog rules are enabled at their documented grades without requiring consumer-owned rule code.
 
 #### Scenario: Another project selects core
 - **WHEN** a consumer selects core or supplies no configuration
@@ -100,3 +100,15 @@ Checks SHALL use static bindings, literals and configured local files. Unresolve
 #### Scenario: Dynamic catalog target
 - **WHEN** `#project-ref(project-key, target)` uses values that cannot be resolved statically
 - **THEN** argument count is checked but literal type and membership checks are reported as skipped without inventing a target.
+
+
+### Requirement: Declare bounded paragraph capitalization language
+Configuration MAY include `[capitalization] language = "en"` with a nonempty language tag. Unknown capitalization keys/types SHALL fail. A static effective source language SHALL override this declaration; dynamic or mixed source language SHALL remain unknown. Only supported English contexts SHALL receive the new PDE casing repair, and no language SHALL be inferred from ASCII spelling.
+
+#### Scenario: No English evidence
+- **WHEN** no configuration or static source declaration establishes English, or the effective source language is non-English or dynamic
+- **THEN** paragraph capitalization is skipped with a reason, not guessed or reported as checked English prose.
+
+#### Scenario: Explicit English default
+- **WHEN** capitalization language is `en` and no source override exists
+- **THEN** a future syntax adapter may use that declared default for otherwise eligible marked prose; configuration alone does not prove paragraph context.
