@@ -563,7 +563,11 @@
       "normative_diagnostics": 1,
       "note": "",
       "intentional_parse_error": false,
-      "scenario_heading": "Violation with split continuation sentences"
+      "scenario_heading": "Violation with split continuation sentences",
+      "assert_normative_count": true,
+      "expected_candidate": {
+        "main.typ": "It is smooth and compactly supported. The calculation can therefore be written as follows.\n"
+      }
     },
     {
       "id": "pde.continuation-line--negative",
@@ -671,7 +675,11 @@
       "normative_diagnostics": 1,
       "note": "",
       "intentional_parse_error": false,
-      "scenario_heading": "Violation with whitespace or misplaced punctuation"
+      "scenario_heading": "Violation with whitespace or misplaced punctuation",
+      "assert_normative_count": true,
+      "expected_candidate": {
+        "main.typ": "This holds.#footnote[Reason.]\n"
+      }
     },
     {
       "id": "pde.prose-footnote-punctuation--negative",
@@ -1962,6 +1970,21 @@
       "note": "Suppression is owned by the display opener, not following prose.",
       "intentional_parse_error": false,
       "scenario_heading": null,
+      "assert_normative_count": true,
+      "expected_no_target_edits": true
+    },
+    {
+      "id": "pde.aligned-footnote-spacer--unbound-helper",
+      "rule_id": "pde.aligned-footnote-spacer",
+      "kind": "positive",
+      "files": {
+        "main.typ": "$ A &= B #footnote[Reason.] $\n"
+      },
+      "config": "rule-set=\"pde\"\n",
+      "normative_diagnostics": 1,
+      "note": "Direct known builtin footnote: diagnose alignment, but no spacer binding proof permits an edit.",
+      "intentional_parse_error": false,
+      "scenario_heading": "Violation in either kind of aligned display",
       "assert_normative_count": true,
       "expected_no_target_edits": true
     }

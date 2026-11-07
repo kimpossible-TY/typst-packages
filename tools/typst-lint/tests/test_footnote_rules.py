@@ -112,6 +112,14 @@ class FootnoteRules(unittest.TestCase):
                        b'This.#footnote[X]\nNext.'):
             self.assertFalse(self.run_source(source)[GAP].diagnostics)
 
+    def test_math_gap_before_comment_is_diagnostic_only(self):
+        for comment in (b'// explanation', b'/* explanation */'):
+            source = b'$\n A #footnote[X]\n\n' + comment + b'\n B\n$'
+            result = self.run_source(source)[GAP]
+            self.assertTrue(result.diagnostics)
+            self.assertFalse(result.edits)
+            self.assertTrue(any('comment attachment' in s for s in result.skips))
+
     def test_proof_is_source_bound_and_unknown_contexts_skipped(self):
         source = b'This. #footnote[X]'
         tree = parse(source)

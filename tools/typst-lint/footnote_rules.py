@@ -1,8 +1,8 @@
 """Partial footnote checks over verified syntax and explicitly supplied bindings.
 
-This module is deliberately not wired to source_analysis. SpacerProof must be
-created by a resolver which proves the actual helper and insertion scope; mere
-identifier spelling or a package path is not such proof. See FOOTNOTE_CONTRACT.md.
+SpacerProof must be created by a resolver which proves the actual helper and
+insertion scope; mere identifier spelling or a package path is not such proof.
+The dispatcher supplies no synthetic proof. See FOOTNOTE_CONTRACT.md.
 """
 from dataclasses import dataclass
 import re
@@ -77,7 +77,8 @@ def analyze(tree, path, resolution, spacer_proof=None):
         return {r: FootnoteResult(skips=('Stale or invalid spacer proof',)) for r in RULE_IDS}
     catalog = {r['id']: r for r in load_rules()[0]['rules']}
     scopes = resolve_suppressions(tree, set(catalog))
-    findings, edits, suppressed, skips = ({r: [] for r in RULE_IDS} for _ in range(4))
+    findings, edits, suppressed = ({r: [] for r in RULE_IDS} for _ in range(3))
+    skips = {r: [*resolution.skips, 'Only bounded root footnote forms are supported'] for r in RULE_IDS}
 
     def add(rid, start, message, edit=None):
         finding = _diagnostic(source, path, catalog[rid], start, message)
@@ -210,13 +211,15 @@ def analyze(tree, path, resolution, spacer_proof=None):
             gap = re.match(rb'(\r?\n)([ \t]*\r?\n)+', rest)
             if gap and rest[gap.end():].strip(b' \t\r\n'):
                 gap_edit = None
-                if math:
+                if math and not rest[gap.end():].startswith((b'//', b'/*')):
                     gap_edit = Edit(call.end, call.end + gap.end(), gap.group(1))
+                elif math:
+                    skip(GAP, call.end, 'fix_unavailable: comment attachment is ambiguous')
                 else:
                     # Inserting parbreak requires composing a following marker
                     # repair; keep it a finding until that contract is supplied.
                     skip(GAP, call.end, 'fix_unavailable: paragraph marker composition is unproven')
-                add(GAP, call.end, 'Avoid a blank source line immediately after a footnote.', gap_edit)
+                add(GAP, start, 'Avoid a blank source line immediately after a footnote.', gap_edit)
 
     root = nodes[0]
     if tree.mode == 'markup' and root.kind == 'Markup':
@@ -225,9 +228,7 @@ def analyze(tree, path, resolution, spacer_proof=None):
             equation = nodes[i]
             if equation.kind != 'Equation' or not resolution.facts[i].prose_safe:
                 continue
-            children = [nodes[j] for j in equation.children]
-            # Display equations require whitespace on both sides of their math.
-            if len(children) < 5 or children[1].kind != 'Space' or children[-2].kind != 'Space':
+            if not equation.display:
                 continue
             for j in equation.children:
                 if nodes[j].kind == 'Math':

@@ -10,6 +10,8 @@ TOOL = Path(__file__).resolve().parents[1]
 REPO = TOOL.parents[1]
 sys.path.insert(0, str(TOOL))
 from edit_plan import Edit, plan
+from continuation_rules import RULE_ID as CONTINUATION
+from footnote_rules import GAP as FOOTNOTE_GAP, PUNCT as FOOTNOTE_PUNCT, ALIGNED as FOOTNOTE_ALIGNED
 from source_analysis import rule_ids
 from typst_lint import digest, report
 
@@ -47,7 +49,7 @@ class DisplayIntegrationTests(unittest.TestCase):
                 self.assertFalse(result['applied_fixes'])
                 self.assertFalse(result['coverage']['complete'])
                 self.assertEqual(result['coverage']['available_backends'], list(rule_ids('pde')))
-                self.assertEqual({item['rule_id'] for item in result['diagnostics']}, set(rule_ids('pde')))
+                self.assertEqual({item['rule_id'] for item in result['diagnostics']}, set(rule_ids('pde')) - {CONTINUATION, FOOTNOTE_GAP, FOOTNOTE_PUNCT, FOOTNOTE_ALIGNED})
                 self.assertEqual(before, {p.name: p.read_bytes() for p in root.iterdir()})
                 results.append(result)
             proposals = results[0]['proposed_edits']

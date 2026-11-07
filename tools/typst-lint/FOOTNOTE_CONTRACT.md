@@ -1,7 +1,9 @@
 # Footnote rule integration contract
 
-`footnote_rules.py` is an independent, partial backend. It is not registered in
-`source_analysis` and cannot authorize user-file writes or compilation. Its
+`footnote_rules.py` is a partial backend. `source_analysis` registers only its
+gap, punctuation, and aligned-spacer checks, without a spacer proof. The
+unaligned and prose spacer rules remain unregistered until provenance exists.
+It cannot authorize user-file writes or compilation. Its
 `analyze(tree, path, resolution, spacer_proof)` uses the existing parser tree,
 source-bound static resolution, rule catalog, suppression scopes, diagnostics,
 and byte-edit type. Its results use the same diagnostic/edit/skip/suppressed
@@ -43,9 +45,9 @@ Outer alignment is not inferred from tokens nested inside footnote bodies,
 comments, strings or code. Only root prose and root displays with supported
 static context are examined; absence of a finding is not complete coverage.
 
-Before wiring the backend, add resolver-produced evidence and use the common
-planner and complete candidate reparse/reanalysis, suppression ownership,
-conflict and convergence checks. Compose prose gap fixes atomically with the
+Before enabling spacer repairs, add resolver-produced evidence. The registered
+subset uses the common planner and candidate reparse/reanalysis, suppression
+ownership, conflict and convergence checks. Compose prose gap fixes atomically with the
 paragraph marker rule and compose remaining spacer/punctuation cases. Add
 integration, explicit package provenance, false-binding, nested-context,
 interaction and isolated Typst compile/render tests; update the audit matrix
