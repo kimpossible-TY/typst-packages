@@ -1,10 +1,10 @@
 # Internal captured-relative scalar core proof
 
-This module provides pure proof infrastructure. The internal identity
-`captured-relative-core-v1` is **not** registered in `source_profiles` or exposed
-by a public CLI/compiler selector. The separate internal root-only repair bridge
-consumes these proofs only with its own transaction and independent validation
-authority; see
+This module provides pure proof infrastructure. The exact public offline selector
+`captured-relative-core-v1` chooses a separate graph composition; it is not a
+member of the old single-source grammar registry. Pure certification does not
+perform CLI dispatch. The root-only repair bridge consumes these proofs only with
+its own transaction and independent validation authority; see
 [CAPTURED_RELATIVE_FIX_CONTRACT.md](CAPTURED_RELATIVE_FIX_CONTRACT.md). Both
 existing public source profiles and every PARTIAL rule status remain unchanged.
 The internal graph compiler separately consumes only the bridge's own live

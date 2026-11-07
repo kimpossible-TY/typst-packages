@@ -137,7 +137,8 @@ punctuation strings, BOM/CRLF/no-op, exact callback evidence, actual rule failur
 replay and graph-budget disagreement, reflective/copy/expiry/bypass attacks,
 preapply/postcommit source/evidence/identity drift, and existing transaction fault
 and recovery behavior. Graph compiler acceptance is tested separately under its
-own contract. Public CLI composition remains separate.
+own contract. The separate explicit graph CLI composition is described in
+[CAPTURED_RELATIVE_CLI_CONTRACT.md](CAPTURED_RELATIVE_CLI_CONTRACT.md).
 
 
 ## Private prepare-before-validation publication composition

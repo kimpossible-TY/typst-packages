@@ -1,7 +1,8 @@
 """Internal graph-only compiler for the live captured-relative repair bridge.
 
-No public profile, CLI or publication route consumes this artifact. Resources and
-process execution reuse the existing private pinned-runtime implementation.
+The separate graph publisher and explicit offline CLI compose this engine.
+Resources and process execution reuse the private pinned-runtime implementation;
+older single-source compiler and publisher APIs do not accept graph artifacts.
 """
 from __future__ import annotations
 

@@ -1,9 +1,11 @@
 # Internal captured-relative PDF publication
 
 `captured_relative_publish.py` composes the live captured-relative repair bridge,
-its graph-only compiler and the existing output-only publication store. It adds
-no CLI, wrapper, profile registry entry, installation, deployment or recovery
-schema. `captured-relative-core-v1` remains unregistered. Existing compiler and
+its graph-only compiler and the existing output-only publication store. The
+separate explicit graph CLI selects this composition without widening the old
+single-source grammar registry. This engine adds no consumer wrapper, installation,
+deployment or recovery schema. See
+[CAPTURED_RELATIVE_CLI_CONTRACT.md](CAPTURED_RELATIVE_CLI_CONTRACT.md). Existing compiler and
 publisher accepted types and ordering are unchanged. No font bytes belong in the
 repository, fixtures, CI, releases, uploads or cloud storage.
 

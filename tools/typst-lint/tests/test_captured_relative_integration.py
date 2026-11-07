@@ -706,9 +706,19 @@ class CapturedRelativeIntegrationTests(unittest.TestCase):
                         session.assert_current(capture)
                 self.no_manifest(f)
 
-    def test_legacy_profiles_still_refuse_imports_and_new_profile_is_not_public(self):
+    def test_legacy_profiles_still_refuse_imports_and_graph_selection_is_separate(self):
         self.assertEqual(source_profiles.KNOWN_SOURCE_PROFILES, {'closed-core-v1', 'structured-core-v1'})
         self.assertNotIn(core.SOURCE_PROFILE, source_profiles.KNOWN_SOURCE_PROFILES)
+        self.assertEqual(source_profiles.KNOWN_OFFLINE_SOURCE_PROFILES,
+                         source_profiles.KNOWN_SOURCE_PROFILES | {core.SOURCE_PROFILE})
+        self.assertEqual(source_profiles.CAPTURED_RELATIVE_SOURCE_PROFILE, core.SOURCE_PROFILE)
+        self.assertTrue(source_profiles.is_offline_source_profile(core.SOURCE_PROFILE))
+        for profile in (core.SOURCE_PROFILE.upper(), ' ' + core.SOURCE_PROFILE,
+                        core.SOURCE_PROFILE + ' '):
+            self.assertFalse(source_profiles.is_offline_source_profile(profile))
+        for select in (source_profiles.validate_source_profile, source_profiles.grammar_for_source_profile):
+            with self.assertRaises(ValueError):
+                select(core.SOURCE_PROFILE)
         for profile in sorted(source_profiles.KNOWN_SOURCE_PROFILES):
             with self.subTest(profile=profile):
                 with mock.patch.object(protected_fix, 'CATALOG', self.f.catalog), \
@@ -717,13 +727,6 @@ class CapturedRelativeIntegrationTests(unittest.TestCase):
                             journal_directory=self.f.store, lease=self.f.lease, source_profile=profile) as fix:
                         with self.assertRaises(lint.SafetyError):
                             fix.validate()
-        output, error = io.StringIO(), io.StringIO()
-        with redirect_stdout(output), redirect_stderr(error), \
-                mock.patch.object(inputs, '_discover', side_effect=AssertionError('public profile discovery')):
-            code = lint.main(['fix', '--root', str(self.f.root), '--format', 'json',
-                              '--profile', core.SOURCE_PROFILE, '--offline-exclusive', '--target', 'main.typ'])
-        self.assertEqual(code, 2)
-        self.assertFalse(json.loads(output.getvalue())['compiler_invoked'])
         self.assertEqual(self.f.source.read_bytes(), ROOT)
         self.no_manifest()
 

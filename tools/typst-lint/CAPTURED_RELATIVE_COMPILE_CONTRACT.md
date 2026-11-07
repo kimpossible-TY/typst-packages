@@ -1,9 +1,10 @@
 # Internal captured-relative graph compiler
 
 `captured_relative_compile.py` compiles only a genuine live committed graph from
-`ProtectedCapturedRelativeFix`. It adds no public source/resource selector,
-registry entry, CLI route, consumer wrapper, installation, publication or recovery
-schema. `captured-relative-core-v1` remains unregistered. Existing closed and
+`ProtectedCapturedRelativeFix`. The separate explicit graph CLI and prepared
+publisher compose this engine; it does not itself dispatch a CLI, register an old
+single-source grammar, install a consumer wrapper or change recovery schemas.
+See [CAPTURED_RELATIVE_CLI_CONTRACT.md](CAPTURED_RELATIVE_CLI_CONTRACT.md). Existing closed and
 structured source profiles remain import-refusing and the existing compiler and
 publisher retain their exact accepted types and ordering. In particular,
 `PreparedPdfPublication` does not accept this new artifact.

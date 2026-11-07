@@ -1,6 +1,8 @@
-"""Explicit closed-core fix, private compilation and journaled PDF publication.
+"""Explicit offline repair, private compilation and journaled PDF publication.
 
-No serialized report is authority. There are no compiler/store/limit overrides.
+The old single-source selections and separate captured-relative graph selection
+use their own source and publication engines. No serialized report is authority.
+There are no compiler/store/limit overrides.
 The only process that may signal itself is the executable entrypoint below.
 """
 from __future__ import annotations
@@ -14,6 +16,8 @@ import sys
 import threading
 
 import closed_core_compile as compiler
+from captured_relative_fix import ProtectedCapturedRelativeFix
+from captured_relative_publish import PreparedCapturedRelativePdfPublication
 from closed_core_publish import PreparedPdfPublication
 from fixed_journal import fixed_journal_directory, journal_inventory, recovery_report_json
 import offline_cli as offline
@@ -21,7 +25,7 @@ from pdf_publication_store import (OfflineOutputExclusive, PublicationError,
     PublicationPending, PublicationReport, inventory_publications, literal_destination, recover_publication)
 from protected_fix import ProtectedCoreFix, _literal_target
 from resource_profiles import APPLEGOTHIC_RESOURCE_PROFILE, validate_resource_profile
-from source_profiles import KNOWN_SOURCE_PROFILES
+from source_profiles import CAPTURED_RELATIVE_SOURCE_PROFILE, is_offline_source_profile
 from transactions import OfflineExclusive, RecoveryRequired, TransactionFailure
 from typst_lint import InputError, SafetyError
 
@@ -56,8 +60,8 @@ def validate_arguments(args, parser):
         if args.journal_id is None or re.fullmatch('[0-9a-f]{32}', args.journal_id) is None:
             parser.error('recover-output requires --journal-id with exactly 32 lowercase hexadecimal characters')
         return
-    if args.profile not in KNOWN_SOURCE_PROFILES:
-        parser.error('compile requires --profile closed-core-v1 or structured-core-v1')
+    if not is_offline_source_profile(args.profile):
+        parser.error('compile requires --profile closed-core-v1, structured-core-v1 or captured-relative-core-v1')
     try:
         validate_resource_profile(args.resource_profile)
     except ValueError:
@@ -68,6 +72,8 @@ def validate_arguments(args, parser):
         parser.error('--target is required')
     try:
         _literal_target(args.target)
+        if args.profile == CAPTURED_RELATIVE_SOURCE_PROFILE:
+            offline.canonical_path(args.target)
     except (InputError, SafetyError, ValueError) as error:
         parser.error(str(error))
     if args.journal_id is not None:
@@ -108,6 +114,21 @@ def _resource_details(report, *, historical=False):
         resource_details_note=('Original font identities were not persisted; no live resources were consulted'
             if historical else 'Original captured resource evidence' if available
             else 'Resource evidence was not captured or is unavailable'))
+
+
+def graph_observation_json(observation):
+    """Original compiler observations only; expected membership is separate."""
+    if observation is None:
+        return None
+    budget = observation.scalar_budget
+    return dict(dependency_paths=list(observation.dependency_paths),
+        dependencies=_file_evidence_json(observation.dependencies),
+        sources=[dict(path=source.path, sha256=source.sha256, size=source.size)
+                 for source in observation.sources],
+        aggregate_source_bytes=observation.aggregate_source_bytes,
+        scalar_budget=dict(policy=budget.policy, limit=budget.limit,
+            total_charge=budget.total_charge, use_count=budget.use_count,
+            origin_count=budget.origin_count))
 
 
 def compile_report_json(report):
@@ -299,8 +320,17 @@ def _print(result, json_format):
         print(inventory.get('empty', f"{len(inventory['entries'])} historical PDF journals; {len(inventory['pending'])} pending"))
     if result.get('source_summary') is not None:
         summary = result['source_summary']
-        print(f"Source profile: {summary['profile']} ({summary['grammar_version']}); {summary['target']}")
+        print(f"Source profile: {offline._source_selection_text(summary)}; {summary['target']}")
+        offline._print_graph_sources(summary)
         print('Input profile complete; global 33-rule coverage remains PARTIAL')
+    if 'graph_observation_available' in result:
+        observation = result['graph_observation']
+        if observation is None:
+            print(result['graph_observation_note'])
+        else:
+            print(f"Compiler-observed dependencies: {', '.join(observation['dependency_paths'])}")
+            budget = observation['scalar_budget']
+            print(f"Scalar render budget ({budget['policy']}): {budget['total_charge']} of {budget['limit']} bytes")
     if 'known_resource_profile_limitation' in result:
         limitation = result['known_resource_profile_limitation']
         print(f"Known resource-profile limitation ({limitation['profile']}): {limitation['note']}")
@@ -317,6 +347,7 @@ def main(arguments=None, *, gate=False):
     source_recovery = dict(state='not_checked', checked=False, pending=None)
     source_cleanup_safe = True
     selected_resource_profile = None
+    selected_source_profile = None
     result = None
     try:
         args = offline._arguments(arguments, gate)
@@ -325,6 +356,7 @@ def main(arguments=None, *, gate=False):
             raise offline.OfflineArgumentsError('This entrypoint accepts only explicit compile/output routes')
         if command == 'compile':
             selected_resource_profile = args.resource_profile
+            selected_source_profile = args.profile
         phase = 'root'
         root = offline._root(args.root)
         if command == 'output-status':
@@ -345,12 +377,22 @@ def main(arguments=None, *, gate=False):
             phase = 'capture'
             source_lease = OfflineExclusive.assert_editors_watchers_closed_and_no_other_writers()
             output_lease = OfflineOutputExclusive.assert_exporters_watchers_closed_and_no_other_writers()
-            with _tracked(ProtectedCoreFix(root, args.target,
+            if args.profile == CAPTURED_RELATIVE_SOURCE_PROFILE:
+                context = ProtectedCapturedRelativeFix(root, args.target,
                     journal_directory=fixed_journal_directory(root), lease=source_lease,
-                    create_journal_directory=True, source_profile=args.profile), cleanup, 'source') as fix:
+                    create_journal_directory=True, source_profile=args.profile)
+            else:
+                context = ProtectedCoreFix(root, args.target,
+                    journal_directory=fixed_journal_directory(root), lease=source_lease,
+                    create_journal_directory=True, source_profile=args.profile)
+            with _tracked(context, cleanup, 'source') as fix:
                 _cancelled()
                 phase = 'output-prepare'
-                publication = PreparedPdfPublication(fix, destination=args.output, lease=output_lease)
+                if args.profile == CAPTURED_RELATIVE_SOURCE_PROFILE:
+                    publication = PreparedCapturedRelativePdfPublication(fix,
+                        destination=args.output, lease=output_lease)
+                else:
+                    publication = PreparedPdfPublication(fix, destination=args.output, lease=output_lease)
                 with _tracked(publication, cleanup, 'output'):
                     _cancelled()
                     phase = 'validate'
@@ -364,11 +406,13 @@ def main(arguments=None, *, gate=False):
                         summary = offline._applied_summary(fix)
                     _cancelled()
                     phase = 'compile'
-                    publication_report = publication.compile_and_publish(fix.compile_snapshot(),
+                    snapshot = (fix.committed_graph_snapshot()
+                        if args.profile == CAPTURED_RELATIVE_SOURCE_PROFILE else fix.compile_snapshot())
+                    publication_report = publication.compile_and_publish(snapshot,
                         profile=args.resource_profile, deadline_seconds=10.0,
                         cancel_event=None if _active_signals is None else _active_signals.cancel_event)
             result = offline._base(command, 0, 'completed')
-            result.update(profile=summary.profile, grammar_version=summary.grammar_version,
+            result.update(**offline._source_selection_json(summary),
                           resource_profile=args.resource_profile,
                           target=args.target, output=args.output)
     except (InputError, SafetyError, OSError, ValueError, compiler.CompilerFailure, KeyboardInterrupt) as caught:
@@ -443,6 +487,13 @@ def main(arguments=None, *, gate=False):
         result['source_recovery'] = source_recovery
         if compile_report is not None:
             result['compile_report'] = compile_report_json(compile_report)
+        if selected_source_profile == CAPTURED_RELATIVE_SOURCE_PROFILE:
+            observation = None if publication is None else publication.graph_observation
+            result.update(graph_observation=graph_observation_json(observation),
+                graph_observation_available=observation is not None,
+                graph_observation_note=('Original compiler-observed dependency evidence and scalar render budget'
+                    if observation is not None else
+                    'Compiler-observed dependency evidence is unavailable; no validated graph artifact was obtained'))
     if publication_report is not None:
         historical = command == 'recover-output'
         result['publication_report'] = publication_report_json(publication_report, historical=historical)

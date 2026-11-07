@@ -5,10 +5,12 @@ registered source profile or repair/compiler bridge. Its internal source identit
 is `captured-relative-core-v1`. The separate `captured_relative_fix.py` bridge now
 performs protected root-only script repairs by owning one capture session and
 privately borrowing its same transaction. Capture alone never authorizes a write.
-Neither existing public source profile accepts this internal identity; both still
-reject imports without dependency discovery. No CLI, ordinary import graph/resolver,
-compiler dispatch, PDF publication, package lookup, installation, consumer
-deployment or recovery schema is added by this composition.
+Neither older single-source profile accepts this graph identity; both still
+reject imports without dependency discovery. A separate explicit graph CLI
+composition uses the repair bridge, graph compiler and prepared publisher. Capture
+itself adds no CLI dispatch, ordinary resolver widening, package lookup, consumer
+installation/deployment or recovery schema. See
+[CAPTURED_RELATIVE_CLI_CONTRACT.md](CAPTURED_RELATIVE_CLI_CONTRACT.md).
 
 ## Ownership and two captures
 

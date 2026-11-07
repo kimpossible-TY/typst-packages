@@ -1,4 +1,8 @@
-# Explicit offline closed-core CLI profile
+# Explicit offline single-source CLI profiles
+
+This document covers the two single-source branches. The separate exact graph
+selection and its additional source/reporting rules are documented in
+[CAPTURED_RELATIVE_CLI_CONTRACT.md](CAPTURED_RELATIVE_CLI_CONTRACT.md).
 
 This is a narrow opt-in writer for one closed literal `.typ` input. It is not a
 general project linter, a compilation gate, a dependency resolver, or consumer
@@ -16,7 +20,7 @@ commands are documented in
 ./typst-lint recover --root ROOT --offline-exclusive --target main.typ --journal-id ID --format json
 ```
 
-A new fix requires an exact `--profile closed-core-v1` or
+A new fix on either single-source branch requires an exact `--profile closed-core-v1` or
 `--profile structured-core-v1`, `--offline-exclusive`, and literal `--target`
 options. The assertion means that editors, watchers and
 all other source writers remain stopped throughout the operation. Git state and

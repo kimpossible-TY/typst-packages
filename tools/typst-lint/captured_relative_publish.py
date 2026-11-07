@@ -6,6 +6,7 @@ or apply attempt. Neither precompiled artifacts nor caller bytes are accepted.
 """
 from __future__ import annotations
 
+from dataclasses import dataclass
 import math
 import threading
 import time
@@ -51,6 +52,23 @@ _CONSTRUCTIONS = weakref.WeakKeyDictionary()
 _BINDINGS = weakref.WeakKeyDictionary()
 
 
+@dataclass(frozen=True, slots=True)
+class CapturedRelativeObservedSource:
+    path: str
+    sha256: str
+    size: int
+
+
+@dataclass(frozen=True, slots=True)
+class CapturedRelativeGraphObservation:
+    """Historical compiler observations only; no live artifact authority."""
+    dependency_paths: tuple[str, ...]
+    dependencies: compiler.FileEvidence
+    sources: tuple[CapturedRelativeObservedSource, ...]
+    aggregate_source_bytes: int
+    scalar_budget: compiler.ScalarRenderBudget
+
+
 class PreparedCapturedRelativePdfPublication:
     """One output baseline captured durably before this session validates sources.
 
@@ -72,6 +90,7 @@ class PreparedCapturedRelativePdfPublication:
         self._compiler_invoked = False
         self._compiler_status = None
         self._compile_report_facts = None
+        self._graph_observation_facts = None
         self.report = None
 
     @property
@@ -80,6 +99,18 @@ class PreparedCapturedRelativePdfPublication:
         # A shared artifact/report mutation can neither rebase nor erase them.
         return (None if self._compile_report_facts is None
                 else compiler._restore(self._compile_report_facts))
+
+    @property
+    def graph_observation(self):
+        # Only successfully returned AND guarded genuine artifacts supply these
+        # bounded facts. Expected capture membership never supplies observations.
+        facts = self._graph_observation_facts
+        if facts is None:
+            return None
+        paths, dependencies, sources, aggregate, budget = facts
+        return CapturedRelativeGraphObservation(tuple(paths), compiler._restore(dependencies),
+            tuple(CapturedRelativeObservedSource(*source) for source in sources),
+            aggregate, compiler._restore(budget))
 
     def _source(self):
         binding = _BINDINGS.get(self)
@@ -331,6 +362,12 @@ class PreparedCapturedRelativePdfPublication:
             self._artifact = artifact
             self._outcome(artifact)
             compiler.assert_artifact_current(binding.fix, artifact)
+            # Retain primitive projections before any later store callback can
+            # alter shared artifact records. Never retain PDF or source bytes.
+            self._graph_observation_facts = (tuple(artifact.dependency_paths),
+                compiler._retain(artifact.dependencies),
+                tuple((source.path, source.sha256, source.size) for source in artifact.sources),
+                artifact.aggregate_source_bytes, compiler._retain(artifact.scalar_budget))
             store.assert_output(store.old)
             store.event('compiled', compiler_sha256=artifact.compiler.sha256,
                 pdf_sha256=artifact.pdf_sha256, invocations=_invocation_records(self._attempts),

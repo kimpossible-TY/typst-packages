@@ -1,8 +1,9 @@
-"""Internal pure proof for captured relative scalar graphs, not a source profile.
+"""Pure proof engine for the explicit captured-relative offline source profile.
 
 Callers own parser/capture provenance. This module never reads, parses, evaluates,
 loads catalogs, or authenticates a constructible ImportGraph. Only exact original
-Trees are admitted. No existing writer or compiler consumes these proofs.
+Trees are admitted. These graph proofs alone grant no write or compile authority;
+the separate live bridge binds them to captured root/module inputs.
 """
 from collections.abc import Mapping
 from dataclasses import dataclass, field, fields, is_dataclass
@@ -12,11 +13,12 @@ import json
 import re
 
 import closed_core
-from source_profiles import STRUCTURED_CORE_GRAMMAR_VERSION
+from source_profiles import (CAPTURED_RELATIVE_SOURCE_PROFILE,
+                             STRUCTURED_CORE_GRAMMAR_VERSION)
 from syntax_client import AdapterError, MAX_NODES, Node, Tree, validate
 from typst_lint import SafetyError
 
-SOURCE_PROFILE = 'captured-relative-core-v1'
+SOURCE_PROFILE = CAPTURED_RELATIVE_SOURCE_PROFILE
 ROOT_GRAMMAR_VERSION = 'captured-relative-root-grammar-v1'
 MODULE_GRAMMAR_VERSION = 'captured-relative-module-grammar-v1'
 PARSER_CONTRACT = closed_core.PARSER_CONTRACT

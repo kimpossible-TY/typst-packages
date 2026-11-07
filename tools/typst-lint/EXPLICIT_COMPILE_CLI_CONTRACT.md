@@ -1,4 +1,8 @@
-# Explicit closed-core fix, compile and PDF publication CLI
+# Explicit single-source fix, compile and PDF publication CLI
+
+This document describes the two single-source branches and their shared status,
+signal and recovery machinery. The separately selected graph composition is
+documented in [CAPTURED_RELATIVE_CLI_CONTRACT.md](CAPTURED_RELATIVE_CLI_CONTRACT.md).
 
 This opt-in route composes the existing protected source bridge, committed-source
 compiler and independent PDF publication journal. It admits only the exact

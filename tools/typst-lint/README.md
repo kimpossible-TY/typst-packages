@@ -122,7 +122,7 @@ that is its package-contract result, not a facade capability or per-rule
 coverage claim. No local file is promoted merely by its spelling. See
 [FACADE_PROVENANCE_CONTRACT.md](FACADE_PROVENANCE_CONTRACT.md).
 
-## Internal relative scalar capture, repair and compilation
+## Captured relative scalar graphs
 
 A separate internal proof/capture layer now accounts for named relative imports
 and their entire inert scalar dependency graph. It checks exact declaration and
@@ -165,16 +165,17 @@ facts. Output-only recovery preserves committed source repairs and later edits;
 durable publication is final. Existing schema-1 historical recovery does not
 require current graph sources or resources.
 
-The identity `captured-relative-core-v1` is **not** registered or exposed by a CLI.
-Existing public profiles still refuse imports. The older single-source compiler
-and publisher do not accept graph receipts or artifacts. Public graph CLI
-composition remains separate work. No consumer documents or installed build
+The exact public offline selection `captured-relative-core-v1` now chooses this
+separate graph composition. The old single-source grammar registry, compiler and
+publisher remain closed to it, and both older profiles still refuse imports.
+Ordinary routes remain read-only. No consumer documents or installed build
 routes are changed.
 See [CAPTURED_RELATIVE_CORE_CONTRACT.md](CAPTURED_RELATIVE_CORE_CONTRACT.md),
 [CAPTURED_RELATIVE_INPUT_CONTRACT.md](CAPTURED_RELATIVE_INPUT_CONTRACT.md),
 [CAPTURED_RELATIVE_FIX_CONTRACT.md](CAPTURED_RELATIVE_FIX_CONTRACT.md),
-[CAPTURED_RELATIVE_COMPILE_CONTRACT.md](CAPTURED_RELATIVE_COMPILE_CONTRACT.md) and
-[CAPTURED_RELATIVE_PUBLISH_CONTRACT.md](CAPTURED_RELATIVE_PUBLISH_CONTRACT.md).
+[CAPTURED_RELATIVE_COMPILE_CONTRACT.md](CAPTURED_RELATIVE_COMPILE_CONTRACT.md),
+[CAPTURED_RELATIVE_PUBLISH_CONTRACT.md](CAPTURED_RELATIVE_PUBLISH_CONTRACT.md) and
+[CAPTURED_RELATIVE_CLI_CONTRACT.md](CAPTURED_RELATIVE_CLI_CONTRACT.md).
 
 ## Explicit offline source profiles
 
@@ -267,6 +268,56 @@ findings; this profile requires a clean final candidate. Reports distinguish its
 15-rule per-input proof from the global 33 PARTIAL rules. Source-only options do
 not authorize compilation. Check, dry-run and typst-style compile reject these
 opt-ins. See [OFFLINE_CLI_CONTRACT.md](OFFLINE_CLI_CONTRACT.md).
+
+## Explicit relative scalar graph commands
+
+The separate `captured-relative-core-v1` selection admits a bounded named relative
+import graph while preserving the old two profiles. For example, `main.typ`:
+
+```typst
+#import "values.typ": count, label
+= Example
+#label $x_count$
+```
+
+Its `values.typ` contains inert scalar declarations:
+
+```typst
+#let count = 7
+#let label = "captured"
+```
+
+Use `.typst-lint.toml` with `rule-set = "core"` and
+`include = ["main.typ"]`. After stopping all source writers, select:
+
+```sh
+tools/typst-lint/typst-lint fix --root /absolute/project --profile captured-relative-core-v1 --offline-exclusive --target main.typ --format json
+```
+
+For compile/publication, also stop output writers and ensure `build/` already
+exists with safe ownership and metadata:
+
+```sh
+tools/typst-lint/typst-lint compile --root /absolute/project --profile captured-relative-core-v1 --resource-profile embedded-ascii-v1 --offline-exclusive --offline-output-exclusive --target main.typ --output build/main.pdf --format json
+```
+
+Only independently verified root parentheses may change; all imported modules
+stay read-only. Root imports must be an initial named minimal relative prefix.
+The entire dependency graph must contain supported inert scalar definitions and
+immutable alias/rename forwarding, including unused declarations. Packages,
+helper/function calls, includes, resources, effects, comments/directives,
+wildcard/namespace/dynamic imports and unknown syntax remain unsupported. All
+sources pass the selected resource repertoire; the fixed imported scalar-text
+budget and production 10-second compile deadline remain enforced. A size-admitted
+input is not guaranteed to finish within that deadline.
+
+Reports identify separate root/module grammar versions and distinguish captured
+source membership from actual compiler-observed dependencies. A later compile or
+publication failure preserves valid source fixes and their reports. Source/PDF
+status and recovery commands remain independent and unchanged. Korean resource
+selection retains the Regular/upright styling limitation below. This explicit
+route does not install an all-project wrapper or change consumer build settings.
+See [CAPTURED_RELATIVE_CLI_CONTRACT.md](CAPTURED_RELATIVE_CLI_CONTRACT.md).
 
 ## Explicit closed-core compile and PDF recovery
 

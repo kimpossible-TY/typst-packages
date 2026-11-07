@@ -7,6 +7,7 @@ authority, user-selectable catalog or store.
 from __future__ import annotations
 
 import argparse
+from copy import deepcopy
 import errno
 import json
 from pathlib import Path
@@ -15,13 +16,17 @@ import stat
 import sys
 
 from closed_core import ClosedCoreError
+from captured_relative_core import canonical_path
+from captured_relative_fix import (CapturedRelativeFixError, CapturedRelativeFixSummary,
+                                   ProtectedCapturedRelativeFix)
 from fixed_journal import (JournalInventoryError, fixed_journal_directory,
                            inventory_json, journal_inventory,
                            recovery_report_json)
 from protected_fix import (ProtectedCoreError, ProtectedCoreFix,
                            ProtectedCoreInputError, _literal_target)
 from syntax_client import AdapterError
-from source_profiles import (CLOSED_CORE_SOURCE_PROFILE, KNOWN_SOURCE_PROFILES)
+from source_profiles import (CAPTURED_RELATIVE_SOURCE_PROFILE,
+    CLOSED_CORE_SOURCE_PROFILE, KNOWN_OFFLINE_SOURCE_PROFILES, is_offline_source_profile)
 from transactions import (OfflineExclusive, ProtectedTransaction,
                           RecoveryRequired, SourceEncodingError, TransactionError,
                           TransactionFailure)
@@ -90,7 +95,7 @@ def _arguments(arguments, gate):
     parser.add_argument('command', choices=('check', 'fix', 'compile', 'journal-status', 'recover', 'output-status', 'recover-output'))
     parser.add_argument('--root', required=True, type=Path)
     parser.add_argument('--format', choices=('json', 'text'), default='text')
-    parser.add_argument('--profile', choices=tuple(sorted(KNOWN_SOURCE_PROFILES)),
+    parser.add_argument('--profile', choices=tuple(sorted(KNOWN_OFFLINE_SOURCE_PROFILES)),
                         help='Explicit source grammar selection')
     parser.add_argument('--offline-exclusive', action='store_true',
                         help='Assert editors, watchers and every other source writer are stopped for the whole operation')
@@ -132,8 +137,13 @@ def _arguments(arguments, gate):
             parser.error('--target is required')
         _literal_target(args.target)
         if args.command == 'fix':
-            if args.profile not in KNOWN_SOURCE_PROFILES:
-                parser.error('fix requires --profile closed-core-v1 or structured-core-v1')
+            if not is_offline_source_profile(args.profile):
+                parser.error('fix requires --profile closed-core-v1, structured-core-v1 or captured-relative-core-v1')
+            if args.profile == CAPTURED_RELATIVE_SOURCE_PROFILE:
+                try:
+                    canonical_path(args.target)
+                except (SafetyError, ValueError) as error:
+                    parser.error(str(error))
             if args.journal_id is not None:
                 parser.error('--journal-id is available only for recover')
         else:
@@ -149,10 +159,34 @@ def _base(command, status, phase):
                 phase=phase, compiler_invoked=False, compiler_status=None)
 
 
+def _source_selection_json(summary):
+    """Separate graph grammar facts from the old single-source selection."""
+    if summary.profile == CAPTURED_RELATIVE_SOURCE_PROFILE:
+        return dict(profile=summary.profile,
+                    root_grammar_version=summary.root_grammar_version,
+                    module_grammar_version=summary.module_grammar_version,
+                    parser_contract=list(summary.parser_contract))
+    return dict(profile=summary.profile, grammar_version=summary.grammar_version)
+
+
+def _source_selection_text(summary):
+    if summary['profile'] == CAPTURED_RELATIVE_SOURCE_PROFILE:
+        return (f"{summary['profile']} (root {summary['root_grammar_version']}; "
+                f"module {summary['module_grammar_version']}; "
+                f"parser {', '.join(summary['parser_contract'])})")
+    return f"{summary['profile']} ({summary['grammar_version']})"
+
+
+def _print_graph_sources(summary):
+    if summary['profile'] == CAPTURED_RELATIVE_SOURCE_PROFILE:
+        print('Committed graph sources: ' + ', '.join(
+            f"{source['path']} ({source['role']})" for source in summary['sources']))
+        print(f"Captured import edges: {len(summary['import_edges'])}")
+
+
 def _summary_json(summary):
     """Explicit primitive output conversion; never consumed by the writer."""
-    return dict(profile=summary.profile, grammar_version=summary.grammar_version,
-                target=summary.target,
+    result = dict(**_source_selection_json(summary), target=summary.target,
                 original_sha256=summary.original_sha256, final_sha256=summary.final_sha256,
                 required_rule_ids=list(summary.required_rule_ids),
                 evaluated_rule_ids=list(summary.evaluated_rule_ids),
@@ -166,13 +200,25 @@ def _summary_json(summary):
                     input_profile_rule_count=15, global_complete=False,
                     global_rule_status='PARTIAL', global_complete_rule_count=0,
                     global_partial_rule_count=33))
+    if summary.profile == CAPTURED_RELATIVE_SOURCE_PROFILE:
+        result.update(sources=[dict(path=source.path, sha256=source.sha256,
+                                   size=source.size, role=source.role)
+                               for source in summary.sources],
+            import_edges=[dict(importer=edge.importer, request=edge.request,
+                target=edge.target, node_id=edge.node_id, span=list(edge.span),
+                items=[list(item) for item in edge.items]) for edge in summary.import_edges])
+    return result
 
 
 def _applied_summary(fix):
     """Retain known apply facts even if a later bridge safety check refused."""
     try:
-        return fix.summary
-    except ProtectedCoreError:
+        summary = fix.summary
+        # Only this exact finite graph report contains primitive frozen records.
+        # Detach it now: later compiler/cleanup callbacks can still hold the
+        # bridge's returned summary and reflectively mutate nested records.
+        return deepcopy(summary) if type(summary) is CapturedRelativeFixSummary else summary
+    except (ProtectedCoreError, CapturedRelativeFixError):
         return None
 
 
@@ -228,7 +274,8 @@ def _print(result, json_format):
     if 'error' in result:
         print(f"{result['error_code']}: {result['error']}")
     if result['command'] == 'fix' and 'profile' in result:
-        print(f"{result['profile']} ({result['grammar_version']}): {result['target']}; {len(result['modified_paths'])} modified paths")
+        print(f"{_source_selection_text(result)}: {result['target']}; {len(result['modified_paths'])} modified paths")
+        _print_graph_sources(result)
         print('Input profile complete; global 33-rule coverage remains PARTIAL')
     elif 'error' not in result and result['command'] == 'journal-status':
         print(f"{len(result['inventory']['entries'])} retained journals; {len(result['inventory']['pending'])} pending")
@@ -289,9 +336,14 @@ def main(arguments=None, *, gate=False):
             lease = OfflineExclusive.assert_editors_watchers_closed_and_no_other_writers()
             if command == 'fix':
                 phase = 'capture'
-                with ProtectedCoreFix(root, args.target, journal_directory=store,
+                if args.profile == CAPTURED_RELATIVE_SOURCE_PROFILE:
+                    context = ProtectedCapturedRelativeFix(root, args.target, journal_directory=store,
+                        lease=lease, create_journal_directory=True, source_profile=args.profile)
+                else:
+                    context = ProtectedCoreFix(root, args.target, journal_directory=store,
                         lease=lease, create_journal_directory=True,
-                        source_profile=args.profile) as fix:
+                        source_profile=args.profile)
+                with context as fix:
                     phase = 'validate'
                     candidate = fix.validate()
                     phase = 'apply'

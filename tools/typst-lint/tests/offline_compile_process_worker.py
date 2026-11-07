@@ -17,6 +17,8 @@ from unittest import mock
 sys.dont_write_bytecode = True
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
+import captured_relative_fix
+import captured_relative_inputs
 import closed_core_compile as compiler
 import closed_core_publish as publication
 import pdf_publication_store as output_store
@@ -59,10 +61,11 @@ if MODE in ('hang', 'timeout'):
 prefix = b'%PDF-1.7\\n%retained-source=' + source.read_bytes().hex().encode() + b'\\n'
 pdf = prefix + b'xref\\n0 1\\n0000000000 65535 f \\ntrailer\\n<< /Size 1 >>\\nstartxref\\n' + str(len(prefix)).encode() + b'\\n%%EOF\\n'
 output.write_bytes(pdf)
-deps.write_bytes(os.fsencode(source.relative_to(pathlib.Path.cwd())) + b'\\0')
+deps.write_bytes(b''.join(os.fsencode(path) + b'\\0' for path in DEPENDENCIES) if DEPENDENCIES is not None else os.fsencode(source.relative_to(pathlib.Path.cwd())) + b'\\0')
 '''
     raw = (f'#!{sys.executable}\nMODE = {request.get("compiler_mode", "success")!r}\n'
            f'VERSION = {compiler._VERSION!r}\nMARKER = {request["compiler_marker"]!r}\n'
+           f'DEPENDENCIES = {request.get("dependency_paths")!r}\n'
            + program).encode()
     if path.exists():
         path.chmod(0o700)
@@ -82,6 +85,10 @@ def main():
         stack.enter_context(mock.patch.object(compiler, '_reviewed_native_artifact', return_value=record))
     if request.get('catalog'):
         stack.enter_context(mock.patch.object(protected_fix, 'CATALOG', Path(request['catalog'])))
+        stack.enter_context(mock.patch.object(captured_relative_inputs, 'CATALOG', Path(request['catalog'])))
+    fix_type = (captured_relative_fix.ProtectedCapturedRelativeFix
+        if request.get('source_profile') == 'captured-relative-core-v1'
+        else protected_fix.ProtectedCoreFix)
     events = []
     seen = set()
 
@@ -123,21 +130,21 @@ def main():
     stack.enter_context(mock.patch.object(output_store._Store, 'hit', pdf_hit))
 
     if request.get('assert_order'):
-        actual_validate = protected_fix.ProtectedCoreFix.validate
+        actual_validate = fix_type.validate
         def validate(self, *args, **kwargs):
             assert ['output', 'after_prepared', request['output']] in events, events
             assert not Path(request['compiler_marker']).exists()
             assert (Path(request['root']) / request['target']).read_bytes() == bytes.fromhex(request['original_hex'])
             return actual_validate(self, *args, **kwargs)
-        stack.enter_context(mock.patch.object(protected_fix.ProtectedCoreFix, 'validate', validate))
+        stack.enter_context(mock.patch.object(fix_type, 'validate', validate))
     if request.get('forbid_validate'):
-        stack.enter_context(mock.patch.object(protected_fix.ProtectedCoreFix, 'validate',
+        stack.enter_context(mock.patch.object(fix_type, 'validate',
             side_effect=AssertionError('Blocked entry must precede source validate/apply')))
     if request.get('forbid_output_scan'):
         stack.enter_context(mock.patch.object(output_store._Store, 'inventory',
             side_effect=AssertionError('Source entry failure must not imply output scan')))
     if request.get('forbid_source'):
-        stack.enter_context(mock.patch.object(protected_fix.ProtectedCoreFix, '__enter__',
+        stack.enter_context(mock.patch.object(fix_type, '__enter__',
             side_effect=AssertionError('Output-only route must not open source/config')))
     if request.get('readonly') or request.get('forbid_leases'):
         for owner, name in ((transactions.OfflineExclusive,
@@ -176,11 +183,11 @@ def main():
             raise OSError('Owned later cleanup failure')
         stack.enter_context(mock.patch.object(compiler, '_kill', kill))
     if request.get('source_exit_failure'):
-        actual_exit = protected_fix.ProtectedCoreFix.__exit__
+        actual_exit = fix_type.__exit__
         def exit_fix(self, *args):
             actual_exit(self, *args)
             raise OSError('Owned source context close failure')
-        stack.enter_context(mock.patch.object(protected_fix.ProtectedCoreFix, '__exit__', exit_fix))
+        stack.enter_context(mock.patch.object(fix_type, '__exit__', exit_fix))
 
     with stack:
         if request.get('ignore_block_signal'):

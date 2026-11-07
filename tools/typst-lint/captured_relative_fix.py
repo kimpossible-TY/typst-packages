@@ -1,6 +1,7 @@
-"""Internal root-only repair of one transaction-captured inert relative graph.
+"""Root-only repair of one transaction-captured inert relative graph.
 
-No public source-profile, CLI, compiler or artifact route consumes these receipts.
+The explicit graph CLI uses the separate graph compiler and PDF publisher.
+Existing single-source compiler and publisher APIs do not accept these receipts.
 The runtime is trusted Python, not a sandbox against arbitrary program changes.
 """
 from __future__ import annotations
@@ -98,6 +99,25 @@ class CapturedRelativeFixCandidate:
 
 
 @dataclass(frozen=True, slots=True)
+class CapturedRelativeSourceSummary:
+    """Final validated source membership, not compiler-observed dependencies."""
+    path: str
+    sha256: str
+    size: int
+    role: str
+
+
+@dataclass(frozen=True, slots=True)
+class CapturedRelativeImportSummary:
+    importer: str
+    request: str
+    target: str
+    node_id: int
+    span: tuple[int, int]
+    items: tuple[tuple[str, str], ...]
+
+
+@dataclass(frozen=True, slots=True)
 class CapturedRelativeFixSummary:
     """Reporting only, never input to apply or committed authority."""
     profile: str
@@ -113,6 +133,21 @@ class CapturedRelativeFixSummary:
     parser_contract: tuple[str, ...]
     modified_paths: tuple[str, ...] = ()
     journal_id: str | None = None
+    sources: tuple[CapturedRelativeSourceSummary, ...] = ()
+    import_edges: tuple[CapturedRelativeImportSummary, ...] = ()
+
+
+def _restore_summary(retained):
+    """Copy only the original finite summary shape, never a changed report."""
+    kind, expected = retained
+    if kind in (str, bytes, int, bool, type(None)):
+        return expected
+    if kind is tuple:
+        return tuple(_restore_summary(item) for item in expected)
+    _require(kind in (CapturedRelativeFixSummary, CapturedRelativeSourceSummary,
+                      CapturedRelativeImportSummary, AppliedInsertion),
+             'Invalid retained relative summary record')
+    return kind(**{name: _restore_summary(fact) for name, fact in expected})
 
 
 @dataclass(frozen=True, slots=True)
@@ -188,6 +223,7 @@ class ProtectedCapturedRelativeFix:
         self._validation_pins = None
         self._applied_validation = self._committed = self._committed_facts = None
         self._receipt = self._summary = self._validated_summary = None
+        self._summary_facts = None
         self._history = []
         # Monotonic admission facts: even a refusal before history/candidate
         # issuance means output preparation can no longer precede validation.
@@ -207,7 +243,7 @@ class ProtectedCapturedRelativeFix:
                  and all(getattr(self, name) is None for name in (
                      '_candidate', '_validation', '_validation_facts', '_validation_pins',
                      '_applied_validation', '_committed', '_committed_facts', '_receipt',
-                     '_summary', '_validated_summary'))
+                     '_summary', '_summary_facts', '_validated_summary'))
                  and tx._issued is None and tx._issued_facts is None
                  and tx._committed_receipt is None and tx._committed_graph is None
                  and tx._committed_files is None and tx._committed_evidence is None,
@@ -434,7 +470,13 @@ class ProtectedCapturedRelativeFix:
             tuple(proof.evaluated_rule_ids), tuple(proof.structural_reasons),
             tuple(AppliedInsertion(self.target, item.edit.start, item.edit.end, item.edit.replacement)
                   for item in replay.edits), self.root_grammar_version,
-            self.module_grammar_version, self.parser_contract)
+            self.module_grammar_version, self.parser_contract,
+            sources=tuple(CapturedRelativeSourceSummary(source.path, source.source_sha256,
+                source.source_bytes, 'writable_root' if source.path == self.target
+                else 'unchanged_read_only_dependency') for source in proof.sources),
+            import_edges=tuple(CapturedRelativeImportSummary(edge.importer, edge.request,
+                edge.target, edge.node_id, tuple(edge.span),
+                tuple(tuple(item) for item in edge.items)) for edge in proof.edges))
         validation = _Validation(candidate, replay, captures, proof, tuple(self._history),
             self._baseline_graph.root, self.target, self._baseline_graph.evidence,
             digest(self._baseline_graph.evidence[self._session._config_path]),
@@ -479,11 +521,10 @@ class ProtectedCapturedRelativeFix:
         self._assert_validation(validation)
         self._session.assert_current(self._capture)
         # Snapshot reporting before any transaction fault callback can mutate
-        # exposed frozen objects reflectively. Clone nested insertion records as
-        # well as the outer summary; this local copy is never exposed mid-apply.
-        report = replace(validation.summary, applied_insertions=tuple(
-            AppliedInsertion(e.path, e.start, e.end, e.replacement, e.rule_id)
-            for e in validation.summary.applied_insertions))
+        # exposed frozen objects reflectively. Follow independently retained
+        # primitive facts, including source/edge/insertion records; this local
+        # deep copy is never exposed mid-apply and supplies no write authority.
+        report = _restore_summary(_retain_authority(validation.summary))
         self._candidate = None
         result = self._tx.apply(candidate._token)
         # Establish provenance and honest reporting immediately after actual
@@ -491,12 +532,18 @@ class ProtectedCapturedRelativeFix:
         self._applied_validation = validation
         self._summary = replace(report, modified_paths=result.modified,
                                 journal_id=result.journal)
+        self._summary_facts = _retain_authority(self._summary)
         self._assert_validation(validation)
         return result
 
     @property
     def summary(self):
-        _require(self._summary is not None, 'A successful relative bridge apply is required for reporting')
+        _require(self._summary_facts is not None,
+                 'A successful relative bridge apply is required for reporting')
+        # Preserve ordinary report identity for existing callers, but a shared
+        # or reflectively changed report cannot rebase or erase actual success.
+        if not _matches_authority(self._summary, self._summary_facts):
+            self._summary = _restore_summary(self._summary_facts)
         return self._summary
 
     def _assert_committed_binding(self, snapshot):
