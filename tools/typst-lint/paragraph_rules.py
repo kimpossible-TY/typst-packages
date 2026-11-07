@@ -4,12 +4,13 @@ Only canonical standalone markers in proven root prose are currently supported.
 This is partial analysis, not permission to write or compile consumer sources.
 """
 from dataclasses import dataclass
+from collections.abc import Mapping
 import re
 
 from capitalization import BodyKind, Context, MarkerBinding, StartKind, evaluate
 from edit_plan import Edit
 from suppression import resolve as resolve_suppressions
-from typst_lint import Diagnostic, digest, load_rules
+from typst_lint import Diagnostic, InputError, digest, load_rules
 
 CAPITALIZATION = 'pde.paragraph-capitalization'
 MARKER_GAP = 'pde.paragraph-marker-gap'
@@ -32,8 +33,20 @@ def _diagnostic(source, path, rule, start, explanation):
     return Diagnostic(rule['id'], rule['grade'], path, line, column, explanation, rule['source'])
 
 
-def analyze(tree, path, resolution):
+def analyze(tree, path, resolution, *, catalog=None):
     """Consume hash-bound proofs, never infer a helper from its identifier text."""
+    supplied = catalog is not None
+    if supplied:
+        if (type(catalog) not in (tuple, list)
+                or any(not isinstance(record, Mapping) or type(record.get('id')) is not str
+                       or not record['id'] for record in catalog)):
+            raise InputError('Paragraph analysis requires explicit rule metadata records')
+        for rid in RULE_IDS:
+            records = [record for record in catalog if record.get('id') == rid]
+            if (len(records) != 1
+                    or any(type(records[0].get(name)) is not str or not records[0][name]
+                           for name in ('grade', 'source'))):
+                raise InputError('Missing or invalid paragraph rule metadata')
     source, nodes = tree.source, tree.nodes
     if nodes[0].errors:
         errors = tuple((n.start, n.end) for n in nodes if n.kind == 'Error')
@@ -43,7 +56,8 @@ def analyze(tree, path, resolution):
     if resolution.source_sha256 != digest(source) or len(resolution.facts) != len(nodes):
         result = ParagraphResult(skips=('Stale or mismatched static resolution; no repair proposed',))
         return {rid: result for rid in RULE_IDS}
-    catalog = {r['id']: r for r in load_rules()[0]['rules']}
+    catalog_records = load_rules()[0]['rules'] if catalog is None else catalog
+    catalog = {r['id']: r for r in catalog_records}
     scopes = resolve_suppressions(tree, set(catalog))
     findings = {rid: [] for rid in RULE_IDS}
     edits = {rid: [] for rid in RULE_IDS}
@@ -174,7 +188,8 @@ def analyze(tree, path, resolution):
                               body.end, ms, me, first.start, first.start + len(word[0]), word[0],
                               StartKind.LITERAL_WORD, BodyKind.ORDINARY_PROSE,
                               MarkerBinding.PARAGRAPH_TAB, resolution.language_for(first_id))
-            result = evaluate(source, context)
+            result = (evaluate(source, context, catalog=catalog_records)
+                      if supplied else evaluate(source, context))
             if result.diagnostic is not None:
                 add(CAPITALIZATION, result.diagnostic, result.edit, ms, first.start)
             elif result.skip_reason != 'already-uppercase':

@@ -6,11 +6,12 @@ literal first-token classification. A config default cannot override
 unknown/dynamic source-language evidence.
 """
 from dataclasses import dataclass
+from collections.abc import Mapping
 from enum import Enum
 import re
 
 from edit_plan import Edit
-from typst_lint import Diagnostic, digest, load_rules, relative
+from typst_lint import Diagnostic, InputError, digest, load_rules, relative
 
 RULE_ID = 'pde.paragraph-capitalization'
 # Explicit editorial convention, not a test of mathematical meaning.
@@ -68,7 +69,22 @@ class Result:
     skip_reason: str | None = None
 
 
-def evaluate(source: bytes, context: Context) -> Result:
+def _rule_metadata(catalog):
+    """An explicit catalog, including an empty one, never selects ambient data."""
+    if type(catalog) not in (tuple, list):
+        raise InputError('Capitalization requires explicit rule metadata records')
+    if any(not isinstance(record, Mapping) or type(record.get('id')) is not str
+           or not record['id'] for record in catalog):
+        raise InputError('Invalid capitalization catalog record identity')
+    records = [record for record in catalog if record['id'] == RULE_ID]
+    if (len(records) != 1
+            or any(type(records[0].get(name)) is not str or not records[0][name]
+                   for name in ('grade', 'source'))):
+        raise InputError('Missing or invalid capitalization rule metadata')
+    return records[0]
+
+
+def evaluate(source: bytes, context: Context, *, catalog=None) -> Result:
     """Return one byte edit/finding, or an explicit refusal/nonapplicability reason.
 
     Effective English tags match en(?:-[A-Za-z0-9]{2,8})* case-insensitively.
@@ -78,6 +94,11 @@ def evaluate(source: bytes, context: Context) -> Result:
     Marker and prose must be adjacent source lines: exactly one LF or CRLF,
     with horizontal whitespace only. Blank intervening lines detach ownership.
     """
+    # Validate supplied evidence even on a non-editing path. None alone retains
+    # the old lazy ambient lookup; an empty/invalid supplied catalog cannot
+    # silently become disk authority.
+    selected_rule = None if catalog is None else _rule_metadata(catalog)
+
     def skip(reason):
         return Result(skip_reason=reason)
 
@@ -143,7 +164,8 @@ def evaluate(source: bytes, context: Context) -> Result:
         return skip('already-uppercase')
     if not word.islower():
         return skip('mixed-case-initial-word')
-    rule = next(r for r in load_rules()[0]['rules'] if r['id'] == RULE_ID)
+    rule = (_rule_metadata(load_rules()[0]['rules'])
+            if selected_rule is None else selected_rule)
     line = source[:start].count(b'\n') + 1
     column = len(source[source.rfind(b'\n', 0, start) + 1:start].decode('utf-8')) + 1
     return Result(Edit(start, start + 1, word[:1].upper()),

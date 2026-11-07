@@ -177,6 +177,34 @@ See [CAPTURED_RELATIVE_CORE_CONTRACT.md](CAPTURED_RELATIVE_CORE_CONTRACT.md),
 [CAPTURED_RELATIVE_PUBLISH_CONTRACT.md](CAPTURED_RELATIVE_PUBLISH_CONTRACT.md) and
 [CAPTURED_RELATIVE_CLI_CONTRACT.md](CAPTURED_RELATIVE_CLI_CONTRACT.md).
 
+## Internal captured paragraph capitalization
+
+A separate `ProtectedCapturedTextUtilsParagraphFix` can repair a deliberately
+bounded root document using the exact reviewed text-utils 0.1.2 paragraph marker
+and show. It retains the root, explicit English configuration, catalog and exact
+package manifest/source in one transaction. Its independent whole-root proof
+accounts for all 33 selected obligations: five actual evaluations and 28
+structural discharges, not a claim that all global rule contracts are complete.
+
+Only one-byte ASCII capitalization of eligible first words in canonical marked,
+single-line literal paragraphs is admitted. Independent replay, candidate
+ownership, immutable evidence and original identities guard application. All
+other source bytes and package files remain unchanged; successful repairs and
+honest historical summaries survive later rejected operations. Existing
+transaction recovery remains separate from live input authority.
+
+This profile is internal. It grants no compiler receipt, public CLI selection,
+package installation or consumer rollout. Private native characterization of
+LF/CRLF and four horizontal-spacing variants observes lowercase original
+rendering and the intended uppercase rendering after repair. Both preserve
+1.5em indentation, line positions and the remaining text; subsequent words
+shift only by the changed first word's advance. PDF/raster bytes are expected
+to differ. This is independent test evidence, not production package-compilation
+authority or a general rendering-equivalence claim.
+See [CAPTURED_TEXT_UTILS_PARAGRAPH_INPUT_CONTRACT.md](CAPTURED_TEXT_UTILS_PARAGRAPH_INPUT_CONTRACT.md),
+[CAPTURED_TEXT_UTILS_PARAGRAPH_CORE_CONTRACT.md](CAPTURED_TEXT_UTILS_PARAGRAPH_CORE_CONTRACT.md) and
+[CAPTURED_TEXT_UTILS_PARAGRAPH_FIX_CONTRACT.md](CAPTURED_TEXT_UTILS_PARAGRAPH_FIX_CONTRACT.md).
+
 ## Explicit offline source profiles
 
 `protected_fix.py` connects actual parser/script analysis to the existing
