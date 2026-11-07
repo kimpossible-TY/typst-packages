@@ -11,12 +11,14 @@ commands are documented in
 
 ```sh
 ./typst-lint fix --root ROOT --profile closed-core-v1 --offline-exclusive --target main.typ --format json
+./typst-lint fix --root ROOT --profile structured-core-v1 --offline-exclusive --target main.typ --format json
 ./typst-lint journal-status --root ROOT --format json
 ./typst-lint recover --root ROOT --offline-exclusive --target main.typ --journal-id ID --format json
 ```
 
-A new fix requires the actual `--profile closed-core-v1`, `--offline-exclusive`,
-and literal `--target` options. The assertion means that editors, watchers and
+A new fix requires an exact `--profile closed-core-v1` or
+`--profile structured-core-v1`, `--offline-exclusive`, and literal `--target`
+options. The assertion means that editors, watchers and
 all other source writers remain stopped throughout the operation. Git state and
 the cooperating root lock do not establish or imply this assertion. The CLI
 constructs the engine assertion only after the explicit flag and all command
@@ -26,9 +28,13 @@ The current config must explicitly contain `rule-set = "core"` and
 `include = ["main.typ"]`, using the supplied literal target. Only an optional
 identical `entrypoint` is additionally accepted. No unknown keys, wider
 selection, PDE pack, glob, package path or catalog override is accepted.
-The existing strict closed-core grammar remains unchanged: only admitted
-literal prose/math, with all calls, imports/includes, directives, bindings,
-unsupported syntax and other excluded constructs refused. See
+`closed-core-v1` remains the unchanged `closed-core-markup-v1` literal prose/math
+grammar. Only explicit `structured-core-v1` selects `closed-core-markup-v2`,
+adding recursively literal headings, `-` list items, automatic `+` enumeration
+items, strong text and emphasis. All calls, imports/includes, comments/directives,
+bindings, labels, explicit numbered enumerators, term lists, resources and other
+excluded constructs remain refused, including inside nested wrappers. No alias,
+latest name, source-selected fallback or silent widening is available. See
 [CLOSED_CORE_CONTRACT.md](CLOSED_CORE_CONTRACT.md).
 
 `ProtectedCoreFix.validate()` and `.apply()` run in the same live context. The
@@ -82,13 +88,19 @@ store migration or arbitrary overwrite option in this CLI profile.
 
 ## Reports and exit codes
 
-Successful fix output contains profile/target, original and final SHA-256,
+Successful fix output contains actual selected profile/grammar_version/target,
+original and final SHA-256,
 exactly 15 required IDs, the actually evaluated script rule, 14 source-proven
 inapplicability reasons, applied insertions, modified paths and journal ID.
 The immutable reporting summary is derived only after verified independent
 replay/history checks, and is exposed only after successful apply. It is never
 used as write authority. No-op fixes create no journal and report no insertions
 or modified paths.
+Text output likewise identifies the selected source profile and grammar.
+Session selection drift or retained proof mutation is a safety refusal (3),
+not an invalid-input refusal (2). The verifier never selects its grammar from
+supplied proof fields. Recovery never resolves or requires a current profile;
+the source journal schema is unchanged.
 
 `coverage.input_profile_complete` refers only to this input/profile.
 `coverage.global_complete` remains false, with 33 global rules PARTIAL and zero

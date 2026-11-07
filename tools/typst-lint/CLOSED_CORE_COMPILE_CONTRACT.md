@@ -19,7 +19,8 @@ from another session cannot authorize compilation.
 cancel_event=None)` compiles the retained **committed postimage**, not a fresh
 source read. The real bridge guard verifies the original committed file identity,
 bytes, metadata, source parents, original config/catalog, applied candidate,
-independent provenance and session. It runs before/after probes and compilation,
+independent provenance, selected source profile/grammar and session. It runs
+before/after probes and compilation,
 after output capture, on failure, and again before artifact issuance. Source or
 evidence drift blocks the artifact. It does not undo valid committed fixes.
 
@@ -40,8 +41,10 @@ or writers that violate the required offline-exclusive assertion.
 
 ## Explicit resource profile
 
-`profile` is a required keyword with no default, separately named from source
-admission profile closed-core-v1. The pure `resource_profiles.py` module exposes
+`profile` is a required resource keyword with no default, distinct from source
+admission selection `closed-core-v1` or `structured-core-v1`. The source session
+and its guarded committed snapshot own that selection; resource selection never
+widens it. The pure `resource_profiles.py` module exposes
 exact historical names and source-repertoire validation independently of live
 platform/compiler/font availability. Neither imports nor name validation read
 fonts, execute probes, normalize text, or make an availability claim.
@@ -54,6 +57,15 @@ fonts, execute probes, normalize text, or make an availability claim.
   ASCII/BOM handling plus U+AC00..U+D7A3 modern precomposed Hangul syllables,
   U+3131..U+3163 modern compatibility jamo, and exactly these 21 characters:
   `· – — ‘ ’ “ ” … ₩ 、 。 〈 〉 《 》 「 」 『 』 【 】`.
+
+The captured AppleGothic file has one Regular face. Native structured fixtures
+preserve Korean glyphs in headings, lists, strong and emphasis, but strong/emphasis
+Korean text remains regular upright, including their combination. Headings use
+a larger size without a Korean bold face. The actual PDF font, glyph codes,
+rendering mode and unskewed matrices agree with this observed fallback. Latin/math
+may use styled embedded fonts. Before/after repair bounding boxes and page
+rasters match in the same captured environment; this is not a claim of Korean
+bold/italic fidelity or equivalence to ambient font discovery.
 
 There is no automatic normalization. Conjoining/NFD jamo, fillers U+115F,
 U+1160 and U+3164, archaic/extended jamo, combining accents, joiners, variation

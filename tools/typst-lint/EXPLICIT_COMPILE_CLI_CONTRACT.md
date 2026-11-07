@@ -10,6 +10,7 @@ change a consumer project or AGENTS.md, merge, deploy or roll out anything.
 
 ```sh
 ./typst-lint compile --root ROOT --profile closed-core-v1 --resource-profile embedded-ascii-v1 --offline-exclusive --offline-output-exclusive --target main.typ --output build/main.pdf --format json
+./typst-lint compile --root ROOT --profile structured-core-v1 --resource-profile embedded-ascii-v1 --offline-exclusive --offline-output-exclusive --target main.typ --output build/main.pdf --format json
 ./typst-lint output-status --root ROOT --format json
 ./typst-lint recover-output --root ROOT --offline-output-exclusive --output build/main.pdf --journal-id ID --format json
 ```
@@ -17,6 +18,15 @@ change a consumer project or AGENTS.md, merge, deploy or roll out anything.
 Use `./typst-lint compile --profile closed-core-v1 --help` for the explicit
 route's options and both exact resource-profile names. Bare `compile --help`
 retains the ordinary read-only route's help and dispatch behavior.
+
+The two exact source profiles are independent of resource selection.
+`closed-core-v1` retains unchanged `closed-core-markup-v1` admission, while
+`structured-core-v1` explicitly selects `closed-core-markup-v2`: recursively
+literal headings, `-` list items, automatic `+` enumeration items, strong text
+and emphasis surrounding the same admitted prose/math. Numbered enumerators,
+term lists, comments/directives, labels, calls, code, imports and resources remain
+unsupported, even when nested. There are no aliases or proof-selected fallbacks.
+The bridge defaults remain v1; only the explicit option selects v2.
 
 Every authority option shown for compile is required. The source assertion means
 editors, watchers and all other source writers remain stopped. The independent
@@ -66,6 +76,12 @@ CLOSED_CORE_COMPILE_CONTRACT.md and PDF_PUBLICATION_CONTRACT.md for the unchange
 source, compiler and output engines. A successful immutable source summary is
 retained independently of any subsequent compile/publication failure. Both
 contexts exit before printing, returning a process status or terminating.
+Both source profiles use the same source transaction, one-pass script repair,
+independent replay, applied receipt and live compiler guard. The selected source
+profile and grammar remain bound through retained validation and every compile
+snapshot/currentness assertion. Changed session or snapshot/proof authority is
+a safety refusal (3), not an input-profile refusal (2). Both resource profiles
+and their platform/repertoire/font requirements remain unchanged.
 
 No automatic recovery is performed. Successfully committed source fixes remain
 committed if compilation or PDF publication fails. PDF rollback/recovery does not
@@ -123,6 +139,23 @@ source journal ID, publication_report with
 output disposition/PDF journal/recovery, and separate source_recovery and
 output_recovery. It includes no PDF bytes or full source text. Reporting values
 and summaries are never consumed as write authority.
+Successful compile JSON and `source_summary` identify actual selected `profile`
+and `grammar_version`. The immutable source summary retains them after a later
+compiler/publication failure. Text output identifies both whenever that summary
+exists. No source-profile fields are added to the source/PDF journal schema;
+status and historical recovery do not resolve a current source profile or add
+font/platform availability requirements.
+
+After valid explicit compile argument selection, only
+`embedded-applegothic-ko-v1` adds a top-level
+`known_resource_profile_limitation` with `profile` and `note`. Text labels it
+"Known resource-profile limitation". Korean strong/emph remains regular upright;
+headings gain size but not a Korean bold face. This profile does not establish
+styled Korean fidelity. This is the selected profile's fixed known limitation,
+not captured resource evidence, a new compiler observation or a fidelity claim.
+It can appear even when compilation/font capture never started. ASCII adds no
+warning. Historical recovery/inventory never add this current-selection note,
+and original resource reports and source/PDF journal schemas remain unchanged.
 
 The actual immutable compiler report survives both contexts, without synthesis
 from invocation summaries. Its resource evidence contains profile/repertoire,

@@ -17,6 +17,16 @@ The bridge never creates that assertion itself.
 The assertion means editors, watchers and other writers are stopped for the
 whole context; the transaction lock does not establish that fact.
 
+The keyword-only `source_profile` selects one exact grammar. Omission retains
+`closed-core-v1` / `closed-core-markup-v1`, unchanged. Explicit
+`structured-core-v1` selects `closed-core-markup-v2`, adding only recursively
+literal headings, `-` list items, automatic `+` enumeration items, strong text
+and emphasis around the same admitted literal prose/math. Explicit numbered
+enumerators, term lists and all previously excluded executable/resource syntax
+remain unsupported. There are no aliases, latest-profile names, automatic
+widening or proof-selected fallbacks. Unknown profiles are input errors before
+transaction or filesystem access.
+
 A present `.typst-lint.toml` must explicitly contain `rule-set = "core"` and
 `include = ["the/exact/target.typ"]`. The only optional key is an `entrypoint`
 with the same literal target. Default selection, other packs, glob breadth,
@@ -39,6 +49,9 @@ values are parsed from retained bytes. The callback never rereads source,
 configuration, catalog or dependencies. The official pinned syntax adapter is
 actually invoked on the supplied source bytes. A fresh source/path/tree-bound
 closed-grammar proof is certified and verified for that exact parser tree.
+Every baseline, candidate, fresh final and independent replay check explicitly
+uses the session's selected source profile. Both profile and grammar are bound
+to the proof, not selected by its fields.
 The admission contract is in `CLOSED_CORE_CONTRACT.md`; it structurally rules out
 imports, calls, code, comments/directives, labels, references and resources.
 Its 14 explicit inapplicability reasons discharge those core rules only for this
@@ -49,6 +62,10 @@ script result fails. Reports and their partial/evaluated booleans are not used.
 Finding identities use attachment preorder and operand role, not byte offsets.
 These identities are checked to survive the inserted grouping. This is not an
 identity scheme for arbitrary rewrites or retained unresolved diagnostics.
+Independent checks also retain each attachment's wrapper/equation ancestry,
+equation display state and nested operand ownership. Backend proposals must
+equal the independently enumerated opening and closing parentheses at every
+ungrouped operand boundary, including shared nested boundaries.
 This first profile permits at most one actual repair pass and requires zero
 final findings. An unexpected second repair pass fails before application.
 The transaction's eight-pass ceiling, repeated-state defense, independent fresh
@@ -73,6 +90,18 @@ bridge's own independent comparison succeeded. A token minted directly through
 the trusted internal `transaction` inspection property is not accepted by the
 bridge. Arbitrary trees, proofs, GraphAnalysis objects, final-byte maps, JSON or
 boolean attestations are not inputs to bridge validation or application.
+
+The source-profile/grammar selection is retained independently of mutable
+session attributes. Changing either attribute refuses validation, application
+or compile handoff as a safety failure. Before actual apply, the retained final
+proof is independently verified again with the original selection; foreign,
+changed or cross-profile proofs cannot authorize writes. Successful immutable
+summaries report the actual selected `profile` and `grammar_version`.
+Selection/proof is checked again after successful actual apply, outside the
+transaction rollback boundary. Drift during application returns a safety
+failure while retaining valid committed fixes, the applied summary and its
+original profile/grammar. CLI reports distinguish that known commit from an
+application failure with unknown source outcome.
 
 Default `ReadLimits` bound source files at 1 MiB, each evidence file at 4 MiB,
 each graph capture at 16 MiB, metadata at 256 KiB, and journals at 64 MiB per

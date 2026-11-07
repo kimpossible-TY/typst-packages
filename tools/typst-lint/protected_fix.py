@@ -14,11 +14,13 @@ from types import MappingProxyType
 from typing import Mapping
 
 from candidate_convergence import converge
-from closed_core import (CORE_RULE_IDS as ADMISSION_CORE_RULE_IDS,
+from closed_core import (CORE_RULE_IDS as ADMISSION_CORE_RULE_IDS, ClosedCoreError,
                          certify, verify_proof)
-from edit_plan import plan
+from edit_plan import Edit, plan
 from script_rule import RULE_ID as SCRIPT, ScriptResult, analyze as analyze_script
 from syntax_client import parse
+from source_profiles import (CLOSED_CORE_SOURCE_PROFILE, grammar_for_source_profile,
+                             validate_source_profile)
 from transactions import (DEFAULT_READ_LIMITS, CommittedSnapshot, EvidenceInput, GraphAnalysis,
                           GraphSnapshot, ProtectedTransaction, SourceEdit,
                           TransactionError)
@@ -143,6 +145,62 @@ def _attachment_roles(tree):
                  for node in tree.nodes if node.kind == 'MathAttach')
 
 
+def _script_ownership(tree):
+    """Retain wrapper/equation and nested-operand owners through grouping.
+
+    Math grouping is transparent here. Exact operand-boundary insertions and
+    raw-byte preservation are checked separately, so this is not permission for
+    any other rewrite or for moving a script to an equal-looking equation.
+    """
+    wrappers = frozenset(('Heading', 'ListItem', 'EnumItem', 'Strong', 'Emph'))
+    owners, attachments = [], []
+    counts = {'wrapper': 0, 'equation': 0, 'attachment': 0}
+
+    def visit(index, enclosing=(), operands=()):
+        node = tree.nodes[index]
+        if node.kind in wrappers:
+            counts['wrapper'] += 1
+            owner = (node.kind, counts['wrapper'])
+            owners.append((owner, enclosing))
+            enclosing += (owner,)
+        elif node.kind == 'Equation':
+            counts['equation'] += 1
+            owner = ('Equation', counts['equation'], node.display)
+            owners.append((owner, enclosing))
+            enclosing += (owner,)
+        if node.kind == 'MathAttach':
+            counts['attachment'] += 1
+            ordinal = counts['attachment']
+            attachments.append((enclosing, operands, tuple(role for role, _ in node.operands)))
+            roles = {child: role for role, child in node.operands}
+            for child in node.children:
+                visit(child, enclosing, operands + ((ordinal, roles.get(child, 'base')),))
+        else:
+            for child in node.children:
+                visit(child, enclosing, operands)
+
+    visit(0)
+    return tuple(owners), tuple(attachments)
+
+
+def _script_insertions(tree):
+    """Independently account for both boundaries of every ungrouped operand."""
+    operands = set()
+    for node in tree.nodes:
+        for _, operand_id in node.operands:
+            operand = tree.nodes[operand_id]
+            children = tuple(tree.nodes[i] for i in operand.children)
+            if not (operand.kind == 'Math' and children
+                    and children[0].kind == 'LeftParen' and children[-1].kind == 'RightParen'):
+                operands.add((operand.start, operand.end))
+    opens, closes = {}, {}
+    for start, end in operands:
+        opens[start] = opens.get(start, 0) + 1
+        closes[end] = closes.get(end, 0) + 1
+    return tuple(Edit(p, p, b')' * closes.get(p, 0) + b'(' * opens.get(p, 0))
+                 for p in sorted(opens.keys() | closes.keys()))
+
+
 def _operand_records(tree, path):
     """Semantic IDs survive inserted grouping; no byte offsets enter identity.
 
@@ -177,9 +235,18 @@ def _findings(tree, path, result):
     return frozenset(identity for identity, _, _, _ in expected)
 
 
-def _script(tree, path, catalog):
-    proof = certify(tree, path)
-    verify_proof(proof, tree, path)
+def _verify_selected_proof(proof, tree, path, source_profile):
+    # A source refusal from certify is input classification. A proof which
+    # fails independent verification is changed/foreign authority, not input.
+    try:
+        verify_proof(proof, tree, path, source_profile=source_profile)
+    except ClosedCoreError as error:
+        raise ProtectedCoreError(f'Protected admission proof changed: {error}') from error
+
+
+def _script(tree, path, catalog, *, source_profile=CLOSED_CORE_SOURCE_PROFILE):
+    proof = certify(tree, path, source_profile=source_profile)
+    _verify_selected_proof(proof, tree, path, source_profile)
     _require(tuple(proof.evaluated_rule_ids) == (SCRIPT,)
              and frozenset(proof.not_applicable_rule_ids) == CORE_RULE_IDS - {SCRIPT}
              and frozenset(rid for rid, reason in proof.structural_reasons if reason)
@@ -194,6 +261,8 @@ def _script(tree, path, catalog):
     findings = _findings(tree, path, result)
     _require(bool(findings) == bool(result.edits),
              'Every script finding must have an actual repair in this profile')
+    _require(result.edits == _script_insertions(tree),
+             'Script proposals must insert exact grouping at every admitted operand boundary')
     return result, findings
 
 
@@ -226,6 +295,13 @@ class ProtectedCoreSummary:
     applied_insertions: tuple[AppliedInsertion, ...]
     modified_paths: tuple[str, ...] = ()
     journal_id: str | None = None
+    grammar_version: str = 'closed-core-markup-v1'
+
+
+@dataclass(frozen=True, slots=True)
+class _SourceSelection:
+    source_profile: str
+    grammar_version: str
 
 
 @dataclass(frozen=True, slots=True)
@@ -239,6 +315,7 @@ class _CompileValidation:
     evidence: Mapping[str, bytes | None]
     config_sha256: str
     catalog_sha256: str
+    selection: _SourceSelection
 
 
 @dataclass(frozen=True, slots=True, init=False, eq=False)
@@ -257,6 +334,8 @@ class ClosedCoreCompileSnapshot:
     _receipt: CommittedSnapshot = field(repr=False)
     _validation: _CompileValidation = field(repr=False)
     _owner: object = field(repr=False)
+    source_profile: str
+    grammar_version: str
 
     def __init__(self, *args, **kwargs):
         raise TypeError('ClosedCoreCompileSnapshot is issued only by compile_snapshot()')
@@ -272,7 +351,17 @@ class ProtectedCoreFix:
     """
     def __init__(self, root: Path, target: str, *, journal_directory: Path,
                  lease, limits=DEFAULT_READ_LIMITS, fault=None,
-                 create_journal_directory=False):
+                 create_journal_directory=False, source_profile=CLOSED_CORE_SOURCE_PROFILE):
+        # Unknown selections are arguments, refused before transaction/root or
+        # journal access. No profile is inferred from source or supplied proof.
+        try:
+            validate_source_profile(source_profile)
+            grammar_version = grammar_for_source_profile(source_profile)
+        except ValueError as error:
+            raise ProtectedCoreInputError(str(error), error_code='invalid_profile', phase='arguments') from error
+        self._selection = _SourceSelection(source_profile, grammar_version)
+        self.source_profile = source_profile
+        self.grammar_version = grammar_version
         self.target = _literal_target(target)
         self._tx = ProtectedTransaction(root, (self.target,),
             journal_directory=journal_directory, lease=lease, limits=limits,
@@ -305,6 +394,7 @@ class ProtectedCoreFix:
         return self._summary
 
     def __enter__(self):
+        self._assert_selection()
         self._tx.__enter__()
         try:
             snapshot = self._tx.snapshot
@@ -322,6 +412,7 @@ class ProtectedCoreFix:
         return self._tx.__exit__(exc_type, exc, tb)
 
     def _context(self, graph):
+        self._assert_selection()
         _require(type(graph) is GraphSnapshot and graph.root == self._tx.root,
                  'Protected graph root differs from the captured transaction')
         _require(frozenset(graph.sources) == frozenset((self.target,))
@@ -334,13 +425,42 @@ class ProtectedCoreFix:
         catalog, _ = _catalog(graph.evidence[self._catalog_path])
         return catalog
 
+    def _assert_selection(self):
+        _require(type(self.source_profile) is str and type(self.grammar_version) is str
+                 and self.source_profile == self._selection.source_profile
+                 and self.grammar_version == self._selection.grammar_version,
+                 'Protected source profile or grammar changed during this session')
+
+    def _assert_validation(self, validation):
+        self._assert_selection()
+        _require(type(validation) is _CompileValidation
+                 and validation.selection is self._selection
+                 and validation.root == self._tx.root and validation.target == self.target,
+                 'Independent validation source selection or session changed')
+        _verify_selected_proof(validation.proof, validation.replay.final_tree,
+                               validation.target, self._selection.source_profile)
+        _require(validation.proof.source_profile == self._selection.source_profile
+                 and validation.proof.grammar_version == self._selection.grammar_version,
+                 'Independent validation has a different source profile or grammar')
+        self._assert_selection()
+
+    def _analyze_source(self, tree, catalog):
+        self._assert_selection()
+        try:
+            return _script(tree, self.target, catalog,
+                           source_profile=self._selection.source_profile)
+        except ClosedCoreError as error:
+            if tree.source == self._baseline:
+                raise
+            raise ProtectedCoreError(f'Protected candidate left its selected grammar: {error}') from error
+
     def _analyze_graph(self, graph):
         _require(self._active, 'Active protected core context required')
         catalog = self._context(graph)
         tree = parse(graph.sources[self.target])
-        result, findings = _script(tree, self.target, catalog)
+        result, findings = self._analyze_source(tree, catalog)
         _require(not result.edits or tree.source == self._baseline,
-                 'Protected core v1 refuses a second repair pass')
+                 'Protected core refuses a second repair pass')
         analysis = GraphAnalysis(CORE_RULE_IDS, CORE_RULE_IDS,
             frozenset((self.target,)), self._evidence_paths,
             findings=findings,
@@ -351,16 +471,18 @@ class ProtectedCoreFix:
     def _independent_replay(self, snapshot):
         catalog = self._context(snapshot)
         tree = parse(self._baseline)
-        initial, _ = _script(tree, self.target, catalog)
+        initial, _ = self._analyze_source(tree, catalog)
 
         def analyze(checked):
-            return {SCRIPT: _script(checked, self.target, catalog)[0]}
+            return {SCRIPT: self._analyze_source(checked, catalog)[0]}
 
         def step(before, old, after, new, history):
             _require(not history.deferred and not history.moves,
                      'Protected script pass has conflicts or source movement')
             _require(_attachment_roles(before) == _attachment_roles(after),
                      'Script repair changed semantic attachment identities')
+            _require(_script_ownership(before) == _script_ownership(after),
+                     'Script repair changed wrapper, equation or nested operand ownership')
             _require(history.edits == plan(before.source, old[SCRIPT].edits).edits
                      and history.after == plan(before.source, old[SCRIPT].edits).candidate(),
                      'Independent script replay differs from exact raw proposals')
@@ -368,7 +490,7 @@ class ProtectedCoreFix:
                          and not e.replacement.strip(b'()') for e in history.edits),
                      'Protected script repair must preserve every original source byte')
             _require(not (new[SCRIPT].diagnostics or new[SCRIPT].edits),
-                     'Protected core v1 requires zero findings after one pass')
+                     'Protected core requires zero findings after one pass')
 
         def final(candidate):
             _require(candidate.passes <= 1 and not candidate.final_results[SCRIPT].diagnostics
@@ -387,6 +509,7 @@ class ProtectedCoreFix:
         return candidate
 
     def validate(self):
+        self._assert_selection()
         _require(self._active, 'Active protected core context required')
         self._candidate = None
         self._history = []
@@ -399,7 +522,7 @@ class ProtectedCoreFix:
         snapshot = self._tx.snapshot
         token = self._tx.validate(self._analyze_graph, required_rules=CORE_RULE_IDS)
         _require(not token.findings and token.passes <= 1,
-                 'Protected core v1 requires a clean one-pass transaction candidate')
+                 'Protected core requires a clean one-pass transaction candidate')
         replay = self._independent_replay(snapshot)
         _require(token.sources == {self.target: replay.content}
                  and token.passes == replay.passes,
@@ -419,18 +542,24 @@ class ProtectedCoreFix:
         # Independent replay is outside the analysis callback; recheck the live
         # captured identities/bytes again before blessing this bridge token.
         self._tx._revalidate()
-        proof = certify(replay.final_tree, self.target)
-        verify_proof(proof, replay.final_tree, self.target)
+        self._assert_selection()
+        try:
+            proof = certify(replay.final_tree, self.target,
+                            source_profile=self._selection.source_profile)
+        except ClosedCoreError as error:
+            raise ProtectedCoreError(f'Retained final admission changed: {error}') from error
+        _verify_selected_proof(proof, replay.final_tree, self.target, self._selection.source_profile)
         self._validated_summary = ProtectedCoreSummary(
-            'closed-core-v1', self.target, digest(self._baseline), digest(replay.content),
+            self._selection.source_profile, self.target, digest(self._baseline), digest(replay.content),
             tuple(sorted(CORE_RULE_IDS)), tuple(proof.evaluated_rule_ids),
             tuple(proof.structural_reasons),
             tuple(AppliedInsertion(self.target, item.edit.start, item.edit.end,
-                                   item.edit.replacement) for item in replay.edits))
+                                   item.edit.replacement) for item in replay.edits),
+            grammar_version=self._selection.grammar_version)
         self._compile_validation = _CompileValidation(token, replay, proof,
             snapshot.root, self.target, snapshot.evidence,
             digest(snapshot.evidence[self._config_path]),
-            digest(snapshot.evidence[self._catalog_path]))
+            digest(snapshot.evidence[self._catalog_path]), self._selection)
         self._candidate = token
         return token
 
@@ -440,6 +569,7 @@ class ProtectedCoreFix:
         validation = self._compile_validation
         _require(validation is not None and validation.candidate is candidate,
                  'Independent protected candidate provenance required')
+        self._assert_validation(validation)
         self._candidate = None
         result = self._tx.apply(candidate)
         # Only this bridge's successful actual apply establishes authority. A
@@ -448,9 +578,14 @@ class ProtectedCoreFix:
         # This reporting-only value is never an input to token validation/apply.
         self._summary = replace(self._validated_summary, modified_paths=result.modified,
                                 journal_id=result.journal)
+        # This check is after successful actual commit, outside transaction
+        # rollback. A later selection/proof drift refuses authority while the
+        # original applied summary and committed fixes remain available.
+        self._assert_validation(validation)
         return result
 
     def _assert_compile_binding(self, snapshot):
+        self._assert_selection()
         validation = self._applied_validation
         _require(self._active and validation is not None
                  and snapshot is not None and snapshot is self._compile_snapshot
@@ -458,12 +593,12 @@ class ProtectedCoreFix:
                  and snapshot._owner is self._compile_owner
                  and snapshot._validation is validation,
                  'Only this active bridge\'s independently applied candidate has a compile snapshot')
+        self._assert_validation(validation)
         receipt, proof, replay = snapshot._receipt, validation.proof, validation.replay
         _require(type(receipt) is CommittedSnapshot and receipt is self._compile_receipt,
                  'Compile snapshot transaction receipt changed')
         # Recheck retained proof/tree binding only. No live-file parsing or
         # reanalysis can manufacture a new successful candidate at handoff.
-        verify_proof(proof, replay.final_tree, validation.target)
         _require(receipt.root == snapshot.root == validation.root
                  and snapshot.target == validation.target
                  and frozenset(receipt.sources) == frozenset((validation.target,))
@@ -479,6 +614,9 @@ class ProtectedCoreFix:
                  and snapshot.config_sha256 == validation.config_sha256
                  and snapshot.catalog_sha256 == validation.catalog_sha256,
                  'Compile snapshot differs from retained independent candidate/proof/evidence')
+        _require(snapshot.source_profile == self._selection.source_profile
+                 and snapshot.grammar_version == self._selection.grammar_version,
+                 'Compile snapshot source profile or grammar changed')
 
     def compile_snapshot(self) -> ClosedCoreCompileSnapshot:
         """Guard and expose the exact postimage of this bridge's own apply.
@@ -490,6 +628,7 @@ class ProtectedCoreFix:
         validation = self._applied_validation
         _require(self._active and validation is not None,
                  'A successful independently validated bridge apply is required for a compile snapshot')
+        self._assert_validation(validation)
         receipt = self._tx.committed_snapshot()
         if self._compile_snapshot is None:
             self._compile_receipt = receipt
@@ -500,6 +639,8 @@ class ProtectedCoreFix:
                     evaluated_rule_ids=tuple(validation.proof.evaluated_rule_ids),
                     structural_reasons=tuple(validation.proof.structural_reasons),
                     config_sha256=validation.config_sha256, catalog_sha256=validation.catalog_sha256,
+                    source_profile=self._selection.source_profile,
+                    grammar_version=self._selection.grammar_version,
                     _receipt=receipt, _validation=validation, _owner=self._compile_owner).items():
                 object.__setattr__(snapshot, name, value)
             self._compile_snapshot = snapshot

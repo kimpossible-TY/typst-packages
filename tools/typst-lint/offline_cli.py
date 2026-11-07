@@ -21,12 +21,13 @@ from fixed_journal import (JournalInventoryError, fixed_journal_directory,
 from protected_fix import (ProtectedCoreError, ProtectedCoreFix,
                            ProtectedCoreInputError, _literal_target)
 from syntax_client import AdapterError
+from source_profiles import (CLOSED_CORE_SOURCE_PROFILE, KNOWN_SOURCE_PROFILES)
 from transactions import (OfflineExclusive, ProtectedTransaction,
                           RecoveryRequired, SourceEncodingError, TransactionError,
                           TransactionFailure)
 from typst_lint import InputError, SafetyError, VERSION
 
-PROFILE = 'closed-core-v1'
+PROFILE = CLOSED_CORE_SOURCE_PROFILE
 _NEW_OPTIONS = frozenset(('--profile', '--offline-exclusive', '--target', '--journal-id',
                           '--resource-profile', '--offline-output-exclusive'))
 _NEW_COMMANDS = frozenset(('journal-status', 'recover', 'output-status', 'recover-output'))
@@ -89,7 +90,8 @@ def _arguments(arguments, gate):
     parser.add_argument('command', choices=('check', 'fix', 'compile', 'journal-status', 'recover', 'output-status', 'recover-output'))
     parser.add_argument('--root', required=True, type=Path)
     parser.add_argument('--format', choices=('json', 'text'), default='text')
-    parser.add_argument('--profile')
+    parser.add_argument('--profile', choices=tuple(sorted(KNOWN_SOURCE_PROFILES)),
+                        help='Explicit source grammar selection')
     parser.add_argument('--offline-exclusive', action='store_true',
                         help='Assert editors, watchers and every other source writer are stopped for the whole operation')
     parser.add_argument('--target')
@@ -130,8 +132,8 @@ def _arguments(arguments, gate):
             parser.error('--target is required')
         _literal_target(args.target)
         if args.command == 'fix':
-            if args.profile != PROFILE:
-                parser.error('fix requires --profile closed-core-v1')
+            if args.profile not in KNOWN_SOURCE_PROFILES:
+                parser.error('fix requires --profile closed-core-v1 or structured-core-v1')
             if args.journal_id is not None:
                 parser.error('--journal-id is available only for recover')
         else:
@@ -149,7 +151,8 @@ def _base(command, status, phase):
 
 def _summary_json(summary):
     """Explicit primitive output conversion; never consumed by the writer."""
-    return dict(profile=summary.profile, target=summary.target,
+    return dict(profile=summary.profile, grammar_version=summary.grammar_version,
+                target=summary.target,
                 original_sha256=summary.original_sha256, final_sha256=summary.final_sha256,
                 required_rule_ids=list(summary.required_rule_ids),
                 evaluated_rule_ids=list(summary.evaluated_rule_ids),
@@ -163,6 +166,14 @@ def _summary_json(summary):
                     input_profile_rule_count=15, global_complete=False,
                     global_rule_status='PARTIAL', global_complete_rule_count=0,
                     global_partial_rule_count=33))
+
+
+def _applied_summary(fix):
+    """Retain known apply facts even if a later bridge safety check refused."""
+    try:
+        return fix.summary
+    except ProtectedCoreError:
+        return None
 
 
 def _error(error, command, phase):
@@ -216,12 +227,12 @@ def _print(result, json_format):
     print(f"typst-lint: {state} (exit {result['status']}); compiler not invoked")
     if 'error' in result:
         print(f"{result['error_code']}: {result['error']}")
-    elif result['command'] == 'fix':
-        print(f"{result['profile']}: {result['target']}; {len(result['modified_paths'])} modified paths")
+    if result['command'] == 'fix' and 'profile' in result:
+        print(f"{result['profile']} ({result['grammar_version']}): {result['target']}; {len(result['modified_paths'])} modified paths")
         print('Input profile complete; global 33-rule coverage remains PARTIAL')
-    elif result['command'] == 'journal-status':
+    elif 'error' not in result and result['command'] == 'journal-status':
         print(f"{len(result['inventory']['entries'])} retained journals; {len(result['inventory']['pending'])} pending")
-    elif result['command'] == 'recover':
+    elif 'error' not in result and result['command'] == 'recover':
         print(f"Journal {result['recovery_report']['journal']}: recovery complete")
 
 
@@ -256,6 +267,7 @@ def main(arguments=None, *, gate=False):
         from offline_compile_cli import main as compile_main
         return compile_main(arguments, gate=gate)
     phase = 'arguments'
+    summary = None
     try:
         args = _arguments(arguments, gate)
         command, json_format = args.command, args.format == 'json'
@@ -278,13 +290,17 @@ def main(arguments=None, *, gate=False):
             if command == 'fix':
                 phase = 'capture'
                 with ProtectedCoreFix(root, args.target, journal_directory=store,
-                        lease=lease, create_journal_directory=True) as fix:
+                        lease=lease, create_journal_directory=True,
+                        source_profile=args.profile) as fix:
                     phase = 'validate'
                     candidate = fix.validate()
                     phase = 'apply'
-                    fix.apply(candidate)
+                    try:
+                        fix.apply(candidate)
+                    finally:
+                        summary = _applied_summary(fix)
                     result = _base(command, 0, 'completed')
-                    result.update(_summary_json(fix.summary))
+                    result.update(_summary_json(summary))
             else:
                 phase = 'recover'
                 with ProtectedTransaction(root, (args.target,), journal_directory=store,
@@ -298,5 +314,7 @@ def main(arguments=None, *, gate=False):
                     result.update(error_code='unresolved_recovery', error='Recovery remains unresolved; later source changes were preserved')
     except (InputError, SafetyError, OSError, ValueError) as error:
         result = _error(error, command, phase)
+        if summary is not None:
+            result.update(_summary_json(summary), source_commit='committed')
     _print(result, json_format)
     return result['status']

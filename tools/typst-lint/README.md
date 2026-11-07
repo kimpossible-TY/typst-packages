@@ -8,7 +8,7 @@ plans from real Typst parsing and narrowly proven contexts.
 All 33 rules have bounded backends; full rule acceptance and compilation remain incomplete.
 Ordinary analysis/fix/compile modes return **2**, including an empty selection,
 without changing source or invoking a compiler. A separate explicit offline
-closed-core profile can apply a narrowly proven script repair. With additional
+source profile can apply a narrowly proven script repair. With additional
 explicit output/resource opt-ins, it can compile and publish one guarded PDF
 under the ASCII or narrowly reviewed Korean resource profile. These are not
 all-project writers. Help/version return 0.
@@ -122,18 +122,30 @@ that is its package-contract result, not a facade capability or per-rule
 coverage claim. No local file is promoted merely by its spelling. See
 [FACADE_PROVENANCE_CONTRACT.md](FACADE_PROVENANCE_CONTRACT.md).
 
-## Explicit offline closed-core profile
+## Explicit offline source profiles
 
 `protected_fix.py` connects actual parser/script analysis to the existing
-protected transaction for a deliberately closed input language. The separately
-selected CLI profile below exposes that engine. Ordinary `check`, dry-run,
+protected transaction for deliberately closed input languages. The separately
+selected CLI profiles below expose that engine. Ordinary `check`, dry-run,
 `fix` without the profile, and unprofiled `compile` remain read-only with exit 2.
 
-The profile requires one literal `.typ` target in an explicit core-only config,
+Both profiles require one literal `.typ` target in an explicit core-only config,
 with no broader globs, excludes, ignores, packages or catalogs. An optional
-entrypoint must be that target. A recursive official-AST grammar accepts only
-bounded literal prose and ordinary mathematical grouping/scripts; imports,
-calls, code, resources, comments, directives and unknown syntax refuse. The
+entrypoint must be that target. The explicit source selection determines the
+recursive official-AST grammar:
+
+- `closed-core-v1` retains its existing literal prose and ordinary mathematical
+  grouping/scripts. Its previous refusal of document structure remains unchanged.
+- `structured-core-v1` adds literal headings, bullet lists using `-`, automatic
+  numbered lists using `+`, strong `*…*` and emphasis `_…_`. Their bodies can
+  contain the same recursively checked literal markup and equations.
+
+Explicit numeric enumerators, term lists, imports, calls, code, resources, labels,
+comments, directives and unknown syntax remain refused at any depth. The pinned
+parser must recognize the exact supported structure; no source normalization or
+fallback broadens admission. Existing internal calls default to the old profile.
+The selected source profile and grammar version remain bound through proof,
+independent replay, protected application and compiler snapshots. The
 actual script rule executes. Each of the other 14 core rules has an explicit
 source-derived inapplicability proof, re-established for every candidate. This
 does not change the global 33-rule PARTIAL audit status.
@@ -172,6 +184,12 @@ tools/typst-lint/typst-lint journal-status --root /absolute/project --format jso
 tools/typst-lint/typst-lint recover --root /absolute/project --offline-exclusive --target main.typ --journal-id JOURNAL_ID --format json
 ```
 
+For supported headings, lists or emphasis, explicitly replace
+`--profile closed-core-v1` with `--profile structured-core-v1` on fix or compile.
+The same document remains refused under the old profile. Reports identify the
+actual source profile and grammar version; selecting the new profile does not
+claim any additional global rule is complete.
+
 The fixed store is the canonical project's sibling `.typst-lint-journals`, with
 a root-specific namespace. There is no option, config key or environment override.
 Fix may create private storage under the root lock; existing unsafe permissions,
@@ -198,7 +216,8 @@ opt-ins. See [OFFLINE_CLI_CONTRACT.md](OFFLINE_CLI_CONTRACT.md).
 
 ## Explicit closed-core compile and PDF recovery
 
-This route requires the same closed core configuration and source grammar, the
+This route requires the same core-only configuration and an explicitly selected
+source grammar, the
 reviewed Mac arm64 Typst 0.15.1 binary, and one explicit resource profile:
 
 - `embedded-ascii-v1` admits ASCII source with optionally one leading UTF-8 BOM
@@ -209,12 +228,24 @@ reviewed Mac arm64 Typst 0.15.1 binary, and one explicit resource profile:
   It requires the exact reviewed local AppleGothic font and uses a verified
   private copy, with system-font discovery disabled.
 
-The Korean profile does not normalize text or broaden the existing grammar.
+The Korean resource profile does not normalize text or broaden the selected
+source grammar.
 Conjoining/decomposed jamo, fillers (including U+3164), emoji, combining marks,
 variation selectors, bidi controls and other non-ASCII source remain refused.
 ASCII-spelled math names remain governed by the existing grammar. Unicode file
 names are independent of this source-character restriction. Neither profile
 supports imports, packages, arbitrary fonts or general Typst projects.
+
+The captured AppleGothic resource has only a Regular face. In reviewed
+structured fixtures, Korean strong/emphasis (including their combination)
+renders as regular upright text; headings increase size without a bold face.
+Latin and math can still use styled embedded fonts. Korean characters remain
+legible and script repairs preserve the captured environment's render, but this
+profile does **not** establish Korean bold/italic fidelity. A different reviewed
+resource profile is needed before claiming that support.
+An explicit Korean compile request reports this as a known profile limitation
+in JSON and text, separate from actual captured resource evidence. Historical
+recovery does not invent current resource observations or repeat this note.
 Stop all source writers and separately all exporters/output writers for the
 whole operation before making both assertions:
 
@@ -420,7 +451,7 @@ These Markdown CLI paths remain read-only with exit 2 and never invoke the compi
 ## Protected offline transaction component
 
 `transactions.py` is an independently tested storage component, connected only
-to the explicit closed-core CLI profile above. Its trusted-engine API requires an explicit assertion that
+to the explicit source profiles above. Its trusted-engine API requires an explicit assertion that
 editors, watchers and every other writer are stopped throughout the transaction.
 It cannot inspect unsaved buffers or lock arbitrary editors. A root directory
 lock serializes this library's runs; fingerprint checks narrow races but are not
@@ -763,8 +794,8 @@ candidate parser, coverage-retention and idempotence checks. See the
   [FLOWBOX_CONTRACT.md](FLOWBOX_CONTRACT.md).
 
 These are partial implementations, not 33 fully accepted rules. Their ordinary
-CLI plans remain unapplied; the separate closed-core profile admits only its
-strict input language. General compiler dispatch and all-project rollout remain
+CLI plans remain unapplied; the separate source profiles admit only their
+strict input languages. General compiler dispatch and all-project rollout remain
 disabled; the explicit resource-profile compile route above is separately scoped.
 
 ## Multi-pass proposal evidence

@@ -1,4 +1,4 @@
-"""Source-derived applicability for one deliberately closed core-only language.
+"""Source-derived applicability for explicitly selected closed core-only languages.
 
 This is not global rule coverage and does not evaluate scripts. The bridge must
 actually evaluate ``core.parenthesized-scripts`` and re-certify every candidate.
@@ -12,10 +12,14 @@ import json
 import re
 import unicodedata
 
+from source_profiles import (CLOSED_CORE_SOURCE_PROFILE, CLOSED_CORE_GRAMMAR_VERSION,
+                             STRUCTURED_CORE_GRAMMAR_VERSION,
+                             grammar_for_source_profile)
 from syntax_client import AdapterError, MAX_INPUT, MAX_NODES, Node, Tree, validate
 from typst_lint import SafetyError
 
-GRAMMAR_VERSION = 'closed-core-markup-v1'
+# Backward-compatible default, never an alias for the newest grammar.
+GRAMMAR_VERSION = CLOSED_CORE_GRAMMAR_VERSION
 PARSER_CONTRACT = ('typst-syntax:0.15.1', 'adapter:0.2.0', 'schema:2')
 EVALUATED_RULE_IDS = ('core.parenthesized-scripts',)
 # Each statement discharges the actual specification's applicability condition.
@@ -53,6 +57,7 @@ def _require(condition, message):
 
 @dataclass(frozen=True, slots=True, init=False)
 class CoverageProof:
+    source_profile: str
     path: str
     source_sha256: str
     source_bytes: int
@@ -114,8 +119,9 @@ _EXPR_KINDS = frozenset(('MathText', 'MathIdent', 'MathShorthand', 'Math',
 
 
 class _Grammar:
-    def __init__(self, tree):
+    def __init__(self, tree, grammar_version):
         self.tree, self.nodes = tree, tree.nodes
+        self.structured = grammar_version == STRUCTURED_CORE_GRAMMAR_VERSION
         self.visited = set()
 
     def raw(self, i):
@@ -159,10 +165,18 @@ class _Grammar:
         self.math(middle[0])
 
     def markup(self):
-        root = self.enter(0)
-        _require(root.kind == 'Markup', 'Closed-core root must be Markup')
-        _require(bool(root.children) or not self.tree.source, 'Nonempty markup root cannot be an opaque leaf')
-        for i in root.children:
+        self.body(0)
+        _require(len(self.visited) == len(self.nodes), 'Unvisited descendant outside closed core')
+
+    def body(self, index):
+        body = self.enter(index)
+        _require(body.kind == 'Markup', 'Closed-core body must be Markup')
+        # Empty nested bodies occupy their own zero-width span. Testing the
+        # length of the whole source would incorrectly reject **, __ and bare
+        # heading/list markers, while allowing opaque nonempty local bodies.
+        _require(bool(body.children) or body.start == body.end,
+                 'Nonempty markup body cannot be an opaque leaf')
+        for i in body.children:
             kind = self.nodes[i].kind
             if kind == 'Text':
                 text = self.token(i, 'Text')
@@ -174,9 +188,61 @@ class _Grammar:
                 self.space(i, kind)
             elif kind == 'Equation':
                 self.equation(i)
+            elif self.structured and kind in ('Heading', 'ListItem', 'EnumItem'):
+                self.line_wrapper(i)
+            elif self.structured and kind in ('Strong', 'Emph'):
+                self.inline_wrapper(i)
             else:
                 raise ClosedCoreError(f'Unsupported markup kind {kind} at byte {self.nodes[i].start}')
-        _require(len(self.visited) == len(self.nodes), 'Unvisited descendant outside closed core')
+
+    def line_wrapper(self, i):
+        n = self.enter(i)
+        ids = n.children
+        _require(len(ids) in (2, 3), f'{n.kind} needs one marker and one Markup body')
+        marker_kind, marker = {
+            'Heading': ('HeadingMarker', None),
+            'ListItem': ('ListMarker', '-'),
+            'EnumItem': ('EnumMarker', '+'),
+        }[n.kind]
+        spelling = self.token(ids[0], marker_kind, marker)
+        if n.kind == 'Heading':
+            _require(set(spelling) == {'='}, 'Heading marker must contain only literal equals signs')
+        body = self.nodes[ids[-1]]
+        _require(body.kind == 'Markup', f'{n.kind} must end with exactly one Markup body')
+        if len(ids) == 2:
+            _require(body.start == body.end, f'Nonempty {n.kind} body needs literal separator whitespace')
+        else:
+            separator = ids[1]
+            kind = self.nodes[separator].kind
+            _require(kind == 'Space' or (n.kind != 'Heading' and kind == 'Parbreak'),
+                     f'Unsupported {n.kind} separator')
+            self.space(separator, kind)
+            text = self.raw(separator)
+            newlines = text.count('\n') + text.count('\r') - text.count('\r\n')
+            _require(kind != 'Space' or newlines < 2, 'Paragraph separator cannot masquerade as Space')
+            if n.kind == 'Heading':
+                _require(not newlines, 'Heading separator must be horizontal ASCII whitespace')
+            elif newlines:
+                # The pinned list parser requires continuation content to be
+                # to the right of its marker's source-character column. Tabs
+                # count as one character, exactly as Lexer::column does.
+                source = self.tree.source
+                line_start = max(source.rfind(b'\n', 0, n.start),
+                                 source.rfind(b'\r', 0, n.start)) + 1
+                marker_column = len(source[line_start:n.start].decode('utf-8'))
+                indentation = len(text) - max(text.rfind('\n'), text.rfind('\r')) - 1
+                _require(indentation > marker_column, 'List continuation must be indented past its marker')
+            _require(body.start < body.end, f'Empty {n.kind} body cannot own separator trivia')
+        self.body(ids[-1])
+
+    def inline_wrapper(self, i):
+        n = self.enter(i)
+        ids = n.children
+        _require(len(ids) == 3, f'{n.kind} needs two delimiters and one Markup body')
+        kind, spelling = ('Star', '*') if n.kind == 'Strong' else ('Underscore', '_')
+        self.token(ids[0], kind, spelling)
+        self.body(ids[1])
+        self.token(ids[2], kind, spelling)
 
     def equation(self, i):
         n = self.enter(i)
@@ -269,18 +335,22 @@ class _Grammar:
                  'Attachment has no script or primes')
 
 
-def certify(tree, path):
+def certify(tree, path, *, source_profile=CLOSED_CORE_SOURCE_PROFILE):
     """Derive applicability from a bridge-owned official-parser Tree.
 
     A caller cannot supply a COMPLETE flag or instantiate the returned proof.
     This pure function validates its input representation, not parser provenance.
     """
+    try:
+        grammar_version = grammar_for_source_profile(source_profile)
+    except ValueError as error:
+        raise ClosedCoreError(str(error)) from error
     records = _validated(tree, path)
-    _Grammar(tree).markup()
-    values = dict(path=path, source_sha256=hashlib.sha256(tree.source).hexdigest(),
+    _Grammar(tree, grammar_version).markup()
+    values = dict(source_profile=source_profile, path=path, source_sha256=hashlib.sha256(tree.source).hexdigest(),
                   source_bytes=len(tree.source),
                   tree_sha256=hashlib.sha256(json.dumps(records, sort_keys=True, separators=(',', ':')).encode()).hexdigest(),
-                  grammar_version=GRAMMAR_VERSION, parser_contract=PARSER_CONTRACT,
+                  grammar_version=grammar_version, parser_contract=PARSER_CONTRACT,
                   evaluated_rule_ids=EVALUATED_RULE_IDS,
                   not_applicable_rule_ids=NOT_APPLICABLE_RULE_IDS,
                   structural_reasons=STRUCTURAL_REASONS, _issuer=_ISSUER)
@@ -290,12 +360,14 @@ def certify(tree, path):
     return proof
 
 
-def verify_proof(proof, tree, path):
+def verify_proof(proof, tree, path, *, source_profile=CLOSED_CORE_SOURCE_PROFILE):
     """Re-derive admission; reject unissued, stale, or mismatched proofs.
 
     As with certify, tree must come from the bridge-owned official parser.
     """
     _require(type(proof) is CoverageProof and getattr(proof, '_issuer', None) is _ISSUER,
              'Closed-core proof was not issued by certify')
-    expected = certify(tree, path)
+    # The caller/session selects the language. Never elevate the supplied
+    # proof's profile or grammar into a parser/admission authority.
+    expected = certify(tree, path, source_profile=source_profile)
     _require(proof == expected, 'Closed-core proof does not bind the current source/path/tree')

@@ -56,10 +56,20 @@ receipt while its original context/root lock remains active.
 
 Public fields are `root`, `target`, `source`, `source_sha256`, `evidence`,
 `required_rule_ids`, `evaluated_rule_ids`, `structural_reasons`,
-`config_sha256` and `catalog_sha256`. The source is the exact retained transaction
+`config_sha256`, `catalog_sha256`, `source_profile` and `grammar_version`.
+The source is the exact retained transaction
 postimage. Its 15 compiled core obligations, actual script evaluation and 14
 structural reasons are bound to the retained independent replay/final proof,
 candidate, reviewed catalog/config and bridge/transaction session.
+Additional immutable `source_profile` and `grammar_version` fields identify the
+original session selection. The default `closed-core-v1` remains grammar v1;
+only explicit `structured-core-v1` selects grammar v2. Selection is never
+inferred from a proof or snapshot. Retained proofs are independently rechecked
+under the original selection before apply and on every compile handoff/guard.
+Changing selection fields, retained proof profile/grammar, or snapshot fields
+refuses authority as a safety failure without undoing committed source fixes.
+Neither the transaction receipt nor source/PDF journals need a schema migration,
+and recovery remains independent of current source-profile admission.
 
 The bridge does not consult `ProtectedCoreSummary` as authority or parse changed
 live files to manufacture a new proof. Direct application through the internal

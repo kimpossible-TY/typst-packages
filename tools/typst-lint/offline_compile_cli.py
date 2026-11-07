@@ -20,13 +20,17 @@ import offline_cli as offline
 from pdf_publication_store import (OfflineOutputExclusive, PublicationError,
     PublicationPending, PublicationReport, inventory_publications, literal_destination, recover_publication)
 from protected_fix import ProtectedCoreFix, _literal_target
-from resource_profiles import validate_resource_profile
+from resource_profiles import APPLEGOTHIC_RESOURCE_PROFILE, validate_resource_profile
+from source_profiles import KNOWN_SOURCE_PROFILES
 from transactions import OfflineExclusive, RecoveryRequired, TransactionFailure
 from typst_lint import InputError, SafetyError
 
 
 # Scoped only by executable_main. Imported main() never changes signal handlers.
 _active_signals = None
+_KOREAN_PROFILE_LIMITATION = (
+    'Korean strong/emph remains regular upright; headings gain size but not a Korean bold face. '
+    'This profile does not establish styled Korean fidelity.')
 
 
 def validate_arguments(args, parser):
@@ -52,8 +56,8 @@ def validate_arguments(args, parser):
         if args.journal_id is None or re.fullmatch('[0-9a-f]{32}', args.journal_id) is None:
             parser.error('recover-output requires --journal-id with exactly 32 lowercase hexadecimal characters')
         return
-    if args.profile != offline.PROFILE:
-        parser.error('compile requires --profile closed-core-v1')
+    if args.profile not in KNOWN_SOURCE_PROFILES:
+        parser.error('compile requires --profile closed-core-v1 or structured-core-v1')
     try:
         validate_resource_profile(args.resource_profile)
     except ValueError:
@@ -294,7 +298,12 @@ def _print(result, json_format):
         inventory = result['output_inventory']
         print(inventory.get('empty', f"{len(inventory['entries'])} historical PDF journals; {len(inventory['pending'])} pending"))
     if result.get('source_summary') is not None:
+        summary = result['source_summary']
+        print(f"Source profile: {summary['profile']} ({summary['grammar_version']}); {summary['target']}")
         print('Input profile complete; global 33-rule coverage remains PARTIAL')
+    if 'known_resource_profile_limitation' in result:
+        limitation = result['known_resource_profile_limitation']
+        print(f"Known resource-profile limitation ({limitation['profile']}): {limitation['note']}")
     sys.stdout.flush()
 
 
@@ -307,12 +316,15 @@ def main(arguments=None, *, gate=False):
     apply_started = False
     source_recovery = dict(state='not_checked', checked=False, pending=None)
     source_cleanup_safe = True
+    selected_resource_profile = None
     result = None
     try:
         args = offline._arguments(arguments, gate)
         command, json_format = args.command, args.format == 'json'
         if command not in ('compile', 'output-status', 'recover-output'):
             raise offline.OfflineArgumentsError('This entrypoint accepts only explicit compile/output routes')
+        if command == 'compile':
+            selected_resource_profile = args.resource_profile
         phase = 'root'
         root = offline._root(args.root)
         if command == 'output-status':
@@ -335,7 +347,7 @@ def main(arguments=None, *, gate=False):
             output_lease = OfflineOutputExclusive.assert_exporters_watchers_closed_and_no_other_writers()
             with _tracked(ProtectedCoreFix(root, args.target,
                     journal_directory=fixed_journal_directory(root), lease=source_lease,
-                    create_journal_directory=True), cleanup, 'source') as fix:
+                    create_journal_directory=True, source_profile=args.profile), cleanup, 'source') as fix:
                 _cancelled()
                 phase = 'output-prepare'
                 publication = PreparedPdfPublication(fix, destination=args.output, lease=output_lease)
@@ -346,15 +358,18 @@ def main(arguments=None, *, gate=False):
                     _cancelled()
                     phase = 'apply'
                     apply_started = True
-                    fix.apply(candidate)
-                    summary = fix.summary
+                    try:
+                        fix.apply(candidate)
+                    finally:
+                        summary = offline._applied_summary(fix)
                     _cancelled()
                     phase = 'compile'
                     publication_report = publication.compile_and_publish(fix.compile_snapshot(),
                         profile=args.resource_profile, deadline_seconds=10.0,
                         cancel_event=None if _active_signals is None else _active_signals.cancel_event)
             result = offline._base(command, 0, 'completed')
-            result.update(profile=args.profile, resource_profile=args.resource_profile,
+            result.update(profile=summary.profile, grammar_version=summary.grammar_version,
+                          resource_profile=args.resource_profile,
                           target=args.target, output=args.output)
     except (InputError, SafetyError, OSError, ValueError, compiler.CompilerFailure, KeyboardInterrupt) as caught:
         error = caught
@@ -445,6 +460,11 @@ def main(arguments=None, *, gate=False):
         result['output_recovery'] = dict(state=state, journal_id=None)
     if result['status'] < 0:
         result['termination_signal'] = -result['status']
+    # A fixed property of the explicitly selected profile, not captured font
+    # evidence or a reconstruction of historical invocation/resource details.
+    if command == 'compile' and selected_resource_profile == APPLEGOTHIC_RESOURCE_PROFILE:
+        result['known_resource_profile_limitation'] = dict(
+            profile=selected_resource_profile, note=_KOREAN_PROFILE_LIMITATION)
     _print(result, json_format)
     return result['status']
 

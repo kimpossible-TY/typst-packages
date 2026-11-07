@@ -203,17 +203,23 @@ class CompilerAdapterTests(unittest.TestCase):
         for behavior, reason in (
             ('sys.exit(9)', 'nonzero exit'),
             ('os.kill(os.getpid(), signal.SIGTERM)', 'signal'),
-            ('time.sleep(2)', 'timeout'),
+            ('time.sleep(10)', 'timeout'),
             ('os.write(1, b"x" * 1000000)', 'stdout byte limit'),
             ('os.write(2, b"x" * 1000000)', 'stderr byte limit')):
             with self.subTest(reason=reason):
                 self.program(behavior)
+                # The total budget includes workspace setup and the version probe.
+                # Only the sleeping case should race a deadline, not exit/stream checks.
+                deadline_seconds = 2.0 if reason == 'timeout' else 10.0
                 with self.assertRaises(cc.CompilerFailure) as failed:
-                    self.compile(deadline_seconds=0.5)
+                    self.compile(deadline_seconds=deadline_seconds)
                 self.assertIn(reason, failed.exception.reason)
                 self.assertEqual(failed.exception.invocation.purpose, 'compile')
                 self.assertLessEqual(len(failed.exception.invocation.stdout), cc._MAX_STREAM)
                 self.assertLessEqual(len(failed.exception.invocation.stderr), cc._MAX_STREAM)
+                if reason == 'timeout':
+                    self.assertIs(failed.exception.kind, cc.CompilerFailureKind.TIMEOUT)
+                    self.assertIs(failed.exception.invocation.started, True)
                 if reason == 'signal':
                     self.assertEqual(failed.exception.invocation.returncode, -signal.SIGTERM)
         event = threading.Event()
