@@ -1,6 +1,7 @@
 """Partial marker insertion at already chosen literal root prose boundaries.
 
-No imports, show rules, paragraph breaks or prose bytes are manufactured. The
+No imports, show rules or prose bytes are manufactured. A missing marker after
+a literal footnote owns its required explicit break as one policy repair. The
 shared dispatcher remains responsible for whole-candidate rule composition.
 """
 from bisect import bisect_left, bisect_right
@@ -9,15 +10,16 @@ import re
 
 from capitalization import BodyKind, Context, MarkerBinding, StartKind, evaluate
 from edit_plan import Edit, plan
-from static_resolver import ParagraphInsertionProof, TEXT_UTILS, TEXT_UTILS_SOURCE_SHA256
+from prose_boundary import (footnote_boundaries, literal_paragraph as _literal_paragraph,
+                            valid_insertion_proof)
 from suppression import resolve as resolve_suppressions
 from syntax_client import AdapterError, parse
 from typst_lint import Diagnostic, SafetyError, digest, load_rules
 
 RULE_ID = 'pde.prose-paragraph-marker'
 _MARKER = b'#paragraph_tab'
+_PARBREAK = b'#parbreak()'
 _GAP = re.compile(rb'(?:[ \t]*\r?\n){2,}[ \t]*\Z')
-_SETUP = frozenset(('ModuleImport', 'LetBinding', 'SetRule', 'ShowRule'))
 
 
 @dataclass(frozen=True)
@@ -35,55 +37,6 @@ def _diagnostic(source, path, rule, start):
     return Diagnostic(RULE_ID, rule['grade'], path, line, column,
                       'Begin this existing new prose paragraph with the resolved paragraph marker.',
                       rule['source'])
-
-
-def _literal_paragraph(tree, resolution, indices, *, setup_prefix=False, marker_prefix=False):
-    """Inspect the whole adjacent paragraph, never just its final text leaf.
-
-    Only the first root paragraph can have a prefix of standalone nonoutput
-    declarations. Each declaration is a complete Hash/expression pair; comments,
-    includes, calls, structural output and directives are never crossed.
-    """
-    source, nodes = tree.source, tree.nodes
-    position = 0
-    if (indices and nodes[indices[0]].start == 0 and nodes[indices[0]].kind == 'Text'
-            and source[:nodes[indices[0]].end] == b'\xef\xbb\xbf'):
-        position += 1
-    if setup_prefix:
-        while position < len(indices):
-            if nodes[indices[position]].kind == 'Space':
-                position += 1
-                continue
-            if position + 1 >= len(indices):
-                break
-            hash_node, expression = nodes[indices[position]], nodes[indices[position + 1]]
-            if hash_node.kind != 'Hash' or expression.kind not in _SETUP or hash_node.end != expression.start:
-                break
-            line_start = source.rfind(b'\n', 0, hash_node.start) + 1
-            prefix = source[line_start:hash_node.start]
-            if line_start == 0 and prefix.startswith(b'\xef\xbb\xbf'):
-                prefix = prefix[3:]
-            line_end = source.find(b'\n', expression.end)
-            line_end = len(source) if line_end < 0 else line_end
-            if prefix.strip(b' \t') or source[expression.end:line_end].strip(b' \t\r'):
-                break
-            position += 2
-    if marker_prefix and position + 1 < len(indices):
-        hash_node, marker = nodes[indices[position]], nodes[indices[position + 1]]
-        binding = resolution.binding_for(indices[position + 1])
-        line_start = source.rfind(b'\n', 0, hash_node.start) + 1
-        line_end = source.find(b'\n', marker.end)
-        if (hash_node.kind == 'Hash' and marker.kind == 'Ident' and hash_node.end == marker.start
-                and source[hash_node.start:marker.end] == _MARKER
-                and not source[line_start:hash_node.start].strip(b' \t')
-                and line_end >= 0 and not source[marker.end:line_end].strip(b' \t\r')
-                and binding and binding.kind == 'api' and binding.name == 'paragraph_tab'
-                and binding.package == TEXT_UTILS and binding.source_sha256 == TEXT_UTILS_SOURCE_SHA256):
-            position += 2
-    paragraph = indices[position:]
-    return bool(paragraph) and any(nodes[index].kind == 'Text' for index in paragraph) and all(
-        nodes[index].kind in ('Text', 'Space') and resolution.facts[index].prose_safe
-        and not resolution.facts[index].deferred for index in paragraph)
 
 
 def _casing_eligibility(tree, resolution, index, edit, *, allow_followup_casing=False):
@@ -154,13 +107,26 @@ def _verify_candidate(tree, edits, scopes):
                 cursor += 1
             if cursor == len(text_nodes) or not text_nodes[cursor].start <= start < end <= text_nodes[cursor].end:
                 raise SafetyError('Marker insertion would reinterpret original literal prose')
-    root_spans = {(checked.nodes[index].kind, checked.nodes[index].start, checked.nodes[index].end)
-                  for index in checked.nodes[0].children}
+    root_nodes = {(checked.nodes[index].kind, checked.nodes[index].start, checked.nodes[index].end):
+                  checked.nodes[index] for index in checked.nodes[0].children}
     for edit in planned.edits:
         start = mapped(edit.start, end=True)
-        if (('Hash', start, start + 1) not in root_spans
-                or ('Ident', start + 1, start + len(_MARKER)) not in root_spans):
-            raise SafetyError('Inserted marker is not a standalone root expression')
+        if edit.start != edit.end:
+            raise SafetyError('Paragraph repair must contain only typed insertions')
+        expression = edit.replacement.rstrip(b'\r\n')
+        newline = edit.replacement[len(expression):]
+        if expression not in (_MARKER, _PARBREAK) or newline not in (b'\n', b'\r\n'):
+            raise SafetyError('Unknown paragraph repair insertion')
+        kind = 'Ident' if expression == _MARKER else 'FuncCall'
+        if (('Hash', start, start + 1) not in root_nodes
+                or (kind, start + 1, start + len(expression)) not in root_nodes):
+            raise SafetyError('Inserted marker or break is not a standalone root expression')
+        if expression == _PARBREAK:
+            call = root_nodes[('FuncCall', start + 1, start + len(expression))]
+            if ([checked.nodes[i].kind for i in call.children] != ['Ident', 'Args']
+                    or [checked.nodes[i].kind for i in checked.nodes[call.children[1]].children]
+                    != ['LeftParen', 'RightParen']):
+                raise SafetyError('Inserted paragraph break is not a canonical empty call')
     final_scopes = resolve_suppressions(checked, {rule['id'] for rule in load_rules()[0]['rules']})
     expected_scopes = tuple((scope.rules, scope.reason, mapped(scope.start),
                              mapped(scope.end, end=True), mapped(scope.directive_start)) for scope in scopes)
@@ -171,7 +137,7 @@ def _verify_candidate(tree, edits, scopes):
 
 
 def analyze(tree, path, resolution, *, allow_followup_casing=False):
-    """Return marker-only proposals; opt-in casing needs an actual next pass."""
+    """Return marker/boundary insertions; opt-in casing needs an actual next pass."""
     source, nodes = tree.source, tree.nodes
     if nodes[0].errors:
         errors = tuple((node.start, node.end) for node in nodes if node.kind == 'Error')
@@ -184,9 +150,7 @@ def analyze(tree, path, resolution, *, allow_followup_casing=False):
     catalog = {rule['id']: rule for rule in load_rules()[0]['rules']}
     scopes = resolve_suppressions(tree, set(catalog))
     proof = resolution.paragraph_insertion_proof
-    valid_proof = (type(proof) is ParagraphInsertionProof and proof.source_sha256 == digest(source)
-                   and type(proof.available) is frozenset
-                   and all(type(index) is int and 0 <= index < len(nodes) for index in proof.available))
+    valid_proof = valid_insertion_proof(tree, proof)
     findings, suppressed, edits = [], [], []
     skips = [*resolution.skips, 'Only complete literal root Text/Space paragraphs at existing whitespace-only Parbreak boundaries are supported']
     siblings = nodes[0].children
@@ -235,6 +199,36 @@ def analyze(tree, path, resolution, *, allow_followup_casing=False):
             skips.append(f'fix_unavailable: {error} at byte {right.start}')
         else:
             edits.append(edit)
+    for boundary in footnote_boundaries(tree, resolution):
+        if boundary.marked:
+            continue
+        right_id = boundary.target_id
+        right = nodes[right_id]
+        finding = _diagnostic(source, path, catalog[RULE_ID], right.start)
+        if any(scope.covers(RULE_ID, right.start) for scope in scopes):
+            suppressed.append(finding)
+            continue
+        findings.append(finding)
+        reason = None
+        if not valid_proof or right_id not in proof.available:
+            reason = 'canonical marker availability and active reviewed paragraph show are unproven'
+        elif right_id not in proof.parbreak_available:
+            reason = 'canonical builtin parbreak availability is unproven'
+        elif any(scope.start <= right.start < scope.end for scope in scopes):
+            reason = 'inserting a marker would retarget an inline directive'
+        if reason:
+            skips.append(f'fix_unavailable: {reason} at byte {right.start}')
+            continue
+        marker = Edit(boundary.marker_at, boundary.marker_at, _MARKER + boundary.newline)
+        try:
+            _casing_eligibility(tree, resolution, right_id, marker,
+                                allow_followup_casing=allow_followup_casing)
+        except SafetyError as error:
+            skips.append(f'fix_unavailable: {error} at byte {right.start}')
+        else:
+            if not boundary.has_break:
+                edits.append(Edit(boundary.break_at, boundary.break_at, _PARBREAK + boundary.newline))
+            edits.append(marker)
     if edits:
         try:
             _verify_candidate(tree, tuple(edits), scopes)

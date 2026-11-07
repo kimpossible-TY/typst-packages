@@ -153,7 +153,6 @@ class ProseMarkerRuleTests(unittest.TestCase):
                      b'First idea.\n\n#paragraph_tab\nThis holds.\n',
                      b'#let body = [First idea.\n\nThis holds.]\n',
                      b'#context [First idea.\n\nThis holds.]\n',
-                     b'First idea.#footnote[Reason.]\n\nThis holds.\n',
                      b'First idea.\n\n// comment\nThis holds.\n',
                      b'First idea.\n// comment\n\nThis holds.\n'):
             with self.subTest(body=body):

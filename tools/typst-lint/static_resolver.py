@@ -210,11 +210,15 @@ class SpacerProof:
 class ParagraphInsertionProof:
     """Root Text nodes where the canonical marker and reviewed show are ready.
 
-    This attests availability at that lexical point, not the existence of a
-    paragraph boundary, casing eligibility or permission to apply an edit.
+    available proves the canonical reviewed marker with its active show.
+    parbreak_available additionally proves the canonical builtin break at the
+    same root Text point. Only validated whitespace/immutable-marker boundaries
+    let a consumer transport that lexical proof to an earlier insertion point.
+    Neither set proves a boundary, casing eligibility or edit permission.
     """
     source_sha256: str
     available: frozenset[int] = frozenset()
+    parbreak_available: frozenset[int] = frozenset()
 
 
 @dataclass(frozen=True)
@@ -378,7 +382,9 @@ class _Resolver:
                 if len(parts) >= 2 and not any(tree.nodes[c].kind == 'Star' for c in parts):
                     self.book_imports.add(_literal_string(tree, parts[1]))
         self.available_paragraph_markers = set()
+        self.available_parbreaks = set()
         self.root_children = frozenset(tree.nodes[0].children) if tree.mode == 'markup' else frozenset()
+        self.root_predecessors = dict(zip(tree.nodes[0].children[1:], tree.nodes[0].children)) if tree.mode == 'markup' else {}
         self.skips = []
         self.packages = {}
         self.artifacts = {}
@@ -452,6 +458,9 @@ class _Resolver:
                 and marker.package == TEXT_UTILS
                 and marker.source_sha256 == TEXT_UTILS_SOURCE_SHA256):
             self.available_paragraph_markers.add(i)
+            parbreak = state.lookup('parbreak')
+            if parbreak and parbreak.kind == 'builtin' and parbreak.name == 'parbreak':
+                self.available_parbreaks.add(i)
 
     def set_binding(self, i, binding):
         self.facts[i] = replace(self.facts[i], binding=binding)
@@ -579,7 +588,8 @@ class _Resolver:
             if len(children) == 2:
                 self.visit(children[1], state)
             if output and not (self.plain_footnote(binding, children)
-                               or self.plain_highlight(binding, children)):
+                               or self.plain_highlight(binding, children)
+                               or self.plain_parbreak(i, binding, state)):
                 self.unknown_output(i, state)
             # Only this exact reviewed zero-argument palette selector has a
             # known result. Arbitrary calls still never establish provenance.
@@ -683,6 +693,30 @@ class _Resolver:
         self.note(i, 'Output effect/body ownership is unsupported')
         state.prose_safe = False
         state.styles_unknown = True
+
+    def plain_parbreak(self, i, binding, state):
+        # Preserve, never restore, the existing state. Only a canonical empty
+        # builtin call occupying its own root source line is known here.
+        if (state.deferred or state.in_context or i not in self.root_children
+                or not binding or binding.kind != 'builtin' or binding.name != 'parbreak'):
+            return False
+        node = self.nodes[i]
+        if (_raw(self.tree, i) != b'parbreak()' or len(node.children) != 2
+                or [self.nodes[c].kind for c in node.children] != ['Ident', 'Args']):
+            return False
+        args = self.nodes[node.children[1]]
+        if [self.nodes[c].kind for c in args.children] != ['LeftParen', 'RightParen']:
+            return False
+        predecessor = self.root_predecessors.get(i)
+        if predecessor is None:
+            return False
+        hash_node = self.nodes[predecessor]
+        line_start = self.tree.source.rfind(b'\n', 0, hash_node.start) + 1
+        line_end = self.tree.source.find(b'\n', node.end)
+        line_end = len(self.tree.source) if line_end < 0 else line_end
+        return (hash_node.kind == 'Hash' and hash_node.end == node.start
+                and not self.tree.source[line_start:hash_node.start].strip(b' \t')
+                and not self.tree.source[node.end:line_end].strip(b' \t\r'))
 
     def plain_footnote(self, binding, children):
         # A proven builtin footnote with nothing but literal markup has scoped
@@ -960,7 +994,8 @@ def resolve(tree: Tree, *, fallback_language=None, packages=()) -> Resolution:
                          if tree.nodes[i].kind in ('Ident', 'FieldAccess', 'Parenthesized')
                          and not fact.deferred and is_spacer_binding(fact.binding))
     proof = SpacerProof(digest(tree.source), existing, frozenset(resolver.available_spacers))
-    paragraph_proof = ParagraphInsertionProof(digest(tree.source), frozenset(resolver.available_paragraph_markers))
+    paragraph_proof = ParagraphInsertionProof(digest(tree.source), frozenset(resolver.available_paragraph_markers),
+                                               frozenset(resolver.available_parbreaks))
     return Resolution(digest(tree.source), tuple(resolver.facts), tuple(dict.fromkeys(resolver.skips)),
                       spacer_proof=proof, paragraph_insertion_proof=paragraph_proof,
                       book_proof=BookProof(digest(tree.source), tuple(resolver.book_applications)))

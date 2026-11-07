@@ -10,6 +10,7 @@ import re
 
 from edit_plan import Edit
 from static_resolver import SpacerProof
+from prose_boundary import footnote_boundaries, valid_insertion_proof
 from suppression import resolve as resolve_suppressions
 from typst_lint import Diagnostic, digest, load_rules
 
@@ -69,6 +70,9 @@ def analyze(tree, path, resolution, spacer_proof=None):
     scopes = resolve_suppressions(tree, set(catalog))
     findings, edits, suppressed = ({r: [] for r in RULE_IDS} for _ in range(3))
     skips = {r: [*resolution.skips, 'Only bounded root footnote forms are supported'] for r in RULE_IDS}
+    paragraph_proof = resolution.paragraph_insertion_proof
+    valid_paragraph_proof = valid_insertion_proof(tree, paragraph_proof)
+    boundaries = {boundary.call_id: boundary for boundary in footnote_boundaries(tree, resolution)}
 
     def add(rid, start, message, edit=None):
         finding = _diagnostic(source, path, catalog[rid], start, message)
@@ -206,9 +210,17 @@ def analyze(tree, path, resolution, spacer_proof=None):
                 elif math:
                     skip(GAP, call.end, 'fix_unavailable: comment attachment is ambiguous')
                 else:
-                    # Inserting parbreak requires composing a following marker
-                    # repair; keep it a finding until that contract is supplied.
-                    skip(GAP, call.end, 'fix_unavailable: paragraph marker composition is unproven')
+                    boundary = boundaries.get(call_id)
+                    if (boundary is not None and boundary.marked and not boundary.has_break
+                            and valid_paragraph_proof
+                            and boundary.target_id in paragraph_proof.available
+                            and boundary.target_id in paragraph_proof.parbreak_available):
+                        gap_edit = Edit(boundary.break_at, boundary.break_at,
+                                        b'#parbreak()' + boundary.newline)
+                    else:
+                        # A missing marker owns its entire break-plus-marker
+                        # policy repair; GAP must never leave a half repair.
+                        skip(GAP, call.end, 'fix_unavailable: paragraph marker composition is unproven')
                 add(GAP, start, 'Avoid a blank source line immediately after a footnote.', gap_edit)
 
     root = nodes[0]

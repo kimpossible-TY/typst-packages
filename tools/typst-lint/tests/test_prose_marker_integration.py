@@ -67,7 +67,7 @@ class ProseMarkerIntegrationTests(unittest.TestCase):
         self.assertTrue(results['pde.display-continuation-gap'].edits)
         footnote = PREFIX + b'First idea.#footnote[Reason.]\n\nThis consequence follows.\n'
         results = self.result(footnote)
-        self.assertFalse(results[RULE_ID].diagnostics or results[RULE_ID].edits)
+        self.assertTrue(results[RULE_ID].diagnostics and results[RULE_ID].edits)
         self.assertTrue(results['pde.footnote-trailing-gap'].diagnostics)
         self.assertFalse(results['pde.footnote-trailing-gap'].edits)
 
