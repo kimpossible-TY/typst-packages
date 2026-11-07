@@ -1,36 +1,59 @@
-# Typst lint foundation (not production-ready)
+# Typst lint (partial implementation)
 
-This is the first implementation slice of the reviewed
+This is the implementation draft for the reviewed
 [`typst-style-linter` design](../../openspec/changes/typst-style-linter/design.md).
-**No style rule is implemented end-to-end yet. This tool cannot approve, repair or compile a
-Typst document. Do not deploy it as a working project linter or build gate.**
-There are no source writes, compiler calls, network requests, installations or
-editor integrations. All actual runs return **2**, including empty selections.
-`--help` and `--version` report tool metadata and return 0.
+**This is not a production linter or build gate.** Real Typst parsing and one
+syntax-only rule now produce diagnostics and partial in-memory repair plans.
+Other required rules, protected runtime writes and compilation remain incomplete.
+Every real CLI run still returns **2**, including an empty selection. No source
+is changed and no compiler is invoked. Help/version return 0.
 
-## Run from a shared checkout
+## Build the official syntax adapter
 
-Requires Python 3.11+ (`tomllib`); no third-party dependencies. Tested on Python
-3.15.2 on macOS. Nothing needs copying into the consumer project.
+Python 3.11+ provides orchestration with no third-party Python dependencies.
+The syntax-only Rust bridge pins official `typst-syntax =0.15.1`; Cargo.lock pins
+its dependency graph. MSRV is 1.92; local and CI verification use Rust 1.94.1.
+Build explicitly from this checkout:
 
 ```sh
-/path/to/typst-packages/tools/typst-lint/typst-lint check --root /path/to/project
+cargo build --locked --manifest-path tools/typst-lint/syntax-adapter/Cargo.toml
+```
+
+The runtime uses only the known absolute, locally built
+`syntax-adapter/target/debug/typst-lint-syntax` executable. It never builds,
+installs or downloads dependencies itself. Missing or mismatched adapters produce
+unsupported-analysis results, not a regex fallback or clean lint result. No
+consumer copies, global PATH changes or package installation are needed.
+
+The bridge parses immutable UTF-8 bytes in markup/code/math modes without
+Typst evaluation, import execution, package resolution or network access. It
+returns schema/version/mode/source-hash evidence and a tree of SyntaxKind byte
+spans with typed MathAttach operand spans. The client checks the complete tree,
+UTF-8 boundaries, root partitioning, links, errors and versions before rule use.
+Limits are 1 MiB input, 16 MiB stdout, 64 KiB stderr, 100,000 nodes, depth 256 and
+a default five-second process deadline. Pipes are bounded while streaming.
+Exceeding a limit fails explicitly; it does not approve an incompletely read file.
+
+## Run without modifying a consumer
+
+```sh
+/path/to/typst-packages/tools/typst-lint/typst-lint check --root /path/to/project --format json
 /path/to/typst-packages/tools/typst-lint/typst-lint fix --root /path/to/project --dry-run --format json
 /path/to/typst-packages/tools/typst-lint/typst-lint fix --root /path/to/project --format json
 /path/to/typst-packages/tools/typst-lint/typst-style compile --root /path/to/project --format json -- main.typ output.pdf
 ```
 
-`fix` and `--dry-run` currently report unsupported analysis, **not an available
-patch or successful no-op**. `typst-style compile` is a deliberately inert,
-fail-closed interface stub: arguments after `--` are never executed, a compiler
-is never resolved, and existing outputs are never replaced. It is not a compiler
-wrapper implementation. No pass-through, `--force`, real-compiler option or
-offline-exclusive-write option is provided.
+All modes are currently read-only. Reports may include AST-backed proposed edits
+with baseline hashes, but label them `partial-not-applicable-transaction`.
+They are **not** permission or proof that the complete protected write contract
+has passed. Incomplete required analysis prevents application. The `compile`
+interface remains inert: arguments after `--` are never executed, no compiler is
+resolved and existing outputs are never replaced. There is no fail-open option.
 
 ## Consumer configuration
 
-Only `.typst-lint.toml` in the explicitly selected root is read. There is no
-ancestor discovery, sibling-project scan or dependency execution.
+Only `.typst-lint.toml` in the explicit root is read. There is no ancestor
+configuration discovery, sibling-project scan or dependency execution.
 
 ```toml
 rule-set = "pde" # default core; pde includes core
@@ -39,162 +62,124 @@ exclude = ["vendor/**", "generated/**"]
 entrypoint = "main.typ"
 # catalog = "references/projects.json"
 
+[capitalization]
+language = "en"
+
 [[ignore]]
 paths = ["legacy/*.typ"]
-rules = ["core.scoped-marker-tags"]
-reason = "External plugin consumes existing public marker labels"
+rules = ["core.parenthesized-scripts"]
+reason = "Preserve these documented legacy source examples"
 ```
 
-Unknown keys/packs/IDs, invalid field types, blank reasons and unsupported globs
-fail. Globs are case-sensitive root-relative POSIX paths: `*` stays within a
-segment, `**` is a complete segment and matches zero or more segments.
-`**/*.typ` includes root-level files; excludes win. `?` and bracket patterns are
-not supported. Empty include lists are rejected to avoid accidental zero scope.
-Only selected `.typ`/`.md` files are read as UTF-8 bytes. Excluded source is not
-read or parsed. BOM and line endings are preserved in memory and hashing.
+Unknown keys/packs/IDs, invalid types, blank reasons and unsupported globs fail.
+Globs are case-sensitive root-relative POSIX paths: `*` stays within a segment;
+whole-segment `**` matches zero or more segments. Excludes win; `**/*.typ`
+includes root files. `?`, bracket patterns and empty include lists are unsupported.
+Only selected `.typ`/`.md` files are read as UTF-8 bytes. Excluded files are not
+read. BOM/newlines are retained in hashes and byte plans.
 
-Selected symlinks, hard links and nonregular files are rejected; traversal never
-follows symlink directories (unexcluded symlink directories conservatively fail
-even if they would not contain matching files). A `directory/**` exclusion
-prunes that subtree. Config, entrypoint and catalog paths must be local regular
-files with no symlink component. The root itself is canonicalized. This is
-**read-only input hygiene, not a race-safe write or snapshot guarantee**.
+Selected symlinks, hard links and nonregular files are rejected. Unexcluded
+symlink directories conservatively fail even if they might contain no selected
+files; `directory/**` exclusions prune their subtrees. Config/entrypoint/catalog
+paths must be regular files without symlink components. The root is canonicalized.
+These read checks do not establish an editor lease or race-safe write snapshot.
 
-An optional entrypoint is read and hashed, but imports and document ownership
-are **not analyzed**. A configured reference catalog is read-only JSON with
-`schema: 1`, a `projects` object, per-project `references` objects and optional
-`ambiguous_labels` string arrays. Entries require positive integer `page` and
-nonempty `text`; optional `x`/`y` must be finite numbers. Additional publication
-metadata is retained in the file and ignored by this reader. URLs are not fetched.
-Missing/malformed catalogs fail; absence is an explicit optional membership skip.
-Validation does not establish freshness, reference correctness or PDF validity.
+An entrypoint is currently read and hashed, not followed for imports or ownership.
+The optional read-only reference catalog requires schema 1, a projects object,
+per-project references and optional ambiguous-label lists. Entries require a
+positive integer page and nonempty reference text; optional coordinates must be
+finite representable numbers. URLs are never fetched. Missing/malformed catalogs
+fail; absence is an explicit optional skip. Validation proves neither reference
+freshness nor published-PDF correspondence.
 
-## Implemented boundary
+## Implemented analysis and remaining coverage
 
-- Shipped versioned `rules/catalog.json`: 15 core + 18 PDE metadata records,
-  grades, original source sections, descriptions and complete repair-policy
-  text. Counts are derived from this catalog at runtime, not empty stubs. Tests
-  reconcile every record against the normative specs and fix-policy table.
-- Strict TOML selection and ignore schema validation, deterministic file
-  selection, optional entrypoint/catalog reads and SHA-256 evidence.
-- Structured JSON reports with versions, hashes, input list, unsupported rule
-  IDs/reasons, optional skips, no applied fixes, compiler status and unmanaged
-  routes. Missing rule implementations are required-analysis failures, not
-  optional skips or a clean result.
-- Pure diagnostic record validation, stable path/line/column/ID ordering and
-  path-scoped style suppression primitives. They are tested with synthetic
-  findings, not generated by a parser. Runtime suppressed counts are zero
-  because no style findings have been evaluated.
-- Pure immutable byte-edit plans: deduplication, deferred conflicting spans,
-  independent edit composition, UTF-8 boundary validation and untouched-byte
-  preservation. Pure convergence validates up to eight edit passes plus a
-  zero-edit/idempotence check, rejects cycles, incomplete/invalid analysis and
-  newly introduced findings, and permits existing unresolved findings.
-  These primitives do **not** authorize source writes or establish correct
-  Typst syntax. A future adapter must supply stable semantic finding identities.
+The shipped catalog has **15 core + 18 PDE rules** with stable IDs, grades,
+source sections and repair contracts; tests reconcile it against OpenSpec.
 
-The intended exit contract is 0 clean, 1 active findings (warnings included),
-2 input/config/parse/coverage failure, 3 safety/write/recovery failure. The CLI
-currently only produces 2 for runs; convergence safety failures exist as tested
-library exceptions, not a working fix-mode status path. Input failures produce
-an `input`-phase error; analysis reports explicitly set `coverage.complete=false`,
-`implemented=[]`, `evaluated=[]`, `compiler_invoked=false`, `compiler_status=null`.
-An empty diagnostics array never means this release checked the document.
+`core.parenthesized-scripts` now analyzes real `.typ` files using the official
+AST, not textual math guessing. It ignores strings/comments/raw content, accepts
+already-parenthesized operands, and proposes parentheses around complete typed
+script operands. Nested shared-boundary parentheses are counted, not accidentally
+deduplicated. A proposed candidate is reparsed and must produce zero second-pass
+script findings/edits. Exact fixtures include nesting/chains, primes, fractions,
+function operands, Unicode, BOM and CRLF.
 
-## Pending work and rollout blockers
+Limitations remain explicit:
 
-1. Select a reliable syntax/span-preserving parser adapter. Do not implement
-   Typst using file-wide regular expressions. All 33 end-to-end detection/repair rules,
-   binding/graph analysis, Markdown extraction and source positions, inline
-   `ignore-next` construct scoping/validation, and dictionary-call recovery are
-   pending. Even malformed Typst is presently only covered by the explicit
-   unavailable-parser failure; UTF-8 validation is not Typst parsing.
-2. Build real acceptance fixtures from every rule scenario, including exact
-   repairs, refusals and intended rendering effects. Synthetic edit tests do
-   not prove a single rule's acceptance contract.
-3. Implement writer/editor leases, canonical identity rechecks, root locks,
-   journaled atomic replacements and conflict-safe recovery before any source
-   mutation. No baseline stashing, reset or index changes are permitted.
-4. Implement faithful immutable dependency/resource snapshots, compiler argument
-   forwarding/version/recursion checks, signals and current-generation output
-   publication before compiler dispatch. The current stub must remain inert
-   until these and complete required analysis are available.
-5. Add CI/watch and a verified versioned Tinymist precompile/export adapter.
-   Installed Tinymist native lint is not this 33-rule policy. An AGENTS.md hint
-   or shell wrapper cannot establish native editor enforcement. All routes
-   currently remain unmanaged; no real-consumer rollout is performed.
+- Malformed Typst yields parse failures and no proposed fixes for that file.
+- Any parsed comment containing `typst-lint:` blocks that file until bounded
+  inline-directive scoping is implemented. Directives are never silently ignored.
+- Escaped/comment-interleaved operands are reported as unsupported rather than
+  rewritten. Other proven spans may appear only as a partial proposal.
+- Markdown extraction is not implemented; included Markdown cannot count as
+  evaluated script coverage.
+- Config path/rule ignores suppress both script findings and their file's edits.
+- All binding/graph-dependent rules and source capitalization discovery remain
+  unsupported. Zero diagnostics never implies full rule coverage.
 
-Environment exploration found Typst 0.15.1 and Tinymist 0.15.8 but no installed
-Python tree-sitter/Typst parser or cached `typst-syntax` crate. No unreviewed
-parser was installed. Separate fixture testing reported that `text-utils:0.1.2`
-with Typst 0.15.1 indents `paragraph_tab` by 1.5em but does **not** uppercase the
-following lowercase source as its comments suggest. Capitalization remains a
-rendered-effect compatibility issue, not a passed acceptance test. The later explicit capitalization request is implemented as a separate bounded source-rule component, not a package show-order fix. Marker insertion still preserves prose; only that rule may edit an eligible initial under its own policy.
+Reports include deterministic findings, suppressions, file-specific coverage,
+parse-failure spans, proposed edits, input/config/catalog hashes, versions and
+actual unmanaged routes. A rule can have evaluated `.typ` inputs while other
+selected files remain partial; `coverage.complete` stays false. Overall status 2
+continues to block writes and compilation even when one file's script rule passes.
+
+The intended final statuses are 0 clean, 1 active findings (warnings included),
+2 input/config/parse/coverage failure and 3 safety/write/recovery failure.
+Pure edit/convergence primitives validate immutable bytes, UTF-8 span boundaries,
+conflicts, cycles, eight-pass limits and idempotence. They do not establish editor
+safety or complete Typst analysis and are not a filesystem writer.
+
+## Paragraph capitalization component
+
+`pde.paragraph-capitalization` is a tested pure rule component, **not yet connected
+to real source/binding discovery**. A trusted parser/resolver must supply a
+hash-bound context proving marker provenance, paragraph ownership, first-token
+classification, effective language and suppression. Spelling `paragraph_tab` in
+a file or setting English in config is insufficient by itself.
+
+Only the design's exact 26 supported English starters are eligible for a one-byte
+initial uppercase edit. The resolved standalone marker must precede its literal
+prose word by exactly one LF/CRLF plus optional horizontal whitespace. Blank
+lines/comments, first math/code/refs/calls/quotes/wrappers, unknown/non-English
+language, non-ASCII casing, mixed-case names such as iPhone/eBay, unknown words
+and single-letter notation are unchanged. It never searches past first math for
+later prose. Supported English tags are case-insensitive `en` with optional
+2–8 ASCII-alphanumeric subtags; effective source language overrides the configured
+default, and dynamic/mixed language stays unknown.
+
+The linter owns this explicit source-casing edit; marker insertion owns only the
+marker change and the package owns indentation. Actual text-utils 0.1.2 with
+Typst 0.15.1 indents but does not uppercase as its comments claim, due to show-rule
+precedence. No broad package recasing fix was made. The optional real-render test
+verifies explicit `This`, 1.5em indentation and unchanged `iPhone` source/rendering.
+Package/consumer source and installed copies are not changed by the tests.
 
 ## Verification
 
 ```sh
+cargo fmt --check --manifest-path tools/typst-lint/syntax-adapter/Cargo.toml
+cargo clippy --locked --manifest-path tools/typst-lint/syntax-adapter/Cargo.toml -- -D warnings
+cargo test --locked --manifest-path tools/typst-lint/syntax-adapter/Cargo.toml
 PYTHONDONTWRITEBYTECODE=1 python3 -m unittest discover -s tools/typst-lint/tests -v
 ```
 
-Tests use temporary isolated consumers. They cover catalog/spec reconciliation,
-pack composition, strict invalid config, glob/exclusion boundaries, read-only
-entrypoint/catalog validation, links/nonregular files/UTF-8, diagnostic ordering
-and path ignores, BOM/CRLF/Unicode preservation, all CLI modes failing closed,
-compiler spies and old-output preservation, edit conflicts, incomplete analysis,
-new findings, cycles, eight-pass limits and idempotence. They do not run actual
-Typst compilation, installed packages, editor operations or protected writes.
-
-For the next slice, the official pinned
-[`typst-syntax` v0.15.1 crate](https://github.com/typst/typst/blob/v0.15.1/crates/typst-syntax/src/lib.rs)
-is a candidate adapter: it exposes `parse`, `parse_code`, `parse_math`, `Source`,
-`SyntaxNode`, `LinkedNode` and `SyntaxKind` without document evaluation. A small
-Rust adapter could return byte spans while Python retains orchestration. This
-candidate has not been built, installed or validated by this foundation.
-
-
-## Paragraph capitalization component (not connected to source parsing)
-
-The author-requested `pde.paragraph-capitalization` adds a 33rd catalog rule. Its
-pure component accepts a parser-certified, hash-bound paragraph context and can
-propose one ASCII initial-letter edit. It does not discover paragraph boundaries,
-resolve marker/helper bindings, infer language, parse ignore directives, write
-source, or enable a working compile gate. Runtime coverage remains zero
-end-to-end rules until those pieces exist.
-
-The supported editorial starters and exclusions are normative in the design.
-Only a direct supported lowercase word after a resolved standalone marker in
-known English ordinary prose is eligible. This first component requires exactly
-one LF/CRLF plus optional horizontal whitespace between marker and word; it
-refuses intervening blank lines/comments rather than crossing a paragraph boundary. Math/code/refs/calls/quotes/wrappers,
-non-English or unknown language, non-ASCII casing, names such as iPhone/eBay,
-unknown words and single-letter notation are unchanged. It never searches past
-an initial math expression for a later prose word. An already-capitalized starter
-is unchanged, and a reasoned suppression disables the casing edit.
-
-Optional configuration declares a default, not a language guess:
-
-```toml
-[capitalization]
-language = "en"
-```
-
-A verified source language overrides this default; dynamic/mixed language stays
-unknown. Marker insertion and capitalization are separate passes with distinct
-preservation contracts. The linter owns the visible source-letter change and the
-package owns indentation; existing packages and consumer documents are not
-modified or installed by this implementation.
-
-
-The optional real-rendering characterization can be run separately with existing
-Typst and pdftotext executables, without installing packages:
+Tests use temporary consumers. Adapter tests require the explicit build above.
+They include protocol corruption, timeouts/streamed-output limits, tree/spans,
+actual source parsing, diagnostics and suppression refusal, non-mutating CLI
+plans, compiler spies and old-output preservation. Synthetic contexts do not
+replace real parser coverage. With existing Typst/pdftotext, opt into rendering:
 
 ```sh
-TYPST_LINT_RENDER_TESTS=1 PYTHONDONTWRITEBYTECODE=1 python3 -m unittest discover -s tools/typst-lint/tests -p 'test_capitalization*.py' -v
+TYPST_LINT_RENDER_TESTS=1 PYTHONDONTWRITEBYTECODE=1 python3 -m unittest discover -s tools/typst-lint/tests -v
 ```
 
-It checks explicit uppercase source, the package's 1.5em indentation, and unchanged
-`iPhone` source/rendering. Unit fixtures also test the exact allowlist, supported
-English tags and language/context refusals, one-byte/BOM/CRLF preservation,
-stale spans/hashes, first-math no-forward-search and simulated marker/case
-convergence. These are component and rendering checks, not full parser coverage.
+The repository test workflow (PRs and relevant main changes) builds the pinned
+adapter and tests Python 3.11/3.15. It neither builds consumer documents nor
+publishes/deploys anything. Renderer-dependent characterization is separate.
+
+Next work: complete inline suppressions and Markdown/source extraction; establish
+static helper/import/language provenance before wiring capitalization; implement
+the remaining rule contracts; validate protected writer/editor transactions and
+immutable compiler snapshots; then verify CI/watch/Tinymist adapters. AGENTS.md
+or a shell wrapper alone cannot claim native editor enforcement.

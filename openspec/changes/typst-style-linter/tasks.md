@@ -72,3 +72,13 @@ The design follow-up is reviewed and merged first. Groups 2–7 are authorized i
 - [x] 10.1 Specify the 33rd rule, `pde.paragraph-capitalization`: bounded marked English prose, explicit starter set, source-only initial-byte repair, context/language exclusions and source-vs-helper ownership.
 - [x] 10.2 Implement and test the pure parser-context rule component, explicit language config and preservation/refusal cases. Do not count this as end-to-end rule coverage before a real parser and protected writer are connected.
 - [x] 10.3 Verify marker-plus-capitalization convergence and isolated render fixtures for explicit uppercase source, indentation and protected names; pass independent review and all 33 tests with opt-in rendering enabled. The draft PR remains incomplete end-to-end.
+
+
+## 11. Wire official syntax analysis (partial coverage)
+
+- [x] 11.1 Pin/build official typst-syntax 0.15.1 with a bounded, syntax-only versioned adapter; validate hashes, byte spans, tree links, limits and timeout on the Python side. No runtime dependency fetch/evaluation.
+- [x] 11.2 Analyze real .typ script operands, produce exact reparsed/idempotent partial plans, and test nesting/chains/primes/fractions/Unicode and data-context exclusions. Keep malformed syntax, directives, escaped/commented operands and Markdown limits explicit.
+- [x] 11.3 Preserve status 2/no mutation/no compiler while required rule coverage is incomplete; expose per-file coverage and partial-plan baseline evidence rather than advertise a working all-project gate.
+- [x] 11.4 Pass independent parser review, rustfmt/Clippy, three Rust tests and 51 Python tests including opt-in rendering; preserve all existing consumers.
+- [ ] 11.6 Verify repository-only remote CI on Python 3.11/3.15 for the exact pushed commit.
+- [ ] 11.5 Implement and independently review a protected offline transaction component against isolated fixtures, without exposing writes through incomplete CLI analysis.

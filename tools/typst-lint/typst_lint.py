@@ -1,4 +1,4 @@
-"""Read-only foundation. No Typst parser, filesystem writer or compiler dispatcher."""
+"""Partial syntax-backed lint analysis; no active writer or compiler dispatcher."""
 from __future__ import annotations
 
 import argparse
@@ -14,7 +14,7 @@ import stat
 import sys
 import tomllib
 
-VERSION = '0.1.0-foundation'
+VERSION = '0.2.0-parser'
 CATALOG = Path(__file__).with_name('rules') / 'catalog.json'
 
 
@@ -264,15 +264,57 @@ def report(root, mode):
         raw.decode('utf-8')
         entry_hash = digest(raw)
     reference_hash = read_reference_catalog(checked_path(root, config.catalog)) if config.catalog else None
+    # Imported here to keep pure configuration/edit primitives independent of the adapter.
+    from syntax_client import AdapterError, parse
+    from script_rule import RULE_ID, analyze
+    active_findings, proposals, file_coverage, parse_failures = [], [], [], []
+    suppressed_count = 0
+    evaluated = []
+    for item in inputs:
+        name = item['path']
+        if not name.endswith('.typ'):
+            file_coverage.append(dict(path=name, rule_id=RULE_ID, status='unsupported',
+                                      reasons=['Markdown extraction is not implemented']))
+            continue
+        try:
+            raw = checked_path(root, name).read_bytes()
+            require(digest(raw) == item['sha256'], f'Input changed during analysis: {name}')
+            result = analyze(parse(raw), name)
+        except (AdapterError, OSError, InputError) as error:
+            file_coverage.append(dict(path=name, rule_id=RULE_ID, status='unsupported', reasons=[str(error)]))
+            continue
+        active, hidden = diagnostics(result.diagnostics, config, catalog['rules'])
+        active_findings.extend(active)
+        suppressed_count += len(hidden)
+        if result.parse_errors:
+            parse_failures.append(dict(path=name, spans=[dict(start=a, end=b) for a, b in result.parse_errors]))
+        if result.skips:
+            file_coverage.append(dict(path=name, rule_id=RULE_ID, status='partial', reasons=list(result.skips)))
+        else:
+            evaluated.append(dict(path=name, rule_id=RULE_ID))
+            file_coverage.append(dict(path=name, rule_id=RULE_ID, status='evaluated', reasons=[]))
+        # Config ignores cover the entire file/rule, never individual edit spans.
+        if active and not hidden:
+            proposals.extend(dict(path=name, start=e.start, end=e.end,
+                                  replacement=e.replacement.decode('utf-8'), rule_id=RULE_ID,
+                                  baseline_sha256=item['sha256']) for e in result.edits)
+    active_findings.sort(key=lambda d: (d.path, d.line, d.column, d.rule_id))
+    script_complete = bool(inputs) and len(evaluated) == len(inputs)
+    unsupported = [dict(rule_id=r['id'], reason=('See per-file script coverage' if r['id'] == RULE_ID
+                                                else 'Binding/rule backend not implemented'))
+                   for r in enabled if r['id'] != RULE_ID or not script_complete]
     return dict(schema=1, tool_version=VERSION, pack_version=catalog['version'], mode=mode,
                 status=2, phase='analysis', compiler_invoked=False, compiler_status=None,
                 rule_set=config.pack, inputs=inputs,
                 hashes=dict(config=config.sha256, rules=rule_hash, entrypoint=entry_hash, reference_catalog=reference_hash),
-                diagnostics=[], suppressed_count=0, applied_fixes=[], proposed_edits=[], recovery=None,
-                coverage=dict(complete=False, enabled=[r['id'] for r in enabled], implemented=[], evaluated=[],
-                              unsupported=[dict(rule_id=r['id'], reason='Syntax and binding backend not implemented') for r in enabled],
+                diagnostics=[asdict(d) for d in active_findings], suppressed_count=suppressed_count,
+                applied_fixes=[], proposed_edits=proposals, proposal_status='partial-not-applicable-transaction',
+                parse_failures=parse_failures, recovery=None,
+                coverage=dict(complete=False, enabled=[r['id'] for r in enabled],
+                              implemented=[RULE_ID] if evaluated else [], evaluated=evaluated,
+                              files=file_coverage, unsupported=unsupported,
                               optional_skips=[] if config.catalog else [dict(check='catalog-membership', reason='No catalog configured')]),
-                blockers=['Typst/Markdown parsing, bindings and inline suppressions are unavailable',
+                blockers=['Required rule coverage remains incomplete; Markdown, bindings and inline suppressions are unavailable',
                           'Protected source transactions and immutable compile snapshots are unavailable'],
                 routes=dict(cli='unmanaged', ci='unmanaged', watch='unmanaged', editor='unmanaged'))
 
@@ -306,7 +348,7 @@ def main(argv=None, *, gate=False):
             print(result['error'])
         else:
             coverage = result['coverage']
-            print(f"{len(result['inputs'])} selected inputs; 0/{len(coverage['enabled'])} enabled rules implemented")
+            print(f"{len(result['inputs'])} selected inputs; {len(coverage['implemented'])}/{len(coverage['enabled'])} enabled rule backends evaluated on supported inputs")
             for blocker in result['blockers']:
                 print(blocker)
     return result['status']
