@@ -22,15 +22,16 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
-  test:
-    name: Python ${{ matrix.python }} and pinned Typst syntax
+  test_shards:
+    name: Python ${{ matrix.python }} shard ${{ matrix.shard }}/2 and pinned Typst syntax
     runs-on: ubuntu-latest
-    # Full subprocess/crash-recovery suite needs headroom within the CI job budget.
+    # Partition whole modules without relaxing any test or compiler deadline.
     timeout-minutes: 30
     strategy:
       fail-fast: false
       matrix:
         python: ['3.11', '3.15']
+        shard: [1, 2]
     env:
       PYTHONDONTWRITEBYTECODE: '1'
       OPENSPEC_TELEMETRY: '0'
@@ -56,6 +57,28 @@ jobs:
           cargo build --locked
           test -x target/debug/typst-lint-syntax
       - name: Test linter components and real parser
-        run: python -m unittest discover -s tools/typst-lint/tests -v
+        run: python tools/typst-lint/run_test_shard.py --shard-index ${{ matrix.shard }} --shard-count 2
       - name: Check whitespace
         run: git diff --check HEAD^ HEAD
+
+  test:
+    # Retain both existing check names. Neither gate may pass unless every
+    # interpreter/shard succeeded, including when a dependency failed or skipped.
+    name: Python ${{ matrix.python }} and pinned Typst syntax
+    if: ${{ always() }}
+    needs: [test_shards]
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    strategy:
+      fail-fast: false
+      matrix:
+        python: ['3.11', '3.15']
+    steps:
+      - name: Require all test shards to succeed
+        env:
+          SHARD_RESULT: ${{ needs.test_shards.result }}
+        run: |
+          if [ "$SHARD_RESULT" != success ]; then
+            echo "Test shards did not all succeed: $SHARD_RESULT"
+            exit 1
+          fi
