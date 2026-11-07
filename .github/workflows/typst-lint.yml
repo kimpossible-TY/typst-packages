@@ -23,7 +23,7 @@ concurrency:
 
 jobs:
   test_shards:
-    name: Python ${{ matrix.python }} shard ${{ matrix.shard }}/2 and pinned Typst syntax
+    name: Python ${{ matrix.python }} shard ${{ matrix.shard }}/4 and pinned Typst syntax
     runs-on: ubuntu-latest
     # Partition whole modules without relaxing any test or compiler deadline.
     timeout-minutes: 30
@@ -31,7 +31,7 @@ jobs:
       fail-fast: false
       matrix:
         python: ['3.11', '3.15']
-        shard: [1, 2]
+        shard: [1, 2, 3, 4]
     env:
       PYTHONDONTWRITEBYTECODE: '1'
       OPENSPEC_TELEMETRY: '0'
@@ -57,7 +57,7 @@ jobs:
           cargo build --locked
           test -x target/debug/typst-lint-syntax
       - name: Test linter components and real parser
-        run: python tools/typst-lint/run_test_shard.py --shard-index ${{ matrix.shard }} --shard-count 2
+        run: python tools/typst-lint/run_test_shard.py --shard-index ${{ matrix.shard }} --shard-count 4
       - name: Check whitespace
         run: git diff --check HEAD^ HEAD
 
