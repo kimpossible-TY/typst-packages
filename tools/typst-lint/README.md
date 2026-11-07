@@ -195,6 +195,12 @@ supported metadata, fsyncs durable recovery records, then atomically replaces
 each file. A multi-file transaction is not atomic as a whole. Fault tests cover
 partial writes, crashes and later user edits. Explicit recovery restores only
 recognized postimages and preserves conflicting later changes for resolution.
+The process-crash suite also sends real SIGKILL to a separate interpreter at
+pre/post-rename boundaries, restarts recovery in fresh interpreters, interrupts
+recovery itself, and checks later content edits and same-byte replacement inodes.
+It verifies lock release, the recovery gate, idempotence, and exact conflict
+acknowledgment. These tests establish process-death behavior, not power-loss
+durability, arbitrary filesystem failures, or production analyzer completeness.
 Missing, corrupt or truncated journal records fail closed for manual investigation.
 Every caller must use the same configured store and retain required journals;
 this library cannot discover deleted journals or ones hidden in a different store.
