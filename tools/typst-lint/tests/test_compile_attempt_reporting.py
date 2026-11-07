@@ -154,7 +154,7 @@ class CompileAttemptReportingTests(unittest.TestCase):
         cases = (('sys.exit(9)', 'nonzero exit', 9, kinds.PROCESS_EXIT),
                  ('os.kill(os.getpid(), signal.SIGTERM)', 'signal', -signal.SIGTERM, kinds.PROCESS_EXIT),
                  ('os.kill(os.getpid(), signal.SIGKILL)', 'signal', -signal.SIGKILL, kinds.PROCESS_EXIT),
-                 ('time.sleep(5)', 'timeout', -signal.SIGKILL, kinds.TIMEOUT),
+                 ('time.sleep(10)', 'timeout', -signal.SIGKILL, kinds.TIMEOUT),
                  ('os.write(1, b"x" * 1000000); time.sleep(5)', 'stdout byte limit exceeded',
                   -signal.SIGKILL, kinds.STREAM_LIMIT),
                  ('os.write(2, b"x" * 1000000); time.sleep(5)', 'stderr byte limit exceeded',
@@ -162,8 +162,12 @@ class CompileAttemptReportingTests(unittest.TestCase):
         for behavior, reason, status, kind in cases:
             with self.subTest(reason=reason):
                 self.program('os.write(1, b"out"); os.write(2, b"err"); ' + behavior)
+                # Setup and the version probe share this deadline. Only the
+                # timeout case should race a deadline; stream/signal assertions
+                # must reach their intended compile behavior on a busy host.
+                deadline = 2 if kind is kinds.TIMEOUT else 10
                 with self.assertRaises(cc.CompilerFailure) as caught:
-                    self.compile(deadline_seconds=0.6)
+                    self.compile(deadline_seconds=deadline)
                 report = self.report(caught.exception, ('version-probe', 'compile'),
                                      gate='passed', invoked=True, status=status)
                 attempt = report.attempts[-1]

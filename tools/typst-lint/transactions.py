@@ -131,6 +131,9 @@ class OfflineExclusive:
 class EvidenceInput:
     path: Path
     allow_missing: bool = False
+    # Opt in to the full source-like reader policy, not decoding alone:
+    # source-byte bound, UTF-8, owner/group, ACL and filesystem-flag checks.
+    utf8: bool = False
 
 
 @dataclass(frozen=True)
@@ -152,6 +155,16 @@ class _File:
     parent: tuple[int, int]
     times: tuple[int, int] | None
     xattrs: tuple[tuple[str, bytes], ...] = ()
+    # Optional live descriptor-chain identity. Never serialized into schema 1.
+    parents: tuple[tuple[str, tuple[int, int]], ...] = ()
+
+
+@dataclass(frozen=True)
+class CaptureFingerprints:
+    """Reporting view of actual retained captures, never fresh stat authority."""
+    sources: Mapping[str, Fingerprint | None]
+    evidence: Mapping[str, Fingerprint | None]
+    directories: Mapping[str, tuple[int, int]]
 
 
 @dataclass(frozen=True)
@@ -259,15 +272,21 @@ def _absolute(value: os.PathLike | str) -> Path:
     return Path(raw)
 
 
-def _directory(path: Path) -> int:
+def _directory(path: Path, *, identities: list | None = None) -> int:
     """Open every component without following symlinks, including ancestors."""
     flags = os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW
     fd = os.open('/', flags)
     try:
+        current = Path('/')
+        if identities is not None:
+            identities.append((str(current), _identity(os.fstat(fd))))
         for name in path.parts[1:]:
             next_fd = os.open(name, flags, dir_fd=fd)
             os.close(fd)
             fd = next_fd
+            current = current / name
+            if identities is not None:
+                identities.append((str(current), _identity(os.fstat(fd))))
         return fd
     except BaseException:
         os.close(fd)
@@ -432,10 +451,13 @@ def _bounded_bytes(fd: int, maximum: int, label: object, *, before=None) -> byte
 
 
 def _read(path: Path, *, missing: bool = False, utf8: bool = False,
-          limits: ReadLimits = DEFAULT_READ_LIMITS, budget: _ReadBudget | None = None) -> _File:
+          limits: ReadLimits = DEFAULT_READ_LIMITS, budget: _ReadBudget | None = None,
+          retain_ancestry: bool = False) -> _File:
     budget = _ReadBudget(limits.max_capture_bytes) if budget is None else budget
     maximum = min(limits.max_source_bytes if utf8 else limits.max_evidence_bytes, budget.remaining)
-    parent_fd = _directory(path.parent)
+    parents = []
+    parent_fd = (_directory(path.parent, identities=parents) if retain_ancestry
+                 else _directory(path.parent))
     try:
         parent = _identity(os.fstat(parent_fd))
         try:
@@ -443,7 +465,7 @@ def _read(path: Path, *, missing: bool = False, utf8: bool = False,
                          dir_fd=parent_fd)
         except FileNotFoundError:
             if missing:
-                return _File(path, None, None, parent, None)
+                return _File(path, None, None, parent, None, parents=tuple(parents))
             raise
         try:
             before = os.fstat(fd)
@@ -470,7 +492,7 @@ def _read(path: Path, *, missing: bool = False, utf8: bool = False,
                     raise SourceEncodingError(f'Non-UTF-8 source: {path}') from error
             fp = Fingerprint(before.st_dev, before.st_ino,
                              stat.S_IMODE(before.st_mode), before.st_uid, before.st_gid, _hash(data), _xattr_hash(attributes))
-            return _File(path, data, fp, parent, (before.st_mtime_ns, before.st_ctime_ns), attributes)
+            return _File(path, data, fp, parent, (before.st_mtime_ns, before.st_ctime_ns), attributes, tuple(parents))
         finally:
             os.close(fd)
     finally:
@@ -781,7 +803,10 @@ class ProtectedTransaction(_JournalReader):
                  create_journal_directory: bool = False,
                  require_existing_namespace: bool = False,
                  limits: ReadLimits = DEFAULT_READ_LIMITS,
+                 retain_ancestry: bool = False,
                  fault: Callable[[str, str | None], None] | None = None):
+        _fail(type(retain_ancestry) is bool, 'Live ancestry opt-in must be a boolean')
+        self._retain_ancestry = retain_ancestry
         _fail(type(create_journal_directory) is bool, 'Journal creation opt-in must be a boolean')
         _fail(type(require_existing_namespace) is bool, 'Existing namespace requirement must be a boolean')
         _fail(not (create_journal_directory and require_existing_namespace),
@@ -801,8 +826,9 @@ class ProtectedTransaction(_JournalReader):
               'Only selected .typ/.md source files are writable')
         self.evidence_inputs = tuple(evidence)
         _fail(all(isinstance(e, EvidenceInput) and type(e.allow_missing) is bool
-                  for e in self.evidence_inputs), 'Invalid evidence input')
+                  and type(e.utf8) is bool for e in self.evidence_inputs), 'Invalid evidence input')
         paths = tuple(_absolute(e.path) for e in self.evidence_inputs)
+        self._evidence_utf8 = MappingProxyType({p: e.utf8 for p, e in zip(map(str, paths), self.evidence_inputs)})
         _fail(len(paths) == len(set(paths)), 'Duplicate evidence paths')
         _fail(not set(paths) & {self.root / p for p in self.targets},
               'Targets cannot also be read-only evidence')
@@ -884,10 +910,12 @@ class ProtectedTransaction(_JournalReader):
                 raise RecoveryRequired(self.pending)
             if not self.recovery_only:
                 budget = _ReadBudget(self.limits.max_capture_bytes)
-                self._files = {p: _read(self.root / p, utf8=True, limits=self.limits, budget=budget)
+                self._files = {p: _read(self.root / p, utf8=True, limits=self.limits, budget=budget,
+                                        retain_ancestry=self._retain_ancestry)
                                for p in self.targets}
-                self._evidence = {str(_absolute(e.path)): _read(_absolute(e.path), missing=e.allow_missing,
-                                                              limits=self.limits, budget=budget)
+                self._evidence = {str(_absolute(e.path)): _read(_absolute(e.path), missing=e.allow_missing, utf8=e.utf8,
+                                                              limits=self.limits, budget=budget,
+                                                              retain_ancestry=self._retain_ancestry)
                                   for e in self.evidence_inputs}
                 for p, value in self._files.items():
                     _fail(value.fingerprint.device == self._store_identity[0],
@@ -982,8 +1010,10 @@ class ProtectedTransaction(_JournalReader):
                                 (False, (self._evidence if evidence is None else evidence).values())):
             for value in values:
                 try:
-                    now = _read(value.path, missing=value.data is None, utf8=sources,
-                                limits=self.limits, budget=budget)
+                    now = _read(value.path, missing=value.data is None,
+                                utf8=sources or self._evidence_utf8[str(value.path)],
+                                limits=self.limits, budget=budget,
+                                retain_ancestry=bool(value.parents))
                 except SourceEncodingError as error:
                     # Encoding failure after initial capture is a stale/raced
                     # protected baseline, not merely unsupported initial input.
@@ -1001,6 +1031,27 @@ class ProtectedTransaction(_JournalReader):
             budget.consume(size + _metadata_size(self._files[p].xattrs), p)
         for value in self._evidence.values():
             budget.consume((0 if value.data is None else len(value.data)) + _metadata_size(value.xattrs), value.path)
+
+    @property
+    def captured_fingerprints(self) -> CaptureFingerprints:
+        """Immutable identities from retained baseline records, without stat refresh.
+
+        This is inspection data, not a validated-candidate or compile receipt.
+        Optional ancestry belongs only to this live transaction and is not a
+        promise that historical/restarted journal recovery retains those guards.
+        """
+        self._check_active()
+        _fail(not self.recovery_only, 'Recovery context has no capture identities')
+        directories = {}
+        for value in (*self._files.values(), *self._evidence.values()):
+            for path, identity in value.parents:
+                _fail(path not in directories or directories[path] == identity,
+                      f'Inconsistent retained directory identity: {path}')
+                directories[path] = identity
+        return CaptureFingerprints(
+            MappingProxyType({p: f.fingerprint for p, f in self._files.items()}),
+            MappingProxyType({p: f.fingerprint for p, f in self._evidence.items()}),
+            MappingProxyType(directories))
 
     @property
     def snapshot(self) -> GraphSnapshot:
@@ -1247,8 +1298,12 @@ class ProtectedTransaction(_JournalReader):
                 # Stage ownership/content is checked, not trusted merely by its name.
                 staged = _read(self._namespace / journal / entry['stage'], utf8=True, limits=self.limits)
                 _fail(staged.fingerprint == stages[p], f'Stage changed: {p}')
-                parent_fd = _directory((self.root / p).parent)
+                parents = []
+                parent_fd = (_directory((self.root / p).parent, identities=parents)
+                             if self._files[p].parents else _directory((self.root / p).parent))
                 try:
+                    _fail(not self._files[p].parents or tuple(parents) == self._files[p].parents,
+                          f'Source ancestor changed: {p}')
                     _fail(_identity(os.fstat(parent_fd)) == self._files[p].parent,
                           f'Source parent changed: {p}')
                     os.replace(entry['stage'], Path(p).name, src_dir_fd=self._tx_fd, dst_dir_fd=parent_fd)
@@ -1257,7 +1312,9 @@ class ProtectedTransaction(_JournalReader):
                     self._sync(self._tx_fd, 'journal_directory_fsync', p)
                 finally:
                     os.close(parent_fd)
-                expected[p] = _read(self.root / p, utf8=True, limits=self.limits)
+                expected[p] = _read(self.root / p, utf8=True, limits=self.limits,
+                                    retain_ancestry=bool(self._files[p].parents))
+                _fail(expected[p].parents == self._files[p].parents, f'Source ancestor changed: {p}')
                 _fail(expected[p].fingerprint == stages[p], f'Unexpected replacement identity: {p}')
                 self._event('applied', path=p, fingerprint=_fp_json(stages[p]))
             self._hit('before_final_validation', None)

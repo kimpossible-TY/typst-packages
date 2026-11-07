@@ -7,7 +7,7 @@ The caller must hold the real offline-exclusive assertion for the whole context.
 """
 from __future__ import annotations
 
-from dataclasses import dataclass, field, replace
+from dataclasses import dataclass, field, fields, is_dataclass, replace
 from pathlib import Path
 import tomllib
 from types import MappingProxyType
@@ -318,6 +318,69 @@ class _CompileValidation:
     selection: _SourceSelection
 
 
+def _retain_authority(value):
+    """Copy issued-object facts, not authority over arbitrary Python code changes.
+
+    Only genuine validated objects are traversed here. Later checks follow this
+    bounded shape, never snapshot a reflectively altered object graph.
+    """
+    kind = type(value)
+    if kind in (str, bytes, int, bool, type(None), object):
+        return kind, value
+    if isinstance(value, Path):
+        str(value)  # Populate the trusted original's path representation once.
+        names = ('_raw_paths', '_parts', '_pparts', '_cached_cparts',
+                 '_drv', '_root', '_tail_cached', '_str',
+                 '_str_normcase_cached', '_parts_normcase_cached', '_hash')
+        return kind, (value, tuple((name, _retain_authority(getattr(value, name)))
+                                  for name in names if hasattr(value, name)))
+    if kind in (tuple, list, frozenset):  # Lists occur only in trusted Path backing fields.
+        return kind, tuple(_retain_authority(item) for item in value)
+    if kind is MappingProxyType:
+        return kind, (value, tuple((_retain_authority(key), _retain_authority(item))
+                                  for key, item in value.items()))
+    _require(is_dataclass(value) and value.__dataclass_params__.frozen,
+             'Immutable independent validation facts required')
+    return kind, tuple((item.name, _retain_authority(getattr(value, item.name)))
+                       for item in fields(value))
+
+
+def _matches_authority(value, retained):
+    """Traverse only the trusted expected shape, even after reflective mutation."""
+    kind, expected = retained
+    if type(value) is not kind:
+        return False
+    if kind in (str, bytes):
+        return len(value) == len(expected) and value == expected
+    if kind in (int, bool, type(None)):
+        return value == expected
+    if kind is object:
+        return value is expected
+    if kind is MappingProxyType or issubclass(kind, Path):
+        original, expected = expected
+        if value is not original:
+            return False
+    if kind in (tuple, list, frozenset, MappingProxyType):
+        if len(value) != len(expected):
+            return False
+        if kind in (tuple, list):
+            return all(_matches_authority(item, fact) for item, fact in zip(value, expected))
+        if kind is frozenset:
+            return all(any(_matches_authority(item, fact) for fact in expected) for item in value)
+        return all(_matches_authority(key, key_fact) and _matches_authority(item, item_fact)
+                   for (key, item), (key_fact, item_fact) in zip(value.items(), expected))
+    try:
+        if not issubclass(kind, Path):
+            state = getattr(value, '__dict__', None)
+            if state is not None and (type(state) is not dict or len(state) != len(expected)
+                                      or any(name not in state for name, _ in expected)):
+                return False
+        return all(_matches_authority(object.__getattribute__(value, name), fact)
+                   for name, fact in expected)
+    except AttributeError:
+        return False
+
+
 @dataclass(frozen=True, slots=True, init=False, eq=False)
 class ClosedCoreCompileSnapshot:
     """Opaque live bridge receipt, not a compiler/resource-profile certificate."""
@@ -378,6 +441,7 @@ class ProtectedCoreFix:
         self._summary = None
         self._compile_owner = object()
         self._compile_validation = None
+        self._validation_authority = None
         self._applied_validation = None
         self._compile_snapshot = None
         self._compile_receipt = None
@@ -409,6 +473,7 @@ class ProtectedCoreFix:
     def __exit__(self, exc_type, exc, tb):
         self._active = False
         self._candidate = None
+        self._validation_authority = None
         return self._tx.__exit__(exc_type, exc, tb)
 
     def _context(self, graph):
@@ -432,6 +497,11 @@ class ProtectedCoreFix:
                  'Protected source profile or grammar changed during this session')
 
     def _assert_validation(self, validation):
+        retained = self._validation_authority
+        _require(retained is not None and validation is retained[0]
+                 and _matches_authority(validation, retained[2])
+                 and validation.candidate.sources is retained[1],
+                 'Independent protected candidate or retained validation changed')
         self._assert_selection()
         _require(type(validation) is _CompileValidation
                  and validation.selection is self._selection
@@ -516,6 +586,7 @@ class ProtectedCoreFix:
         self._validated_summary = None
         self._summary = None
         self._compile_validation = None
+        self._validation_authority = None
         self._applied_validation = None
         self._compile_snapshot = None
         self._compile_receipt = None
@@ -560,6 +631,8 @@ class ProtectedCoreFix:
             snapshot.root, self.target, snapshot.evidence,
             digest(snapshot.evidence[self._config_path]),
             digest(snapshot.evidence[self._catalog_path]), self._selection)
+        self._validation_authority = (self._compile_validation, token.sources,
+                                     _retain_authority(self._compile_validation))
         self._candidate = token
         return token
 
@@ -567,7 +640,7 @@ class ProtectedCoreFix:
         _require(self._active and candidate is not None and candidate is self._candidate,
                  'Only this bridge session\'s independently validated candidate may be applied')
         validation = self._compile_validation
-        _require(validation is not None and validation.candidate is candidate,
+        _require(validation is not None and getattr(validation, 'candidate', None) is candidate,
                  'Independent protected candidate provenance required')
         self._assert_validation(validation)
         self._candidate = None

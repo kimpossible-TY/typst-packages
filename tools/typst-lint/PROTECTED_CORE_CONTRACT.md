@@ -91,6 +91,16 @@ the trusted internal `transaction` inspection property is not accepted by the
 bridge. Arbitrary trees, proofs, GraphAnalysis objects, final-byte maps, JSON or
 boolean attestations are not inputs to bridge validation or application.
 
+The bridge independently retains the original candidate source-map identity and
+immutable, type-exact facts for the validated token, replay, results, attribution,
+Trees, proof and captured context. Before application and later handoffs, it
+checks expected types, container lengths and fields before traversing altered
+objects. Replacing the source map, changing bytes, substituting booleans for
+integers, deleting fields or coherently altering exposed candidate/replay objects
+cannot reuse the earlier validation. These checks defend issued in-process
+objects against tampering; they do not sandbox arbitrary Python code or turn the
+trusted low-level transaction API into an independently analyzed writer.
+
 The source-profile/grammar selection is retained independently of mutable
 session attributes. Changing either attribute refuses validation, application
 or compile handoff as a safety failure. Before actual apply, the retained final

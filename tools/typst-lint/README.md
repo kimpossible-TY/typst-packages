@@ -122,6 +122,29 @@ that is its package-contract result, not a facade capability or per-rule
 coverage claim. No local file is promoted merely by its spelling. See
 [FACADE_PROVENANCE_CONTRACT.md](FACADE_PROVENANCE_CONTRACT.md).
 
+## Internal relative scalar capture foundation
+
+A separate internal proof/capture layer now accounts for named relative imports
+and their entire inert scalar dependency graph. It checks exact declaration and
+alias origins, imported scalar uses, every unused initializer, canonical paths,
+closure and fixed graph budgets. Discovery proposes paths only. An existing
+protected transaction recaptures root, modules, config and catalog, then all
+proofs are rebuilt from those retained bytes and actual file identities.
+
+Dependencies stay read-only. Source-like evidence reads and complete live
+ancestor retention are explicit transaction opt-ins; default transactions and
+schema-1 historical recovery keep their previous semantics. Live capture receipts
+reject altered, stale, copied, foreign or expired evidence. Their reports and
+pure proofs are not candidate, committed-source or compiler authority.
+
+The proposed identity `captured-relative-core-v1` is **not** registered or exposed
+by a CLI. Existing public profiles still refuse imports. Actual script analysis,
+protected root-only repair, multi-file compilation and publication must be
+separately integrated and verified before this graph can drive those operations.
+No consumer documents or installed build routes are changed. See
+[CAPTURED_RELATIVE_CORE_CONTRACT.md](CAPTURED_RELATIVE_CORE_CONTRACT.md) and
+[CAPTURED_RELATIVE_INPUT_CONTRACT.md](CAPTURED_RELATIVE_INPUT_CONTRACT.md).
+
 ## Explicit offline source profiles
 
 `protected_fix.py` connects actual parser/script analysis to the existing

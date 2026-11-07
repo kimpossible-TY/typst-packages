@@ -144,7 +144,10 @@ class CommittedSnapshotTests(unittest.TestCase):
         self.assertEqual(fixture.journal_files(), journals)
         if source_bytes is not None:
             self.assertEqual(fixture.source.read_bytes(), source_bytes)
-            self.assertEqual(fixture.source.lstat(), before_source)
+            # Guard reads may advance atime. Preserve every identity/content/
+            # ownership/mode/mtime/ctime/flag field used by the protected reader.
+            self.assertEqual(storage._stable(fixture.source.lstat()),
+                             storage._stable(before_source))
         elif before_source is None:
             self.assertFalse(fixture.source.exists())
         else:

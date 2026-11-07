@@ -56,6 +56,21 @@ ceiling before deterministic sorting. This API does not promise a global time,
 aggregate file-count or total-process-memory limit, or constrain allocations
 performed by a trusted callback itself.
 
+## Explicit live capture options
+
+`EvidenceInput.utf8` defaults to false. Opting in selects the entire source-like
+reader policy: source-byte limits, UTF-8, owner/group and existing ACL/flag
+checks, not decoding alone. Read-only evidence remains read-only.
+`retain_ancestry=True` additionally retains the actual no-follow descriptor chain
+at capture and compares it during live revalidation, application and committed
+snapshot use. The default is false. `captured_fingerprints` exposes immutable
+inspection maps from retained records, never refreshed file-stat authority.
+
+These options support the internal relative-input capture foundation described
+in [CAPTURED_RELATIVE_INPUT_CONTRACT.md](CAPTURED_RELATIVE_INPUT_CONTRACT.md).
+They do not serialize new fields or upgrade rollback and historical recovery to
+full ancestry attestation. Those retain schema-1 immediate-parent semantics.
+
 ## Journals and recovery
 
 The schema remains version 1. Manifest and event reads share a per-journal byte
