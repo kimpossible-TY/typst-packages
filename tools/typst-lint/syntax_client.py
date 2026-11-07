@@ -162,7 +162,9 @@ def parse(source: bytes, mode='markup', *, executable=EXECUTABLE, timeout=5.0):
         demand(path.is_absolute() and path == EXECUTABLE and path.resolve() == EXECUTABLE,
                'Only the known absolute local syntax adapter is allowed')
         info = path.stat()
-        demand(stat.S_ISREG(info.st_mode) and info.st_nlink == 1 and os.access(path, os.X_OK), 'Syntax adapter is not a regular executable')
+        # Cargo may hardlink this read-only executable to its deps artifact.
+        # Source-write hardlink restrictions do not apply to build artifacts.
+        demand(stat.S_ISREG(info.st_mode) and os.access(path, os.X_OK), 'Syntax adapter is not a regular executable')
         raw = _run(source, mode, path, timeout)
         demand(len(raw) <= MAX_OUTPUT, 'Syntax adapter output limit exceeded')
         return validate(json.loads(raw), source, mode)
