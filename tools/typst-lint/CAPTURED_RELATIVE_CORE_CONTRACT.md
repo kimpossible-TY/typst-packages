@@ -2,10 +2,14 @@
 
 This module provides pure proof infrastructure. The internal identity
 `captured-relative-core-v1` is **not** registered in `source_profiles` or exposed
-by a CLI/compiler. The separate internal root-only repair bridge consumes these
-proofs only with its own transaction and independent validation authority; see
+by a public CLI/compiler selector. The separate internal root-only repair bridge
+consumes these proofs only with its own transaction and independent validation
+authority; see
 [CAPTURED_RELATIVE_FIX_CONTRACT.md](CAPTURED_RELATIVE_FIX_CONTRACT.md). Both
 existing public source profiles and every PARTIAL rule status remain unchanged.
+The internal graph compiler separately consumes only the bridge's own live
+committed graph, never a pure proof; see
+[CAPTURED_RELATIVE_COMPILE_CONTRACT.md](CAPTURED_RELATIVE_COMPILE_CONTRACT.md).
 Certification alone is not script execution, repair authority, compilation,
 resource/repertoire approval or permission to publish a PDF.
 
@@ -142,9 +146,9 @@ There is no public budget override:
 - 64 provenance steps per binding, counting the literal declaration and every alias
   or named import, including the final root import.
 
-The file/path/byte/parent limits fit inside the future compiler's 128-entry,
-64 KiB dependency framing, and 96 MiB workspace envelope. They do not enable or prove
-that compiler integration.
+The file/path/byte/parent limits fit inside the internal graph compiler's 128-entry,
+64 KiB dependency framing, and 96 MiB workspace envelope. These source limits alone
+do not establish compiler authority or prove resource admission.
 
 ## Imported uses and independent replay
 
@@ -169,8 +173,9 @@ strings. These pure tests alone do not authorize source writes.
 The separate internal bridge independently rederives insertions, enforces exact
 dependency bytes/edges and root imports, compares owners/origins/provenance,
 re-certifies final candidate structure and actually executes the script rule.
-A future compiler must additionally validate its full resource repertoire across
-root and modules. Equal scalar values or equal use records alone never authorize
+The separate graph compiler additionally validates its full resource repertoire
+across root and modules and a fixed imported scalar-render charge limit.
+Equal scalar values or equal use records alone never authorize
 rewriting, compilation or publication.
 
 ## Core rule applicability

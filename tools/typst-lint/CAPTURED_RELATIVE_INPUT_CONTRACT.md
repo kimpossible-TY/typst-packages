@@ -99,8 +99,9 @@ source-language ceilings:
   8,192 scalar uses; 64 provenance steps; 128 UTF-8 bytes per binding name.
 
 The transaction's unchanged per-view byte/metadata/journal bounds apply in
-addition. These source limits reserve room beneath the later compiler workspace
-limits; they are not total-process-memory or parser execution-time guarantees.
+addition. These source limits reserve room beneath the separate graph compiler
+workspace limits; they are not total-process-memory or parser execution-time
+guarantees.
 
 ## Live receipt versus data
 
@@ -123,8 +124,12 @@ certificate or permission to write/compile. The separate existing internal repai
 bridge performs complete actual script analysis, independently verifies candidate
 provenance, and permits only root-only repair under the existing transaction.
 Its own successful apply is required for its opaque committed graph receipt.
-Compiler/resource/publication integration and its additional obligations remain
-outside both this capture module and that repair bridge.
+The separate internal graph compiler consumes only that bridge's live committed
+graph and implements additional repertoire, scalar-charge, resource, dependency
+and artifact obligations. See
+[CAPTURED_RELATIVE_COMPILE_CONTRACT.md](CAPTURED_RELATIVE_COMPILE_CONTRACT.md).
+Compilation and publication remain outside this capture module and repair bridge;
+graph PDF publication and public CLI composition are not implemented here.
 
 ## Verification
 

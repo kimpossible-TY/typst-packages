@@ -122,7 +122,7 @@ that is its package-contract result, not a facade capability or per-rule
 coverage claim. No local file is promoted merely by its spelling. See
 [FACADE_PROVENANCE_CONTRACT.md](FACADE_PROVENANCE_CONTRACT.md).
 
-## Internal relative scalar capture and repair
+## Internal relative scalar capture, repair and compilation
 
 A separate internal proof/capture layer now accounts for named relative imports
 and their entire inert scalar dependency graph. It checks exact declaration and
@@ -145,13 +145,25 @@ candidates and committed graph receipts retain independent facts; capture/proof
 reports cannot substitute for the bridge's own successful apply. Valid fixes and
 honest successful reports survive a later rejected handoff.
 
+The separate internal `compile_committed_graph` now accepts only that same active
+bridge's genuine committed graph. It checks the selected repertoire across every
+source and a fixed 1 MiB aggregate imported scalar-text charge before resource
+capture. It exclusively stages the exact bounded graph, checks actual dependency
+bytes for complete membership, retains their observed order, and guards original
+and private source/resource identities through compilation and cleanup. Its sealed
+artifact expires with the bridge; valid source fixes survive compiler failures.
+Private native tests exercise ASCII and dependency-only Korean graphs, actual PDF
+text/boxes/raster/fonts, and zero-launch rejection under the ASCII resource profile.
+
 The identity `captured-relative-core-v1` is **not** registered or exposed by a CLI.
-Existing public profiles still refuse imports, and the current compiler does not
-accept this graph receipt. Multi-file resource capture, compilation and publication
-remain separate work. No consumer documents or installed build routes are changed.
+Existing public profiles still refuse imports. The older single-source compiler
+and publisher do not accept graph receipts or artifacts. Graph PDF publication
+and public CLI composition remain separate work. No consumer documents or
+installed build routes are changed.
 See [CAPTURED_RELATIVE_CORE_CONTRACT.md](CAPTURED_RELATIVE_CORE_CONTRACT.md),
-[CAPTURED_RELATIVE_INPUT_CONTRACT.md](CAPTURED_RELATIVE_INPUT_CONTRACT.md) and
-[CAPTURED_RELATIVE_FIX_CONTRACT.md](CAPTURED_RELATIVE_FIX_CONTRACT.md).
+[CAPTURED_RELATIVE_INPUT_CONTRACT.md](CAPTURED_RELATIVE_INPUT_CONTRACT.md),
+[CAPTURED_RELATIVE_FIX_CONTRACT.md](CAPTURED_RELATIVE_FIX_CONTRACT.md) and
+[CAPTURED_RELATIVE_COMPILE_CONTRACT.md](CAPTURED_RELATIVE_COMPILE_CONTRACT.md).
 
 ## Explicit offline source profiles
 

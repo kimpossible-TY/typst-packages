@@ -4,7 +4,9 @@
 `captured-relative-core-v1`. It does not register a public profile, change either
 existing public grammar, expose CLI selection, accept imports in closed/structured
 core, stage compiler sources, execute Typst/modules, resolve resources, or publish
-artifacts. Existing compiler entrypoints do not accept its committed graph.
+artifacts. The separate internal graph compiler accepts its genuine committed
+graph; older single-source compiler entrypoints do not. See
+[CAPTURED_RELATIVE_COMPILE_CONTRACT.md](CAPTURED_RELATIVE_COMPILE_CONTRACT.md).
 Ordinary analysis remains PARTIAL and read-only.
 
 ## Exact API and ownership
@@ -134,4 +136,5 @@ They cover nested scripts/fractions/wrappers, diamond renames, builtin shadowing
 punctuation strings, BOM/CRLF/no-op, exact callback evidence, actual rule failures,
 replay and graph-budget disagreement, reflective/copy/expiry/bypass attacks,
 preapply/postcommit source/evidence/identity drift, and existing transaction fault
-and recovery behavior. Full CLI/compiler/audit acceptance remains separate.
+and recovery behavior. Graph compiler acceptance is tested separately under its
+own contract. Public CLI composition and graph PDF publication remain separate.
