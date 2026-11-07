@@ -177,7 +177,7 @@ See [CAPTURED_RELATIVE_CORE_CONTRACT.md](CAPTURED_RELATIVE_CORE_CONTRACT.md),
 [CAPTURED_RELATIVE_PUBLISH_CONTRACT.md](CAPTURED_RELATIVE_PUBLISH_CONTRACT.md) and
 [CAPTURED_RELATIVE_CLI_CONTRACT.md](CAPTURED_RELATIVE_CLI_CONTRACT.md).
 
-## Captured paragraph capitalization
+## Captured paragraph repairs
 
 A separate `ProtectedCapturedTextUtilsParagraphFix` can repair a deliberately
 bounded root document using the exact reviewed text-utils 0.1.2 paragraph marker
@@ -186,12 +186,23 @@ package manifest/source in one transaction. Its independent whole-root proof
 accounts for all 33 selected obligations: five actual evaluations and 28
 structural discharges, not a claim that all global rule contracts are complete.
 
-Only one-byte ASCII capitalization of eligible first words in canonical marked,
-single-line literal paragraphs is admitted. Independent replay, candidate
-ownership, immutable evidence and original identities guard application. All
-other source bytes and package files remain unchanged; successful repairs and
-honest historical summaries survive later rejected operations. Existing
-transaction recovery remains separate from live input authority.
+The bounded repair grammar admits a missing blank line before a standalone
+marker, a missing marker at an existing root blank-line paragraph boundary, and
+one-byte ASCII capitalization of eligible first words. Marker insertion preserves
+original casing; a later actual reparse/evaluator pass owns newly required
+capitalization. At most two repair passes are allowed. Mixed and initially
+unmarked paragraphs are supported when an after-first paragraph needs a marker;
+the first unmarked paragraph is exempt. A final document still requires at least
+one marked paragraph. Single-newline continuations, blocks, footnotes and display
+math are not admitted by this profile.
+
+Independent byte/owner maps, replay, original validation/history identity seals,
+immutable evidence and current filesystem guards protect application. All other
+original source bytes and all package bytes remain unchanged. Reports distinguish
+the repair grammar from the unchanged canonical final grammar and retain causal
+rule/pass/contribution records. Successful repairs and honest historical summaries
+survive later rejected operations. Existing transaction recovery remains separate
+from live input authority.
 
 The explicit offline selection `captured-text-utils-paragraph-v1` requires a
 canonical absolute `--package-path` and the exact PDE/English configuration in
@@ -217,13 +228,18 @@ dependencies and resource-independent recovery under the unchanged 10-second
 compiler deadline. A repertoire refusal preserves committed source fixes and
 the prior PDF without launching a compiler.
 
-Private source-repair characterization of
-LF/CRLF and four horizontal-spacing variants observes lowercase original
-rendering and the intended uppercase rendering after repair. Both preserve
-1.5em indentation, line positions and the remaining text; subsequent words
-shift only by the changed first word's advance. PDF/raster bytes are expected
-to differ. This is independent test evidence, not production package-compilation
-authority or a general rendering-equivalence claim.
+Boundary insertion intentionally changes paragraph structure and indentation.
+Private public-CLI tests compare mixed LF and initially unmarked CRLF/BOM repairs
+with independently authored canonical documents. Their PDFs, text/word boxes and
+rasters match exactly, including 1.5em indentation, intended capitalization and
+unchanged protected names. Changed-length crash/recovery tests preserve later
+edits and leave an unobserved postrename state explicitly unresolved.
+
+Earlier case-only LF/CRLF and horizontal-spacing characterization observes
+lowercase original rendering and uppercase after repair, unchanged indentation
+and line positions, and subsequent words shifted only by the changed first-word
+advance. These are tested author-intended effects, not a general original/final
+rendering-equivalence claim or substitute for live compiler authority.
 See [CAPTURED_TEXT_UTILS_PARAGRAPH_INPUT_CONTRACT.md](CAPTURED_TEXT_UTILS_PARAGRAPH_INPUT_CONTRACT.md),
 [CAPTURED_TEXT_UTILS_PARAGRAPH_CORE_CONTRACT.md](CAPTURED_TEXT_UTILS_PARAGRAPH_CORE_CONTRACT.md),
 [CAPTURED_TEXT_UTILS_PARAGRAPH_FIX_CONTRACT.md](CAPTURED_TEXT_UTILS_PARAGRAPH_FIX_CONTRACT.md),

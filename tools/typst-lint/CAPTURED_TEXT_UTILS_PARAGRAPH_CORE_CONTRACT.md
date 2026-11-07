@@ -63,9 +63,10 @@ The linter's only permitted casing change remains the source's first ASCII byte.
 Unused `highlighted`, title and numeric-title helper bodies are never invoked.
 Initializer/deferred-body safety alone grants no call safety to those helpers.
 
-## Exhaustive root language
+## Exhaustive final canonical root language
 
-The original root contains only:
+`certify` and the unchanged final grammar
+`captured-text-utils-paragraph-grammar-v1` require only:
 
 - Optional initial BOM and literal horizontal/LF/CRLF whitespace.
 - Exactly one root standalone direct named import of `paragraph_tab` followed
@@ -108,24 +109,105 @@ identifiers to the exact package/import/source identity and proves root prose,
 English language and nondeferred ownership. Helper spelling alone grants no
 semantic identity.
 
+## Separate initial/intermediate repair admission
+
+`certify_repair(tree, path, **explicit_authority)` uses the same public source
+profile and exact capture/config/catalog/package semantics. It privately issues
+`CapturedTextUtilsParagraphRepairProof` with the distinct internal grammar
+`captured-text-utils-paragraph-repair-grammar-v1`. This is not a new public source
+profile, final compiler proof, completed actual rule evaluation or transaction
+lease. `verify_proof` rejects this different proof type. Final `certify`, its
+proof type, grammar version and `compare_candidate` behavior remain unchanged.
+All previously admitted canonical forms retain their original clean proofs.
+
+Repair admission additionally permits only these source-owned root cases:
+
+- A standalone existing canonical marker without its immediately preceding
+  terminated whitespace-only blank line, including the first marker immediately
+  after the exact show declaration.
+- An after-existing-prose whitespace-only boundary with a parser-owned root
+  `Parbreak`, but without its required canonical marker.
+- Any mixture of those cases and correct paragraphs. Initially zero markers are
+  supported when at least a second paragraph provides an existing boundary for
+  marker insertion. A lone unmarked first paragraph remains unsupported by the
+  unchanged canonical final language; document start never creates a marker.
+
+All other restrictions above still apply. In particular every paragraph remains
+one physical line, and every future marked first word must already satisfy the
+same exact allowlist, case, completeness and effective-English eligibility.
+The initial unmarked paragraph stays exempt. No block, explicit parbreak call,
+footnote, continuation, display, comment/directive, arbitrary call, wrapper,
+facade or package behavior is newly admitted. No boundary is discovered by
+stripping setup text or regex-scanning otherwise unconsumed syntax. The entire
+validated AST is exhaustively consumed, and an unmarked boundary additionally
+requires its actually consumed whitespace `Parbreak` sibling. The resolver must
+independently prove canonical marker availability and the active reviewed show
+at every insertion target.
+
+A repair proof retains source-bound `Repair(rule_id, paragraph_ordinal, start,
+end, replacement)` records in `.repairs`, always exact insertions. Repair
+boundaries retain their previous/next paragraph owners, exact original gap bytes,
+first node, and optional original marker nodes/spans. Only existing marked
+paragraphs have capitalization contexts and pending first-byte edits on this
+pass. An inserted marker cannot retroactively authorize same-pass casing.
+
+The exact insertion policy follows the normative fix catalog and reviewed rule
+implementations:
+
+- Missing marker gap: insert one LF/CRLF at the marker's physical line start,
+  before any original indentation. Choose CRLF if that marker line's terminator
+  is CRLF or the immediately previous line ends CRLF; otherwise choose LF.
+- Missing marker: insert exactly `#paragraph_tab` plus LF/CRLF at the following
+  prose line's physical start, before and preserving its original indentation.
+  Use CRLF exactly when the preceding source terminator is CRLF. The existing
+  blank boundary, every prose byte, BOM and all original newlines are preserved.
+- The later separately attributed capitalization pass may change only the
+  eligible first ASCII byte. Existing marked casing and unrelated insertions
+  can occur together on the first pass. No import/show/package bytes change.
+
+The bridge must report repair grammar and final canonical grammar separately,
+and obtain actual independently derived rule proposals. `.repairs` is expected
+ownership evidence, not proof those analyzers ran. A distinct exhaustive bounded
+backend may share the reviewed paragraph policies while independently deriving
+the four actual paragraph-rule results; the actual script evaluation and 28
+structural discharges separately account for the full 33-rule matrix. The generic
+prose-marker analyzer's unconditional partial skip remains real and cannot be removed or waived.
+
 ## Five required actual obligations and 28 structural discharges
 
 The pure proof lists these five obligations as requiring later actual execution,
 not as completed analyzer calls:
 
 - `core.parenthesized-scripts`: actual script analyzer must be clean.
-- `pde.paragraph-marker-gap`: actual gap analyzer must be clean.
+- `pde.paragraph-marker-gap`: actual bounded gap evaluation must independently
+  derive exactly the admitted missing-blank insertions; the final actual result
+  must be clean.
 - `pde.paragraph-marker-target`: actual target analyzer must be clean.
-- `pde.paragraph-capitalization`: the only allowed actual edits; final analyzer
-  result must be clean, including verified already-uppercase no-ops.
-- `pde.prose-paragraph-marker`: actual `analyze_boundaries` invocation must pass
-  the new exhaustive bounded checker.
+- `pde.paragraph-capitalization`: the only owner of source casing edits; final
+  analyzer result must be clean, including verified already-uppercase no-ops.
+- `pde.prose-paragraph-marker`: actual exhaustive bounded marker evaluation
+  must independently derive all paragraph owners and existing boundaries,
+  propose exactly the admitted missing-marker insertions, and confirm every
+  required marker is present on the final source.
 
+The protected bridge executes `bounded_paragraph_rules.analyze` on the initial,
+intermediate and final Trees, checking independently derived owners and actual
+rule results against admission expectations. Initial/intermediate gaps or
+markers may need the exact recorded repairs; final actual evaluation must have
+no diagnostics, edits, skips, parse errors or suppressions. Those actual calls
+are distinct from this pure proof module.
+
+The unchanged canonical-only legacy API
 `analyze_boundaries(tree, path, **explicit_authority)` independently rewalks the
-original grammar and every prose boundary rather than consuming a caller proof.
+original clean grammar and every prose boundary rather than consuming a caller
+proof.
 It returns frozen source-bound boundary records and empty diagnostic/edit/skip/
 parse-error/suppression fields on success. It refuses any uncovered boundary.
 `check_boundaries` returns the same independently rederived boundary records.
+They remain available for canonical clients, but neither is an additional
+required duplicate call in the bounded repair bridge. Canonical proof obligation
+reasons remain unchanged; repair proof reasons separately describe admitted
+proposals followed by final clean actual evaluation.
 The ordinary `prose_marker_rules.analyze` generic partial skip is not stripped,
 filtered or declared complete. The bridge must retain this distinction.
 
@@ -186,6 +268,47 @@ candidate from the original recorded edits and rejects every other changed
 byte, omitted change, residual edit, or statement/boundary/package ownership
 change. The bridge separately executes actual analyzers and owns write authority.
 
+`verify_repair_proof` independently rederives every repair admission field,
+with exact types and expected tuple lengths, and additionally checks weak
+identity-based private issuance. A copied repair proof, even with an equal
+issuer/field payload, is not issued. Boolean coordinates, missing/changed fields,
+forged/cyclic records, oversized tuples and foreign proofs are rejected without
+using caller object equality as evidence. Registry entries retain no proof once
+the original proof is no longer live.
+
+`compare_repair_step(before, after, *, before_tree, after_tree, path, step=None,
+**explicit_authority)` verifies both admissions from selected authority and
+independently derives the complete current pass: every recorded insertion plus
+only pre-existing marked capitalization edits. It replays original bytes exactly,
+rejects growth above the root bound, and derives a one-to-one original-to-new
+semantic node map. Import/show subtrees, original markers, ordered paragraph
+content/first words and every inline-math descendant retain mapped spans,
+child structure, operand roles/owners and typed metadata. Original whitespace
+nodes may split or merge after insertion, but every original whitespace byte is
+preserved by exact replay and both grammars still consume every AST token.
+No caller-provided offset map, move record or equal-looking copied text proves
+original-byte survival.
+
+When supplied, the genuine convergence `Step` must have exactly these proposals,
+one exact separately attributed contribution per edit, one typed pass number,
+no deferred edit and no move. Duplicate marker ownership, alternate spelling,
+deletion/replacement, recasing newly marked prose on the insertion contribution,
+changed math/package/statements and omitted or extra changes are rejected.
+
+`compare_repair_candidate(initial, clean_final, *, before_tree, after_tree, path,
+candidate=None, step_trees=(), **explicit_authority)` requires the unchanged clean
+final proof, zero pending casing, independently replayed exact original-to-final
+bytes and the same semantic node ownership map. Any changed candidate also
+requires genuine convergence evidence and the bridge's exact parser Tree pair
+for each pass. The pure module never reparses. It re-certifies every supplied
+intermediate, verifies the connected strictly progressing history, and checks
+typed causal rule/pass attribution and minimal composed baseline envelopes.
+Widened replacements containing equal copied original bytes are rejected even
+when they replay to the right final source. Candidate/Step mapping methods are
+never trusted or invoked. Actual final reanalysis and independent zero-edit
+idempotence remain mandatory bridge responsibilities, not a consequence of a
+pure structural proof.
+
 Retained immutable records bind exact import/show node identities and spans,
 marker Hash/Ident ownership, each paragraph's first word/Text span and content
 nodes, every after-prose boundary's previous/next owners and gap bytes, package
@@ -198,6 +321,11 @@ There are no caller budget overrides:
 - One original root payload at most 1 MiB, at most 100,000 nodes, maximum depth
   256, checked by the existing strict parser representation validator.
 - At most 256 prose paragraphs, including the optional unmarked first one.
+- At most 512 independently derived edits per pass and two actual edit passes.
+  All current proposals apply on each pass, so only newly marked lowercase
+  starters can need the second pass. Histories contain at most two Tree pairs;
+  semantic node maps contain at most the original 100,000 nodes. Source growth
+  remains bounded by the same 1-MiB root limit, not by a caller override.
 - Configuration and catalog each at most 64 KiB.
 - Exactly 5,583 package source and 173 manifest bytes; package identity at most
   4,096 UTF-8 bytes. Package Tree uses the same strict node/depth bounds.

@@ -6,6 +6,7 @@ shared dispatcher remains responsible for whole-candidate rule composition.
 """
 from bisect import bisect_left, bisect_right
 from dataclasses import dataclass
+from collections.abc import Mapping
 import re
 
 from capitalization import BodyKind, Context, MarkerBinding, StartKind, evaluate
@@ -14,7 +15,7 @@ from prose_boundary import (footnote_boundaries, literal_paragraph as _literal_p
                             valid_insertion_proof)
 from suppression import resolve as resolve_suppressions
 from syntax_client import AdapterError, parse
-from typst_lint import Diagnostic, SafetyError, digest, load_rules
+from typst_lint import Diagnostic, InputError, SafetyError, digest, load_rules
 
 RULE_ID = 'pde.prose-paragraph-marker'
 _MARKER = b'#paragraph_tab'
@@ -39,7 +40,7 @@ def _diagnostic(source, path, rule, start):
                       rule['source'])
 
 
-def _casing_eligibility(tree, resolution, index, edit, *, allow_followup_casing=False):
+def _casing_eligibility(tree, resolution, index, edit, *, allow_followup_casing=False, catalog=None):
     """Reuse the pure casing policy on a bounded exact source extraction.
 
     This is only a preflight. The complete batch must subsequently pass real
@@ -60,7 +61,7 @@ def _casing_eligibility(tree, resolution, index, edit, *, allow_followup_casing=
                       1, 1 + len(_MARKER), start, start + len(word[0]), word[0],
                       StartKind.LITERAL_WORD, BodyKind.ORDINARY_PROSE,
                       MarkerBinding.PARAGRAPH_TAB, resolution.language_for(index))
-    result = evaluate(fragment, context)
+    result = evaluate(fragment, context, catalog=catalog)
     if result.edit or result.diagnostic:
         if (allow_followup_casing is True and result.skip_reason is None
                 and result.diagnostic is not None and word[0].islower()
@@ -71,7 +72,7 @@ def _casing_eligibility(tree, resolution, index, edit, *, allow_followup_casing=
         raise SafetyError(f'Marker insertion would add capitalization nonapplicability: {result.skip_reason}')
 
 
-def _verify_candidate(tree, edits, scopes):
+def _verify_candidate(tree, edits, scopes, *, catalog=None):
     """Certify unchanged root text/targets and real standalone marker syntax.
 
     The original resolver proof certifies the inserted immutable marker value
@@ -127,7 +128,7 @@ def _verify_candidate(tree, edits, scopes):
                     or [checked.nodes[i].kind for i in checked.nodes[call.children[1]].children]
                     != ['LeftParen', 'RightParen']):
                 raise SafetyError('Inserted paragraph break is not a canonical empty call')
-    final_scopes = resolve_suppressions(checked, {rule['id'] for rule in load_rules()[0]['rules']})
+    final_scopes = resolve_suppressions(checked, {rule['id'] for rule in _catalog_records(catalog)})
     expected_scopes = tuple((scope.rules, scope.reason, mapped(scope.start),
                              mapped(scope.end, end=True), mapped(scope.directive_start)) for scope in scopes)
     actual_scopes = tuple((scope.rules, scope.reason, scope.start, scope.end, scope.directive_start)
@@ -136,8 +137,25 @@ def _verify_candidate(tree, edits, scopes):
         raise SafetyError('Marker insertion would change directive targets')
 
 
-def analyze(tree, path, resolution, *, allow_followup_casing=False):
+def _catalog_records(catalog):
+    if catalog is None:
+        return load_rules()[0]['rules']
+    if (type(catalog) not in (tuple, list)
+            or any(not isinstance(record, Mapping) or type(record.get('id')) is not str
+                   or not record['id'] for record in catalog)):
+        raise InputError('Prose marker analysis requires explicit rule metadata records')
+    for rid in (RULE_ID, 'pde.paragraph-capitalization'):
+        records = [record for record in catalog if record.get('id') == rid]
+        if (len(records) != 1
+                or any(type(records[0].get(name)) is not str or not records[0][name]
+                       for name in ('grade', 'source'))):
+            raise InputError('Missing or invalid prose marker rule metadata')
+    return catalog
+
+
+def analyze(tree, path, resolution, *, allow_followup_casing=False, catalog=None):
     """Return marker/boundary insertions; opt-in casing needs an actual next pass."""
+    catalog_records = _catalog_records(catalog) if catalog is not None else None
     source, nodes = tree.source, tree.nodes
     if nodes[0].errors:
         errors = tuple((node.start, node.end) for node in nodes if node.kind == 'Error')
@@ -147,7 +165,9 @@ def analyze(tree, path, resolution, *, allow_followup_casing=False):
         return ProseMarkerResult(skips=('Stale or mismatched static resolution; no repair proposed',))
     if tree.mode != 'markup' or nodes[0].kind != 'Markup':
         return ProseMarkerResult(skips=('Only direct root markup prose boundaries are supported',))
-    catalog = {rule['id']: rule for rule in load_rules()[0]['rules']}
+    if catalog_records is None:
+        catalog_records = _catalog_records(None)
+    catalog = {rule['id']: rule for rule in catalog_records}
     scopes = resolve_suppressions(tree, set(catalog))
     proof = resolution.paragraph_insertion_proof
     valid_proof = valid_insertion_proof(tree, proof)
@@ -194,7 +214,7 @@ def analyze(tree, path, resolution, *, allow_followup_casing=False):
         edit = Edit(at, at, _MARKER + newline)
         try:
             _casing_eligibility(tree, resolution, right_id, edit,
-                                allow_followup_casing=allow_followup_casing)
+                                allow_followup_casing=allow_followup_casing, catalog=catalog_records)
         except SafetyError as error:
             skips.append(f'fix_unavailable: {error} at byte {right.start}')
         else:
@@ -222,7 +242,7 @@ def analyze(tree, path, resolution, *, allow_followup_casing=False):
         marker = Edit(boundary.marker_at, boundary.marker_at, _MARKER + boundary.newline)
         try:
             _casing_eligibility(tree, resolution, right_id, marker,
-                                allow_followup_casing=allow_followup_casing)
+                                allow_followup_casing=allow_followup_casing, catalog=catalog_records)
         except SafetyError as error:
             skips.append(f'fix_unavailable: {error} at byte {right.start}')
         else:
@@ -231,7 +251,7 @@ def analyze(tree, path, resolution, *, allow_followup_casing=False):
             edits.append(marker)
     if edits:
         try:
-            _verify_candidate(tree, tuple(edits), scopes)
+            _verify_candidate(tree, tuple(edits), scopes, catalog=catalog_records)
         except (AdapterError, SafetyError) as error:
             edits.clear()
             skips.append(f'fix_unavailable: {error}; no paragraph marker edits proposed')

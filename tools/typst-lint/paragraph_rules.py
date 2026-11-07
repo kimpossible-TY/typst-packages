@@ -33,7 +33,7 @@ def _diagnostic(source, path, rule, start, explanation):
     return Diagnostic(rule['id'], rule['grade'], path, line, column, explanation, rule['source'])
 
 
-def analyze(tree, path, resolution, *, catalog=None):
+def analyze(tree, path, resolution, *, catalog=None, _bounded_gap_markers=frozenset()):
     """Consume hash-bound proofs, never infer a helper from its identifier text."""
     supplied = catalog is not None
     if supplied:
@@ -157,7 +157,8 @@ def analyze(tree, path, resolution, *, catalog=None):
                 # guessed safe: the footnote's combined repair is not implemented.
                 previous_nodes = [n for n in nodes if not n.children and n.start < line_start
                                   and n.end > previous_start]
-                safe = all(n.kind in ('Text', 'Space', 'Parbreak') for n in previous_nodes)
+                safe = (all(n.kind in ('Text', 'Space', 'Parbreak') for n in previous_nodes)
+                        or ms in _bounded_gap_markers)
                 replacement = b'\r\n' if (source[me:line_end].endswith(b'\r')
                                              or previous.endswith(b'\r\n')) else b'\n'
                 edit = Edit(line_start, line_start, replacement) if safe else None

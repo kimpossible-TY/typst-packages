@@ -187,7 +187,6 @@ class CapturedTextUtilsParagraphFixTests(unittest.TestCase):
             ROOT.replace(b'#show: apply-paragraph-tabs\n', b'#show: apply-paragraph-tabs\n#set text(lang:"en")\n'),
             ROOT.replace(b'\n#paragraph_tab', b'\n// comment\n#paragraph_tab'),
             ROOT.replace(b'\n#paragraph_tab\n', b'\n#paragraph_tab\n\n'),
-            ROOT.replace(b'\n\n#paragraph_tab', b'\n#paragraph_tab'),
             ROOT.replace(b'this preserves', b'$x_(1)$ this preserves'),
             ROOT.replace(b'this preserves', b'*this* preserves'),
             ROOT.replace(b'this preserves', b'= this preserves'),
@@ -275,7 +274,8 @@ class CapturedTextUtilsParagraphFixTests(unittest.TestCase):
         self.assertEqual(self.f.source.read_bytes(), EXPECTED)
 
     def test_initial_proof_authority_failure_is_safety_not_unsupported_input(self):
-        with mock.patch.object(core, 'verify_proof', side_effect=
+        # Initial admission now has its own repair grammar and verifier.
+        with mock.patch.object(core, 'verify_repair_proof', side_effect=
                 core.CapturedTextUtilsParagraphAuthorityError('owned verifier refusal')):
             with self.assertRaises(TransactionError) as caught:
                 with self.context():
@@ -409,10 +409,13 @@ class CapturedTextUtilsParagraphFixTests(unittest.TestCase):
                     with self.context(f) as fix:
                         actual = {'paragraph': bridge.analyze_paragraphs,
                                   'script': bridge.analyze_script,
-                                  'boundary': core.analyze_boundaries}[hook]
+                                  'boundary': bridge.analyze_bounded_paragraphs}[hook]
                         def lie(*args, **kwargs):
                             result = actual(*args, **kwargs)
-                            value = result[CAP] if hook == 'paragraph' else result
+                            # Root prose-marker coverage now comes from the
+                            # real retained-metadata bounded rule backend.
+                            value = (result[0][bridge.PROSE_MARKER] if hook == 'boundary'
+                                     else result[CAP] if hook == 'paragraph' else result)
                             if alteration == 'skips':
                                 altered = replace(value, skips=('unchecked actual rule',))
                             elif alteration == 'suppressed':
@@ -422,11 +425,16 @@ class CapturedTextUtilsParagraphFixTests(unittest.TestCase):
                             elif alteration == 'missing':
                                 if hook == 'paragraph':
                                     return {rid: item for rid, item in result.items() if rid != CAP}
+                                if hook == 'boundary':
+                                    return ({rid: item for rid, item in result[0].items()
+                                             if rid != bridge.PROSE_MARKER}, result[1], result[2])
                                 return None
                             else:
                                 altered = replace(value, edits=(Edit(0, 0, b'FORGED'),))
+                            if hook == 'boundary':
+                                return (dict(result[0], **{bridge.PROSE_MARKER: altered}), result[1], result[2])
                             return dict(result, **{CAP: altered}) if hook == 'paragraph' else altered
-                        owner, name = (core, 'analyze_boundaries') if hook == 'boundary' else (
+                        owner, name = (bridge, 'analyze_bounded_paragraphs') if hook == 'boundary' else (
                             bridge, 'analyze_paragraphs' if hook == 'paragraph' else 'analyze_script')
                         with mock.patch.object(owner, name, side_effect=lie):
                             with self.assertRaises(TransactionError):

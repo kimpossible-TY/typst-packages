@@ -219,6 +219,8 @@ def _summary_json(summary):
             original_sha256=summary.original_sha256, final_sha256=summary.final_sha256,
             config_sha256=summary.config_sha256, catalog_sha256=summary.catalog_sha256,
             package_sha256=summary.package_sha256,
+            repair_grammar_version=summary.repair_grammar_version,
+            repair_passes=summary.repair_passes,
             package_identity=dict(namespace='local', name='text-utils', version='0.1.2',
                 role='read-only-semantic-evidence',
                 files=[dict(path=path, sha256=sha256, size=size)
@@ -228,7 +230,10 @@ def _summary_json(summary):
             not_applicable=[dict(rule_id=rid, reason=reason)
                             for rid, reason in summary.structural_reasons],
             applied_edits=[dict(path=e.path, start=e.start, end=e.end,
-                replacement=e.replacement.decode('utf-8'), rule_id=e.rule_id)
+                replacement=e.replacement.decode('utf-8'), rule_id=e.rule_id,
+                rule_ids=list(e.rule_ids), contributions=[dict(pass_number=c.pass_number,
+                    rule_id=c.rule_id, start=c.start, end=c.end,
+                    replacement=c.replacement.decode('utf-8')) for c in e.contributions])
                 for e in summary.applied_edits],
             modified_paths=list(summary.modified_paths), journal_id=summary.journal_id,
             final_findings=[], coverage=dict(input_profile_complete=True,
