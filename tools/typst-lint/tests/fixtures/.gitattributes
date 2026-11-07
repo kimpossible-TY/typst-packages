@@ -1,0 +1,2 @@
+# Preserve byte-exact pinned upstream source, including original whitespace.
+anchor-overlay-packages/preview/cetz/0.4.2/src/** whitespace=-blank-at-eol,-blank-at-eof
