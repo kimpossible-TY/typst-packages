@@ -283,6 +283,27 @@ The original snapshot is a baseline, not a compiler-ready snapshot; validated
 candidate sources describe postimages. Compiler resource capture, output
 publication, editor version integration and production CLI wiring remain absent.
 
+## Bounded prose footnote boundaries
+
+A literal root paragraph ending in a proven builtin `#footnote[...]` can now
+receive its required next-line `#parbreak()` when the next literal paragraph
+already has the reviewed canonical marker. The footnote gap rule owns that
+break-only proposal. If the marker is missing, the marker rule owns the complete
+break-plus-marker repair, preserving every prose byte; eligible capitalization
+is still produced by the real later rule pass. Ignoring the marker rule cannot
+leave a gap rule's half repair.
+
+Both paths require an existing whitespace-only paragraph gap, exact reviewed
+text-utils marker/show evidence, canonical builtin-break availability, and no
+lost directive/comment ownership. Unknown shows, shadowed bindings, nested or
+structural boundaries and opaque footnote content remain refused. An existing
+break is not duplicated; multiple breaks are never deduplicated. The narrow
+root builtin-break resolver exception preserves state but never restores
+unknown prose safety. Renderer fixtures verify unchanged footnote/word geometry
+for marked prose and the intended 1.5em indent for a newly marked paragraph.
+See [FOOTNOTE_COMPOSITION_CONTRACT.md](FOOTNOTE_COMPOSITION_CONTRACT.md).
+Production source writes and compiler dispatch remain closed.
+
 ## Proven source paragraph rules
 
 `pde.paragraph-capitalization` now consumes real AST/hash-bound static proofs for
@@ -323,7 +344,7 @@ reparse and repeated analysis, checking zero second-pass edits, deterministic
 results, unchanged suppression ownership and no newly introduced finding.
 
 The linter owns this explicit source-casing edit; marker insertion owns only the
-marker change and the package owns indentation. Actual text-utils 0.1.2 with
+marker/required paragraph-break insertions and the package owns indentation. Actual text-utils 0.1.2 with
 Typst 0.15.1 indents but does not uppercase as its comments claim, due to show-rule
 precedence. No broad package recasing fix was made. The optional real-render test
 verifies explicit `This`, 1.5em indentation and unchanged `iPhone` source/rendering.

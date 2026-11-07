@@ -191,4 +191,13 @@ The design follow-up is reviewed and merged first. Groups 2–7 are authorized i
 - [x] 24.2 Integrate script-only Markdown analysis, actual fence directive scopes and config ignores without applying other Typst style rules or resolving documentation imports.
 - [x] 24.3 Authenticate Markdown repair candidates from independent immutable captured contexts and preserve source mapping, parsing, suppression ownership and zero-edit idempotence.
 - [x] 24.4 Complete independent adversarial/resource review, 730 Python tests with rendering enabled (729 passed, one filesystem setuid skip), four Rust tests, formatting/Clippy, strict OpenSpec and whitespace checks. Frozen audit: 219 fixtures, 276 actual CLI calls, 54 verified candidate reanalyses, 33 PARTIAL / 0 NOT_IMPLEMENTED / 0 COMPLETE, with zero invariant issues. Full acceptance and production writes/compiler routes remain separate.
-- [ ] 24.5 Publish the Markdown checkpoint to the existing draft branch and verify both CI jobs for its exact head without changing PR metadata or merging.
+- [x] 24.5 Publish 6ecca8f1dd54fae2d92808ce6df20fbd99c46598 and verify both Python 3.11/3.15 jobs for exact head CI run 42359676777. PR metadata, merge and rollout remain unchanged.
+
+
+## 25. Compose bounded prose-footnote paragraph repairs
+
+- [x] 25.1 Prove canonical standalone builtin paragraph-break availability without restoring state after unknown shows or output, and preserve immutable source-bound resolver evidence.
+- [x] 25.2 Share exact literal root paragraph/footnote ownership. Let the gap rule insert a missing break before an existing marker, and the marker rule own the complete break-plus-marker repair when a marker is missing.
+- [x] 25.3 Preserve comments, directive targets, ignored-rule ownership, original prose bytes, existing breaks and language/casing refusals. Require actual followup capitalization and authenticated zero-edit reanalysis.
+- [x] 25.4 Complete independent exact-source review, 764 Python tests with rendering enabled (763 passed, one filesystem setuid skip), four Rust tests, formatting/Clippy, strict OpenSpec and whitespace checks. Frozen audit: 225 fixtures, 286 actual CLI calls, 58 verified candidate reanalyses, 33 PARTIAL / 0 NOT_IMPLEMENTED / 0 COMPLETE, with zero invariant issues. Production writes, compilation and rollout remain closed.
+- [ ] 25.5 Publish the reviewed footnote-composition checkpoint and verify both CI jobs for its exact draft PR head without changing PR metadata or merging.

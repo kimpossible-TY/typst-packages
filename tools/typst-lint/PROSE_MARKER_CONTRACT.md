@@ -19,13 +19,23 @@ marker prefix. This keeps an existing later boundary/refusal visible when an
 earlier paragraph receives its marker. No other inline output prefix is allowed.
 
 No comment, directive, inline equation, strong/emphasized content, reference,
-raw content, call, footnote or other output construct is crossed to infer a
-literal paragraph from its final punctuation. Unknown ownership remains
+raw content, general call or other output construct is crossed to infer a
+literal paragraph from its final punctuation. The separately proven terminal
+literal-footnote boundary below is the only added call exception. Unknown ownership remains
 unsupported. Document start, source-line continuations, headings, lists,
 displays, figures and proof/theorem output do not imply a new prose paragraph.
 Display-to-prose gaps remain owned by `pde.display-continuation-gap`. Blocks,
-explicit `parbreak` calls, footnote/break composition and nested bodies remain
-outside this slice. Existing marked paragraphs receive no duplicate finding.
+general explicit break/call boundaries and nested bodies remain outside this
+slice. Existing marked paragraphs receive no duplicate marker finding.
+
+A complete ordinary root paragraph ending in a direct builtin literal-content
+footnote can use an existing whitespace-only blank boundary when both reviewed
+marker/show ownership and canonical builtin break availability are proven.
+The marker rule owns the whole next-line break plus marker insertion for an
+unmarked target. An already marked target instead belongs to the footnote gap
+rule. No comments/directives or arbitrary calls are crossed, and an existing
+break is never duplicated. See
+[FOOTNOTE_COMPOSITION_CONTRACT.md](FOOTNOTE_COMPOSITION_CONTRACT.md).
 
 ## Source-bound insertion proof
 
@@ -49,6 +59,12 @@ its alias later does not uninstall it. Marker shadowing/mutation, unknown
 wildcards, unknown shows, deferred execution and absent/altered package evidence
 cannot grant insertion proof. A show appearing later does not apply backward.
 
+The default-empty `parbreak_available` proof set additionally records only
+root target Text IDs with canonical builtin `parbreak` availability. Only an
+exact standalone root zero-argument `#parbreak()` preserves the resolver state;
+it never restores safety after unknown shows/output. Aliases, options, argument
+trivia and nested/deferred calls receive no transparent-break assumption.
+
 A proven source boundary without insertion availability remains diagnostic
 with `fix_unavailable`. If unknown effects also prevent ordinary prose proof,
 applicability is unsupported rather than a semantic clean result.
@@ -58,8 +74,9 @@ applicability is unsupported rather than a semantic clean result.
 Insert only `#paragraph_tab` followed by the preceding physical line's LF or
 CRLF, at the original right paragraph's physical line start. Preserve the
 entire existing blank gap, the prose line's original indentation and every
-original source byte. Never introduce an import, show, paragraph break,
-capitalization change or synthetic idea boundary.
+original source byte. Never introduce an import, show, capitalization change
+or synthetic idea boundary. Only the proven terminal-footnote case also inserts
+the exact canonical next-line `#parbreak()` required by its existing boundary.
 
 Eligible insertions are collected using a bounded source-extracted context for
 the existing pure casing evaluator, then the complete batch is reparsed once.

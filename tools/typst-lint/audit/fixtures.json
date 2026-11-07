@@ -675,9 +675,13 @@
       },
       "config": "rule-set=\"pde\"\ninclude=[\"**/*.typ\",\"**/*.md\"]\n",
       "normative_diagnostics": 1,
-      "note": "",
+      "note": "Exact source-owned literal footnote boundary and existing reviewed marker allow GAP to own only the next-line builtin break.",
       "intentional_parse_error": false,
-      "scenario_heading": "Violation after a source-line footnote"
+      "scenario_heading": "Violation after a source-line footnote",
+      "expected_candidate": {
+        "main.typ": "#import \"@local/text-utils:0.1.2\": paragraph_tab, apply-paragraph-tabs\n#show: apply-paragraph-tabs\n#set text(lang: \"en\")\nThis holds.#footnote[Reason.]\n#parbreak()\n\n#paragraph_tab\nA new idea.\n"
+      },
+      "assert_normative_count": true
     },
     {
       "id": "pde.footnote-trailing-gap--negative",
@@ -3334,6 +3338,102 @@
       "scenario_heading": null,
       "assert_normative_count": true,
       "expected_no_target_edits": true
+    },
+    {
+      "id": "pde.prose-paragraph-marker--footnote-marker-compose",
+      "rule_id": "pde.prose-paragraph-marker",
+      "kind": "footnote-marker-compose",
+      "files": {
+        "main.typ": "#import \"@local/text-utils:0.1.2\": paragraph_tab, apply-paragraph-tabs\n#show: apply-paragraph-tabs\n#set text(lang: \"en\")\nThis holds.#footnote[Reason.]\n\nThis consequence follows.\n"
+      },
+      "config": "rule-set=\"pde\"\ninclude=[\"**/*.typ\"]\n",
+      "normative_diagnostics": 1,
+      "note": "",
+      "intentional_parse_error": false,
+      "scenario_heading": null,
+      "assert_normative_count": true,
+      "expected_candidate": {
+        "main.typ": "#import \"@local/text-utils:0.1.2\": paragraph_tab, apply-paragraph-tabs\n#show: apply-paragraph-tabs\n#set text(lang: \"en\")\nThis holds.#footnote[Reason.]\n#parbreak()\n\n#paragraph_tab\nThis consequence follows.\n"
+      }
+    },
+    {
+      "id": "pde.prose-paragraph-marker--footnote-marker-casing",
+      "rule_id": "pde.prose-paragraph-marker",
+      "kind": "footnote-marker-casing",
+      "files": {
+        "main.typ": "#import \"@local/text-utils:0.1.2\": paragraph_tab, apply-paragraph-tabs\n#show: apply-paragraph-tabs\n#set text(lang: \"en\")\nThis holds.#footnote[Reason.]\n\nthis consequence follows.\n"
+      },
+      "config": "rule-set=\"pde\"\ninclude=[\"**/*.typ\"]\n",
+      "normative_diagnostics": 1,
+      "note": "",
+      "intentional_parse_error": false,
+      "scenario_heading": null,
+      "assert_normative_count": true,
+      "expected_candidate": {
+        "main.typ": "#import \"@local/text-utils:0.1.2\": paragraph_tab, apply-paragraph-tabs\n#show: apply-paragraph-tabs\n#set text(lang: \"en\")\nThis holds.#footnote[Reason.]\n#parbreak()\n\n#paragraph_tab\nThis consequence follows.\n"
+      }
+    },
+    {
+      "id": "pde.footnote-trailing-gap--footnote-marker-ignore-no-half",
+      "rule_id": "pde.footnote-trailing-gap",
+      "kind": "footnote-marker-ignore-no-half",
+      "files": {
+        "main.typ": "#import \"@local/text-utils:0.1.2\": paragraph_tab, apply-paragraph-tabs\n#show: apply-paragraph-tabs\n#set text(lang: \"en\")\nThis holds.#footnote[Reason.]\n\nthis consequence follows.\n"
+      },
+      "config": "rule-set=\"pde\"\n[[ignore]]\npaths=[\"main.typ\"]\nrules=[\"pde.prose-paragraph-marker\"]\nreason=\"intentional unmarked paragraph\"\n",
+      "normative_diagnostics": 1,
+      "note": "",
+      "intentional_parse_error": false,
+      "scenario_heading": null,
+      "assert_normative_count": true,
+      "expected_no_target_edits": true
+    },
+    {
+      "id": "pde.footnote-trailing-gap--footnote-break-already-present",
+      "rule_id": "pde.footnote-trailing-gap",
+      "kind": "footnote-break-already-present",
+      "files": {
+        "main.typ": "#import \"@local/text-utils:0.1.2\": paragraph_tab, apply-paragraph-tabs\n#show: apply-paragraph-tabs\n#set text(lang: \"en\")\nThis holds.#footnote[Reason.]\n#parbreak()\n\n#paragraph_tab\nThis consequence follows.\n"
+      },
+      "config": "rule-set=\"pde\"\ninclude=[\"**/*.typ\"]\n",
+      "normative_diagnostics": 0,
+      "note": "",
+      "intentional_parse_error": false,
+      "scenario_heading": null,
+      "assert_normative_count": true,
+      "expected_no_target_edits": true
+    },
+    {
+      "id": "pde.footnote-trailing-gap--footnote-break-shadowed",
+      "rule_id": "pde.footnote-trailing-gap",
+      "kind": "footnote-break-shadowed",
+      "files": {
+        "main.typ": "#import \"@local/text-utils:0.1.2\": paragraph_tab, apply-paragraph-tabs\n#show: apply-paragraph-tabs\n#set text(lang: \"en\")\n#let parbreak() = [custom]\nThis holds.#footnote[Reason.]\n\n#paragraph_tab\nThis consequence follows.\n"
+      },
+      "config": "rule-set=\"pde\"\ninclude=[\"**/*.typ\"]\n",
+      "normative_diagnostics": 1,
+      "note": "",
+      "intentional_parse_error": false,
+      "scenario_heading": null,
+      "assert_normative_count": true,
+      "expected_no_target_edits": true
+    },
+    {
+      "id": "pde.footnote-trailing-gap--footnote-marked-crlf-unicode",
+      "rule_id": "pde.footnote-trailing-gap",
+      "kind": "footnote-marked-crlf-unicode",
+      "files": {
+        "main.typ": "﻿#import \"@local/text-utils:0.1.2\": paragraph_tab, apply-paragraph-tabs\r\n#show: apply-paragraph-tabs\r\n#set text(lang: \"en\")\r\n한글 문장.#footnote[Reason.]\r\n\r\n#paragraph_tab\r\nThis consequence follows.\r\n"
+      },
+      "config": "rule-set=\"pde\"\ninclude=[\"**/*.typ\"]\n",
+      "normative_diagnostics": 1,
+      "note": "",
+      "intentional_parse_error": false,
+      "scenario_heading": null,
+      "assert_normative_count": true,
+      "expected_candidate": {
+        "main.typ": "﻿#import \"@local/text-utils:0.1.2\": paragraph_tab, apply-paragraph-tabs\r\n#show: apply-paragraph-tabs\r\n#set text(lang: \"en\")\r\n한글 문장.#footnote[Reason.]\r\n#parbreak()\r\n\r\n#paragraph_tab\r\nThis consequence follows.\r\n"
+      }
     }
   ]
 }

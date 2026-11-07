@@ -79,7 +79,7 @@ path, copied formula or synthetic test proof.
 | Rule | Supported subset | Deferred |
 | --- | --- | --- |
 | Punctuation | Direct root prose, proven built-in literal-form call. Remove horizontal space after adjacent punctuation or move one trailing comma/period after literal prose across a literal footnote body. | Nested bodies, ambiguous punctuation, comments/newlines, calls/side effects and remaining multi-rule composition. |
-| Trailing gap | Diagnose source-line calls followed by blank lines and more content; inside a root display remove surplus empty lines. | Prose correction needs proven following paragraph-marker composition; EOF and explicit next-line parbreak are accepted. |
+| Trailing gap | Diagnose source-line calls followed by blank lines and more content; inside a root display remove surplus empty lines. For a proven literal root footnote followed by an existing reviewed marker, insert only the canonical next-line builtin break. | Missing-marker boundaries use the marker rule's complete break-plus-marker repair. Unknown shows/bindings, nonliteral ownership, comments and broader contexts refuse. EOF and an already existing break are preserved. |
 | Aligned spacer | In root displays, inspect syntax `MathAlignPoint` or `Linebreak` outside nested calls/bodies; diagnose missing spacer, insert only with canonical `available` proof. | Nested equations, richer math contexts, absent helper or unknown context. |
 | Unaligned spacer | Remove an immediately preceding `existing`-proven helper expression and its separator in a root display. | Unresolved helpers/facades and non-direct equation calls. |
 | Prose spacer | Remove a proven helper, including preceding horizontal gap only when necessary to restore already-existing punctuation adjacency. | Ambiguous punctuation; do not leave an adjacency violation after a spacer-only edit. |
@@ -99,6 +99,12 @@ synthetic proofs solely to exercise the consumer contract. Isolated render
 fixtures verify only their explicit before/after placement effects; they do not
 certify graph coverage or open the production write/compiler gate.
 
-Remaining work includes nested/facade resolution, atomic prose gap/paragraph
-marker composition, remaining punctuation interactions and complete supported
+The bounded prose composition contract is documented in
+[FOOTNOTE_COMPOSITION_CONTRACT.md](FOOTNOTE_COMPOSITION_CONTRACT.md). It keeps
+rule ownership, genuine followup capitalization, source-bound builtin-break
+availability and independent candidate authentication distinct. It never
+deduplicates existing breaks or guesses transparency under unknown shows.
+
+Remaining work includes nested/facade resolution, broader prose/paragraph
+ownership, remaining punctuation interactions and complete supported
 context/render coverage. All five backends remain partial.
