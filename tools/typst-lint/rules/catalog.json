@@ -1,6 +1,6 @@
 {
   "schema": 1,
-  "version": "0.2.0-parser",
+  "version": "0.3.0-provenance",
   "packs": {
     "core": [
       "core"

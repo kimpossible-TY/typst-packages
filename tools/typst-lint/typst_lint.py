@@ -14,7 +14,7 @@ import stat
 import sys
 import tomllib
 
-VERSION = '0.2.0-parser'
+VERSION = '0.3.0-provenance'
 CATALOG = Path(__file__).with_name('rules') / 'catalog.json'
 
 
@@ -252,7 +252,7 @@ def diagnostics(findings, config, rules):
     return tuple(sorted(active, key=key)), tuple(sorted(suppressed, key=key))
 
 
-def report(root, mode):
+def report(root, mode, *, package_path=None):
     catalog, rule_hash = load_rules()
     config = read_config(root, catalog['rules'])
     enabled = [r for r in catalog['rules'] if r['id'].split('.')[0] in catalog['packs'][config.pack]]
@@ -266,65 +266,97 @@ def report(root, mode):
     reference_hash = read_reference_catalog(checked_path(root, config.catalog)) if config.catalog else None
     # Imported here to keep pure configuration/edit primitives independent of the adapter.
     from syntax_client import AdapterError, parse
-    from script_rule import RULE_ID, analyze
+    from source_analysis import analyze, rule_ids
+    from static_resolver import imported_paths
+    from package_loader import load_packages
     from suppression import SuppressionError
+    backends = rule_ids(config.pack)
     active_findings, proposals, file_coverage, parse_failures = [], [], [], []
     suppressed_count = 0
     suppressed_by_rule = {}
     configuration_failures = []
-    evaluated = []
+    evaluated, parsed = [], {}
     for item in inputs:
         name = item['path']
         if not name.endswith('.typ'):
-            file_coverage.append(dict(path=name, rule_id=RULE_ID, status='unsupported',
-                                      reasons=['Markdown extraction is not implemented']))
+            file_coverage.extend(dict(path=name, rule_id=rid, status='unsupported',
+                                      reasons=['Markdown extraction is not implemented']) for rid in backends)
             continue
         try:
             raw = checked_path(root, name).read_bytes()
             require(digest(raw) == item['sha256'], f'Input changed during analysis: {name}')
-            result = analyze(parse(raw), name)
+            parsed[name] = parse(raw)
+        except (AdapterError, OSError, InputError) as error:
+            file_coverage.extend(dict(path=name, rule_id=rid, status='unsupported', reasons=[str(error)])
+                                 for rid in backends)
+    package_sources, package_evidence, package_unavailable = (), [], []
+    resolved_package_path = None
+    if package_path is not None:
+        requested = sorted({name for tree in parsed.values() for name in imported_paths(tree)})
+        loaded = load_packages(package_path, requested)
+        package_sources = loaded.sources
+        package_evidence = [asdict(record) for record in loaded.evidence]
+        package_unavailable = [asdict(record) for record in loaded.unavailable]
+        resolved_package_path = loaded.package_path
+    for item in inputs:
+        name = item['path']
+        if name not in parsed:
+            continue
+        ignored = frozenset(rid for ignore in config.ignores if any(matches(name, glob) for glob in ignore.paths)
+                            for rid in ignore.rules)
+        try:
+            results = analyze(parsed[name], name, pack=config.pack,
+                              fallback_language=config.capitalization_language,
+                              packages=package_sources, ignored=ignored)
         except SuppressionError as error:
             configuration_failures.append(dict(path=name, error=str(error)))
-            file_coverage.append(dict(path=name, rule_id=RULE_ID, status='configuration-failure', reasons=[str(error)]))
+            file_coverage.extend(dict(path=name, rule_id=rid, status='configuration-failure', reasons=[str(error)])
+                                 for rid in backends)
             continue
         except (AdapterError, OSError, InputError) as error:
-            file_coverage.append(dict(path=name, rule_id=RULE_ID, status='unsupported', reasons=[str(error)]))
+            file_coverage.extend(dict(path=name, rule_id=rid, status='unsupported', reasons=[str(error)])
+                                 for rid in backends)
             continue
-        active, hidden = diagnostics(result.diagnostics, config, catalog['rules'])
-        active_findings.extend(active)
-        suppressed_count += len(hidden) + len(result.suppressed)
-        for finding in (*hidden, *result.suppressed):
-            suppressed_by_rule[finding.rule_id] = suppressed_by_rule.get(finding.rule_id, 0) + 1
-        if result.parse_errors:
-            parse_failures.append(dict(path=name, spans=[dict(start=a, end=b) for a, b in result.parse_errors]))
-        if result.skips:
-            file_coverage.append(dict(path=name, rule_id=RULE_ID, status='partial', reasons=list(result.skips)))
-        else:
-            evaluated.append(dict(path=name, rule_id=RULE_ID))
-            file_coverage.append(dict(path=name, rule_id=RULE_ID, status='evaluated', reasons=[]))
-        # Config ignores cover the entire file/rule, never individual edit spans.
-        if active and not hidden:
-            proposals.extend(dict(path=name, start=e.start, end=e.end,
-                                  replacement=e.replacement.decode('utf-8'), rule_id=RULE_ID,
-                                  baseline_sha256=item['sha256']) for e in result.edits)
+        errors = sorted({span for result in results.values() for span in result.parse_errors})
+        if errors:
+            parse_failures.append(dict(path=name, spans=[dict(start=a, end=b) for a, b in errors]))
+        for rid, result in results.items():
+            active, hidden = diagnostics(result.diagnostics, config, catalog['rules'])
+            active_findings.extend(active)
+            suppressed_count += len(hidden) + len(result.suppressed)
+            for finding in (*hidden, *result.suppressed):
+                suppressed_by_rule[finding.rule_id] = suppressed_by_rule.get(finding.rule_id, 0) + 1
+            if result.skips:
+                file_coverage.append(dict(path=name, rule_id=rid, status='partial', reasons=list(result.skips)))
+            else:
+                evaluated.append(dict(path=name, rule_id=rid))
+                file_coverage.append(dict(path=name, rule_id=rid, status='evaluated', reasons=[]))
+            if active and not hidden:
+                proposals.extend(dict(path=name, start=e.start, end=e.end,
+                                      replacement=e.replacement.decode('utf-8'), rule_id=rid,
+                                      baseline_sha256=item['sha256']) for e in result.edits)
     active_findings.sort(key=lambda d: (d.path, d.line, d.column, d.rule_id))
-    script_complete = bool(inputs) and len(evaluated) == len(inputs)
-    unsupported = [dict(rule_id=r['id'], reason=('See per-file script coverage' if r['id'] == RULE_ID
+    proposals.sort(key=lambda e: (e['path'], e['start'], e['end'], e['rule_id']))
+    complete_backends = {rid for rid in backends if inputs and
+                         sum(row['rule_id'] == rid for row in evaluated) == len(inputs)}
+    unsupported = [dict(rule_id=r['id'], reason=('See per-file supported-source coverage' if r['id'] in backends
                                                 else 'Binding/rule backend not implemented'))
-                   for r in enabled if r['id'] != RULE_ID or not script_complete]
+                   for r in enabled if r['id'] not in complete_backends]
+
     return dict(schema=1, tool_version=VERSION, pack_version=catalog['version'], mode=mode,
                 status=2, phase='analysis', compiler_invoked=False, compiler_status=None,
                 rule_set=config.pack, inputs=inputs,
                 hashes=dict(config=config.sha256, rules=rule_hash, entrypoint=entry_hash, reference_catalog=reference_hash),
+                package_path=resolved_package_path, package_evidence=package_evidence, package_unavailable=package_unavailable,
                 diagnostics=[asdict(d) for d in active_findings], suppressed_count=suppressed_count,
                 applied_fixes=[], proposed_edits=proposals, proposal_status='partial-not-applicable-transaction',
                 parse_failures=parse_failures, configuration_failures=configuration_failures,
                 suppressed_by_rule=dict(sorted(suppressed_by_rule.items())), recovery=None,
                 coverage=dict(complete=False, enabled=[r['id'] for r in enabled],
-                              implemented=[RULE_ID] if evaluated else [], evaluated=evaluated,
+                              implemented=[rid for rid in backends if any(row['rule_id'] == rid for row in evaluated)], evaluated=evaluated,
                               files=file_coverage, unsupported=unsupported,
                               optional_skips=[] if config.catalog else [dict(check='catalog-membership', reason='No catalog configured')]),
-                blockers=['Required rule coverage remains incomplete; Markdown, bindings and additional rule backends are unavailable',
+                blockers=['Required rule coverage remains incomplete; Markdown, general dependency resolution and additional rule backends are unavailable',
                           'Protected source transactions and immutable compile snapshots are unavailable'],
                 routes=dict(cli='unmanaged', ci='unmanaged', watch='unmanaged', editor='unmanaged'))
 
@@ -335,6 +367,7 @@ def main(argv=None, *, gate=False):
     parser.add_argument('command', choices=['compile'] if gate else ['check', 'fix'])
     parser.add_argument('--root', required=True, type=Path)
     parser.add_argument('--format', choices=['json', 'text'], default='text')
+    parser.add_argument('--package-path', type=Path, help='Explicit Typst package directory for bounded read-only provenance')
     if not gate:
         parser.add_argument('--dry-run', action='store_true')
     arguments = list(sys.argv[1:] if argv is None else argv)
@@ -346,7 +379,7 @@ def main(argv=None, *, gate=False):
     try:
         root = args.root.resolve(strict=True)
         require(root.is_dir(), 'Consumer root must be a directory')
-        result = report(root, 'compile' if gate else ('dry-run' if args.dry_run else args.command))
+        result = report(root, 'compile' if gate else ('dry-run' if args.dry_run else args.command), package_path=args.package_path)
     except (InputError, OSError, ValueError) as error:
         result = dict(schema=1, tool_version=VERSION, status=2, phase='input',
                       compiler_invoked=False, compiler_status=None, error=str(error))

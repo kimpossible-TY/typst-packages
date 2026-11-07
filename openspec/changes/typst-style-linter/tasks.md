@@ -83,3 +83,11 @@ The design follow-up is reviewed and merged first. Groups 2–7 are authorized i
 - [x] 11.6 Verify repository-only remote CI on Python 3.11/3.15 for exact commit 452484c; both passed run 42338058080. Retain the Linux Cargo hardlink regression without relaxing writable-source protection.
 - [x] 11.5 Implement and independently review a protected offline transaction component against isolated fixtures, without exposing writes through incomplete CLI analysis. Verify staged metadata after writes/fsync and preserve later edits during recovery; this is not compiler snapshotting or an editor lease implementation.
 - [x] 11.7 Resolve own-line inline suppressions through proven Markup/Code AST sibling scopes; verify full multiline targets, expiration, reasons/IDs, balanced partial fixes and explicit refusal of ambiguous ownership.
+
+## 12. Connect bounded static provenance and paragraph rules
+
+- [x] 12.1 Resolve direct imports, aliases, shadowing and literal effective language from actual AST nodes. Require explicit immutable reviewed package bytes; refuse unknown versions/content, local facades, dynamic effects and deferred prose rather than infer bindings from spelling.
+- [x] 12.2 Add explicit read-only `--package-path` loading with manifest/source hashes, bounded reads, no-follow paths and concurrent-replacement checks. Never discover or install packages implicitly.
+- [x] 12.3 Connect root-prose capitalization and paragraph-marker-gap to those proofs, including source-language precedence, suppression-anchor expiration, LF/CRLF/BOM preservation and unresolved combined footnote repairs.
+- [x] 12.4 Verify combined script/paragraph proposals by reparsing and repeated analysis; run real source-to-render fixtures proving uppercase, indentation and protected names. Preserve status 2/no CLI writes/compiler while required coverage is incomplete. Independent final suite: 183 tests including both real-render tests passed.
+- [ ] 12.5 Independently review the implementation and exact pushed-commit Linux matrix; document remaining facade/graph, nested-body and rule coverage without claiming all-project enforcement.

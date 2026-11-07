@@ -44,7 +44,7 @@ Each style diagnostic SHALL contain rule ID, catalog grade, root-relative path, 
 - **THEN** the diagnostic identifies `core.project-ref-arguments` with error grade and the call position.
 
 ### Requirement: Suppress one construct with a reason
-The primary suppression SHALL be `// typst-lint: ignore-next <rule-id>[, <rule-id>...] -- <reason>` on its own source line immediately before the next non-comment syntax construct. It SHALL suppress only listed style IDs whose reported start is inside that construct, including multiline bodies, and SHALL expire after it. Missing reasons, unknown IDs, or a directive without a following construct SHALL be configuration failures. Suppression SHALL NOT hide configuration or parse failures.
+An own-line `// typst-lint: ignore-next <rule-id>[, <rule-id>...] -- <reason>` SHALL target the next non-comment construct, including multiline bodies. It SHALL suppress only listed IDs with diagnostic starts in that construct, then expire, except the bounded marker anchor below. Missing reasons, unknown IDs or absent following constructs SHALL be configuration failures. Suppression SHALL NOT hide configuration or parse failures.
 
 #### Scenario: Intentional raw marker
 - **WHEN** the following code is scanned inside an annotation scope
@@ -63,6 +63,17 @@ $ mark(x, tag: #<external-target>) $
 #### Scenario: Invalid suppression
 - **WHEN** a directive omits `-- <reason>` or appears at end of file with no following construct
 - **THEN** the linter reports a configuration failure rather than silently disabling checks.
+
+### Requirement: Bound compound paragraph suppression to one marker
+The sole compound-rule exception SHALL let a directive targeting a proven standalone marker suppress `pde.paragraph-capitalization` for its immediately following eligible initial word. Every binding, body, language and single-line-gap precondition SHALL still hold. The exception SHALL NOT suppress later paragraphs or other rule IDs.
+
+#### Scenario: Intentional lowercase after one proven marker
+- **WHEN** a valid `ignore-next pde.paragraph-capitalization` directive precedes a resolved standalone marker with an immediately following eligible lowercase English initial word
+- **THEN** that initial-word finding and edit are suppressed; a later marked paragraph and script findings in the prose remain unaffected.
+
+#### Scenario: Unproven marked paragraph cannot expand an ignore
+- **WHEN** a same-spelled marker is shadowed, its body or language is unknown, or intervening content defeats the exact adjacency contract
+- **THEN** the directive does not create a capitalization context or acquire a wider following-prose scope.
 
 ### Requirement: Support bounded configuration ignores
 The linter SHALL accept `[[ignore]]` entries with root-relative `paths` globs, explicit `rules` IDs, and a nonempty `reason`. They SHALL suppress only matching style findings. Inline suppression SHALL be preferred for a single construct; config ignores SHALL handle documented recurring exceptions. Path excludes SHALL remove whole inputs. No wildcard rule ID SHALL disable all rules accidentally.

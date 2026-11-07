@@ -1,8 +1,9 @@
 """Bounded rule component for trusted parser-certified contexts, not a parser.
 
-No runtime coverage is enabled by this module. Callers must establish effective
-language, helper provenance, body ownership and literal first-token classification.
-A config default cannot override unknown/dynamic source-language evidence.
+This module does not discover contexts. The bounded paragraph_rules source
+adapter must establish effective language, helper provenance, body ownership and
+literal first-token classification. A config default cannot override
+unknown/dynamic source-language evidence.
 """
 from dataclasses import dataclass
 from enum import Enum
@@ -72,7 +73,7 @@ def evaluate(source: bytes, context: Context) -> Result:
 
     Effective English tags match en(?:-[A-Za-z0-9]{2,8})* case-insensitively.
     First-token spans
-    come from a future parser, never from scanning ahead. Intervening comments
+    come from parser-certified literal text, never from scanning ahead. Intervening comments
     are conservatively unsupported, even if the parser classified them safely.
     Marker and prose must be adjacent source lines: exactly one LF or CRLF,
     with horizontal whitespace only. Blank intervening lines detach ownership.

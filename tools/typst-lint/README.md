@@ -2,8 +2,9 @@
 
 This is the implementation draft for the reviewed
 [`typst-style-linter` design](../../openspec/changes/typst-style-linter/design.md).
-**This is not a production linter or build gate.** Real Typst parsing and one
-syntax-only rule now produce diagnostics and partial in-memory repair plans.
+**This is not a production linter or build gate.** Real Typst parsing, script
+analysis and narrowly proven paragraph rules produce diagnostics and partial
+in-memory repair plans.
 Other required rules, protected runtime writes and compilation remain incomplete.
 Every real CLI run still returns **2**, including an empty selection. No source
 is changed and no compiler is invoked. Help/version return 0.
@@ -40,6 +41,7 @@ Exceeding a limit fails explicitly; it does not approve an incompletely read fil
 /path/to/typst-packages/tools/typst-lint/typst-lint check --root /path/to/project --format json
 /path/to/typst-packages/tools/typst-lint/typst-lint fix --root /path/to/project --dry-run --format json
 /path/to/typst-packages/tools/typst-lint/typst-lint fix --root /path/to/project --format json
+/path/to/typst-packages/tools/typst-lint/typst-lint fix --root /path/to/project --package-path /path/to/typst-packages --dry-run --format json
 /path/to/typst-packages/tools/typst-lint/typst-style compile --root /path/to/project --format json -- main.typ output.pdf
 ```
 
@@ -49,6 +51,19 @@ They are **not** permission or proof that the complete protected write contract
 has passed. Incomplete required analysis prevents application. The `compile`
 interface remains inert: arguments after `--` are never executed, no compiler is
 resolved and existing outputs are never replaced. There is no fail-open option.
+
+`--package-path` explicitly supplies Typst's local-package directory layout. The
+bounded resolver reads only AST-requested reviewed artifacts below it. There is
+no implicit lookup in the package owner's checkout, home directory, installed
+packages, caches or environment variable. The initial reviewed contract is the
+exact dependency-free `@local/text-utils:0.1.2` source shipped here; both manifest
+identity and actual source bytes are checked. A matching package name/version
+alone is insufficient. Other versions, modified source and local facades remain
+unresolved, not version-style violations. Missing/unsafe/malformed requested
+inputs fail; unsupported valid artifacts are reported with reasons. Package
+files are never changed, fetched, evaluated or installed. Reports record manifest
+and source identities/hashes. These read snapshots are not proof that a future
+compiler sees the same resources; immutable compiler capture remains pending.
 
 ## Consumer configuration
 
@@ -123,8 +138,14 @@ Limitations remain explicit:
 - Markdown extraction is not implemented; included Markdown cannot count as
   evaluated script coverage.
 - Config path/rule ignores suppress both script findings and their file's edits.
-- All binding/graph-dependent rules and source capitalization discovery remain
-  unsupported. Zero diagnostics never implies full rule coverage.
+- Direct reviewed package imports, explicit renames/module aliases, simple aliases,
+  lexical shadowing and literal builtin text-language settings have a bounded
+  static resolver. General import/include graphs and local facade exports remain
+  unsupported. Unknown wildcard imports, bindings, dynamic language, show/output
+  effects and deferred bodies cannot certify paragraph prose or language.
+- Root prose with proven canonical paragraph markers supports the two paragraph
+  rules described below. Other binding/graph-dependent rules remain unavailable.
+  Zero diagnostics never implies full rule coverage.
 
 Reports include deterministic findings, suppressions, file-specific coverage,
 parse-failure spans, proposed edits, input/config/catalog hashes, versions and
@@ -177,13 +198,16 @@ The original snapshot is a baseline, not a compiler-ready snapshot; validated
 candidate sources describe postimages. Compiler resource capture, output
 publication, editor version integration and production CLI wiring remain absent.
 
-## Paragraph capitalization component
+## Proven source paragraph rules
 
-`pde.paragraph-capitalization` is a tested pure rule component, **not yet connected
-to real source/binding discovery**. A trusted parser/resolver must supply a
-hash-bound context proving marker provenance, paragraph ownership, first-token
-classification, effective language and suppression. Spelling `paragraph_tab` in
-a file or setting English in config is insufficient by itself.
+`pde.paragraph-capitalization` now consumes real AST/hash-bound static proofs for
+the bounded root-prose subset. The pure component still requires marker
+provenance, paragraph ownership, first-token classification, effective language
+and suppression. Spelling `paragraph_tab` in a file or setting English in config
+is insufficient by itself. Without verified package input, no package helper is
+certified. Aliased imports can establish provenance, but the current source-rule
+contract supports only the canonical standalone `#paragraph_tab` spelling.
+Nested/captured bodies and unverified wrappers are not guessed to be prose.
 
 Only the design's exact 26 supported English starters are eligible for a one-byte
 initial uppercase edit. The resolved standalone marker must precede its literal
@@ -194,6 +218,23 @@ and single-letter notation are unchanged. It never searches past first math for
 later prose. Supported English tags are case-insensitive `en` with optional
 2–8 ASCII-alphanumeric subtags; effective source language overrides the configured
 default, and dynamic/mixed language stays unknown.
+
+The exact resolved `#show: apply-paragraph-tabs` form preserves language proof
+because its audited source has no language setting. Unknown show rules invalidate
+that proof; a later English setting does not erase the unknown wrapper effect.
+A reasoned inline ignore targeting the proven marker may suppress its immediate
+capitalization finding/edit, even though the diagnostic points to the first word.
+That compound anchor cannot suppress another paragraph or an unlisted rule.
+
+`pde.paragraph-marker-gap` diagnoses a missing whitespace-only blank line before
+the same proven standalone marker. It proposes one newline only when the previous
+line is proven safe literal prose/whitespace, retaining nearby LF/CRLF style.
+Unsupported footnote/call/comment combinations are never guessed or repaired with
+an incomplete paragraph-break transformation. The source must already contain the
+marker; automatic marker insertion and other paragraph rules remain unimplemented.
+Supported script and paragraph proposals are composed before a whole-candidate
+reparse and repeated analysis, checking zero second-pass edits, deterministic
+results, unchanged suppression ownership and no newly introduced finding.
 
 The linter owns this explicit source-casing edit; marker insertion owns only the
 marker change and the package owns indentation. Actual text-utils 0.1.2 with
@@ -226,8 +267,8 @@ The repository test workflow (PRs and relevant main changes) builds the pinned
 adapter and tests Python 3.11/3.15. It neither builds consumer documents nor
 publishes/deploys anything. Renderer-dependent characterization is separate.
 
-Next work: extend only provable directive scopes and Markdown/source extraction; establish
-static helper/import/language provenance before wiring capitalization; implement
+Next work: extend only provable directive scopes and Markdown/source extraction; expand
+verified package/local-facade graphs and paragraph ownership; implement
 the remaining rule contracts; validate protected writer/editor transactions and
 immutable compiler snapshots; then verify CI/watch/Tinymist adapters. AGENTS.md
 or a shell wrapper alone cannot claim native editor enforcement.

@@ -1,0 +1,157 @@
+"""Bounded real-source paragraph rules over parser and static binding proofs.
+
+Only canonical standalone markers in proven root prose are currently supported.
+This is partial analysis, not permission to write or compile consumer sources.
+"""
+from dataclasses import dataclass
+import re
+
+from capitalization import BodyKind, Context, MarkerBinding, StartKind, evaluate
+from edit_plan import Edit
+from suppression import resolve as resolve_suppressions
+from typst_lint import Diagnostic, digest, load_rules
+
+CAPITALIZATION = 'pde.paragraph-capitalization'
+MARKER_GAP = 'pde.paragraph-marker-gap'
+RULE_IDS = (CAPITALIZATION, MARKER_GAP)
+
+
+@dataclass(frozen=True)
+class ParagraphResult:
+    diagnostics: tuple[Diagnostic, ...] = ()
+    edits: tuple[Edit, ...] = ()
+    skips: tuple[str, ...] = ()
+    parse_errors: tuple[tuple[int, int], ...] = ()
+    suppressed: tuple[Diagnostic, ...] = ()
+
+
+def _diagnostic(source, path, rule, start, explanation):
+    line = source[:start].count(b'\n') + 1
+    column = len(source[source.rfind(b'\n', 0, start) + 1:start].decode('utf-8')) + 1
+    return Diagnostic(rule['id'], rule['grade'], path, line, column, explanation, rule['source'])
+
+
+def analyze(tree, path, resolution):
+    """Consume hash-bound proofs, never infer a helper from its identifier text."""
+    source, nodes = tree.source, tree.nodes
+    if nodes[0].errors:
+        errors = tuple((n.start, n.end) for n in nodes if n.kind == 'Error')
+        result = ParagraphResult(skips=('Malformed Typst syntax; no repair proposed',),
+                                 parse_errors=errors or ((0, len(source)),))
+        return {rid: result for rid in RULE_IDS}
+    if resolution.source_sha256 != digest(source) or len(resolution.facts) != len(nodes):
+        result = ParagraphResult(skips=('Stale or mismatched static resolution; no repair proposed',))
+        return {rid: result for rid in RULE_IDS}
+    catalog = {r['id']: r for r in load_rules()[0]['rules']}
+    scopes = resolve_suppressions(tree, set(catalog))
+    findings = {rid: [] for rid in RULE_IDS}
+    edits = {rid: [] for rid in RULE_IDS}
+    suppressed = {rid: [] for rid in RULE_IDS}
+    skips = {rid: list(resolution.skips) for rid in RULE_IDS}
+
+    def skip(rid, start, reason):
+        skips[rid].append(f'{reason} at byte {start}')
+
+    def add(rid, finding, edit, marker_start, diagnostic_start):
+        # The marked paragraph belongs to its marker. An ignore-next directive
+        # on that marker suppresses both its gap and initial-letter repair.
+        if any(s.covers(rid, marker_start) or s.covers(rid, diagnostic_start) for s in scopes):
+            suppressed[rid].append(finding)
+        else:
+            findings[rid].append(finding)
+            if edit is not None:
+                edits[rid].append(edit)
+
+    for body in nodes:
+        if body.kind != 'Markup':
+            continue
+        siblings = body.children
+        for position, index in enumerate(siblings):
+            marker = nodes[index]
+            if marker.kind not in ('Ident', 'FieldAccess', 'Parenthesized') or position == 0:
+                continue
+            hash_node = nodes[siblings[position - 1]]
+            if hash_node.kind != 'Hash' or hash_node.end != marker.start:
+                continue
+            facts = resolution.facts[index]
+            binding = facts.binding
+            known = binding is not None and binding.kind == 'api' and binding.name == 'paragraph_tab'
+            # The text check only identifies unsupported candidates. It never
+            # grants a binding or causes a finding/edit.
+            spelled = source[marker.start:marker.end] == b'paragraph_tab'
+            if not known and not spelled:
+                continue
+            ms, me = hash_node.start, marker.end
+            reason = None
+            if not known:
+                reason = 'Unresolved or unrelated paragraph marker'
+            elif source[ms:me] != b'#paragraph_tab':
+                reason = 'Resolved marker alias spelling is unsupported by the capitalization context contract'
+            elif not facts.prose_safe or facts.deferred:
+                reason = 'Unsupported paragraph body or deferred context'
+            line_start = max(body.start, source.rfind(b'\n', body.start, ms) + 1)
+            prefix = source[line_start:ms]
+            if line_start == 0 and prefix.startswith(b'\xef\xbb\xbf'):
+                line_start += 3
+                prefix = prefix[3:]
+            line_end = source.find(b'\n', me, body.end)
+            line_end = body.end if line_end < 0 else line_end
+            if prefix.strip(b' \t') or source[me:line_end].strip(b' \t\r'):
+                reason = reason or 'Marker is not standalone on its source line'
+            if reason:
+                for rid in RULE_IDS:
+                    skip(rid, ms, reason)
+                continue
+
+            # Gap belongs to the immediate previous physical source line.
+            # A body opening or BOM is not a whitespace-only blank line.
+            previous_start = max(body.start, source.rfind(b'\n', body.start, max(body.start, line_start - 1)) + 1)
+            previous = source[previous_start:line_start]
+            has_blank = bool(previous.endswith(b'\n')) and not previous.strip(b' \t\r\n')
+            if not has_blank:
+                finding = _diagnostic(source, path, catalog[MARKER_GAP], ms,
+                                      'Place a whitespace-only blank source line before the standalone paragraph marker.')
+                # Every syntax leaf on the previous line must be plain prose,
+                # whitespace, or BOM. In particular no footnote/call/comment is
+                # guessed safe: the footnote's combined repair is not implemented.
+                previous_nodes = [n for n in nodes if not n.children and n.start < line_start
+                                  and n.end > previous_start]
+                safe = all(n.kind in ('Text', 'Space', 'Parbreak') for n in previous_nodes)
+                replacement = b'\r\n' if (source[me:line_end].endswith(b'\r')
+                                             or previous.endswith(b'\r\n')) else b'\n'
+                edit = Edit(line_start, line_start, replacement) if safe else None
+                add(MARKER_GAP, finding, edit, ms, ms)
+                if not safe and finding not in suppressed[MARKER_GAP]:
+                    skip(MARKER_GAP, ms, 'fix_unavailable: preceding line has call/footnote/comment or other unsupported syntax')
+
+            # Inspect exactly the next sibling after one whitespace node.
+            # Do not search past comments, math, quotes, wrappers or references.
+            next_position = position + 1
+            if next_position < len(siblings) and nodes[siblings[next_position]].kind == 'Space':
+                next_position += 1
+            if next_position >= len(siblings):
+                skip(CAPITALIZATION, ms, 'No following direct prose word')
+                continue
+            first_id = siblings[next_position]
+            first = nodes[first_id]
+            if first.kind != 'Text' or not resolution.facts[first_id].prose_safe:
+                skip(CAPITALIZATION, ms, 'First token is not a proven direct literal prose word')
+                continue
+            # Lex only the beginning of one parser-certified Text leaf. This
+            # does not tokenize Typst or search forward to a later word.
+            word = re.match(rb'[A-Za-z]+', source[first.start:first.end])
+            if word is None:
+                skip(CAPITALIZATION, first.start, 'First token is not an ASCII literal word')
+                continue
+            context = Context(digest(source), path, max(body.start, 3 if source.startswith(b'\xef\xbb\xbf') else 0),
+                              body.end, ms, me, first.start, first.start + len(word[0]), word[0],
+                              StartKind.LITERAL_WORD, BodyKind.ORDINARY_PROSE,
+                              MarkerBinding.PARAGRAPH_TAB, resolution.language_for(first_id))
+            result = evaluate(source, context)
+            if result.diagnostic is not None:
+                add(CAPITALIZATION, result.diagnostic, result.edit, ms, first.start)
+            elif result.skip_reason != 'already-uppercase':
+                skip(CAPITALIZATION, first.start, result.skip_reason)
+    return {rid: ParagraphResult(tuple(findings[rid]), tuple(edits[rid]),
+                                tuple(dict.fromkeys(skips[rid])), suppressed=tuple(suppressed[rid]))
+            for rid in RULE_IDS}
