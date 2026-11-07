@@ -17,6 +17,7 @@ import sys
 import uuid
 
 from transactions import TransactionError, _plain_metadata, _xattrs, _copy_xattrs
+from resource_profiles import validate_resource_profile
 
 KIND = 'typst-pdf-publication'
 SCHEMA = 1
@@ -102,6 +103,12 @@ class PublicationReport:
     observed_sha256: str | None = None
     source_journal_id: str | None = None
     reason: str | None = None
+    # Original immutable compiler facts only; never persisted or reconstructed.
+    compile_report: object | None = None
+
+    @property
+    def resource_report(self):
+        return None if self.compile_report is None else self.compile_report.resource_report
 
     @property
     def journal(self):
@@ -756,7 +763,10 @@ class _Store:
                     and all(p and p not in ('.','..') for p in target.split('/'))
                     and target.endswith('.typ'), 'Invalid historical source target')
         if 'profile' in e:
-            _demand(e['profile'] == 'embedded-ascii-v1', 'Invalid publication profile')
+            try:
+                validate_resource_profile(e['profile'])
+            except ValueError as error:
+                raise PublicationError('Invalid publication profile') from error
         if 'compiler_invoked' in e:
             _demand(e['compiler_invoked'] is None or type(e['compiler_invoked']) is bool,
                     'Invalid compiler invocation observation')

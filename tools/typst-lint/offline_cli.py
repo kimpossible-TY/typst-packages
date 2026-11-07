@@ -94,7 +94,8 @@ def _arguments(arguments, gate):
                         help='Assert editors, watchers and every other source writer are stopped for the whole operation')
     parser.add_argument('--target')
     parser.add_argument('--journal-id')
-    parser.add_argument('--resource-profile')
+    parser.add_argument('--resource-profile',
+                        help='Explicit compile only: embedded-applegothic-ko-v1 or embedded-ascii-v1')
     parser.add_argument('--offline-output-exclusive', action='store_true',
                         help='Assert exporters, watchers and all output/ancestor/storage writers remain stopped')
     parser.add_argument('--output')

@@ -1,9 +1,8 @@
-"""Internal, explicit embedded-ascii-v1 experiment, never a CLI build gate.
+"""Internal explicit resource-profile compiler, never an ordinary build gate.
 
-The trusted Python runtime and OS are not adversarial sandboxes. Typst's embedded
-fonts and reviewed native executable are the only copied compiler resources;
-trusted OS libraries/frameworks are outside that claim. Dependency output is
-checked evidence, not an exhaustive trace of OS reads. No destination is exposed.
+The trusted Python runtime and OS are not adversarial sandboxes. Only reviewed
+compiler/font resources are copied; trusted OS libraries/frameworks are outside
+that claim. Dependencies are checked evidence, not an exhaustive OS-read trace.
 """
 from __future__ import annotations
 
@@ -28,10 +27,13 @@ from types import MappingProxyType
 import weakref
 
 from protected_fix import ClosedCoreCompileSnapshot, ProtectedCoreFix
+from resource_profiles import (ASCII_RESOURCE_PROFILE, APPLEGOTHIC_RESOURCE_PROFILE,
+    REPERTOIRE_VERSIONS, resource_profile_protected_paths,
+    validate_resource_profile, validate_source_repertoire)
 from transactions import TransactionError
 from typst_lint import InputError, SafetyError
 
-RESOURCE_PROFILE = 'embedded-ascii-v1'
+RESOURCE_PROFILE = ASCII_RESOURCE_PROFILE
 _VERSION = b'typst 0.15.1 (unknown commit)\n'
 
 
@@ -80,6 +82,33 @@ class FileEvidence:
 
 
 @dataclass(frozen=True, slots=True)
+class FontIdentity:
+    """Reviewed metadata, not inferred permission to redistribute font bytes."""
+    format: str
+    family: str
+    postscript_name: str
+    full_name: str
+    version: str
+    unique_name: str
+
+
+@dataclass(frozen=True, slots=True)
+class FontEvidence:
+    face_index: int
+    installed: FileEvidence
+    private: FileEvidence
+    identity: FontIdentity
+
+
+@dataclass(frozen=True, slots=True)
+class ResourceReport:
+    """Original captured facts; later staleness does not refresh or erase them."""
+    profile: str
+    repertoire_version: str
+    fonts: tuple[FontEvidence, ...]
+
+
+@dataclass(frozen=True, slots=True)
 class Invocation:
     purpose: str
     argv: tuple[str, ...]
@@ -107,6 +136,7 @@ class CompileReport:
     attempts: tuple[Invocation, ...]
     safety_gate: str
     compiler_failure: CompilerFailureInfo | None
+    resource_report: ResourceReport | None = None
 
     @property
     def attempted_invocations(self):
@@ -150,6 +180,7 @@ class _AttemptLedger:
     def __init__(self):
         self.attempts = []
         self.compiler_failure = None
+        self.resource_report = None
 
     def begin(self, *args):
         # There is at most one probe and one compile in this fixed protocol.
@@ -164,7 +195,7 @@ class _AttemptLedger:
 
     def snapshot(self, safety_gate):
         return CompileReport(tuple(item.snapshot() for item in self.attempts),
-                             safety_gate, self.compiler_failure)
+                             safety_gate, self.compiler_failure, self.resource_report)
 
 
 @dataclass(frozen=True, slots=True)
@@ -181,6 +212,36 @@ _NATIVE_ARTIFACTS = MappingProxyType({('darwin', 'arm64'): _ReviewedNativeArtifa
     '08d01e5a434e821c4a1ce30dd1593e1bbc57c9b1203c4d760d8912ef4ce6a621',
     _VERSION),
 })
+@dataclass(frozen=True, slots=True)
+class _ReviewedFontArtifact:
+    path: Path
+    sha256: str
+    size: int
+    face_index: int
+    identity: FontIdentity
+
+
+@dataclass(frozen=True, slots=True)
+class _ReviewedResourceArtifact:
+    compiler_sha256: str
+    fonts: tuple[_ReviewedFontArtifact, ...]
+
+
+# Private trust declarations, not selectable paths, hashes, metadata or argv.
+# Absence of OS/2 embedding bits is NOT redistribution permission. This font
+# may be copied only to an ephemeral private local workspace on this Mac.
+_RESOURCE_ARTIFACTS = MappingProxyType({
+    (APPLEGOTHIC_RESOURCE_PROFILE, 'darwin', 'arm64'): _ReviewedResourceArtifact(
+        '08d01e5a434e821c4a1ce30dd1593e1bbc57c9b1203c4d760d8912ef4ce6a621',
+        (_ReviewedFontArtifact(resource_profile_protected_paths(APPLEGOTHIC_RESOURCE_PROFILE)[0],
+            '69071005e523e3a2bf276b35b0066f68a7ec0d942c860941ad188ef15ef69c51',
+            15253080, 0, FontIdentity('TrueType', 'AppleGothic', 'AppleGothic',
+                'AppleGothic Regular', '22.0d2e1',
+                'AppleGothic Regular;13.0d1e3;2017-07-12')),)),
+})
+_MAX_FONT = 16 * 1024 * 1024
+_MAX_FONT_TOTAL = 16 * 1024 * 1024
+_MAX_FONTS = 1
 _MAX_EXECUTABLE = 64 * 1024 * 1024
 _MAX_PDF = 16 * 1024 * 1024
 _MAX_WORKSPACE = 96 * 1024 * 1024
@@ -318,6 +379,33 @@ def _capture_compiler():
                 'Recursive compiler launcher inode')
     _demand(evidence.sha256 == record.sha256, 'Unreviewed compiler SHA-256')
     return record, raw, evidence
+
+
+def _reviewed_resource_artifact(profile):
+    record = _RESOURCE_ARTIFACTS.get((profile, sys.platform, platform.machine()))
+    _demand(record is not None, 'No reviewed font resource profile for this platform')
+    return record
+
+
+def _capture_fonts(profile, compiler):
+    # ASCII never resolves/captures external fonts, including on unknown hosts.
+    if profile == ASCII_RESOURCE_PROFILE:
+        return ()
+    record = _reviewed_resource_artifact(profile)
+    _demand(record.compiler_sha256 == compiler.sha256,
+            'Font profile does not bind this reviewed compiler')
+    _demand(len(record.fonts) == _MAX_FONTS == 1
+            and sum(font.size for font in record.fonts) <= _MAX_FONT_TOTAL,
+            'Font resource count/total byte limit exceeded')
+    captures = []
+    for font in record.fonts:
+        _demand(0 < font.size <= _MAX_FONT and font.face_index == 0,
+                'Invalid reviewed font size/face')
+        raw, installed = _capture(font.path, _MAX_FONT)
+        _demand(installed.size == font.size and installed.sha256 == font.sha256,
+                'Unreviewed font size or SHA-256')
+        captures.append((font, raw, installed))
+    return tuple(captures)
 
 
 def _guard(fix, snapshot):
@@ -544,6 +632,7 @@ class ClosedCoreCompileArtifact:
     probes: tuple[Invocation, ...]
     compilation: Invocation
     report: CompileReport
+    resource_report: ResourceReport
     pdf_sha256: str
     _pdf_bytes: bytes = field(repr=False)
 
@@ -571,7 +660,8 @@ _ARTIFACTS = weakref.WeakKeyDictionary()
 
 def _artifact_values(artifact):
     def freeze(value):
-        if type(value) in (FileEvidence, Invocation, CompileReport, CompilerFailureInfo):
+        if type(value) in (FileEvidence, FontIdentity, FontEvidence, ResourceReport,
+                           Invocation, CompileReport, CompilerFailureInfo):
             return (type(value), tuple(freeze(getattr(value, field.name)) for field in fields(value)))
         if type(value) is tuple:
             return tuple(freeze(item) for item in value)
@@ -590,6 +680,8 @@ def assert_artifact_current(fix, artifact):
     # Original compiler drift blocks later use too. The private workspace has
     # already been destroyed, so its immutable evidence is historical only.
     _same(Path(artifact.compiler.path), artifact.compiler, _MAX_EXECUTABLE, executable=True)
+    for font in artifact.resource_report.fonts:
+        _same(Path(font.installed.path), font.installed, _MAX_FONT)
     _demand(_hash(object.__getattribute__(artifact, '_pdf_bytes')) == artifact.pdf_sha256,
             'Artifact PDF bytes changed')
     _guard(fix, record[1])
@@ -613,11 +705,13 @@ def compile_committed_snapshot(fix, snapshot, *, profile, deadline_seconds=10.0,
 def _compile_committed_snapshot(fix, snapshot, *, profile, deadline_seconds, cancel_event, _ledger):
     """Compile retained bytes, with no public path/hash/args/environment bypass.
 
-    profile has no default. This experiment deliberately rejects Unicode source
-    (except one leading UTF-8 BOM), even where closed-core grammar admits it.
+    profile has no default. Repertoire is an additional restriction on source,
+    never permission to bypass the independent closed-core AST grammar.
     """
-    if profile != RESOURCE_PROFILE or type(profile) is not str:
-        raise UnsupportedCompileProfile('Explicit embedded-ascii-v1 profile required')
+    try:
+        validate_resource_profile(profile)
+    except ValueError as error:
+        raise UnsupportedCompileProfile(str(error)) from error
     if (type(deadline_seconds) not in (int, float) or not math.isfinite(deadline_seconds)
             or not 0 < deadline_seconds <= 120
             or (cancel_event is not None and type(cancel_event) is not threading.Event)):
@@ -625,18 +719,22 @@ def _compile_committed_snapshot(fix, snapshot, *, profile, deadline_seconds, can
     deadline = time.monotonic() + deadline_seconds
     _guard(fix, snapshot)
     raw = snapshot.source
-    payload = raw[3:] if raw.startswith(b'\xef\xbb\xbf') else raw
-    if not payload.isascii():
-        raise UnsupportedCompileProfile('embedded-ascii-v1 requires ASCII source; Unicode fidelity is unsupported')
+    try:
+        validate_source_repertoire(profile, raw)
+    except ValueError as error:
+        raise UnsupportedCompileProfile(str(error)) from error
     _demand(_hash(raw) == snapshot.source_sha256 and len(raw) <= 1024 * 1024,
             'Invalid retained postimage hash/length')
     try:
         record, compiler_bytes, compiler = _capture_compiler()
+        font_captures = _capture_fonts(profile, compiler)
         with tempfile.TemporaryDirectory(prefix='typst-embedded-ascii-') as temporary, ExitStack() as outputs:
             base = Path(temporary).resolve()
             os.chmod(base, 0o700)
             directories = {base / name for name in ('bin', 'project', 'out', 'home', 'cache',
                 'config', 'data', 'tmp', 'packages', 'package-cache')}
+            if font_captures:
+                directories.add(base / 'fonts')
             input_path = base / 'project' / snapshot.target
             directories.update(input_path.parents)
             directories.discard(base)
@@ -653,8 +751,19 @@ def _compile_committed_snapshot(fix, snapshot, *, profile, deadline_seconds, can
             _, captured_input = _capture(input_path, 1024 * 1024)
             _demand(private_compiler.sha256 == compiler.sha256
                     and captured_input.sha256 == snapshot.source_sha256, 'Private copy differs')
+            font_evidence = []
+            for font, font_bytes, installed in font_captures:
+                private_path = base / 'fonts' / 'AppleGothic.ttf'
+                _write_private(private_path, font_bytes, 0o400)
+                _, private = _capture(private_path, _MAX_FONT)
+                _demand(private.size == installed.size and private.sha256 == installed.sha256,
+                        'Private font copy differs')
+                font_evidence.append(FontEvidence(font.face_index, installed, private, font.identity))
+            resource_report = ResourceReport(profile, REPERTOIRE_VERSIONS[profile], tuple(font_evidence))
+            _ledger.resource_report = resource_report
             environment = _environment(base)
             allowed = {executable, input_path, pdf, deps}
+            allowed.update(Path(font.private.path) for font in font_evidence)
             directory_identities = {p: (p.stat().st_dev, p.stat().st_ino,
                 p.stat().st_mode, p.stat().st_uid, p.stat().st_gid)
                 for p in directories | {base}}
@@ -668,6 +777,9 @@ def _compile_committed_snapshot(fix, snapshot, *, profile, deadline_seconds, can
                     _demand(_output_identity(os.fstat(descriptor)) == expected
                             == _output_identity(path.lstat()), 'Bound compiler output was replaced')
                 _workspace_check(base, allowed, directories, pdf)
+                for font in font_evidence:
+                    _demand(Path(font.private.path).lstat().st_size <= _MAX_FONT,
+                            'Private font byte limit exceeded')
 
             last_invocation = None
             output = dependencies = None
@@ -683,6 +795,9 @@ def _compile_committed_snapshot(fix, snapshot, *, profile, deadline_seconds, can
                 _same(record.path, compiler, _MAX_EXECUTABLE, executable=True)
                 _same(executable, private_compiler, _MAX_EXECUTABLE, executable=True)
                 _same(input_path, captured_input, 1024 * 1024)
+                for font in font_evidence:
+                    _same(Path(font.installed.path), font.installed, _MAX_FONT)
+                    _same(Path(font.private.path), font.private, _MAX_FONT)
                 check_workspace()
                 if output is not None:
                     _same(pdf, output, _MAX_PDF)
@@ -702,7 +817,10 @@ def _compile_committed_snapshot(fix, snapshot, *, profile, deadline_seconds, can
                     '--ignore-system-fonts', '--package-path', str(base / 'packages'),
                     '--package-cache-path', str(base / 'package-cache'), '--creation-timestamp', '0',
                     '--jobs', '1', '--diagnostic-format', 'short', '--deps', str(deps),
-                    '--deps-format', 'zero', str(input_path), str(pdf))
+                    '--deps-format', 'zero')
+                if font_evidence:
+                    argv += ('--font-path', str(base / 'fonts'))
+                argv += (str(input_path), str(pdf))
                 compilation = _run(argv, purpose='compile', cwd=base / 'project',
                     environment=environment, deadline=deadline, cancel_event=cancel_event,
                     check_workspace=check_workspace, _ledger=_ledger)
@@ -722,7 +840,7 @@ def _compile_committed_snapshot(fix, snapshot, *, profile, deadline_seconds, can
                     tuple(sorted((path, None if data is None else _hash(data))
                                  for path, data in snapshot.evidence.items())),
                     compiler, private_compiler, captured_input, output, dependencies,
-                    (snapshot.target,), (probe,), compilation, _ledger.snapshot('passed'),
+                    (snapshot.target,), (probe,), compilation, _ledger.snapshot('passed'), resource_report,
                     _hash(pdf_bytes), pdf_bytes)
                 artifact = object.__new__(ClosedCoreCompileArtifact)
                 for field, value in zip(fields(ClosedCoreCompileArtifact), values, strict=True):
@@ -738,6 +856,8 @@ def _compile_committed_snapshot(fix, snapshot, *, profile, deadline_seconds, can
                 revalidate()
         _guard(fix, snapshot)
         _same(record.path, compiler, _MAX_EXECUTABLE, executable=True)
+        for font in font_evidence:
+            _same(Path(font.installed.path), font.installed, _MAX_FONT)
         _guard(fix, snapshot)
         check_request()
         _ARTIFACTS[artifact] = (weakref.ref(fix), snapshot, _artifact_values(artifact))

@@ -20,6 +20,7 @@ import offline_cli as offline
 from pdf_publication_store import (OfflineOutputExclusive, PublicationError,
     PublicationPending, PublicationReport, inventory_publications, literal_destination, recover_publication)
 from protected_fix import ProtectedCoreFix, _literal_target
+from resource_profiles import validate_resource_profile
 from transactions import OfflineExclusive, RecoveryRequired, TransactionFailure
 from typst_lint import InputError, SafetyError
 
@@ -53,8 +54,10 @@ def validate_arguments(args, parser):
         return
     if args.profile != offline.PROFILE:
         parser.error('compile requires --profile closed-core-v1')
-    if args.resource_profile != compiler.RESOURCE_PROFILE:
-        parser.error('compile requires --resource-profile embedded-ascii-v1')
+    try:
+        validate_resource_profile(args.resource_profile)
+    except ValueError:
+        parser.error('compile requires an explicit known --resource-profile')
     if not args.offline_exclusive:
         parser.error('--offline-exclusive is required; all source writers must remain stopped')
     if args.target is None:
@@ -76,6 +79,33 @@ def invocation_json(value):
         lifecycle=value.lifecycle, termination_reason=value.termination_reason)
 
 
+def _file_evidence_json(value):
+    return dict(path=value.path, identity=list(value.identity), sha256=value.sha256,
+        size=value.size, parents=[[path, list(identity)] for path, identity in value.parents])
+
+
+def resource_report_json(report):
+    """Original primitive font evidence only, never registry data or font bytes."""
+    if report is None:
+        return None
+    return dict(profile=report.profile, repertoire_version=report.repertoire_version,
+        fonts=[dict(face_index=font.face_index,
+            installed=_file_evidence_json(font.installed), private=_file_evidence_json(font.private),
+            identity=dict(format=font.identity.format, family=font.identity.family,
+                postscript_name=font.identity.postscript_name, full_name=font.identity.full_name,
+                version=font.identity.version, unique_name=font.identity.unique_name))
+            for font in report.fonts])
+
+
+def _resource_details(report, *, historical=False):
+    available = not historical and report is not None
+    return dict(resource_report=resource_report_json(report) if available else None,
+        resource_details_available=available,
+        resource_details_note=('Original font identities were not persisted; no live resources were consulted'
+            if historical else 'Original captured resource evidence' if available
+            else 'Resource evidence was not captured or is unavailable'))
+
+
 def compile_report_json(report):
     failure = report.compiler_failure
     return dict(safety_gate=report.safety_gate, compiler_invoked=report.compiler_invoked,
@@ -83,7 +113,8 @@ def compile_report_json(report):
         attempted_invocations=[invocation_json(item) for item in report.attempted_invocations],
         compiler_failure=None if failure is None else dict(reason=failure.reason,
             kind=failure.kind.value,
-            invocation=None if failure.invocation is None else invocation_json(failure.invocation)))
+            invocation=None if failure.invocation is None else invocation_json(failure.invocation)),
+        **_resource_details(report.resource_report))
 
 
 def publication_report_json(report, *, historical=False):
@@ -96,14 +127,15 @@ def publication_report_json(report, *, historical=False):
                                  if historical else 'Bounded original invocation details'),
         source_commit=report.source_commit, source_journal_id=report.source_journal_id,
         output_disposition=report.output_disposition, recovery_required=report.recovery_required,
-        journal_id=report.journal_id, observed_sha256=report.observed_sha256, reason=report.reason)
+        journal_id=report.journal_id, observed_sha256=report.observed_sha256, reason=report.reason,
+        **_resource_details(report.resource_report, historical=historical))
 
 
 def inventory_json(entries):
     return dict(historical_only=True, pending=[e.journal_id for e in entries if e.pending],
         entries=[dict(journal_id=e.journal_id, state=e.state, pending=e.pending,
             destination=e.destination, error=e.error, compiler_invoked=e.compiler_invoked,
-            compiler_status=e.compiler_status) for e in entries],
+            compiler_status=e.compiler_status, **_resource_details(None, historical=True)) for e in entries],
         **({'empty': 'no PDF journals observed'} if not entries else {}))
 
 
@@ -257,6 +289,7 @@ def _print(result, json_format):
         print(f"PDF output: {report['output_disposition']}; journal {report['journal_id']}; recovery {'required' if report['recovery_required'] else 'not required'}")
         if report['invocation_origin'] == 'historical_recovery':
             print(report['invocation_details_note'])
+            print(report['resource_details_note'])
     if 'output_inventory' in result:
         inventory = result['output_inventory']
         print(inventory.get('empty', f"{len(inventory['entries'])} historical PDF journals; {len(inventory['pending'])} pending"))
@@ -357,7 +390,11 @@ def main(arguments=None, *, gate=False):
             result['source_summary'] = None
             result['source_commit'] = 'unknown' if apply_started else 'not_applied'
         immediate = _immediate_compiler_error(error)
-        compile_report = getattr(immediate, 'report', None)
+        # Preserve the actual immutable report through context teardown. A later
+        # safety/cleanup error may have an empty default report of its own.
+        compile_report = (None if publication is None else publication.compile_report)
+        if compile_report is None:
+            compile_report = getattr(immediate, 'report', None)
         if not isinstance(compile_report, compiler.CompileReport):
             compile_report = None
         if publication_report is not None:
@@ -391,13 +428,6 @@ def main(arguments=None, *, gate=False):
         result['source_recovery'] = source_recovery
         if compile_report is not None:
             result['compile_report'] = compile_report_json(compile_report)
-            if publication_report is not None and publication_report.attempted_invocations:
-                result['compile_report'].update(compiler_invoked=publication_report.compiler_invoked,
-                    compiler_status=publication_report.compiler_status,
-                    attempted_invocations=[invocation_json(item) for item in publication_report.attempted_invocations])
-        elif publication_report is not None and publication_report.phase == 'published':
-            result['compile_report'] = compile_report_json(compiler.CompileReport(
-                publication_report.attempted_invocations, 'passed', None))
     if publication_report is not None:
         historical = command == 'recover-output'
         result['publication_report'] = publication_report_json(publication_report, historical=historical)

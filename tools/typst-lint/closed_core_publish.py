@@ -5,13 +5,12 @@ output lease is required even when source exclusivity was already asserted.
 """
 from __future__ import annotations
 
-from pathlib import Path
 import time
 
 import closed_core_compile as compiler
 from protected_fix import ProtectedCoreFix
 from transactions import TransactionError
-from typst_lint import InputError
+from resource_profiles import validate_resource_profile
 from pdf_publication_store import (DEFAULT_PUBLICATION_LIMITS, OfflineOutputExclusive,
     PublicationError, PublicationPending, PublicationReport, _Store, _demand,
     _lease, _observation, literal_destination)
@@ -43,6 +42,7 @@ class PreparedPdfPublication:
         self._attempts = ()
         self._compiler_invoked = False
         self._compiler_status = None
+        self.compile_report = None
         self.report = None
 
     def _source(self):
@@ -57,7 +57,7 @@ class PreparedPdfPublication:
         return PublicationReport(phase, gate, self._compiler_invoked, self._compiler_status,
             self._attempts, source, disposition, recovery,
             None if self._store is None else self._store.journal_id,
-            None if observed is None else observed.sha256, journal, reason)
+            None if observed is None else observed.sha256, journal, reason, self.compile_report)
 
     def __enter__(self):
         _demand(not self._active and not self._used, 'Publication contexts cannot be reused')
@@ -108,7 +108,13 @@ class PreparedPdfPublication:
 
     def _outcome(self, value):
         report = getattr(value, 'report', None)
-        if report is not None and hasattr(report, 'compiler_invoked'):
+        if type(report) is compiler.CompileReport:
+            # Later safety guards can carry a default empty refusal. They do
+            # not replace facts already observed at the compiler call boundary.
+            if (self.compile_report is not None and not report.attempted_invocations
+                    and report.resource_report is None):
+                return
+            self.compile_report = report
             self._attempts = tuple(report.attempted_invocations)
             self._compiler_invoked = report.compiler_invoked
             self._compiler_status = report.compiler_status
@@ -202,8 +208,16 @@ class PreparedPdfPublication:
             # Exact same live bridge/session receipt, not its reporting summary.
             compiler._guard(self.fix, snapshot)
             store.assert_output(store.old)
-            if profile != compiler.RESOURCE_PROFILE or type(profile) is not str:
-                raise compiler.UnsupportedCompileProfile('Explicit embedded-ascii-v1 profile required')
+            try:
+                validate_resource_profile(profile)
+            except ValueError as error:
+                raise compiler.UnsupportedCompileProfile(str(error)) from error
+            # Preparation is deliberately resource-neutral. Only the explicitly
+            # selected profile can add a font collision check, before capture or
+            # any durable launch intent. ASCII does not stat a system font.
+            resource_paths = compiler.resource_profile_protected_paths(profile)
+            if resource_paths:
+                store.check_collisions(resource_paths)
             store.event('compile_launch_intent', source_sha256=snapshot.source_sha256,
                         source_journal_id=self.fix.summary.journal_id, profile=profile,
                         source_target=snapshot.target, config_sha256=snapshot.config_sha256,

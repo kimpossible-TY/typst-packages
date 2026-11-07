@@ -14,6 +14,10 @@ change a consumer project or AGENTS.md, merge, deploy or roll out anything.
 ./typst-lint recover-output --root ROOT --offline-output-exclusive --output build/main.pdf --journal-id ID --format json
 ```
 
+Use `./typst-lint compile --profile closed-core-v1 --help` for the explicit
+route's options and both exact resource-profile names. Bare `compile --help`
+retains the ordinary read-only route's help and dispatch behavior.
+
 Every authority option shown for compile is required. The source assertion means
 editors, watchers and all other source writers remain stopped. The independent
 output assertion covers exporters, watchers, destination ancestors and output
@@ -25,7 +29,7 @@ The source target is one literal canonical root-relative `.typ` file. The output
 is one literal canonical root-relative `.pdf` path with existing safe parents.
 Absolute, dot/dotdot, glob and template destinations are refused. No compiler
 argv/tail, positional source/output pair, stdin, watch, eval, custom executable,
-flags, package directory, resource profile other than embedded-ascii-v1, custom
+flags, package directory, unknown resource profile, custom
 store, limit, deadline or fault injection is accepted. The internal deadline is
 10 seconds. Options do not abbreviate; duplicate options, including mixed
 `--option value` and `--option=value`, are refused. Global options before the
@@ -48,9 +52,16 @@ source application run. No preliminary standalone scan is added to the mutation
 path. A source-entry refusal does not imply the PDF store was checked.
 
 Only the successfully applied bridge's live compile_snapshot() is compiled with
-the explicit embedded-ascii-v1 resource profile. ASCII plus an optional single
-UTF-8 BOM is supported. Unicode/system-font fidelity, imports/packages and other
-resources remain unsupported. See CLOSED_CORE_CONTRACT.md,
+an explicit known resource profile. `embedded-ascii-v1` retains unchanged ASCII
+plus an optional single UTF-8 BOM behavior. `embedded-applegothic-ko-v1` separately
+admits the compiler's exact versioned Korean repertoire and pinned local
+AppleGothic capture. It does not widen the closed-core grammar. General
+Unicode/system-font fidelity, imports/packages and other resources remain
+unsupported. Preparation remains resource-neutral; the selected Korean font
+collision check follows profile validation and precedes launch intent/capture/probe.
+No font path or bytes are selected by CLI arguments. The sole supported installed
+font is `/System/Library/Fonts/Supplemental/AppleGothic.ttf`; any private copy is
+local and temporary, never bundled or uploaded. See CLOSED_CORE_CONTRACT.md,
 CLOSED_CORE_COMPILE_CONTRACT.md and PDF_PUBLICATION_CONTRACT.md for the unchanged
 source, compiler and output engines. A successful immutable source summary is
 retained independently of any subsequent compile/publication failure. Both
@@ -85,11 +96,11 @@ Source and PDF journal IDs are never interchangeable.
   inventory with no pending records.
 - 2: invalid arguments/literal destination/profile, initial absent/non-directory
   root, source config/grammar/parser or initial encoding refusal, or unsupported
-  resource profile, provided cleanup is safe.
+  resource profile/repertoire, provided cleanup is safe.
 - 3: source/output safety, pending/corrupt journals, unsafe storage, unresolved or
   unknown recovery/cleanup, probe failure, uncertain launch, compiler timeout,
-  internal cancellation or stream-limit failure. Compiler zero followed by a
-  later safety/publication failure remains 3. A safe abort's internal gate 3
+  internal cancellation or stream-limit failure, or absent/unsafe/drifted required
+  font. Compiler zero followed by a later safety/publication failure remains 3. A safe abort's internal gate 3
   does not by itself change an original input refusal from 2 to 3.
 - A natural nonzero compiler exit propagates its exact positive code only when
   the immediate known PublicationError cause is CompilerFailure with typed
@@ -107,14 +118,32 @@ process_exit, cancelled, timeout, stream_limit and unknown.
 JSON uses explicit primitive serializers, ensure_ascii=true and byte streams as
 stdout_hex/stderr_hex. It includes signed status/optional termination_signal,
 tri-state compiler_invoked (true/false/null), raw compiler_status, compiler safety
-and typed failure, source_summary and source journal ID, publication_report with
+and typed failure, the original captured resource report, source_summary and
+source journal ID, publication_report with
 output disposition/PDF journal/recovery, and separate source_recovery and
 output_recovery. It includes no PDF bytes or full source text. Reporting values
 and summaries are never consumed as write authority.
 
+The actual immutable compiler report survives both contexts, without synthesis
+from invocation summaries. Its resource evidence contains profile/repertoire,
+face index, installed/private path, file and ancestor identities, SHA-256 and
+size, plus font format/family/PostScript/full/version/unique names. It includes
+no font bytes. A verified ASCII report has `fonts=[]`; a null resource report
+means not captured/unavailable. A later safety error does not erase known
+compiler evidence. The original `compile_report.safety_gate` remains the compiler
+call's fact; `publication_report.gate_status`, reason and final status separately
+report a later publication/safety failure. A safe natural compiler exit 3 can
+still have compiler safety passed, so numeric status alone is not a safety gate.
+
 Invocation details distinguish original_invocation from historical_recovery.
 Historical recovery's empty attempted_invocations means argv/streams were not
-persisted, not that no past execution occurred. Historical terminal reports leave
+persisted, not that no past execution occurred. Historical recovery and each
+inventory entry report `resource_details_available=false` and explain that
+original font identities were not persisted. Their resource report is null;
+current compiler/font registry data never fills historical gaps. Schema-1
+manifest/event fields and transitions remain unchanged. Updated readers accept
+old ASCII journals, while older readers may safely reject the new Korean name.
+Empty inventory retains its existing shape. Historical terminal reports leave
 observed_sha256=null: the current output was not examined. Text presentation
 likewise distinguishes compiler invoked/not invoked/unknown and output
 published/restored/untouched/unresolved dispositions.

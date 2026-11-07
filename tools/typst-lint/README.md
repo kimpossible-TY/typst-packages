@@ -9,8 +9,9 @@ All 33 rules have bounded backends; full rule acceptance and compilation remain 
 Ordinary analysis/fix/compile modes return **2**, including an empty selection,
 without changing source or invoking a compiler. A separate explicit offline
 closed-core profile can apply a narrowly proven script repair. With additional
-explicit output/resource opt-ins, it can compile and publish one guarded ASCII
-PDF. These are not all-project writers. Help/version return 0.
+explicit output/resource opt-ins, it can compile and publish one guarded PDF
+under the ASCII or narrowly reviewed Korean resource profile. These are not
+all-project writers. Help/version return 0.
 
 ## Build the official syntax adapter
 
@@ -197,10 +198,23 @@ opt-ins. See [OFFLINE_CLI_CONTRACT.md](OFFLINE_CLI_CONTRACT.md).
 
 ## Explicit closed-core compile and PDF recovery
 
-This route requires the same closed core configuration and source grammar, plus
-ASCII source (optionally one leading UTF-8 BOM), the reviewed Mac arm64 Typst
-0.15.1 binary, and an explicit embedded-font resource profile. It does not support
-imports, packages, broader Unicode/system fonts or general Typst projects.
+This route requires the same closed core configuration and source grammar, the
+reviewed Mac arm64 Typst 0.15.1 binary, and one explicit resource profile:
+
+- `embedded-ascii-v1` admits ASCII source with optionally one leading UTF-8 BOM
+  and uses only the compiler's embedded fonts. It never inspects external fonts.
+- `embedded-applegothic-ko-v1` adds modern precomposed Hangul syllables
+  U+AC00–U+D7A3, modern compatibility jamo U+3131–U+3163, and exactly these 21
+  prose punctuation characters: `· – — ‘ ’ “ ” … ₩ 、 。 〈 〉 《 》 「 」 『 』 【 】`.
+  It requires the exact reviewed local AppleGothic font and uses a verified
+  private copy, with system-font discovery disabled.
+
+The Korean profile does not normalize text or broaden the existing grammar.
+Conjoining/decomposed jamo, fillers (including U+3164), emoji, combining marks,
+variation selectors, bidi controls and other non-ASCII source remain refused.
+ASCII-spelled math names remain governed by the existing grammar. Unicode file
+names are independent of this source-character restriction. Neither profile
+supports imports, packages, arbitrary fonts or general Typst projects.
 Stop all source writers and separately all exporters/output writers for the
 whole operation before making both assertions:
 
@@ -209,6 +223,15 @@ tools/typst-lint/typst-lint compile --root /absolute/project --profile closed-co
 tools/typst-lint/typst-lint output-status --root /absolute/project --format json
 tools/typst-lint/typst-lint recover-output --root /absolute/project --offline-output-exclusive --output build/main.pdf --journal-id JOURNAL_ID --format json
 ```
+
+Select `--resource-profile embedded-applegothic-ko-v1` instead of the ASCII
+profile only for its admitted Korean repertoire. Missing, changed or unsafe
+required font files refuse safely; there is no fallback to ambient fonts.
+Font bytes are copied only into private local temporary storage and are not
+bundled in this repository, CI fixtures, releases or uploads.
+Use `typst-lint compile --profile closed-core-v1 --help` for the explicit
+route's options and resource-profile names. Bare compile help remains the
+ordinary route's help and does not enable compilation.
 
 The output is one safe root-relative PDF with parents already present. Both
 assertions, both profiles, target and output are explicit; no raw compiler tail,
@@ -227,8 +250,13 @@ if compilation fails; missing apply receipts never prove source was untouched.
 
 Output status is genuinely read-only and reports historical journals, not current
 PDF conformance. Output recovery uses the exact named journal and output, without
-needing current source/config/compiler, and preserves later edits. Reports separate
+needing current source/config/compiler/fonts, and preserves later edits. Reports separate
 source recovery, output recovery, actual compiler facts and historical evidence.
+Original reports retain actual captured font identities, hashes, sizes and face
+evidence after temporary compilation storage closes. Historical journals retain
+the selected profile but not those original resource details, and say so rather
+than consulting current fonts. Updated readers still accept unchanged ASCII
+journals; older readers can safely reject a new profile they do not know.
 The executable defers received SIGINT/SIGTERM through bounded source application
 and cleanup; safe cleanup can preserve the original signal, while unknown or
 unresolved cleanup remains 3. Imported Python main never changes handlers or
@@ -440,17 +468,18 @@ handoff failures cannot roll back committed fixes. See
 
 ## Internal committed-source compiler experiment
 
-`closed_core_compile.py` is an internal API, not a CLI compile route. It accepts
-only a live bridge-owned committed snapshot and the explicitly required resource
-profile `embedded-ascii-v1`. ASCII source with an optional leading UTF-8 BOM is
-supported. Broader Unicode source refuses: embedded-only fonts did not preserve
-Korean text in characterization, so no system-font or Unicode fidelity is claimed.
+`closed_core_compile.py` is the internal compiler engine used by the explicit
+CLI route. It accepts only a live bridge-owned committed snapshot and one of the
+two required resource profiles described above. Embedded-only fonts did not
+preserve Korean text in characterization; the additional profile therefore
+captures a specifically reviewed font rather than enabling ambient discovery.
 
 The experiment uses the exact reviewed Mac arm64 Typst 0.15.1 executable hash,
 a private verified executable/input copy, an empty environment with allowlisted
-private directories, and embedded fonts only. Unknown compiler bytes refuse
-before probing. Source/config/catalog/compiler identities are checked before and
-after execution. Root-to-leaf descriptor capture, retained output descriptors,
+private directories, and the selected captured resource closure. Unknown
+compiler bytes refuse before probing. Source/config/catalog/compiler and selected
+font identities are checked before and after execution. Root-to-leaf descriptor
+capture, retained output descriptors,
 bounded diagnostics/artifacts, cancellation and exact relative dependency evidence
 protect the internal result. Trusted OS libraries and sampled workspace limits
 are explicit boundaries, not a complete OS or network sandbox.
@@ -458,12 +487,22 @@ are explicit boundaries, not a complete OS or network sandbox.
 A successful invocation returns immutable, session-bound PDF bytes and execution
 evidence. It does not accept a user PDF destination or publish a file. Artifact
 access rechecks live authority; valid committed source fixes survive compiler
-failure or later staleness. Actual temporary native fixtures verify ASCII prose
-and math, including nested non-ASCII/space filenames. External-font capture,
-general output publication, editor version integration and general project
+failure or later staleness. Actual temporary native fixtures verify admitted
+ASCII/Korean prose and math, including nested non-ASCII/space filenames. General
+font/resource support, output publication, editor version integration and project
 writer coverage remain separate work. The separately scoped
 internal publication session below is the only new output-writing composition.
 See [CLOSED_CORE_COMPILE_CONTRACT.md](CLOSED_CORE_COMPILE_CONTRACT.md).
+
+The Korean resource is one complete, single-face TrueType AppleGothic file at
+`/System/Library/Fonts/Supplemental/AppleGothic.ttf`, pinned by exact bytes and
+metadata. No font redistribution permission is inferred. The private font file
+is read-only in a private directory and has a 16 MiB capture bound. Actual
+installed/private evidence is part of the sealed artifact; using it again also
+rechecks the installed font. Typst's observed dependency list remains source-only
+because the compiler omits fonts from that list. Explicit font capture is
+separate evidence, not a fabricated dependency entry. These checks do not claim
+equivalence to normal system-font discovery or unrestricted Unicode fidelity.
 
 Compiler attempts retain immutable reporting separately from artifact authority.
 Actual probe/compile launch, exit/signal and uncertain interruption facts survive
@@ -491,15 +530,15 @@ stages and durable state records. After a visible destination replacement,
 failures use guarded restoration or report recovery required; they never undo
 valid committed source fixes or overwrite later output edits. An uncertain final
 completion acknowledgment is not a successful build. Explicit output-only
-recovery is independent of later source/config/compiler changes, and terminal
+recovery is independent of later source/config/compiler/font changes, and terminal
 history is not a new observation of a user's current PDF.
 
 Read-only publication inventory is separate from its writer/recovery paths.
 The new combined session strengthens observed terminal records before treating
 them as nonblocking. Existing standalone offline CLI `fix`, `journal-status` and
 `recover` do not inspect publication journals, and ordinary CLI `compile` remains
-inert. Neither this internal ASCII profile nor SIGKILL/restart tests establish
-Unicode/system-font fidelity, universal power-loss durability, editor exclusion
+inert. Neither these resource profiles nor SIGKILL/restart tests establish
+general Unicode/system-font fidelity, universal power-loss durability, editor exclusion
 or all-project enforcement. See
 [PDF_PUBLICATION_CONTRACT.md](PDF_PUBLICATION_CONTRACT.md).
 
@@ -726,7 +765,7 @@ candidate parser, coverage-retention and idempotence checks. See the
 These are partial implementations, not 33 fully accepted rules. Their ordinary
 CLI plans remain unapplied; the separate closed-core profile admits only its
 strict input language. General compiler dispatch and all-project rollout remain
-disabled; the explicit ASCII compile route above is separately scoped.
+disabled; the explicit resource-profile compile route above is separately scoped.
 
 ## Multi-pass proposal evidence
 
@@ -796,6 +835,6 @@ publishes/deploys anything. Renderer-dependent characterization is separate.
 Next work: extend only provable directive scopes and Markdown extraction contexts; expand
 verified package/local-facade graphs and paragraph ownership; implement
 the remaining rule contracts; validate protected writer/editor transactions and
-broader compiler resources and recoverable output publication; then verify
+broader compiler resources and general output publication; then verify
 CI/watch/Tinymist adapters. AGENTS.md
 or a shell wrapper alone cannot claim native editor enforcement.

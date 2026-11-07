@@ -16,8 +16,11 @@ The caller enters a real `ProtectedCoreFix`, then enters
 **before** calling that fix's `validate()` or `apply()`. Inside the publication
 context, validate/apply normally and call
 `publication.compile_and_publish(fix.compile_snapshot(), profile='embedded-ascii-v1')`.
-The profile remains explicitly required and retains the compiler's ASCII plus
-optional leading UTF-8 BOM and embedded-font limitations.
+The profile remains explicitly required. `embedded-ascii-v1` keeps its exact ASCII
+plus optional leading UTF-8 BOM and embedded-font behavior. The separate opt-in
+`embedded-applegothic-ko-v1` admits only its versioned Korean source repertoire
+and the compiler's pinned local AppleGothic resource, without widening the
+closed-core grammar or claiming general Unicode/system-font support.
 
 The output lease must be independently created with
 `OfflineOutputExclusive.assert_exporters_watchers_closed_and_no_other_writers()`.
@@ -40,13 +43,19 @@ pending or corrupt record blocks a new combined session. Entering after source
 validation/application is refused. There is exactly one compile attempt per
 prepared context and no public method accepting arbitrary artifact bytes,
 previously compiled artifacts, serialized receipts, caller executables or flags.
+Preparation is resource-neutral: no font path is inspected before profile
+selection. After pure profile-name validation, only the selected Korean font is
+checked for destination path/inode collisions, before launch intent, resource
+capture or a compiler probe. ASCII preparation and compilation do not stat fonts.
 
 The session calls the actual committed-snapshot compiler itself. Its genuine
 artifact must remain bound to the same live bridge/snapshot and unchanged pinned
-compiler. `assert_artifact_current` is checked after compilation, before staging,
+compiler and selected captured fonts. `assert_artifact_current` is checked after
+compilation, before staging,
 immediately before replacement and before final publication commit. Cancellation
 and the bounded deadline are checked before staging/replacement and final commit.
-A later stale source/config/catalog/compiler refuses publication without undoing
+A later stale source/config/catalog/compiler/font refuses publication without
+undoing
 committed source fixes. Reports, hashes and journals never confer authority.
 
 ## Destination and metadata
@@ -149,8 +158,12 @@ Normal ordered events are `prepared`, `compile_launch_intent`, `compiled`,
 `staged`, `replace_intent`, `replaced`, `published`. Failure/recovery uses
 `aborted_unpublished`, `rollback_intent`, `restored`, `recovery_required`.
 Both readers and writers enforce closed field schemas, legal transitions and
-cross-event content/inode/metadata consistency. An observed compiler zero must
-not become gate success without successful final guards and publication.
+cross-event content/inode/metadata consistency. Schema remains 1 with identical
+manifest/event fieldsets and transitions; only the strict historical profile-name
+allowlist adds `embedded-applegothic-ko-v1`. Updated readers still accept existing
+ASCII journals. Older readers may safely reject Korean journals as unknown. No
+font identities or resource bytes are added to durable records. An observed
+compiler zero must not become gate success without successful final guards and publication.
 
 Preparation fsyncs backup, manifest/events and containing directories. Staging
 writes new bytes and supported metadata, fsyncs, reads back and verifies the exact
@@ -189,7 +202,7 @@ reconciliation rereads/replaces later user output or promotes an old PDF anew.
 `recover_publication(root, destination=..., journal_id=..., lease=fresh_output_lease)`
 requires existing storage, one exact ID, the exact destination allowlist and root
 lock. It never parses or changes source, consults current config/catalog/compiler,
-recompiles, executes recorded argv or reissues an artifact. Source/config/compiler
+recompiles, resolves current font resources, executes recorded argv or reissues an artifact. Source/config/compiler
 may legitimately have changed or disappeared since the old attempt.
 
 For a nonterminal record:
@@ -214,14 +227,25 @@ Immutable result reports, also attached to errors, separate `phase`, `gate_statu
 (true/false/unknown), raw observed `compiler_status`, full original bounded
 `attempted_invocations`, `source_commit`, `output_disposition`, `recovery_required`,
 `journal_id`, `source_journal_id`, reason and a currently observed hash when known.
-Compiler reports are consumed at the actual call boundary: a later artifact
+The optional `compile_report` retains the exact immutable compiler report from
+the actual call boundary, including its `resource_report`, on success or later
+publication failure. A captured ASCII resource report has an empty font tuple;
+`None` means evidence was not captured or is unavailable. Installed/private file
+identity, hash, size, face index and font names are original observations, not
+facts refreshed from a live registry. Private workspaces may already be deleted
+when the report is read. The compiler report's `safety_gate` describes its original
+compile outcome; `PublicationReport.gate_status`, reason and the final CLI status
+separately describe later safety/publication refusals. Reports are consumed at the actual call boundary: a later artifact
 safety error with an empty report cannot erase known compile zero/nonzero/signal
 or attempted invocations. Restart after durable launch intent without a durable
 outcome reports unknown, never false or zero. Recovery's full-detail
 `attempted_invocations` tuple is empty because argv/streams were not persisted,
 not because no attempt occurred. Its `compiler_invoked`/`compiler_status` derive
 from retained bounded purpose/start/returncode/lifecycle summaries. Recovery
-never fabricates missing invocation details. Source commit and output commit
+never fabricates missing invocation details. Historical CLI recovery and
+inventory entries also report `resource_details_available=false`: original font
+identities were not persisted, and live resources are never consulted to fill
+them in. Source commit and output commit
 are independent facts. `source_commit='not_applied'` means no successful bridge
 apply receipt was obtained, not proof that source bytes were untouched. A
 BaseException/SIGINT during source application may leave source recovery journals;
