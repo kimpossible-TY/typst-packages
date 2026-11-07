@@ -40,13 +40,17 @@ class UnsupportedCompileProfile(InputError):
 
 class CompileSafetyError(SafetyError):
     """Stale authority, unsafe capture, unreviewed compiler, or invalid artifact."""
+    def __init__(self, *args, report=None):
+        self.report = report if report is not None else CompileReport((), 'refused', None)
+        super().__init__(*args)
 
 
 class CompilerFailure(Exception):
     """A probe/compile failed, was cancelled, exceeded limits, or timed out."""
-    def __init__(self, reason, invocation=None):
+    def __init__(self, reason, invocation=None, *, report=None):
         self.reason = reason
         self.invocation = invocation
+        self.report = report if report is not None else CompileReport((), 'pending', None)
         super().__init__(reason)
 
 
@@ -68,6 +72,82 @@ class Invocation:
     returncode: int | None
     stdout: bytes
     stderr: bytes
+    launch_attempted: bool = False
+    started: bool | None = False
+    lifecycle: str = 'uncertain'
+    termination_reason: str | None = None
+
+
+@dataclass(frozen=True, slots=True)
+class CompilerFailureInfo:
+    reason: str
+    invocation: Invocation | None
+
+
+@dataclass(frozen=True, slots=True)
+class CompileReport:
+    """Output-only historical facts, never compiler or artifact authority."""
+    attempts: tuple[Invocation, ...]
+    safety_gate: str
+    compiler_failure: CompilerFailureInfo | None
+
+    @property
+    def attempted_invocations(self):
+        return self.attempts
+
+    @property
+    def compiler_invoked(self):
+        attempts = tuple(item for item in self.attempts if item.purpose == 'compile')
+        if any(item.started is True for item in attempts):
+            return True
+        return None if any(item.started is None for item in attempts) else False
+
+    @property
+    def compiler_status(self):
+        return next((item.returncode for item in reversed(self.attempts)
+                     if item.purpose == 'compile'), None)
+
+
+class _Attempt:
+    """Issuer-owned mutable state; only immutable snapshots leave the runner."""
+    def __init__(self, purpose, argv, cwd, environment, output, error):
+        self.metadata = purpose, tuple(argv), str(cwd), tuple(sorted(environment.items()))
+        self.output, self.error = output, error
+        self.started = None
+        self.lifecycle = 'uncertain'
+        self.returncode = None
+        self.termination_reason = None
+
+    def observe(self, process):
+        # Only an observed wait/poll status can establish exit/signal facts.
+        if process.returncode is not None:
+            self.returncode = process.returncode
+            self.lifecycle = 'signaled' if self.returncode < 0 else 'exited'
+
+    def snapshot(self):
+        return Invocation(*self.metadata, self.returncode, bytes(self.output), bytes(self.error),
+                          True, self.started, self.lifecycle, self.termination_reason)
+
+
+class _AttemptLedger:
+    def __init__(self):
+        self.attempts = []
+        self.compiler_failure = None
+
+    def begin(self, *args):
+        # There is at most one probe and one compile in this fixed protocol.
+        _demand(len(self.attempts) < 2, 'Compiler invocation count exceeded')
+        attempt = _Attempt(*args)
+        self.attempts.append(attempt)
+        return attempt
+
+    def note_failure(self, failure):
+        if isinstance(failure, CompilerFailure) and self.compiler_failure is None:
+            self.compiler_failure = CompilerFailureInfo(failure.reason, failure.invocation)
+
+    def snapshot(self, safety_gate):
+        return CompileReport(tuple(item.snapshot() for item in self.attempts),
+                             safety_gate, self.compiler_failure)
 
 
 @dataclass(frozen=True, slots=True)
@@ -274,14 +354,20 @@ def _kill(process):
     process.wait()
 
 
-def _run(argv, *, purpose, cwd, environment, deadline, cancel_event, check_workspace):
+def _run(argv, *, purpose, cwd, environment, deadline, cancel_event, check_workspace,
+         _ledger=None):
+    ledger = _AttemptLedger() if _ledger is None else _ledger
     output, error = bytearray(), bytearray()
     process = None
+    attempt = None
 
     def report():
+        if attempt is not None:
+            return attempt.snapshot()
+        # Legacy failure.invocation is retained for a prelaunch cancellation or
+        # deadline. It is deliberately NOT an attempted invocation in the ledger.
         return Invocation(purpose, tuple(argv), str(cwd), tuple(sorted(environment.items())),
-                          None if process is None else process.returncode,
-                          bytes(output), bytes(error))
+                          None, bytes(output), bytes(error))
 
     try:
         if cancel_event is not None and cancel_event.is_set():
@@ -289,14 +375,32 @@ def _run(argv, *, purpose, cwd, environment, deadline, cancel_event, check_works
         if time.monotonic() >= deadline:
             raise CompilerFailure('timeout', report())
         check_workspace()
-        process = subprocess.Popen(argv, cwd=cwd, env=environment, stdin=subprocess.DEVNULL,
-            stdout=subprocess.PIPE, stderr=subprocess.PIPE, shell=False, close_fds=True,
-            start_new_session=True, umask=0o077)
+        # Bound retained text independently of stream bounds. These values are
+        # generated internally, not a user-supplied command/environment facility.
+        _demand(len(argv) <= 64 and len(environment) <= 16
+                and all(type(item) is str and len(os.fsencode(item)) <= 8192
+                        for item in (*argv, str(cwd), *environment, *environment.values())),
+                'Compiler invocation metadata limit exceeded')
+        attempt = ledger.begin(purpose, argv, cwd, environment, output, error)
+        try:
+            process = subprocess.Popen(argv, cwd=cwd, env=environment, stdin=subprocess.DEVNULL,
+                stdout=subprocess.PIPE, stderr=subprocess.PIPE, shell=False, close_fds=True,
+                start_new_session=True, umask=0o077)
+        except (OSError, ValueError, subprocess.SubprocessError):
+            attempt.started = False
+            attempt.lifecycle = 'launch_failed'
+            attempt.termination_reason = 'launch failed'
+            raise
+        # An interruption before Popen returns cannot honestly establish whether
+        # a child started. Keep started=None and lifecycle=uncertain in that case.
+        attempt.started = True
+        attempt.lifecycle = 'running'
         with selectors.DefaultSelector() as selector:
             for stream, kind in ((process.stdout, 'stdout'), (process.stderr, 'stderr')):
                 os.set_blocking(stream.fileno(), False)
                 selector.register(stream, selectors.EVENT_READ, kind)
             while selector.get_map() or process.poll() is None:
+                attempt.observe(process)
                 if cancel_event is not None and cancel_event.is_set():
                     raise CompilerFailure('cancelled')
                 remaining = deadline - time.monotonic()
@@ -313,15 +417,36 @@ def _run(argv, *, purpose, cwd, environment, deadline, cancel_event, check_works
                             raise CompilerFailure(f'{key.data} byte limit exceeded')
                         target.extend(chunk)
         process.wait()
+        attempt.observe(process)
         check_workspace()
         if process.returncode != 0:
             raise CompilerFailure('signal' if process.returncode < 0 else 'nonzero exit', report())
         return report()
     except BaseException as failure:
+        if attempt is not None and attempt.termination_reason is None:
+            attempt.termination_reason = (failure.reason if isinstance(failure, CompilerFailure)
+                else 'interrupted' if isinstance(failure, KeyboardInterrupt)
+                else 'safety refusal' if isinstance(failure, CompileSafetyError)
+                else 'runtime failure')
+        cleanup_failure = None
         if process is not None:
-            _kill(process)
+            try:
+                _kill(process)
+            except BaseException as error_:
+                cleanup_failure = error_
+            finally:
+                attempt.observe(process)
+                if attempt.returncode is None:
+                    attempt.lifecycle = 'uncertain'
         if isinstance(failure, CompilerFailure):
             failure.invocation = report()
+        ledger.note_failure(failure)
+        if isinstance(failure, (CompilerFailure, CompileSafetyError, KeyboardInterrupt)):
+            failure.report = ledger.snapshot('refused' if isinstance(failure, CompileSafetyError)
+                                             else 'pending')
+        if cleanup_failure is not None and not isinstance(failure, KeyboardInterrupt):
+            raise CompileSafetyError('Compiler cleanup did not complete',
+                                     report=ledger.snapshot('refused')) from cleanup_failure
         raise
     finally:
         if process is not None:
@@ -399,6 +524,7 @@ class ClosedCoreCompileArtifact:
     dependency_paths: tuple[str, ...]
     probes: tuple[Invocation, ...]
     compilation: Invocation
+    report: CompileReport
     pdf_sha256: str
     _pdf_bytes: bytes = field(repr=False)
 
@@ -426,7 +552,7 @@ _ARTIFACTS = weakref.WeakKeyDictionary()
 
 def _artifact_values(artifact):
     def freeze(value):
-        if type(value) in (FileEvidence, Invocation):
+        if type(value) in (FileEvidence, Invocation, CompileReport, CompilerFailureInfo):
             return (type(value), tuple(freeze(getattr(value, field.name)) for field in fields(value)))
         if type(value) is tuple:
             return tuple(freeze(item) for item in value)
@@ -451,6 +577,21 @@ def assert_artifact_current(fix, artifact):
 
 
 def compile_committed_snapshot(fix, snapshot, *, profile, deadline_seconds=10.0, cancel_event=None):
+    """Compile with an issuer-owned attempt ledger, never reporting authority."""
+    ledger = _AttemptLedger()
+    try:
+        return _compile_committed_snapshot(fix, snapshot, profile=profile,
+            deadline_seconds=deadline_seconds, cancel_event=cancel_event, _ledger=ledger)
+    except BaseException as failure:
+        ledger.note_failure(failure)
+        if isinstance(failure, (CompilerFailure, CompileSafetyError, KeyboardInterrupt)):
+            failure.report = ledger.snapshot('refused' if isinstance(failure, CompileSafetyError)
+                                             else 'passed' if isinstance(failure, CompilerFailure)
+                                             else 'pending')
+        raise
+
+
+def _compile_committed_snapshot(fix, snapshot, *, profile, deadline_seconds, cancel_event, _ledger):
     """Compile retained bytes, with no public path/hash/args/environment bypass.
 
     profile has no default. This experiment deliberately rejects Unicode source
@@ -534,7 +675,7 @@ def compile_committed_snapshot(fix, snapshot, *, profile, deadline_seconds=10.0,
                 revalidate()
                 probe = _run((str(executable), '--version'), purpose='version-probe',
                     cwd=base / 'project', environment=environment, deadline=deadline,
-                    cancel_event=cancel_event, check_workspace=check_workspace)
+                    cancel_event=cancel_event, check_workspace=check_workspace, _ledger=_ledger)
                 last_invocation = probe
                 _demand(probe.stdout == record.version and not probe.stderr, 'Compiler version mismatch')
                 revalidate()
@@ -545,7 +686,7 @@ def compile_committed_snapshot(fix, snapshot, *, profile, deadline_seconds=10.0,
                     '--deps-format', 'zero', str(input_path), str(pdf))
                 compilation = _run(argv, purpose='compile', cwd=base / 'project',
                     environment=environment, deadline=deadline, cancel_event=cancel_event,
-                    check_workspace=check_workspace)
+                    check_workspace=check_workspace, _ledger=_ledger)
                 last_invocation = compilation
                 revalidate()
                 pdf_bytes, output = _capture(pdf, _MAX_PDF)
@@ -562,10 +703,16 @@ def compile_committed_snapshot(fix, snapshot, *, profile, deadline_seconds=10.0,
                     tuple(sorted((path, None if data is None else _hash(data))
                                  for path, data in snapshot.evidence.items())),
                     compiler, private_compiler, captured_input, output, dependencies,
-                    (snapshot.target,), (probe,), compilation, _hash(pdf_bytes), pdf_bytes)
+                    (snapshot.target,), (probe,), compilation, _ledger.snapshot('passed'),
+                    _hash(pdf_bytes), pdf_bytes)
                 artifact = object.__new__(ClosedCoreCompileArtifact)
                 for field, value in zip(fields(ClosedCoreCompileArtifact), values, strict=True):
                     object.__setattr__(artifact, field.name, value)
+            except BaseException as failure:
+                # Capture the original failure BEFORE a final safety guard can
+                # supersede it. Reports do not turn compiler status into gate status.
+                _ledger.note_failure(failure)
+                raise
             finally:
                 # A compiler failure never rolls back a valid committed source fix.
                 # Staleness/safety takes precedence over a compiler's exit status.

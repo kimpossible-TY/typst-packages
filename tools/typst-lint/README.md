@@ -416,9 +416,48 @@ evidence. It does not accept a user PDF destination or publish a file. Artifact
 access rechecks live authority; valid committed source fixes survive compiler
 failure or later staleness. Actual temporary native fixtures verify ASCII prose
 and math, including nested non-ASCII/space filenames. External-font capture,
-output publication, CLI compiler dispatch, editor version integration and general
-project writer coverage remain separate work. See
-[CLOSED_CORE_COMPILE_CONTRACT.md](CLOSED_CORE_COMPILE_CONTRACT.md).
+general output publication, CLI compiler dispatch, editor version integration and
+general project writer coverage remain separate work. The separately scoped
+internal publication session below is the only new output-writing composition.
+See [CLOSED_CORE_COMPILE_CONTRACT.md](CLOSED_CORE_COMPILE_CONTRACT.md).
+
+Compiler attempts retain immutable reporting separately from artifact authority.
+Actual probe/compile launch, exit/signal and uncertain interruption facts survive
+later safety refusals. A compiler exit of 0 is not overwritten by the gate's
+failure status, and a version probe is not reported as an actual compilation.
+
+## Internal single-PDF publication and recovery
+
+`closed_core_publish.py` adds a separately entered `PreparedPdfPublication`, not
+a CLI route. It requires its own explicit offline-output assertion in addition
+to the protected source session. It checks pending publication journals and
+captures the previous output or absence before source validation/application
+and compilation. It owns the compiler call and cannot accept an arbitrary
+previously generated artifact or bytes as publication authority.
+
+The destination is one explicit root-relative PDF on the same filesystem, with
+existing parents. Existing output may contain any bytes, but only the precisely
+supported ownership, ordinary modes and metadata are admitted. The Mac's automatic
+provenance metadata is retained and checked exactly, not stripped or ignored;
+other unsupported metadata refuses. Links, unsafe ancestors, protected-path
+collisions and later file replacements fail closed.
+
+A separate fixed sibling publication store retains bounded binary backups,
+stages and durable state records. After a visible destination replacement,
+failures use guarded restoration or report recovery required; they never undo
+valid committed source fixes or overwrite later output edits. An uncertain final
+completion acknowledgment is not a successful build. Explicit output-only
+recovery is independent of later source/config/compiler changes, and terminal
+history is not a new observation of a user's current PDF.
+
+Read-only publication inventory is separate from its writer/recovery paths.
+The new combined session strengthens observed terminal records before treating
+them as nonblocking. Existing standalone offline CLI `fix`, `journal-status` and
+`recover` do not inspect publication journals, and ordinary CLI `compile` remains
+inert. Neither this internal ASCII profile nor SIGKILL/restart tests establish
+Unicode/system-font fidelity, universal power-loss durability, editor exclusion
+or all-project enforcement. See
+[PDF_PUBLICATION_CONTRACT.md](PDF_PUBLICATION_CONTRACT.md).
 
 ## Bounded prose footnote boundaries
 

@@ -133,6 +133,62 @@ probe/compile nonzero/signal/timeout/cancellation/stream failures use
 `CompilerFailure` with invocation metadata when available. Safety drift takes
 precedence over an otherwise successful or failed compiler exit.
 
+## Attempt reporting, separate from authority
+
+The compiler owns a private attempt ledger. `CompilerFailure.report`,
+`CompileSafetyError.report`, and a successful artifact's `report` expose frozen
+`CompileReport` snapshots. Their `attempts` tuple (also named
+`attempted_invocations`) contains each attempted version probe and compile in
+order. A prelaunch deadline, cancellation, profile/admission refusal, or safety
+failure does not create an attempt. A successful version probe alone never means
+the compile was invoked. Reports are bounded historical output, not an input to
+compiler trust, source admission, snapshot verification, or artifact issuance.
+Constructing or copying a report grants no authority. The artifact's report and
+all nested reporting fields participate in its existing identity/content seal.
+
+Each immutable `Invocation` retains the existing purpose, argv, cwd, environment,
+raw returncode and bounded stdout/stderr, plus:
+
+- `launch_attempted`: true once recorded immediately before calling `Popen`.
+- `started`: true only after `Popen` returns a process, false for a known launch
+  failure, or `None` if interruption leaves launch outcome uncertain.
+- `lifecycle`: `launch_failed`, `running`, `exited`, `signaled`, or `uncertain`.
+  Exit/signal states require an observed actual process returncode.
+- `termination_reason`: the cancellation, timeout, stream-limit, nonzero/signal,
+  interruption, launch, runtime, or in-run safety reason, when one occurred.
+  A later safety refusal does not rewrite a successfully exited attempt's reason.
+
+At most two attempts are retained. Each argv has at most 64 strings, the private
+environment at most 16 pairs, and each retained text item at most 8192 encoded
+bytes. Output buffers retain the existing 64 KiB per-stream bound. Immutable
+snapshots do not hold process objects, mutable buffers, exceptions/tracebacks,
+callbacks, bridge references, or authority tokens.
+
+`CompileReport.compiler_invoked` concerns only actual compilation: true if a
+compile is known to have started, false if none started (including a known launch
+failure), and `None` for an uncertain compile launch. `compiler_status` is only
+the observed raw compile returncode, or `None` when none was observed. In
+particular, compiler status 0 remains 0 when a later safety check refuses output;
+a gate result is never substituted for that process status.
+
+The independent `safety_gate` is `passed` after compiler control flow completes
+its safety checks, `refused` for a safety refusal, or `pending` when interrupted
+work did not complete the gate. `passed` does not mean a successful compile or an
+issued artifact. `compiler_failure`, when present, is frozen
+`CompilerFailureInfo(reason, invocation)` retaining the original failure before
+a final guard can supersede it. Existing `CompilerFailure.reason` and
+`CompilerFailure.invocation` remain available. A final guard preserves all probe
+and compile attempts, even when it supersedes a compiler failure or output
+capture/artifact issuance. No artifact is issued on refusal.
+
+Started-process failure and `KeyboardInterrupt` cleanup kill/reap the owned
+process group and retain any observed exit/signal status. An interrupted or
+failed cleanup never invents a returncode or claims a known process did not
+start. Interruption during `Popen` may leave no process handle, so reporting is
+explicitly uncertain. Process death (including killing this Python process with
+SIGKILL) cannot promise a final in-memory report or postmortem facts. Durable
+restart/publication recovery is outside this ledger's scope.
+
 Deterministic adapter tests run without a native Typst binary. Real bridge tests
 require the existing official syntax adapter. Real pinned Mac compiler tests are
 explicitly opt-in; Linux must not silently substitute another compiler or claim
