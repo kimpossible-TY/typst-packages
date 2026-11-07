@@ -22,7 +22,7 @@ The linter SHALL read `.typst-lint.toml` at an explicitly selected consumer root
 - **THEN** the run reports a configuration failure with the invalid value and does not claim a clean lint result.
 
 ### Requirement: Scope inputs deterministically
-The linter SHALL select files using root-relative `include` and `exclude` globs, with excludes taking precedence. Default include SHALL be `**/*.typ`. Excluded files SHALL produce no style diagnostics. An optional entrypoint SHALL bound static book/include analysis; an optional read-only catalog path SHALL enable catalog lookups. No input, catalog, or package SHALL be modified or fetched.
+The linter SHALL use root-relative include/exclude globs with excludes winning and default `**/*.typ`. Excluded files SHALL emit no style findings. Optional entrypoint and read-only catalog paths SHALL bound static analysis. Check/dry-run SHALL NOT write inputs; fix MAY write only selected source through `typst-lint-autofix`. Lint analysis SHALL NOT modify or fetch catalogs/packages.
 
 #### Scenario: Generated sources excluded
 - **WHEN** include is `**/*.typ`, exclude contains `generated/**`, and both `chapter.typ` and `generated/chapter.typ` contain the same violation
@@ -91,7 +91,7 @@ The linter SHALL distinguish prose, inline/display math, code, strings, comments
 - **THEN** neither produces a script diagnostic, but subsequent actual math `$X_j$` does.
 
 ### Requirement: Bound conclusions to static evidence
-Checks SHALL resolve only statically known bindings, literal arguments, and configured local files. Ambiguous aliases, dynamic imports/labels, unresolved wrappers, and unavailable catalog evidence SHALL be listed as skipped checks with reasons, rather than style findings. Syntactically malformed selected input SHALL be a parse failure. A clean style result SHALL NOT assert compilation success, catalog freshness, or visual correctness.
+Checks SHALL use static bindings, literals and configured local files. Unresolved aliases/imports/targets/wrappers SHALL be reported as skipped with reasons. Malformed input SHALL fail parsing, except the declared scoped dictionary-call repair whose candidate MUST reparse successfully. Clean style results SHALL NOT assert compilation, catalog freshness or visual correctness.
 
 #### Scenario: Shadowed helper name
 - **WHEN** a file defines its own unrelated `#let footnote(body) = body`
