@@ -74,8 +74,9 @@ def matches(path: str, glob: str) -> bool:
     return match(0, 0)
 
 
-def load_rules(path=CATALOG):
-    raw = path.read_bytes()
+def parse_rules(raw: bytes):
+    """Parse retained immutable catalog bytes without filesystem access."""
+    require(type(raw) is bytes, 'Rule catalog must be immutable bytes')
     data = json.loads(raw)
     require(isinstance(data, dict) and type(data.get('schema')) is int and data['schema'] == 1, 'Invalid rule catalog schema')
     require(data.get('version') == VERSION, 'Rule catalog version mismatch')
@@ -94,6 +95,10 @@ def load_rules(path=CATALOG):
             require(isinstance(rule.get(key), str) and bool(rule[key].strip()), f'Missing {key}: {rid}')
     require(bool(ids), 'Empty rule catalog')
     return data, digest(raw)
+
+
+def load_rules(path=CATALOG):
+    return parse_rules(path.read_bytes())
 
 
 @dataclass(frozen=True)

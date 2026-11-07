@@ -18,13 +18,13 @@ class ScriptResult:
     suppressed: tuple[Diagnostic, ...] = ()
 
 
-def analyze(tree, path, *, _verify=True):
+def analyze(tree, path, *, _verify=True, catalog=None):
     """No bindings/import execution; scoped directives filter exact operands."""
     source, nodes = tree.source, tree.nodes
     if nodes[0].errors:
         errors = tuple((n.start, n.end) for n in nodes if n.kind == 'Error')
         return ScriptResult(skips=('Malformed Typst syntax; no repair proposed',), parse_errors=errors or ((0, len(source)),))
-    catalog = load_rules()[0]['rules']
+    catalog = load_rules()[0]['rules'] if catalog is None else catalog
     scopes = resolve(tree, {r['id'] for r in catalog})
     rule = next(r for r in catalog if r['id'] == RULE_ID)
     findings, operands, skips, suppressed = [], [], [], []
@@ -65,7 +65,7 @@ def analyze(tree, path, *, _verify=True):
     if edits and _verify:
         candidate = plan(source, edits).candidate()
         checked = parse(candidate, tree.mode)
-        final = analyze(checked, path, _verify=False)
+        final = analyze(checked, path, _verify=False, catalog=catalog)
         if checked.nodes[0].errors or final.edits or final.diagnostics or len(final.suppressed) != len(suppressed):
             return ScriptResult(tuple(findings), skips=tuple(skips)+('Candidate failed parse/idempotence verification; no edits proposed',), suppressed=tuple(suppressed))
     return ScriptResult(tuple(findings), edits, tuple(skips), suppressed=tuple(suppressed))

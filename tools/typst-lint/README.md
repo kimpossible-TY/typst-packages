@@ -117,6 +117,41 @@ that is its package-contract result, not a facade capability or per-rule
 coverage claim. No local file is promoted merely by its spelling. See
 [FACADE_PROVENANCE_CONTRACT.md](FACADE_PROVENANCE_CONTRACT.md).
 
+## Internal protected core fixture bridge
+
+`protected_fix.py` connects actual parser/script analysis to the existing
+protected transaction for a deliberately closed input language. It is an
+internal API, not a public launcher route or an all-project writer. Ordinary
+`check`, dry-run, `fix` and `compile` remain read-only with exit 2.
+
+The profile requires one literal `.typ` target in an explicit core-only config,
+with no broader globs, excludes, ignores, packages or catalogs. An optional
+entrypoint must be that target. A recursive official-AST grammar accepts only
+bounded literal prose and ordinary mathematical grouping/scripts; imports,
+calls, code, resources, comments, directives and unknown syntax refuse. The
+actual script rule executes. Each of the other 14 core rules has an explicit
+source-derived inapplicability proof, re-established for every candidate. This
+does not change the global 33-rule PARTIAL audit status.
+
+The caller must supply a genuine offline-exclusive assertion and an existing
+private journal directory. The API never infers editor safety or creates that
+assertion. Config and the exact reviewed full rule catalog are immutable
+transaction evidence; callbacks parse their retained bytes without rereading
+inputs. All 15 required core IDs are fixed in implementation. The transaction's
+actual one-pass script repair must agree with an independent source-origin
+convergence replay, preserve every original byte and finish with zero findings.
+Only that same live session's independently verified candidate can be applied.
+
+Source/evidence, metadata and journal reads have explicit bounds, including
+revalidation, staging and recovery. Existing journals retain schema 1; an
+oversized historical journal refuses rather than truncating, with deliberately
+larger explicit limits available for recovery. This is process-crash recovery,
+not a claim of power-loss durability, arbitrary editor exclusion or an immutable
+compiler snapshot. No user project, installed package or build route is enabled.
+See [CLOSED_CORE_CONTRACT.md](CLOSED_CORE_CONTRACT.md),
+[PROTECTED_CORE_CONTRACT.md](PROTECTED_CORE_CONTRACT.md) and
+[TRANSACTION_BOUNDS_CONTRACT.md](TRANSACTION_BOUNDS_CONTRACT.md).
+
 ## Consumer configuration
 
 Only `.typst-lint.toml` in the explicit root is read. There is no ancestor

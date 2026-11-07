@@ -209,4 +209,13 @@ The design follow-up is reviewed and merged first. Groups 2–7 are authorized i
 - [x] 26.2 Preserve named/renamed import, alias, shadowing and wildcard-refusal semantics in source-bound resolver evidence, including fresh candidate graph rebasing.
 - [x] 26.3 Capture required relative dependencies before the single explicit package load in both packs, using only captured bytes for transitive package requests and preserving safety/resource refusals.
 - [x] 26.4 Complete independent adversarial/source review, 814 Python tests with rendering enabled (813 passed, one filesystem setuid skip), four Rust tests, formatting/Clippy, strict OpenSpec and whitespace checks. Frozen audit: 232 fixtures, 297 actual CLI calls, 62 verified candidate reanalyses, 33 PARTIAL / 0 NOT_IMPLEMENTED / 0 COMPLETE, with zero invariant issues. Production writes, compilation and rollout remain closed.
-- [ ] 26.5 Publish this checkpoint and verify both Python 3.11/3.15 jobs for the exact draft PR head. Keep PR metadata, merge and rollout unchanged.
+- [x] 26.5 Publish 7027db4e1435e0ec31d3658cd0356dbef8bf7e0a and verify both Python 3.11/3.15 jobs for exact head CI run 42362845098. PR metadata, merge and rollout remain unchanged.
+
+
+## 27. Bridge a source-certified core input to protected fixes
+
+- [x] 27.1 Bound transaction source/evidence capture, metadata, journal reads, revalidation and recovery while preserving schema-1 conflict detection and explicit offline exclusivity.
+- [x] 27.2 Certify a closed, recursively checked plain-prose/math grammar with exact source/path identity. Evaluate the script rule and prove the other 14 required core rules structurally inapplicable for each admitted input, without relabeling general backend coverage.
+- [x] 27.3 Connect immutable explicit singleton config and reviewed rule-catalog bytes to actual parser/script analysis and the existing protected transaction. Require genuine offline-exclusive input, independently matched convergence and final zero findings; keep ordinary CLI routes unwired.
+- [x] 27.4 Complete independent exact-source review and real temporary replacement/race/SIGKILL/recovery evidence. Full local suite: 892 Python tests with rendering enabled (891 passed, one filesystem setuid skip), four Rust tests, formatting/Clippy, strict OpenSpec and whitespace checks. Frozen CLI audit: 232 fixtures, 297 calls, 62 candidate reanalyses, all 33 PARTIAL and zero invariant issues. Internal per-input completeness does not change global coverage or enable public CLI writes/compilation.
+- [ ] 27.5 Publish the verified internal protected-core checkpoint and verify both Python 3.11/3.15 jobs for its exact draft PR head, including native Linux metadata execution. Keep PR metadata, merge, consumer rollout and compiler dispatch unchanged.
