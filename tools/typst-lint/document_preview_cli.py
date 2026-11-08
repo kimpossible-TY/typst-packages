@@ -236,6 +236,7 @@ def main(arguments=None, *, gate=False):
     phase = 'input'
     result = None
     discovery_completed = False
+    withheld = None
     starts = document_preview_compile.PreviewCompilerStarts()
     profile = ('conditional-gaps-punctuation-and-spacers' if args.conditional_punctuation and args.conditional_spacers else
                'conditional-gaps-and-spacers' if args.conditional_spacers else
@@ -499,6 +500,20 @@ def main(arguments=None, *, gate=False):
             result['source_apply_gate'] = dict(eligible=False, blockers=['global_rule_coverage_incomplete',
                 'dependency_closure_unproved', 'live_source_freshness_unproved',
                 'protected_source_transaction_unavailable', 'no_verified_candidate_edits']
+                + (['partial_preview_withheld_files'] if withheld else []))
+        if partial_requested and withheld is not None and 'withheld_sources' not in result:
+            result['global_coverage_complete'] = False
+            result['withheld_sources'] = describe_withheld(withheld, catalog['rules'])
+            result['uninspected_rule_ids'] = [rule['id'] for rule in catalog['rules']]
+            if args.withhold_source:
+                result['explicit_source_withholding'] = True
+            if args.partial_unsupported_preview:
+                result['partial_unsupported_preview'] = True
+            if args.partial_unproven_binding_preview:
+                result['partial_unproven_binding_preview'] = True
+            result['source_apply_gate'] = dict(eligible=False, blockers=['global_rule_coverage_incomplete',
+                'dependency_closure_unproved', 'live_source_freshness_unproved',
+                'protected_source_transaction_unavailable', 'preview_failed']
                 + (['partial_preview_withheld_files'] if withheld else []))
         if isinstance(error, runtime.CompilerFailure) and error.invocation is not None:
             starts.observe(error.invocation)

@@ -327,9 +327,11 @@ the selected standard/G/P/S, continuation and adjacent-punctuation sequence.
 It replays the sequence, reissues an in-memory intermediate graph, and checks
 the final source map and captured package routes before private compilation.
 The JSON report includes per-stage hashes and changed byte spans. Explicitly
-withheld sources stay unchanged in both stages. A highlight edit in the same
-source as a facade-proven footnote is currently refused, as is a change to
-another finding's route or a captured footnote facade. `--review-edits` is not
+withheld sources stay unchanged in both stages. A highlight edit in a source
+with a facade-proven footnote is allowed only when its edits do not touch the
+footnote call, its final offset is mapped, and its facade is rechecked. A
+change to another finding's route or a captured footnote facade is refused.
+`--review-edits` is not
 available with this composed profile; these checks do not grant source writes.
 Adding `--conditional-punctuation` appends the separate conditional prose
 footnote spacing stage; it requires `--conditional-gaps`.

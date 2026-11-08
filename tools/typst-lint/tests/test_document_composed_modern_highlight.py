@@ -2,6 +2,8 @@
 from pathlib import Path
 import json
 import os
+import contextlib
+import io
 import subprocess
 import sys
 import unittest
@@ -13,6 +15,7 @@ import document_composed_modern_highlight as composed
 import document_sequence_preview as sequence
 import document_footnote_evidence as footnote
 import document_preview_compile as compiler
+import document_preview_cli
 import test_document_intermediate_context as fixtures
 from typst_lint import SafetyError, digest
 
@@ -115,19 +118,43 @@ class ComposedModernHighlightTests(unittest.TestCase):
         with self.assertRaisesRegex(SafetyError, 'another finding route source'):
             composed.stage(proof, [])
 
-    def test_highlight_in_facade_footnote_source_is_withheld(self):
+    def test_highlights_before_after_and_between_facade_footnotes_are_mapped(self):
+        fixture = self.fixture.fixture
+        note = b'#block[$ x #dots_space #footnote[Note] $]'
+        other = b'#block[$ y #dots_space #footnote[Second] $]'
+        highlight = b'#highlighted[Text $x$ end.]'
+        for body, count in ((highlight + b'\n' + note, 1), (note + b'\n' + highlight, 1),
+                            (note + b'\n' + highlight + b'\n' + other, 2)):
+            with self.subTest(body=body):
+                _, analyzer, snapshot, _ = fixture.issue(fixtures.fixtures.fixtures.IMPORT + body)
+                proof = footnote.PreviewFootnoteEvidence(analyzer._session, snapshot)
+                item = analyzer._session._context.source_for('main.typ')
+                profile = 'conditional-gaps-and-spacers'
+                record = sequence.preview(item.tree, item.path, fixtures.load_rules()[0]['rules'],
+                                          profile=profile, footnote_evidence=proof)
+                self.assertTrue(any(step.get('conditional_footnote_calls') for step in record['steps']))
+                final, report, _ = composed.stage(proof, [record], profile=profile, sequence_facade_evidence=True)
+                self.assertEqual(report['candidate_count'], 1)
+                self.assertEqual(len(proof.candidate_calls('main.typ', final['project', 'main.typ']).calls), count)
+                self.assertFalse(report['modern_withheld_sources'])
+
+    def test_overlapping_footnote_call_withholds_only_that_modern_source(self):
         fixture = self.fixture.fixture
         source = fixtures.fixtures.fixtures.IMPORT + (b'#highlighted[Text $x$ end.]\n'
                  b'#block[$ x #dots_space #footnote[Note] $]')
         _, analyzer, snapshot, _ = fixture.issue(source)
         proof = footnote.PreviewFootnoteEvidence(analyzer._session, snapshot)
-        catalog = fixtures.load_rules()[0]['rules']
         item = analyzer._session._context.source_for('main.typ')
         profile = 'conditional-gaps-and-spacers'
-        record = sequence.preview(item.tree, item.path, catalog, profile=profile, footnote_evidence=proof)
-        self.assertTrue(any(step.get('conditional_footnote_calls') for step in record['steps']))
-        with self.assertRaisesRegex(SafetyError, 'facade-footnote source'):
-            composed.stage(proof, [record], profile=profile, sequence_facade_evidence=True)
+        record = sequence.preview(item.tree, item.path, fixtures.load_rules()[0]['rules'],
+                                  profile=profile, footnote_evidence=proof)
+        with patch.object(sequence, '_map_conditional_calls_through_edits',
+                          side_effect=sequence.ConditionalFootnoteEditOverlap('fixture overlap')):
+            final, report, view = composed.stage(proof, [record], profile=profile, sequence_facade_evidence=True)
+        self.assertEqual(final['project', 'main.typ'], view.sources['project', 'main.typ'])
+        self.assertEqual(report['candidate_count'], 0)
+        self.assertEqual(report['status'], 'INCOMPLETE')
+        self.assertEqual(report['modern_withheld_sources'][0]['reason_code'], 'conditional-footnote-overlap')
 
     def test_highlight_changing_another_footnote_facade_is_withheld(self):
         fixture = self.fixture.fixture
@@ -145,6 +172,47 @@ class ComposedModernHighlightTests(unittest.TestCase):
         self.assertTrue(any(step.get('conditional_footnote_calls') for row in records for step in row['steps']))
         with self.assertRaisesRegex(SafetyError, 'facade changes'):
             composed.stage(proof, records, profile=profile, sequence_facade_evidence=True)
+
+    def test_facade_offsets_follow_continuation_before_other_file_highlight(self):
+        fixture = self.fixture.fixture
+        (fixture.project / 'styles.typ').write_bytes(fixtures.fixtures.fixtures.IMPORT)
+        child = b'#import "@local/text-utils:0.1.2": highlighted\n#highlighted[Text $y$ end.]'
+        (fixture.project / 'child.typ').write_bytes(child)
+        source = (b'#include "child.typ"\n#import "styles.typ": *\n'
+                  b'#block[This solution holds.\n    We continue.]\n'
+                  b'#block[$ x #dots_space #footnote[Note] $]')
+        _, analyzer, snapshot, _ = fixture.issue(source)
+        proof = footnote.PreviewFootnoteEvidence(analyzer._session, snapshot)
+        catalog = fixtures.load_rules()[0]['rules']
+        profile = 'conditional-gaps-and-spacers'
+        records = [record for item in analyzer._session._context.sources
+                   if (record := sequence.preview(item.tree, item.path, catalog, profile=profile,
+                       footnote_evidence=proof, conditional_continuations=True)) is not None]
+        self.assertTrue(any(step.get('conditional_footnote_calls') for row in records for step in row['steps']))
+        final, report, _ = composed.stage(proof, records, profile=profile, sequence_facade_evidence=True,
+                                           conditional_continuations=True)
+        self.assertEqual(report['candidate_count'], 1)
+        self.assertNotIn(b'#dots_space', final['project', 'main.typ'])
+        self.assertNotEqual(final['project', 'child.typ'], child)
+
+    def test_stage_failure_keeps_explicit_withheld_source_report(self):
+        fixture = self.fixture.fixture
+        child = fixtures.fixtures.fixtures.IMPORT + b'#highlighted[Text $x$ end.]'
+        (fixture.project / 'child.typ').write_bytes(child)
+        _, _, snapshot, _ = fixture.issue(b'#include "child.typ"\n')
+        manifest = fixture.project.parent / 'combined-manifest.json'
+        manifest.write_text(json.dumps(dict(roots=dict(snapshot.roots), files=[
+            dict(root=x.request.root, path=x.request.path, role=x.request.role) for x in snapshot.files])))
+        output = io.StringIO()
+        with patch.object(document_preview_cli.document_preview_compile, 'compile_preview',
+                          side_effect=SafetyError('fixture stage failure')), contextlib.redirect_stdout(output):
+            document_preview_cli.main(['--root', str(fixture.project), '--entrypoint', 'main.typ',
+                '--manifest', str(manifest), '--format', 'json', '--compose-modern-highlights',
+                '--withhold-source', 'main.typ'])
+        result = json.loads(output.getvalue())
+        self.assertEqual(result['error'], 'fixture stage failure')
+        self.assertEqual([row['path'] for row in result['withheld_sources']], ['main.typ'])
+        self.assertFalse(result['source_apply_gate']['eligible'] or result['pdf_generated'])
 
     def test_fully_withheld_cli_reports_sources_and_disabled_gate(self):
         proof, _, main, child = self.fixture.setup_capture()

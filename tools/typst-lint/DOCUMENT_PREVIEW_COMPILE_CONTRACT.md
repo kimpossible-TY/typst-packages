@@ -61,7 +61,9 @@ An explicitly withheld or recognized unsupported source remains unchanged in
 both stages. If the modern stage would change another finding's route source or
 an existing conditional-footnote facade, the complete preview is refused.
 Modern edits in a source with facade-proven conditional footnote calls are
-currently refused because their final offsets are not reissued. When both
+admitted only when they do not touch a call's complete span; call offsets are
+mapped through subsequent edits and the final facade binding is rechecked.
+An overlapping modern stage is withheld for that source. When both
 stages have no verified edits, compilation is refused and the report retains
 withheld sources, incomplete evidence and an ineligible source-apply gate.
 The option cannot be combined with the modern-only option or `--review-edits`.

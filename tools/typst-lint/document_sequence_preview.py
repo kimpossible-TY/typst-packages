@@ -4,7 +4,7 @@ Every stage uses the previous candidate bytes; this is not a write transaction
 or a compiler snapshot. A failure withholds the complete per-source sequence.
 """
 from document_display import RULE_ID as GAP, STANDALONE, analyze_all
-from document_gap_preview import _scopes, preview as preview_gap
+from document_gap_preview import _MappedEdits, _scopes, preview as preview_gap
 from document_standalone_preview import preview as preview_standalone
 from edit_plan import Edit, plan
 from array import array
@@ -25,6 +25,10 @@ _CONDITIONAL = 'conditional-gaps'
 _PUNCTUATION = 'conditional-gaps-and-punctuation'
 _SPACERS = 'conditional-gaps-and-spacers'
 _PUNCTUATION_SPACERS = 'conditional-gaps-punctuation-and-spacers'
+
+
+class ConditionalFootnoteEditOverlap(SafetyError):
+    """A verified later edit touches a conditionally bound footnote call."""
 _VERIFICATIONS = {_STANDARD: 'hash-chained-parse-and-three-rule-reanalysis',
                   _CONDITIONAL: 'hash-chained-three-rule-and-conditional-gap-reanalysis',
                   _PUNCTUATION: 'hash-chained-three-rule-and-conditional-gap-punctuation-reanalysis',
@@ -780,6 +784,79 @@ def _replay_expected(tree, record, expected, *, profile=_STANDARD, conditional_c
     return current
 
 
+def _final_conditional_footnote_calls(tree, record):
+    """Map validated stage-local calls through later edits to final offsets.
+
+    Caller must first rederive/validate the whole record. A later edit that
+    touches any part of a call is refused rather than guessing its identity.
+    """
+    if not any(step.get('conditional_footnote_calls') for step in record['steps']):
+        return ()
+    import import_graph
+    current, active = tree.source, []
+    for step in record['steps']:
+        if digest(current) != step['baseline_sha256']:
+            raise SafetyError('Conditional footnote offset baseline changed')
+        edits = tuple(Edit(row['start'], row['end'], row['replacement'].encode('utf-8'))
+                      for row in step['edits'])
+        proposal = plan(current, edits)
+        if proposal.deferred or len(proposal.edits) != len(edits):
+            raise SafetyError('Conditional footnote offset edits conflict')
+        mapper = _MappedEdits(proposal.edits)
+        moved = []
+        for start, end, raw in active:
+            if any((edit.start == edit.end and start <= edit.start <= end)
+                   or (edit.start < end and edit.end > start) for edit in proposal.edits):
+                raise ConditionalFootnoteEditOverlap('A later edit touches a conditional footnote call')
+            moved.append((mapper.mapped(start), mapper.mapped(end), raw))
+        current = proposal.candidate()
+        if digest(current) != step['candidate_sha256']:
+            raise SafetyError('Conditional footnote offset candidate changed')
+        for start, end, raw in moved:
+            if current[start:end] != raw:
+                raise SafetyError('A conditional footnote call changed during offset mapping')
+        active = moved
+        offsets = step.get('conditional_footnote_calls', ())
+        if offsets:
+            parsed = parse(current, tree.mode)
+            calls = {}
+            for index, node in enumerate(parsed.nodes):
+                if node.kind != 'FuncCall' or node.start <= 0 or current[node.start - 1:node.start] != b'#':
+                    continue
+                parts = import_graph.significant(parsed, index)
+                if (len(parts) == 2 and parsed.nodes[parts[0]].kind == 'Ident'
+                        and import_graph.raw(parsed, parts[0]) == b'footnote'):
+                    calls.setdefault(node.start - 1, []).append(node)
+            for offset in offsets:
+                if type(offset) is not int or len(calls.get(offset, ())) != 1:
+                    raise SafetyError('Conditional footnote stage has an invalid call anchor')
+                node = calls[offset][0]
+                active.append((offset, node.end, current[offset:node.end]))
+    if digest(current) != record['candidate_sha256']:
+        raise SafetyError('Conditional footnote final source changed')
+    starts = tuple(start for start, _, _ in active)
+    if len(set(starts)) != len(starts):
+        raise SafetyError('Conditional footnote final call anchors overlap')
+    return starts
+
+
+def _map_conditional_calls_through_edits(tree, offsets, edits):
+    """Map exact calls through one already-selected, conflict-checked edit set."""
+    proposal = plan(tree.source, edits)
+    if proposal.deferred or len(proposal.edits) != len(edits):
+        raise SafetyError('Conditional footnote mapping edits conflict')
+    candidate = proposal.candidate()
+    baseline = digest(tree.source)
+    final = digest(candidate)
+    record = dict(candidate_sha256=final, steps=[
+        dict(baseline_sha256=baseline, candidate_sha256=baseline, edits=[],
+             conditional_footnote_calls=list(offsets)),
+        dict(baseline_sha256=baseline, candidate_sha256=final,
+             edits=[dict(start=edit.start, end=edit.end, replacement=edit.replacement.decode('utf-8'))
+                    for edit in proposal.edits])])
+    return _final_conditional_footnote_calls(tree, record)
+
+
 def explicit_withheld_record(source):
     """Describe a caller-selected whole source; this is not a rule finding."""
     return dict(path=source.path, baseline_sha256=digest(source.source), candidate_sha256=None,
@@ -877,8 +954,8 @@ def replay_document(context, records, catalog, *, profile=_STANDARD, footnote_ev
             candidates[source.path] = _replay_expected(source.tree, record, expected, profile=profile,
                                                        conditional_continuations=conditional_continuations,
                                                        conditional_adjacent_punctuation=conditional_adjacent_punctuation)
-    conditional_calls = {record['path']: tuple(offset for step in record['steps']
-                         for offset in step.get('conditional_footnote_calls', ())) for record in records}
+    conditional_calls = {record['path']: _final_conditional_footnote_calls(
+                         context.source_for(record['path']).tree, record) for record in records}
     conditional_calls = {path: offsets for path, offsets in conditional_calls.items() if offsets}
     if conditional_calls:
         if footnote_evidence is None:

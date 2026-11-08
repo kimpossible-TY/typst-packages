@@ -37,11 +37,16 @@ def stage(proof, records, *, profile='standard', partial_unsupported=False, with
     analyzer = modern.ModernHighlightAnalyzer(session, scoped_callbacks=True)
     diagnostics, proposed = highlight.preview_all(analyzer, return_evidence=True)
     modern_evidence._verify_routes(analyzer, view.sources, diagnostics)
+    conditional_calls = {record['path']: sequence._final_conditional_footnote_calls(
+                         proof._session._context.source_for(record['path']).tree, record)
+                         for record in stable_records}
+    conditional_calls = {path: offsets for path, offsets in conditional_calls.items() if offsets}
     excluded = set(explicit_withheld_sources)
     excluded.update(row['path'] for row in (stable_withheld or ()))
     baseline = footnote._valid(proof)
     final = dict(view.sources)
     edits_by_path = {}
+    modern_withheld = []
     for row in proposed['by_file']:
         path = row['path']
         if path in excluded or row['verification'] == 'withheld':
@@ -58,6 +63,14 @@ def stage(proof, records, *, profile='standard', partial_unsupported=False, with
         after = proposal.candidate()
         if digest(before) != row['baseline_sha256'] or digest(after) != row['candidate_sha256']:
             raise SafetyError('Composed modern highlight hash chain changed')
+        if path in conditional_calls:
+            try:
+                conditional_calls[path] = sequence._map_conditional_calls_through_edits(
+                    view.context.source_for(path).tree, conditional_calls[path], proposal.edits)
+            except sequence.ConditionalFootnoteEditOverlap:
+                modern_withheld.append(dict(path=path, reason_code='conditional-footnote-overlap',
+                    reason='A modern highlight edit touches a conditionally bound footnote call'))
+                continue
         final[key] = after
         edits_by_path[path] = edits
 
@@ -72,12 +85,7 @@ def stage(proof, records, *, profile='standard', partial_unsupported=False, with
             if (dependencies - {row['path']}) & edits_by_path.keys():
                 raise SafetyError('A composed highlight changes another finding route source')
 
-    conditional_calls = {record['path']: tuple(offset for step in record['steps']
-                         for offset in step.get('conditional_footnote_calls', ())) for record in stable_records}
-    conditional_calls = {path: offsets for path, offsets in conditional_calls.items() if offsets}
     if conditional_calls:
-        if conditional_calls.keys() & edits_by_path.keys():
-            raise SafetyError('Composed highlights in a conditional facade-footnote source are unsupported')
         project = {source.path: final['project', source.path] for source in view.context.sources}
         footnote.PreviewFootnoteEvidence.validate_staged_facades(proof, project, conditional_calls)
 
@@ -111,18 +119,20 @@ def stage(proof, records, *, profile='standard', partial_unsupported=False, with
     accepted = sum(map(len, edits_by_path.values()))
     unpreviewed = proposed['diagnostics_count'] - accepted
     result = dict(status='INCOMPLETE' if unpreviewed or proposed['unresolved_reasons_count']
-                  or proposed['withheld_source_count'] or excluded else 'CONDITIONAL',
+                  or proposed['withheld_source_count'] or modern_withheld or excluded else 'CONDITIONAL',
                   source_count=len(changed), candidate_count=accepted, sources=changed,
                   unpreviewed_diagnostics=unpreviewed,
                   unresolved_reasons_count=proposed['unresolved_reasons_count'],
-                  withheld_source_count=proposed['withheld_source_count'],
+                  withheld_source_count=proposed['withheld_source_count'] + len(modern_withheld),
+                  modern_withheld_sources=modern_withheld,
                   sequence_withheld_source_count=len(excluded),
                   runtime_binding_proved=False, execution_proved=False, coverage_complete=False,
                   render_equivalence_proved=False, edit_permission=False, compiler_permission=False,
                   staged_workspace_proved=False)
     encoded = [json.dumps(x, ensure_ascii=False, sort_keys=True, indent=2) for x in (diagnostics, proposed, result)]
     size = sum(len(raw.encode('utf-8')) + 2 * raw.count('\n') for raw in encoded)
-    stage_items = sum(1 + sum(1 + len(step['edit_spans']) for step in row['stages']) for row in changed)
+    stage_items = (len(modern_withheld)
+                   + sum(1 + sum(1 + len(step['edit_spans']) for step in row['stages']) for row in changed))
     if (size > highlight.MAX_PREVIEW_BYTES
             or diagnostics['report_items'] + proposed['report_items'] + stage_items > highlight.MAX_PREVIEW_ITEMS):
         raise SafetyError('Composed highlight report budget exceeded')
