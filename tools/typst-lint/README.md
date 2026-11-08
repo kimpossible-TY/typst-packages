@@ -62,6 +62,7 @@ inspection route:
 /path/to/typst-packages/tools/typst-lint/typst-lint inspect-document --root /absolute/project --entrypoint main.typ --rule-set pde --format json
 /path/to/typst-packages/tools/typst-lint/typst-lint inspect-document --root /absolute/project --entrypoint main.typ --rule-set pde --preview-display-gaps --format json
 /path/to/typst-packages/tools/typst-lint/typst-lint inspect-document --root /absolute/project --entrypoint main.typ --rule-set pde --preview-standalone-displays --format json
+/path/to/typst-packages/tools/typst-lint/typst-lint inspect-document --root /absolute/project --entrypoint main.typ --rule-set pde --preview-sequence --format json
 /path/to/typst-packages/tools/typst-lint/typst-lint inspect-document --root /absolute/project --entrypoint main.typ --rule-set pde --package-path /absolute/captured-packages --format json
 ```
 
@@ -103,6 +104,13 @@ new continuation-gap finding, reported for the candidate; inspect the resulting
 source again before producing another rule's edits. Each preview uses the
 original source hash, is independent of all other proposals, and has no write or
 general rendering authority.
+For a combined candidate, `--preview-sequence` instead emits a per-source ordered
+sequence: standalone display, math scripts, then continuation gaps. Each stage's
+offsets apply only to that stage's baseline hash; its output hash is the next
+stage's baseline. The entire source sequence is withheld if a stage fails, a
+script operand is unsupported, a directive target changes or final reanalysis
+fails. Display-context refusals and uninspected rules remain explicit; this is
+still a read-only preview, not an automatic write or a compiler resource proof.
 With explicit PDE selection, `--package-path` additionally captures six exact
 package namespace contracts and relative import sources. This can trace
 `highlighted` through the actual PDE wildcard facade, including combined module

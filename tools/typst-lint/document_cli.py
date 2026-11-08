@@ -28,7 +28,8 @@ CONDITIONAL_RULES = ('pde.text-only-highlight', 'pde.paragraph-marker-gap')
 
 
 def report_document(root, entrypoint, *, rule_set='core', package_path=None,
-                    preview_display_gaps=False, preview_standalone_displays=False):
+                    preview_display_gaps=False, preview_standalone_displays=False,
+                    preview_sequence=False):
     """Inspect retained source bytes without reading consumer configuration.
 
     Literal includes inside unknown containers are inventory entries, not proof
@@ -44,6 +45,8 @@ def report_document(root, entrypoint, *, rule_set='core', package_path=None,
     require(type(preview_standalone_displays) is bool
             and (not preview_standalone_displays or rule_set == 'pde'),
             'Standalone display previews require explicit --rule-set pde')
+    require(type(preview_sequence) is bool and (not preview_sequence or rule_set == 'pde'),
+            'Sequence previews require explicit --rule-set pde')
     raw_root = os.fspath(root)
     require(type(raw_root) is str and len(raw_root) <= include_context.MAX_ROOT_BYTES,
             'Document root must be a bounded canonical absolute path')
@@ -87,6 +90,7 @@ def report_document(root, entrypoint, *, rule_set='core', package_path=None,
     conditional_findings, conditional_suppressed, conditional_files = [], [], []
     gap_previews = []
     standalone_previews = []
+    sequence_previews = []
     items = len(captured.sources) + len(captured.edges) + len(captured.occurrences) + len(captured.unresolved)
     for item in captured.sources:
         gap_preview = None
@@ -122,6 +126,13 @@ def report_document(root, entrypoint, *, rule_set='core', package_path=None,
                 if standalone_preview is not None:
                     items += 1 + len(standalone_preview['edits'])
                     standalone_previews.append(standalone_preview)
+            if preview_sequence and (result.diagnostics or result.skips
+                                     or displays[STANDALONE].diagnostics or displays[DISPLAY_GAP].diagnostics):
+                from document_sequence_preview import preview
+                sequence = preview(item.tree, item.path, catalog['rules'])
+                if sequence is not None:
+                    items += 1 + len(sequence['steps']) + sum(len(step['edits']) for step in sequence['steps'])
+                    sequence_previews.append(sequence)
         if conditional is not None:
             items += sum(1 + len(conditional.reasons_for(rid)) + len(conditional.parse_errors)
                          for rid in CONDITIONAL_RULES)
@@ -250,6 +261,9 @@ def report_document(root, entrypoint, *, rule_set='core', package_path=None,
     if preview_standalone_displays:
         report['standalone_display_previews'] = standalone_previews
         report['standalone_display_preview_status'] = 'independent-read-only-not-composed-with-other-proposals'
+    if preview_sequence:
+        report['sequence_previews'] = sequence_previews
+        report['sequence_preview_status'] = 'hash-chained-read-only-not-a-write-transaction'
     return report
 
 
@@ -269,13 +283,16 @@ def main(arguments=None):
                         help='Preview independently verified display-gap edits (requires --rule-set pde)')
     parser.add_argument('--preview-standalone-displays', action='store_true',
                         help='Preview standalone display edits (requires --rule-set pde)')
+    parser.add_argument('--preview-sequence', action='store_true',
+                        help='Preview hash-chained standalone, script and gap passes (requires --rule-set pde)')
     parser.add_argument('--format', choices=('json', 'text'), default='text')
     args = parser.parse_args(sys.argv[1:] if arguments is None else arguments)
     try:
         result = report_document(args.root, args.entrypoint, rule_set=args.rule_set,
                                  package_path=args.package_path,
                                  preview_display_gaps=args.preview_display_gaps,
-                                 preview_standalone_displays=args.preview_standalone_displays)
+                                 preview_standalone_displays=args.preview_standalone_displays,
+                                 preview_sequence=args.preview_sequence)
     except (InputError, PackageInputError, OSError, ValueError) as error:
         result = dict(schema=1, tool_version=VERSION, mode='inspect-document', status=2,
                       phase='input', compiler_invoked=False, applied_fixes=[], error=str(error))
@@ -311,6 +328,10 @@ def main(arguments=None):
             print(f"Standalone display previews: {sum(len(row['edits']) for row in previews)} edits; "
                   f"{sum(row['verification'] == 'withheld' for row in previews)} sources withheld; "
                   'independent of other proposals and not applied')
+        if args.preview_sequence:
+            previews = result['sequence_previews']
+            print(f"Sequence previews: {sum(len(row['steps']) for row in previews)} passes; "
+                  f"{sum(row['verification'] == 'withheld' for row in previews)} sources withheld; not applied")
         for blocker in result['blockers']:
             print(blocker)
         print('Global coverage incomplete (exit 2); compiler not invoked')

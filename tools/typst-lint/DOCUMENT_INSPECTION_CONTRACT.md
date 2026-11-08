@@ -76,6 +76,26 @@ JSON includes:
   Making a display standalone can reveal a previously inapplicable gap finding;
   the candidate's gap count is reported and must be reanalyzed before a later
   gap pass. Suppressed display findings retain their original ownership.
+- With `--rule-set pde --preview-sequence`, `sequence_previews` reports a
+  per-source ordered standalone/script/gap sequence. Each step contains edits
+  relative to its own baseline and the resulting candidate hash. The next step
+  uses that result as its baseline, not the original source offsets. A failure,
+  incomplete script analysis, changed directive target or unsuccessful final
+  three-rule reanalysis withholds the entire source sequence. The final record
+  includes counts of unresolved display contexts; other enabled rules and runtime
+  obligations are still incomplete. No source or compiler execution authority
+  follows from this report.
+  The internal pure `document_sequence_preview.replay` helper lets a downstream
+  consumer recompute the source-bound report, reject stale or changed serialized
+  data with exact primitive types, and independently replay its hash chain in
+  memory. It returns candidate bytes only; it does not capture compiler resources
+  or create a protected write receipt.
+  The internal `replay_document` helper accepts the original locally issued
+  include capture and a complete plan set, recomputes every source plan, and
+  returns an immutable path-to-bytes map. Missing, duplicate, foreign and
+  withheld records reject the whole map. Include capture does not prove import,
+  image, font, package or compiler-resource closure; the map is not compiler
+  or write authority and does not revalidate live paths.
 - `coverage.files`: per-source rule status, refusal reasons, candidate hash and
   candidate verification status. Partial source analysis withholds all proposals
   for that source. Candidates require a successful reparse and a second script

@@ -355,6 +355,23 @@ class DocumentCliTests(unittest.TestCase):
         self.assertEqual(result['phase'], 'input')
         self.assertIn('explicit --rule-set pde', result['error'])
 
+    def test_sequence_preview_is_separate_and_never_writes(self):
+        source = b'Thus $ x^i $\n\nHence.\n'
+        target = self.write('main.typ', source)
+        report = self.run_cli('--rule-set', 'pde', '--preview-sequence')
+        sequence, = report['sequence_previews']
+        self.assertEqual(sequence['baseline_sha256'], digest(source))
+        self.assertEqual(len(sequence['steps']), 3)
+        self.assertEqual(report['sequence_preview_status'], 'hash-chained-read-only-not-a-write-transaction')
+        self.assertTrue(report['proposed_edits'], 'Ordinary script proposals are retained')
+        self.assertEqual(target.read_bytes(), source)
+
+    def test_sequence_preview_requires_explicit_pde_rule_set(self):
+        self.write('main.typ', b'$ x^i $')
+        report = self.run_cli('--preview-sequence')
+        self.assertEqual(report['phase'], 'input')
+        self.assertIn('explicit --rule-set pde', report['error'])
+
     def test_nested_standalone_display_is_diagnostic_only(self):
         source = (b'#local-scope-annotations(s => [\n'
                   b'  Thus $ x^i = 1 $ <identity> and the claim follows.\n])\n')

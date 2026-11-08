@@ -19,6 +19,7 @@ sys.path.insert(0, str(TOOL))
 from document_display import RULE_ID, STANDALONE, analyze, analyze_all
 from document_gap_preview import preview
 from document_standalone_preview import preview as preview_standalone
+from document_sequence_preview import preview as preview_sequence, replay as replay_sequence
 from edit_plan import Edit, plan
 from static_resolver import TEXT_UTILS_SOURCE_SHA256
 from syntax_client import EXECUTABLE, parse
@@ -227,6 +228,25 @@ class DocumentDisplayRenderTests(unittest.TestCase):
         self.assertEqual(candidate, STANDALONE_AFTER)
         original = self.render('standalone-preview-before', 'light', MAIN, STANDALONE_BEFORE)
         rendered = self.render('standalone-preview-after', 'light', MAIN, candidate)
+        self.assertEqual(original, rendered)
+
+    def test_generated_three_pass_sequence_renders_owned_fixture(self):
+        before = BEFORE.replace(b'  Prior literal sentence.\n  $', b'  Prior literal sentence.  $')
+        before = before.replace(b'x^(2) = 1', b'x^2 = 1')
+        report = preview_sequence(parse(before), 'child.typ', load_rules()[0]['rules'])
+        self.assertEqual([s['rule_id'] for s in report['steps']],
+                         [STANDALONE, 'core.parenthesized-scripts', RULE_ID])
+        candidate = before
+        for step in report['steps']:
+            self.assertEqual(digest(candidate), step['baseline_sha256'])
+            edits = tuple(Edit(row['start'], row['end'], row['replacement'].encode())
+                          for row in step['edits'])
+            candidate = plan(candidate, edits).candidate()
+            self.assertEqual(digest(candidate), step['candidate_sha256'])
+        self.assertEqual(candidate, AFTER)
+        self.assertEqual(replay_sequence(parse(before), 'child.typ', load_rules()[0]['rules'], report), candidate)
+        original = self.render('sequence-preview-before', 'light', MAIN, before)
+        rendered = self.render('sequence-preview-after', 'light', MAIN, candidate)
         self.assertEqual(original, rendered)
 
     def test_nested_inline_labeled_display_observation_preserves_fixture_layout_and_indent(self):
