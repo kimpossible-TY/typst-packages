@@ -111,6 +111,74 @@ def analyze_conditional_nested_gap(tree, path, *, catalog=None):
         suppressed=tuple(suppressed))
 
 
+def analyze_conditional_nested_target(tree, path, *, catalog=None):
+    """Hint at nested marker-shaped names before a structural sibling.
+
+    Binding, execution, and ownership of the literal body are not proved.
+    This source-only diagnostic never proposes removing the marker.
+    """
+    source, nodes = tree.source, tree.nodes
+    if nodes[0].errors:
+        errors = tuple((n.start, n.end) for n in nodes if n.kind == 'Error')
+        return ParagraphResult(skips=('Malformed Typst syntax; no source pattern diagnosis',),
+                               parse_errors=errors or ((0, len(source)),))
+    if tree.mode != 'markup' or nodes[0].kind != 'Markup':
+        return ParagraphResult(skips=('Only nested markup source patterns are supported',))
+    records = load_rules()[0]['rules'] if catalog is None else catalog
+    if (type(records) not in (list, tuple) or any(not isinstance(row, Mapping)
+            or type(row.get('id')) is not str or not row['id'] for row in records)):
+        raise InputError('Conditional paragraph analysis requires rule metadata records')
+    selected = [row for row in records if row['id'] == MARKER_TARGET]
+    if (len(selected) != 1 or any(type(selected[0].get(key)) is not str or not selected[0][key]
+                                   for key in ('grade', 'source'))):
+        raise InputError('Missing or invalid paragraph marker target metadata')
+    scopes = resolve_suppressions(tree, {row['id'] for row in records})
+    parents = {child: index for index, node in enumerate(nodes) for child in node.children}
+    excluded = {}
+    for index, node in enumerate(nodes):
+        parent = parents.get(index)
+        excluded[index] = parent is not None and (excluded[parent]
+                                                   or nodes[parent].kind in _CONDITIONAL_EXCLUDED)
+    newlines = [index for index, byte in enumerate(source) if byte == 10]
+    findings, suppressed = [], []
+    for body_id, body in enumerate(nodes):
+        if body_id == 0 or body.kind != 'Markup' or excluded[body_id]:
+            continue
+        children = body.children
+        for position, index in enumerate(children):
+            marker = nodes[index]
+            if (position == 0 or marker.kind != 'Ident'
+                    or source[marker.start:marker.end] != b'paragraph_tab'):
+                continue
+            hash_node = nodes[children[position - 1]]
+            if hash_node.kind != 'Hash' or hash_node.end != marker.start:
+                continue
+            start, end = hash_node.start, marker.end
+            line_index = bisect_left(newlines, start)
+            line_start = 0 if line_index == 0 else newlines[line_index - 1] + 1
+            line_end = newlines[line_index] if line_index < len(newlines) else len(source)
+            if source[line_start:start].strip(b' \t') or source[end:line_end].strip(b' \t\r'):
+                continue
+            next_pos = position + 1
+            while (next_pos < len(children) and nodes[children[next_pos]].kind in
+                   ('Space', 'Parbreak', 'LineComment', 'BlockComment')):
+                next_pos += 1
+            target = nodes[children[next_pos]] if next_pos < len(children) else None
+            if target is None or not (target.kind == 'Heading'
+                                      or (target.kind == 'Equation' and target.display)):
+                continue
+            column = len(source[line_start:start].decode('utf-8')) + 1
+            rule = selected[0]
+            finding = Diagnostic(MARKER_TARGET, rule['grade'], path, line_index + 1, column,
+                'Conditional source hint: if this standalone name is the paragraph marker, remove it before the heading or display.',
+                rule['source'])
+            (suppressed if any(scope.covers(MARKER_TARGET, start) for scope in scopes)
+             else findings).append(finding)
+    return ParagraphResult(tuple(findings), (),
+        ('Nested source pattern only; marker binding, execution and body ownership are unproved.',),
+        suppressed=tuple(suppressed))
+
+
 def analyze_conditional_nested_capitalization(tree, path, *, catalog=None):
     """Report literal nested marker/starter patterns without proving language or binding.
 

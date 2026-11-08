@@ -185,6 +185,57 @@ class DocumentPreviewCliTests(unittest.TestCase):
         with contextlib.redirect_stderr(io.StringIO()), self.assertRaises(SystemExit):
             document_preview_cli.main(self.command()[3:] + ['--conditional-punctuation'])
 
+    def test_conditional_spacers_require_gaps_and_report_render_difference(self):
+        fake = SimpleNamespace(baseline_sha256='a' * 64, candidate_sha256='b' * 64,
+            pdfs_identical=False, dependency_count=1, unobserved_capture_count=0,
+            system_font_files=0, compiler_sha256='c' * 64)
+        self.source = b'#block[$\n A = B #dots_space #footnote[X]\n$]'
+        (self.project / 'main.typ').write_bytes(self.source)
+        for punctuation, profile in ((False, 'conditional-gaps-and-spacers'),
+                                     (True, 'conditional-gaps-punctuation-and-spacers')):
+            output = io.StringIO()
+            extra = ['--conditional-gaps', '--conditional-spacers', '--format', 'json']
+            if punctuation:
+                extra.append('--conditional-punctuation')
+            with self.subTest(punctuation=punctuation), \
+                 patch.object(document_preview_cli.document_preview_compile, 'compile_preview', return_value=fake) as compiler, \
+                 contextlib.redirect_stdout(output):
+                status = document_preview_cli.main(self.command()[3:] + extra)
+                report = json.loads(output.getvalue())
+                self.assertEqual(status, 2)
+                self.assertEqual(compiler.call_args.kwargs['profile'], profile)
+                self.assertEqual(report['sequence_profile'], profile)
+                self.assertIn('pde.unaligned-footnote-no-spacer', report['conditionally_previewed_rule_ids'])
+                self.assertIn('pde.unaligned-footnote-no-spacer', report['uninspected_rule_ids'])
+                self.assertFalse(report['pdfs_identical'] or report['source_apply_gate']['eligible']
+                                 or report['source_files_modified'])
+                self.assertIn('preview_pdfs_differ', report['source_apply_gate']['blockers'])
+                self.assertEqual((self.project / 'main.typ').read_bytes(), self.source)
+        with contextlib.redirect_stderr(io.StringIO()), self.assertRaises(SystemExit):
+            document_preview_cli.main(self.command()[3:] + ['--conditional-spacers'])
+
+    @unittest.skipUnless(os.environ.get('TYPST_LINT_RENDER_TESTS') == '1'
+                         and sys.platform == 'darwin', 'Opt in on macOS with the reviewed Typst compiler')
+    def test_conditional_spacer_private_pdf_comparison_reflects_actual_layout(self):
+        for extent, identical in ((b'0pt', True), (b'8pt', False)):
+            with self.subTest(extent=extent):
+                source = (b'#set page(width: 300pt, height: 250pt, margin: 30pt)\n'
+                          b'#let dots_space = h(' + extent + b')\n'
+                          b'#block[$\n A = B #dots_space #footnote[Reason.]\n$]')
+                (self.project / 'main.typ').write_bytes(source)
+                run = subprocess.run(self.command('--conditional-gaps', '--conditional-spacers',
+                                                  '--review-edits', '--format', 'json'),
+                                     capture_output=True, timeout=60)
+                self.assertEqual(run.returncode, 2, run.stderr)
+                report = json.loads(run.stdout)
+                self.assertEqual(report['phase'], 'preview', report)
+                self.assertTrue(report['pdf_generated'])
+                self.assertEqual(report['pdfs_identical'], identical)
+                self.assertFalse(report['source_files_modified'] or report['source_apply_gate']['eligible'])
+                self.assertEqual((self.project / 'main.typ').read_bytes(), source)
+                self.assertEqual(report['source_review']['sources'][0]['steps'][-1]['rule_id'],
+                                 'pde.unaligned-footnote-no-spacer')
+
     @unittest.skipUnless(os.environ.get('TYPST_LINT_RENDER_TESTS') == '1'
                          and sys.platform == 'darwin', 'Opt in on macOS with the reviewed Typst compiler')
     def test_real_preview_reports_success_and_can_stream_pdf(self):

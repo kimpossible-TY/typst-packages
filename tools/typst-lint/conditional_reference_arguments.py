@@ -12,13 +12,78 @@ from collections.abc import Mapping
 from dataclasses import dataclass, field
 
 import conditional_reference_provenance as provenance
+import namespace_packages
 import reference_rules as rules
-from static_resolver import PROJECT_REFERENCE_LOCAL_PREFIXES
+import scoped_provenance
+from static_resolver import (MANNOT_NAMESPACE, MANNOT_NAMESPACE_SOURCE_SHA256,
+                             PROJECT_REFERENCE_LOCAL_PREFIXES, PackageSource, _literal_string)
 from suppression import resolve as resolve_suppressions
 from syntax_client import AdapterError, parse
 from typst_lint import InputError, digest, load_rules
 
 RULE_ID = rules.ARGUMENTS
+
+
+def _scoped_tag(resolver, index):
+    """Recognize only a direct, reviewed scope.tag with one literal name."""
+    nodes = resolver.nodes
+    if nodes[index].kind != 'FuncCall':
+        return False
+    parts = resolver.sig(index)
+    binding = resolver.facts[index].binding
+    if not (len(parts) == 2 and nodes[parts[1]].kind == 'Args' and binding
+            and binding.kind == 'scope-field' and binding.name == 'tag'
+            and binding.package == scoped_provenance.PACKAGE
+            and binding.source_sha256 == scoped_provenance.SOURCE_SHA256):
+        return False
+    args = scoped_provenance.arguments(resolver, parts[1])
+    if len(args) != 1 or _literal_string(resolver.tree, args[0]) is None:
+        return False
+    callee = parts[0]
+    grouped = resolver.sig(callee)
+    if (nodes[callee].kind != 'Parenthesized' or len(grouped) != 3
+            or [nodes[i].kind for i in grouped] != ['LeftParen', 'FieldAccess', 'RightParen']):
+        return False
+    field = grouped[1]
+    members = resolver.sig(field)
+    if (len(members) != 3 or [nodes[i].kind for i in members] != ['Ident', 'Dot', 'Ident']
+            or resolver.text(members[2]) != 'tag' or resolver.facts[field].binding != binding):
+        return False
+    receiver = resolver.facts[members[0]].binding
+    return bool(receiver and receiver.kind in ('tag-scope', 'annotation-scope')
+                and receiver.package == scoped_provenance.PACKAGE
+                and receiver.source_sha256 == scoped_provenance.SOURCE_SHA256
+                and receiver.source_identity == binding.source_identity)
+
+
+def _scoped_resolver(analyzer, tree):
+    """Reuse only the sealed session's reviewed scoped and wildcard packages."""
+    if not provenance._valid_session(analyzer):
+        return None
+    packages = []
+    for path, expected in ((scoped_provenance.PACKAGE, scoped_provenance.SOURCE_SHA256),
+                           (MANNOT_NAMESPACE, MANNOT_NAMESPACE_SOURCE_SHA256)):
+        item = analyzer._engine.packages.get(path)
+        if (type(item) is not namespace_packages.NamespacePackage
+                or item.evidence.import_path != path or item.evidence.source_sha256 != expected
+                or digest(item.source) != expected):
+            return None
+        packages.append(PackageSource(path, item.evidence.source_identity, item.source))
+    resolver = scoped_provenance.resolve(tree, tuple(packages))
+    # The general scope resolver tracks rebinding, not arbitrary dictionary
+    # methods or escaping a scope value. Do not infer an unchanged tag field
+    # when a scope value is used for anything except direct tag access.
+    parents = {child: index for index, node in enumerate(tree.nodes) for child in node.children}
+    for index, node in enumerate(tree.nodes):
+        binding = resolver.facts[index].binding
+        if node.kind != 'Ident' or not binding or binding.kind not in ('tag-scope', 'annotation-scope'):
+            continue
+        parent = parents.get(index)
+        parts = resolver.sig(parent) if parent is not None else ()
+        if (parent is None or tree.nodes[parent].kind != 'FieldAccess' or len(parts) != 3
+                or parts[0] != index or resolver.text(parts[2]) != 'tag'):
+            return None
+    return resolver
 
 
 @dataclass(frozen=True)
@@ -68,6 +133,20 @@ def analyze(analyzer, path, *, catalog=None):
     if (type(getattr(analyzer, '_engine', None)) is not provenance._ReferenceNamespace
             or not hasattr(analyzer, '_reference_capture') or not hasattr(analyzer, '_selection_reason')):
         return ArgumentResult('UNAVAILABLE', unresolved=('Reference provenance session is uninitialized',))
+    if not provenance._valid_session(analyzer):
+        return ArgumentResult('UNAVAILABLE', unresolved=('Session capture changed or is unissued',))
+    try:
+        result = _analyze_unchecked(analyzer, path, catalog=catalog)
+    except Exception:
+        if not provenance._valid_session(analyzer):
+            return ArgumentResult('UNAVAILABLE', unresolved=('Session capture changed during inspection',))
+        raise
+    if not provenance._valid_session(analyzer):
+        return ArgumentResult('UNAVAILABLE', unresolved=('Session capture changed during inspection',))
+    return result
+
+
+def _analyze_unchecked(analyzer, path, *, catalog=None):
     records = load_rules()[0]['rules'] if catalog is None else catalog
     if (type(records) not in (tuple, list)
             or any(not isinstance(row, Mapping) or type(row.get('id')) is not str or not row['id']
@@ -106,6 +185,8 @@ def analyze(analyzer, path, *, catalog=None):
     column_offsets = {}
     findings, suppressed, unresolved = [], [], list(traced.unresolved)
     rule = selected[0]
+    scoped = None
+    scoped_checked = False
 
     def add(call, start, explanation):
         line = bisect_right(newlines, start) + 1
@@ -160,7 +241,15 @@ def analyze(analyzer, path, *, catalog=None):
         elif project_type != 'string':
             add(call, nodes[project_id].start, 'If this call binds project-ref, its project must be a string alias.')
         if target_type is None:
-            unresolved.append(f'Target type and global identity are unresolved at byte {nodes[target_id].start}')
+            if not scoped_checked:
+                scoped = _scoped_resolver(analyzer, tree)
+                scoped_checked = True
+            if scoped is not None and _scoped_tag(scoped, target):
+                add(call, nodes[target_id].start,
+                    'If this call binds project-ref and the reviewed scoped callback executes, '
+                    'its scope-generated target is not a global label.')
+            else:
+                unresolved.append(f'Target type and global identity are unresolved at byte {nodes[target_id].start}')
         elif target_type != 'label':
             add(call, nodes[target_id].start,
                 f'If this call binds project-ref, its target must be a global Typst label, not {target_type}.')

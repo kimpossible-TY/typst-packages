@@ -15,6 +15,8 @@ typst-lint preview-compile --root /absolute/project --entrypoint main.typ \
   --manifest /absolute/font-seed.json --discover-dependencies --conditional-gaps --format json
 typst-lint preview-compile --root /absolute/project --entrypoint main.typ \
   --manifest /absolute/font-seed.json --discover-dependencies --conditional-gaps --conditional-punctuation --format json
+typst-lint preview-compile --root /absolute/project --entrypoint main.typ \
+  --manifest /absolute/font-seed.json --discover-dependencies --conditional-gaps --conditional-spacers --format json
 typst-style compile --preview --root /absolute/project --entrypoint main.typ \
   --manifest /absolute/font-seed.json --discover-dependencies --format json
 typst-style compile --preview --root /absolute/project --entrypoint main.typ \
@@ -32,6 +34,16 @@ application authority. Their rules remain in `uninspected_rule_ids` for full
 coverage. Adding `--conditional-punctuation` explicitly appends the separate
 prose-footnote punctuation-spacing stage; it requires `--conditional-gaps`.
 Its binding, execution and rendering remain conditional as well.
+
+`--conditional-spacers` requires `--conditional-gaps` and appends removal of
+the exact `#dots_space` token before an unaligned nested display footnote. It
+can also be combined with `--conditional-punctuation`. The source-local
+resolver must identify the footnote as the built-in; an unresolved or shadowed
+footnote with a proposed edit withholds that source's whole plan. Spacer binding,
+include-site execution and rendered context remain unproved. The candidate is
+compiled privately; PDF differences are reported and may be intentional under
+the selected style policy. They do not authorize applying edits. This stage does
+not claim complete inspection, and the rule remains in `uninspected_rule_ids`.
 
 The `typst-style compile --preview` form explicitly selects the same preview
 engine and cancellation handling. It does not accept an ordinary compiler tail

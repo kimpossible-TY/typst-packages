@@ -163,6 +163,69 @@ class DocumentSequencePreviewTests(unittest.TestCase):
             self.assertEqual(replayed['main.typ'], b'#block[Claim.#footnote[Reason.]]')
             self.assertEqual((root / 'main.typ').read_bytes(), source)
 
+    def test_opt_in_spacer_is_chained_profile_bound_and_idempotent(self):
+        source = (b'Thus $ x^i $\n\nHence.\n\n#block[\n$\nA #footnote[X]\n\nB\n$\n'
+                  b'Claim. #footnote[Reason.]\n$\nC #dots_space #footnote[More.]\n$\n]')
+        profile = 'conditional-gaps-punctuation-and-spacers'
+        tree = parse(source)
+        without = document_sequence_preview.preview(tree, 'main.typ', self.catalog,
+                                                      profile='conditional-gaps-and-punctuation')
+        report = document_sequence_preview.preview(tree, 'main.typ', self.catalog, profile=profile)
+        self.assertEqual(report['verification'],
+                         'hash-chained-three-rule-and-conditional-gap-punctuation-spacer-reanalysis', report)
+        self.assertEqual([step['rule_id'] for step in report['steps']],
+                         [step['rule_id'] for step in without['steps']] + ['pde.unaligned-footnote-no-spacer'])
+        self.assertFalse(report['runtime_binding_proved'] or report['render_equivalence_proved']
+                         or report['edit_permission'])
+        candidate = document_sequence_preview.replay(tree, 'main.typ', self.catalog, report, profile=profile)
+        self.assertIn(b'C  #footnote[More.]', candidate)
+        self.assertIsNone(document_sequence_preview.preview(parse(candidate), 'main.typ', self.catalog, profile=profile))
+        with self.assertRaises(SafetyError):
+            document_sequence_preview.replay(tree, 'main.typ', self.catalog, report,
+                                              profile='conditional-gaps-and-punctuation')
+        changed = deepcopy(report)
+        changed['steps'][-1]['baseline_sha256'] = '0' * 64
+        with self.assertRaises(SafetyError):
+            document_sequence_preview.replay(tree, 'main.typ', self.catalog, changed, profile=profile)
+
+    def test_spacer_profile_skips_aligned_comments_and_suppression(self):
+        cases = (b'#block[$\n A &= B #dots_space #footnote[X]\n$]',
+                 b'#block[$\n A = B #dots_space /* comment */ #footnote[X]\n$]',
+                 b'// typst-lint: ignore-next pde.unaligned-footnote-no-spacer -- deliberate\n'
+                 b'#block[$\n A = B #dots_space #footnote[X]\n$]')
+        for source in cases:
+            with self.subTest(source=source):
+                self.assertIsNone(document_sequence_preview.preview(parse(source), 'main.typ', self.catalog,
+                                                                    profile='conditional-gaps-and-spacers'))
+
+        shadowed = b'#let footnote(x) = x\n#block[$\n A = B #dots_space #footnote[X]\n$]'
+        report = document_sequence_preview.preview(parse(shadowed), 'main.typ', self.catalog,
+                                                   profile='conditional-gaps-and-spacers')
+        self.assertEqual(report['verification'], 'withheld', report)
+        self.assertIn('footnote binding is not locally proven', report['reason'])
+        self.assertFalse(report['steps'])
+
+    def test_spacer_profile_withholds_forged_or_withheld_preview(self):
+        source = b'#block[$\n A = B #dots_space #footnote[X]\n$]'
+        tree = parse(source)
+        real = document_sequence_preview.footnote_rules.preview_conditional_unaligned_spacers(
+            tree, 'main.typ', document_sequence_preview.resolve(tree), catalog=self.catalog)
+        for mutation in ('withheld', 'authority', 'hash', 'target'):
+            fake = deepcopy(real)
+            if mutation == 'withheld': fake = {'verification': 'withheld', 'reason': 'fixture refusal'}
+            elif mutation == 'authority': fake['runtime_binding_proved'] = True
+            elif mutation == 'hash': fake['candidate_sha256'] = '0' * 64
+            else:
+                fake['edits'][0]['start'] = source.index(b'A')
+                fake['edits'][0]['end'] = source.index(b'A') + 1
+                fake['candidate_sha256'] = digest(source.replace(b'A', b'', 1))
+            with self.subTest(mutation=mutation), patch.object(document_sequence_preview.footnote_rules,
+                    'preview_conditional_unaligned_spacers', return_value=fake):
+                report = document_sequence_preview.preview(tree, 'main.typ', self.catalog,
+                                                           profile='conditional-gaps-and-spacers')
+                self.assertEqual(report['verification'], 'withheld', report)
+                self.assertFalse(report['steps'])
+
     def test_conditional_replay_requires_every_candidate_source(self):
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory).resolve()

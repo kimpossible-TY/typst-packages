@@ -100,11 +100,15 @@ def main(arguments=None, *, gate=False):
                         help='Also preview conditional proof and nested math-footnote gap edits')
     parser.add_argument('--conditional-punctuation', action='store_true',
                         help='Also preview conditional prose-footnote spacing (requires --conditional-gaps)')
+    parser.add_argument('--conditional-spacers', action='store_true',
+                        help='Also preview conditional unaligned footnote spacer removal (requires --conditional-gaps)')
     args = parser.parse_args(sys.argv[1:] if arguments is None else arguments)
     if args.review_edits and args.format != 'json' and not args.pdf_stdout:
         parser.error('--review-edits requires --format json or --pdf-stdout')
     if args.conditional_punctuation and not args.conditional_gaps:
         parser.error('--conditional-punctuation requires --conditional-gaps')
+    if args.conditional_spacers and not args.conditional_gaps:
+        parser.error('--conditional-spacers requires --conditional-gaps')
     # The executable installs cooperative SIGINT/SIGTERM handling; imported
     # callers do not change process-wide signal handlers.
     import offline_compile_cli
@@ -113,7 +117,9 @@ def main(arguments=None, *, gate=False):
     phase = 'input'
     result = None
     discovery_completed = False
-    profile = ('conditional-gaps-and-punctuation' if args.conditional_punctuation else
+    profile = ('conditional-gaps-punctuation-and-spacers' if args.conditional_punctuation and args.conditional_spacers else
+               'conditional-gaps-and-spacers' if args.conditional_spacers else
+               'conditional-gaps-and-punctuation' if args.conditional_punctuation else
                'conditional-gaps' if args.conditional_gaps else 'standard')
     try:
         raw_root = args.root
@@ -184,7 +190,8 @@ def main(arguments=None, *, gate=False):
                       sequence_profile=profile,
                       conditionally_previewed_rule_ids=(
                           (['pde.proof-trailing-gap', 'pde.footnote-trailing-gap'] if args.conditional_gaps else [])
-                          + (['pde.prose-footnote-punctuation'] if args.conditional_punctuation else [])),
+                          + (['pde.prose-footnote-punctuation'] if args.conditional_punctuation else [])
+                          + (['pde.unaligned-footnote-no-spacer'] if args.conditional_spacers else [])),
                       partially_inspected_rule_ids=[document_display.STANDALONE, script_rule.RULE_ID, document_display.RULE_ID],
                       uninspected_rule_ids=[rule['id'] for rule in catalog['rules'] if rule['id'] not in
                                            (document_display.STANDALONE, script_rule.RULE_ID, document_display.RULE_ID)],

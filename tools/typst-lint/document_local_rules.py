@@ -10,9 +10,10 @@ from dataclasses import replace
 from footnote_rules import (RULE_IDS as FOOTNOTES, analyze as footnotes,
                             analyze_conditional_nested as nested_footnotes)
 from import_rules import ORDER as IMPORT_ORDER, analyze_conditional_order
-from paragraph_rules import (RULE_IDS as PARAGRAPHS, MARKER_GAP, CAPITALIZATION,
+from paragraph_rules import (RULE_IDS as PARAGRAPHS, MARKER_GAP, MARKER_TARGET, CAPITALIZATION,
                              analyze as paragraphs, analyze_conditional_nested_gap,
-                             analyze_conditional_nested_capitalization)
+                             analyze_conditional_nested_capitalization,
+                             analyze_conditional_nested_target)
 from proof_rules import RULE_ID as PROOF, analyze_conditional as proof
 from prose_marker_rules import RULE_ID as PROSE_MARKER, analyze_conditional as prose_marker
 from static_resolver import resolve
@@ -39,6 +40,8 @@ def analyze(tree, path, catalog):
         results[MARKER_GAP], analyze_conditional_nested_gap(tree, path, catalog=catalog))
     results[CAPITALIZATION] = _merge_conditional(
         results[CAPITALIZATION], analyze_conditional_nested_capitalization(tree, path, catalog=catalog))
+    results[MARKER_TARGET] = _merge_conditional(
+        results[MARKER_TARGET], analyze_conditional_nested_target(tree, path, catalog=catalog))
     results[CONTINUATION] = continuation(tree, path, catalog=catalog)
     root_footnotes = footnotes(tree, path, resolution, resolution.spacer_proof)
     nested = nested_footnotes(tree, path, resolution, catalog=catalog)

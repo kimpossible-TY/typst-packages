@@ -184,15 +184,19 @@ from source findings and leave that rule in `coverage.uninspected`. Only an
 explicit package root is read; installed caches are not searched. See
 [CONDITIONAL_HIGHLIGHT_CONTRACT.md](CONDITIONAL_HIGHLIGHT_CONTRACT.md).
 The separate `--local-rule-hints` option analyzes each included file as a
-standalone lexical environment for eleven additional paragraph, continuation,
-footnote, proof and cancellation rules. Its findings and per-file refusals are grouped
+standalone lexical environment for fourteen paragraph, continuation, footnote,
+proof, theme, import-order and cancellation rules. Its findings and per-file refusals are grouped
 under `local_rule_hints` and remain conditional on the actual include-site
 bindings, styles and execution; it does not propose or apply these rules' edits.
 Continuation-line hints also inspect literal nested Markup bodies. Footnote hints
-include nested prose and displays. Both retain exclusions for unrelated math,
-code, raw text, headings and list structures.
+include nested prose and displays. Nested paragraph capitalization hints cover only
+a bounded set of lowercase starters after literal standalone markers; nested
+marker-target hints cover directly following headings or display math. These hints
+retain exclusions for unrelated math, code, raw text, headings and list structures.
 Common resolver refusals are reported once per source. These rules remain in
 `coverage.uninspected` because the document context has not been established.
+See [document rule coverage](DOCUMENT_RULE_COVERAGE.md) for each rule's current
+single-source, document-hint and compile-preview scope.
 With the additional explicit `--reference-package-path` and `--reference-facade`,
 `reference_provenance` separately traces the facade's `project-ref` export using
 captured package hashes and namespace evidence. It reports either conditional

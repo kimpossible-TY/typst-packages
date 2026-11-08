@@ -23,9 +23,13 @@ from typst_lint import InputError, SafetyError, digest
 _STANDARD = 'standard'
 _CONDITIONAL = 'conditional-gaps'
 _PUNCTUATION = 'conditional-gaps-and-punctuation'
+_SPACERS = 'conditional-gaps-and-spacers'
+_PUNCTUATION_SPACERS = 'conditional-gaps-punctuation-and-spacers'
 _VERIFICATIONS = {_STANDARD: 'hash-chained-parse-and-three-rule-reanalysis',
                   _CONDITIONAL: 'hash-chained-three-rule-and-conditional-gap-reanalysis',
-                  _PUNCTUATION: 'hash-chained-three-rule-and-conditional-gap-punctuation-reanalysis'}
+                  _PUNCTUATION: 'hash-chained-three-rule-and-conditional-gap-punctuation-reanalysis',
+                  _SPACERS: 'hash-chained-three-rule-and-conditional-gap-spacer-reanalysis',
+                  _PUNCTUATION_SPACERS: 'hash-chained-three-rule-and-conditional-gap-punctuation-spacer-reanalysis'}
 
 
 def _profile(value):
@@ -136,7 +140,7 @@ def preview(tree, path, catalog, *, profile=_STANDARD):
                                      for e in proposal.edits]))
             current = candidate_tree
         apply_display(preview_gap, GAP)
-        if profile in (_CONDITIONAL, _PUNCTUATION) and (b'#proof' in current.source or b'#footnote' in current.source):
+        if profile != _STANDARD and (b'#proof' in current.source or b'#footnote' in current.source):
             before_tree = current
             before_resolution = resolve(before_tree, packages=())
             notes_before = footnote_rules.analyze_conditional_nested(before_tree, path, before_resolution, catalog=catalog)
@@ -219,7 +223,7 @@ def preview(tree, path, catalog, *, profile=_STANDARD):
                                   candidate_sha256=digest(candidate),
                                   edits=[dict(start=e.start, end=e.end, replacement=e.replacement.decode('utf-8'),
                                               rule_id=proof_rules.RULE_ID) for e in candidate_plan.edits]))
-            if profile == _PUNCTUATION:
+            if profile in (_PUNCTUATION, _PUNCTUATION_SPACERS):
                 before_tree = current
                 before_resolution = resolve(before_tree, packages=())
                 notes_before = footnote_rules.analyze_conditional_nested(
@@ -279,6 +283,86 @@ def preview(tree, path, catalog, *, profile=_STANDARD):
                         raise SafetyError('Conditional punctuation stage did not converge or introduced gaps')
                     steps.append(dict(rule_id=footnote_rules.PUNCT, baseline_sha256=digest(before_tree.source),
                                       candidate_sha256=digest(candidate), edits=punctuation['edits']))
+            if profile in (_SPACERS, _PUNCTUATION_SPACERS):
+                before_tree = current
+                before_resolution = resolve(before_tree, packages=())
+                notes_before = footnote_rules.analyze_conditional_nested(
+                    before_tree, path, before_resolution, catalog=catalog)
+                proof_before = proof_rules.analyze_conditional(before_tree, path, before_resolution, catalog=catalog)
+                spacer = footnote_rules.preview_conditional_unaligned_spacers(
+                    before_tree, path, before_resolution, catalog=catalog)
+                if spacer is not None:
+                    if spacer['verification'] == 'withheld':
+                        raise SafetyError('Conditional spacer preview withheld: ' + spacer['reason'])
+                    if (spacer['verification'] != 'conditional-spacer-token-syntax-directives-and-footnote-reanalysis'
+                            or spacer['path'] != path
+                            or spacer['runtime_binding_proved'] is not False
+                            or spacer['render_equivalence_proved'] is not False
+                            or spacer['edit_permission'] is not False):
+                        raise SafetyError('Conditional spacer preview has invalid verification or authority')
+                    edits = tuple(Edit(row['start'], row['end'], row['replacement'].encode('utf-8'))
+                                  for row in spacer['edits'])
+                    candidate_plan = plan(before_tree.source, edits)
+                    candidate = candidate_plan.candidate()
+                    if (not edits or candidate_plan.deferred or len(candidate_plan.edits) != len(edits)
+                            or digest(before_tree.source) != spacer['baseline_sha256']
+                            or digest(candidate) != spacer['candidate_sha256']
+                            or any(row['rule_id'] != footnote_rules.UNALIGNED for row in spacer['edits'])
+                            or any(edit.replacement for edit in edits)):
+                        raise SafetyError('Conditional spacer preview hash or edit mismatch')
+                    current = parse(candidate, tree.mode)
+                    if (current.nodes[0].errors
+                            or footnote_rules._signature_without_spacers(before_tree, edits)
+                            != footnote_rules._signature_without_spacers(current, ())
+                            or _scopes(before_tree, catalog, edits) != _scopes(current, catalog)):
+                        raise SafetyError('Conditional spacer changed syntax or suppression targets')
+                    current_resolution = resolve(current, packages=())
+                    notes_after = footnote_rules.analyze_conditional_nested(
+                        current, path, current_resolution, catalog=catalog)
+                    proof_after = proof_rules.analyze_conditional(current, path, current_resolution, catalog=catalog)
+                    if not _same_findings(before_tree, proof_before, current, proof_after, edits):
+                        raise SafetyError('Conditional spacer stage changed proof findings or suppressions')
+                    mapper = _FindingMapper(before_tree.source)
+                    target_mapper = _FindingMapper(before_tree.source, edits)
+                    for rid in footnote_rules.RULE_IDS:
+                        first, last = notes_before[rid], notes_after[rid]
+                        expected = _keys(before_tree.source, first.diagnostics, edits)
+                        if rid == footnote_rules.UNALIGNED:
+                            diagnosed = {}
+                            for finding in first.diagnostics:
+                                diagnosed.setdefault(mapper.offset(finding), []).append(finding)
+                            calls = {node.start - 1: index for index, node in enumerate(before_tree.nodes)
+                                     if node.kind == 'FuncCall' and node.start > 0
+                                     and before_tree.source[node.start - 1:node.start] == b'#'}
+                            for edit in edits:
+                                matching = diagnosed.get(edit.start, ())
+                                if len(matching) != 1:
+                                    raise SafetyError('Conditional spacer edit does not match one diagnosed call')
+                                call_start = edit.end
+                                while before_tree.source[call_start:call_start + 1] in (b' ', b'\t', b'\r', b'\n'):
+                                    call_start += 1
+                                call_id = calls.get(call_start)
+                                binding = before_resolution.facts[call_id].binding if call_id is not None else None
+                                if not (binding and binding.kind == 'builtin' and binding.name == 'footnote'):
+                                    raise SafetyError('Conditional spacer footnote binding is not locally proven')
+                                finding = matching[0]
+                                expected[(finding.rule_id, finding.grade, finding.path,
+                                          target_mapper.mapped(finding), finding.explanation, finding.source)] -= 1
+                        if (any(count < 0 for count in expected.values())
+                                or +expected != _keys(current.source, last.diagnostics)
+                                or _keys(before_tree.source, first.suppressed, edits)
+                                   != _keys(current.source, last.suppressed)):
+                            raise SafetyError('Conditional spacer changed another finding or suppression')
+                    if (footnote_rules.preview_conditional_unaligned_spacers(
+                            current, path, current_resolution, catalog=catalog) is not None
+                            or footnote_rules.preview_conditional_math_gaps(
+                                current, path, current_resolution, catalog=catalog) is not None
+                            or (profile == _PUNCTUATION_SPACERS
+                                and footnote_rules.preview_conditional_prose_punctuation(
+                                    current, path, current_resolution, catalog=catalog) is not None)):
+                        raise SafetyError('Conditional spacer stage did not converge or introduced edits')
+                    steps.append(dict(rule_id=footnote_rules.UNALIGNED, baseline_sha256=digest(before_tree.source),
+                                      candidate_sha256=digest(candidate), edits=spacer['edits']))
         final_displays = analyze_all(current, path, catalog=catalog)
         final_scripts = analyze_script(current, path, catalog=catalog, _verify=False, _allow_code_call=True)
         if (current.nodes[0].errors or final_scripts.parse_errors or final_scripts.skips
@@ -290,7 +374,7 @@ def preview(tree, path, catalog, *, profile=_STANDARD):
         result = dict(path=path, baseline_sha256=digest(baseline), candidate_sha256=digest(current.source),
                       verification=_VERIFICATIONS[profile], steps=steps,
                       unresolved_display_contexts={rid: len(value.skips) for rid, value in final_displays.items()})
-        if profile in (_CONDITIONAL, _PUNCTUATION):
+        if profile != _STANDARD:
             result.update(profile=profile, runtime_binding_proved=False, render_equivalence_proved=False,
                           edit_permission=False)
         return result
