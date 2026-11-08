@@ -488,11 +488,31 @@ def gate_preview_requested(arguments):
     return head[:1] == ['compile'] and '--preview' in head[1:]
 
 
+def gate_original_compile_requested(arguments):
+    """Select original-only compilation only before an inert compiler tail."""
+    head = arguments[:arguments.index('--')] if '--' in arguments else arguments
+    if head[:1] != ['compile']:
+        return False
+    value_options = frozenset(('--root', '--format', '--package-path', '--profile',
+        '--resource-profile', '--target', '--output', '--entrypoint', '--manifest', '--journal-id'))
+    i = 1
+    while i < len(head):
+        if head[i] == '--compile-original':
+            return True
+        i += 2 if head[i] in value_options else 1
+    return False
+
+
 def main(argv=None, *, gate=False):
     arguments = list(sys.argv[1:] if argv is None else argv)
     if not gate and arguments[:1] == ['packages-status']:
         from package_status_cli import main as package_status_main
         return package_status_main(arguments[1:])
+    if gate and gate_original_compile_requested(arguments):
+        from document_original_compile_cli import main as original_compile_main
+        original_arguments = arguments[1:]
+        original_arguments.remove('--compile-original')
+        return original_compile_main(original_arguments)
     if gate and gate_preview_requested(arguments):
         from document_preview_cli import main as preview_compile_main
         preview_arguments = arguments[1:]
@@ -512,7 +532,10 @@ def main(argv=None, *, gate=False):
     parser = argparse.ArgumentParser(description=__doc__, epilog=(
         'Explicit private preview: compile --preview --root /absolute/project --entrypoint main.typ '
         '--manifest /absolute/font-seed.json --discover-dependencies. '
-        'Preview does not publish output or establish complete coverage.' if gate else
+        'Preview does not publish output or establish complete coverage. '
+        'Explicit original-only compilation: compile --compile-original --root /absolute/project '
+        '--entrypoint main.typ --manifest /absolute/resources.json --pdf-stdout; '
+        'this compiles captured bytes but performs no lint.' if gate else
         'Explicit offline routes: fix --profile closed-core-v1 --offline-exclusive --target main.typ; '
         'compile --profile closed-core-v1 --resource-profile embedded-ascii-v1 '
         '--offline-exclusive --offline-output-exclusive --target main.typ --output build/main.pdf; '

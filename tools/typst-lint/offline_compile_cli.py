@@ -607,12 +607,12 @@ class _ExecutableSignals:
 def executable_main(arguments=None, *, gate=False):
     """Run, clean, flush, then reproduce a natural/requested signal on self only."""
     global _active_signals
-    from typst_lint import main as lint_main, gate_preview_requested
+    from typst_lint import main as lint_main, gate_preview_requested, gate_original_compile_requested
     arguments = list(sys.argv[1:] if arguments is None else arguments)
     previous = _active_signals
     if ((offline._command(arguments) == 'compile' and offline.requested(arguments))
             or arguments[:1] in (['preview-compile'], ['packages-status'])
-            or (gate and gate_preview_requested(arguments))):
+            or (gate and (gate_preview_requested(arguments) or gate_original_compile_requested(arguments)))):
         try:
             with _ExecutableSignals() as coordinator:
                 _active_signals = coordinator

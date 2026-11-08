@@ -265,6 +265,23 @@ def capture(roots, requests, *, allow_apple_asset_fonts=False):
                                   tuple(files), total, apple_asset_fonts=allow_apple_asset_fonts))
 
 
+def stage_original(context, snapshot, *, project_root='project'):
+    """Stage only issued original resource bytes; no source edit is planned."""
+    import include_context
+    assert_capture(snapshot)
+    include_context.assert_include_context(context)
+    if type(project_root) is not str or dict(snapshot.roots).get(project_root) != context.project_root:
+        raise SafetyError('Captured project root does not match the include context')
+    resources = {(item.request.root, item.request.path): item for item in snapshot.files}
+    for source in context.sources:
+        item = resources.get((project_root, source.path))
+        if item is None or item.data != source.source:
+            raise SafetyError('A captured document source is absent or differs from the resource snapshot')
+    assert_capture(snapshot)
+    include_context.assert_include_context(context)
+    return MappingProxyType({key: item.data for key, item in resources.items()})
+
+
 def stage_document(context, records, catalog, snapshot, *, project_root='project', profile='standard',
                    footnote_evidence=None, partial_unsupported=False, withheld_records=None,
                    partial_unproven_binding=False, explicit_withheld_sources=()):

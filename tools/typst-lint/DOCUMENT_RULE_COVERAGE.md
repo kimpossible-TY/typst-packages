@@ -25,7 +25,7 @@
 | `core.scoped-anchor-access` | 제안 | — | — | 검토된 CeTZ 증거와 유일한 마커·방향이 확인된 경우. |
 | `core.scoped-reference-access` | 제안 | — | — | 동일 scope와 단일 리터럴 대상이 확인된 경우. |
 | `core.local-overlay-api` | 진단 | — | — | 알려진 로컬 annotation 콜백 안의 제한된 raw API 호출. |
-| `core.annotation-in-display` | 진단 | C | — | 제한된 literal scoped callback과 raw `annot-cetz`·`annot`의 display 밖 직접 호출을 각각 조건부 진단한다. helper 바인딩과 실제 display 소유권은 미증명이며 수식 이동은 추측하지 않는다. |
+| `core.annotation-in-display` | 진단 | C | — | 제한된 literal scoped callback과 raw `annot-cetz`·`annot`의 display 밖 직접 호출을 각각 조건부 진단한다. `mannot-scope`의 제한된 literal callback에서는 지연 외부 문맥을 포함해 raw `annot`의 문법상 display 내부를 별도로 세고, 외부 호출은 조건부 진단한다. helper 바인딩·실행·실제 display 소유권은 미증명이며 수식 이동은 추측하지 않는다. |
 | `core.annotation-marker-bounds` | 진단 | — | — | 직접 확인한 display와 같은 scope의 순서가 확인된 대상. |
 | `core.unique-scope-namespace` | 진단 | C | — | 문서 검사는 include graph의 직접 literal prefix 충돌을 조건부 비교하고 반복 include를 별도 출현으로 센다. 바인딩·실행·순서는 미증명이고 중첩 부모 비교는 미지원이다. |
 | `core.project-ref-arguments` | 제안 | R | — | 단일 소스의 제한된 수정에는 유일한 catalog 대상이 필요하다. R은 추적된 호출에서 검토된 scoped 패키지·namespace 출처와 단일 리터럴 인자가 확인된 직접 `(scope.tag)("이름")`을 조건부 진단한다. 호출 바인딩과 콜백 실행은 전제이며, scope 값이 다른 방식으로 사용되거나 출처가 불명확하면 미확인으로 남긴다. 이 문서 진단은 수정안을 생성하지 않는다. |
@@ -41,13 +41,13 @@
 | --- | --- | --- | --- | --- |
 | `pde.import-order` | 제안 | L | — | 명시적 import 그래프와 순수한 리터럴 모듈에서만 안전한 순서 변경. |
 | `pde.no-redundant-facade-import` | 제안 | — | — | facade와 원래 바인딩의 동일성이 그래프로 증명된 중복 import. |
-| `pde.paragraph-marker-gap` | 제안 | L, P | — | 확인된 text-utils 마커와 제한된 문단 경계; 힌트는 바인딩을 전제한다. |
+| `pde.paragraph-marker-gap` | 제안 | L, P, 독립 미리보기 | — | 제한된 중첩 marker 앞 빈 줄을 조건부 제안하며 바인딩과 실행은 미증명이다. 렌더 결과가 달라질 수 있다. |
 | `pde.paragraph-marker-target` | 제안 | L | — | 단일 소스는 확인된 독립 마커와 제목·display 형제에 한정한다. L은 직접 중첩 본문에서 제목·display 앞 마커 형태를 조건부 진단하지만 바인딩·실행·본문 소유권은 미확인이다. |
 | `pde.prose-paragraph-marker` | 제안 | L, 독립 미리보기 | — | 독립 미리보기는 기존의 제한된 리터럴 문단 경계에서 ASCII 대문자로 시작하는 산문 앞에만 마커 삽입을 제안한다. 마커·show 바인딩과 실행은 조건부다. |
 | `pde.continuation-line` | 제안 | L, 독립 미리보기 | — | 제한된 직접 리터럴 문장·어휘와 경계만. `--preview-conditional-continuations`는 소스 줄바꿈을 공백으로 바꾸는 독립 후보를 제안하며 렌더 동등성은 미증명이다. |
 | `pde.display-continuation-gap` | 제안 | 기본 | 기본 | 확인된 display와 직접 이어지는 문장; 주석·불명확한 wrapper는 보류. |
 | `pde.proof-trailing-gap` | 제안 | L | G | 알려진 proof helper와 제한된 경계; G는 조건부 후보다. |
-| `pde.footnote-trailing-gap` | 제안 | L | G | 확인된 각주와 제한된 경계; G 결합 컴파일은 중첩 수식 각주 후보에 한정된다. 별도 소스 미리보기는 기존 marker 앞 중첩 산문의 제한된 후보를 제안한다. |
+| `pde.footnote-trailing-gap` | 제안 | L | G | G 결합 컴파일은 중첩 수식 각주 후보에 한정된다. 별도 소스 미리보기는 기존 marker 또는 직접 display 앞 중첩 산문의 제한된 후보를 제안한다. |
 | `pde.prose-footnote-punctuation` | 제안 | L | P | 제한된 직접 문장과 builtin 각주. 문서 검사는 조건부로 각주 앞 공백 제거와 각주 뒤 문장부호 이동을 각각 독립 미리보기로 제공한다. `--footnote-punctuation-evidence`는 일부 진단에 별도 출처 근거를 붙인다. P 결합 컴파일은 공백 제거만 포함한다. |
 | `pde.aligned-footnote-spacer` | 제안 | L, 독립 미리보기 | — | 독립 미리보기는 제한된 정렬 수식 각주에 spacer 삽입을 제안한다. 실제 바인딩과 실행은 조건부이며 렌더가 달라질 수 있다. |
 | `pde.unaligned-footnote-no-spacer` | 제안 | L | S | 기존 명세대로 제한된 비정렬 수식 각주 앞 spacer를 제거하는 조건부 후보. 실제 렌더는 달라질 수 있다. |

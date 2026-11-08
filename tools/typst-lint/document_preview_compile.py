@@ -102,6 +102,19 @@ class PreviewCompileResult:
     publication_authority: bool = False
 
 
+@dataclass(frozen=True, slots=True)
+class OriginalCompileResult:
+    pdf_sha256: str
+    dependency_count: int
+    unobserved_capture_count: int
+    compiler_sha256: str
+    system_font_files: int
+    pdf: bytes = field(repr=False)
+    source_files_modified: bool = False
+    dependency_closure_proved: bool = False
+    publication_authority: bool = False
+
+
 def _sandbox_profile(base):
     value = str(base)
     if not re.fullmatch(r'/[A-Za-z0-9_./-]+', value):
@@ -150,11 +163,11 @@ def _workspace_guard(base, allowed_files, allowed_dirs, output_limits):
                 raise SafetyError('Unsafe private preview workspace entry')
 
 
-def compile_preview(context, records, catalog, snapshot, *, entrypoint, deadline_seconds=120.0,
+def _compile_captured(context, records, catalog, snapshot, *, entrypoint, deadline_seconds=120.0,
                     cancel_event=None, expected_dependencies=None, expected_baseline_sha256=None,
                     profile='standard', starts=None, footnote_evidence=None,
                     partial_unsupported=False, withheld_records=None, partial_unproven_binding=False,
-                    explicit_withheld_sources=()):
+                    explicit_withheld_sources=(), original_only=False):
     """Compile baseline and candidate from explicit captured bytes in private.
 
     macOS sandbox-exec denies networking and writes outside the temporary
@@ -193,12 +206,15 @@ def compile_preview(context, records, catalog, snapshot, *, entrypoint, deadline
         raise SafetyError('Preview requires explicit project, packages and cache roots')
     if any(len(name) > 64 for name in roots):
         raise SafetyError('Preview resource root ID is too long')
-    candidates = document_resources.stage_document(context, records, catalog, snapshot, profile=profile,
-                                                   footnote_evidence=footnote_evidence,
-                                                   partial_unsupported=partial_unsupported,
-                                                   withheld_records=withheld_records,
-                                                   partial_unproven_binding=partial_unproven_binding,
-                                                   explicit_withheld_sources=explicit_withheld_sources)
+    if original_only:
+        candidates = document_resources.stage_original(context, snapshot)
+    else:
+        candidates = document_resources.stage_document(context, records, catalog, snapshot, profile=profile,
+                                                       footnote_evidence=footnote_evidence,
+                                                       partial_unsupported=partial_unsupported,
+                                                       withheld_records=withheld_records,
+                                                       partial_unproven_binding=partial_unproven_binding,
+                                                       explicit_withheld_sources=explicit_withheld_sources)
     cancelled()
     external_fonts = [item for item in snapshot.files
                       if item.request.role == 'font' and item.request.root != 'project']
@@ -217,10 +233,12 @@ def compile_preview(context, records, catalog, snapshot, *, entrypoint, deadline
     # Reserve space and a conservative entry count before creating any staged
     # files. External fonts are duplicated into each ordered font directory.
     candidate_total = sum(len(candidates[item.request.root, item.request.path]) for item in snapshot.files)
-    staged_bytes = (snapshot.total_bytes + candidate_total + 2 * sum(item.size for item in external_fonts)
-                    + runtime._MAX_EXECUTABLE + 2 * (MAX_PDF_BYTES + MAX_DEPS_BYTES))
+    copies = 1 if original_only else 2
+    staged_bytes = (snapshot.total_bytes + (0 if original_only else candidate_total)
+                    + copies * sum(item.size for item in external_fonts)
+                    + runtime._MAX_EXECUTABLE + copies * (MAX_PDF_BYTES + MAX_DEPS_BYTES))
     parent_upper_bound = sum(max(0, len(item.request.path.split('/')) - 1) for item in snapshot.files)
-    staged_entries = 8 + 2 * (6 + len(roots) + len(snapshot.files) + len(external_fonts) + parent_upper_bound)
+    staged_entries = 8 + copies * (6 + len(roots) + len(snapshot.files) + len(external_fonts) + parent_upper_bound)
     if staged_bytes > MAX_PREVIEW_BYTES or staged_entries > MAX_PREVIEW_ENTRIES:
         raise SafetyError('Captured resources exceed the private preview workspace budget')
     compiler_record, compiler_bytes, compiler_evidence = runtime._capture_compiler()
@@ -237,7 +255,8 @@ def compile_preview(context, records, catalog, snapshot, *, entrypoint, deadline
             raise SafetyError('Private preview compiler differs from the pinned capture')
         workspaces = {}
         input_evidence = {compiler: private_compiler}
-        for label in ('baseline', 'candidate'):
+        labels = ('baseline',) if original_only else ('baseline', 'candidate')
+        for label in labels:
             workspace = base / label
             _mkdir(workspace)
             staged_roots = {name: workspace / name for name in roots}
@@ -293,7 +312,7 @@ def compile_preview(context, records, catalog, snapshot, *, entrypoint, deadline
         if probe.stdout != compiler_record.version or probe.stderr:
             raise SafetyError('Private preview compiler version does not match the pinned binary')
         outputs = {}
-        for label in ('baseline', 'candidate'):
+        for label in labels:
             workspace, staged, system_fonts, project_fonts, pdf, pdf_fd, pdf_id, deps, deps_fd, deps_id = workspaces[label]
             def verify_outputs():
                 check_workspace(force=True)
@@ -335,7 +354,7 @@ def compile_preview(context, records, catalog, snapshot, *, entrypoint, deadline
                     and set(comparison.observed) != set(expected_dependencies)):
                 raise SafetyError('Captured baseline dependencies differ from discovery')
             outputs[label] = pdf_bytes, comparison
-        if set(outputs['baseline'][1].observed) != set(outputs['candidate'][1].observed):
+        if not original_only and set(outputs['baseline'][1].observed) != set(outputs['candidate'][1].observed):
             raise SafetyError('Candidate compiler dependency membership changed')
         for path, evidence in input_evidence.items():
             runtime._same(path, evidence, runtime._MAX_EXECUTABLE if path == compiler else document_resources.MAX_FILE_BYTES,
@@ -346,8 +365,34 @@ def compile_preview(context, records, catalog, snapshot, *, entrypoint, deadline
         document_resources.assert_capture(snapshot)
         check_workspace(force=True)
         cancelled()
+        if original_only:
+            pdf, comparison = outputs['baseline']
+            return OriginalCompileResult(digest(pdf), len(comparison.observed), len(comparison.unobserved),
+                                         compiler_evidence.sha256, len(external_fonts), pdf)
         before, after = outputs['baseline'][0], outputs['candidate'][0]
         return PreviewCompileResult(digest(before), digest(after), before == after,
                                     len(outputs['candidate'][1].observed),
                                     len(outputs['candidate'][1].unobserved), compiler_evidence.sha256,
                                     len(external_fonts), after)
+
+
+def compile_preview(context, records, catalog, snapshot, *, entrypoint, deadline_seconds=120.0,
+                    cancel_event=None, expected_dependencies=None, expected_baseline_sha256=None,
+                    profile='standard', starts=None, footnote_evidence=None,
+                    partial_unsupported=False, withheld_records=None, partial_unproven_binding=False,
+                    explicit_withheld_sources=()):
+    return _compile_captured(context, records, catalog, snapshot, entrypoint=entrypoint,
+        deadline_seconds=deadline_seconds, cancel_event=cancel_event, expected_dependencies=expected_dependencies,
+        expected_baseline_sha256=expected_baseline_sha256, profile=profile, starts=starts,
+        footnote_evidence=footnote_evidence, partial_unsupported=partial_unsupported,
+        withheld_records=withheld_records, partial_unproven_binding=partial_unproven_binding,
+        explicit_withheld_sources=explicit_withheld_sources)
+
+
+def compile_original(context, snapshot, *, entrypoint, deadline_seconds=120.0, cancel_event=None,
+                     expected_dependencies=None, expected_baseline_sha256=None, starts=None):
+    """Compile only the captured original once; no lint or source edits are performed."""
+    return _compile_captured(context, None, None, snapshot, entrypoint=entrypoint,
+        deadline_seconds=deadline_seconds, cancel_event=cancel_event,
+        expected_dependencies=expected_dependencies, expected_baseline_sha256=expected_baseline_sha256,
+        starts=starts, original_only=True)

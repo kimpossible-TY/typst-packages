@@ -57,6 +57,18 @@ unresolved contexts. It does not inspect package bindings or prove callback
 execution, rendering or authority to write or compile. Complex calls, mutation,
 deferred scopes and unsupported options are conservatively skipped. Its edits
 are independent of all other previews, and the global rule remains uninspected.
+The same option also reports `conditional_mannot_scope_annotations`: it checks
+direct raw `annot` calls in supported literal `mannot-scope` callbacks, counts
+calls lexically inside display equations separately, and conditionally diagnoses
+supported calls outside displays. It can inspect a wrapper written inside an
+outer deferred or dynamic context, but neither that context nor the callback is
+proved to execute. `mannot-scope` forwarding to the reviewed scoped-annotations
+helper, raw `annot` binding, selected package bytes and runtime display ownership
+are conditions, not established provenance. Nested deferred annotation calls,
+bare math `annot(...)`, explicit shadows, unsupported callback forms and possible equation-constructor
+ownership remain unresolved. A hint can duplicate an existing independent raw
+annotation hint; these sections are not added to the top-level diagnostics.
+There are no edits, compiler or source-write authority, or complete coverage.
 
 The independent `--rule-set pde --preview-conditional-continuations` option
 proposes replacing the single newline and indentation between narrowly
@@ -73,6 +85,14 @@ reasoned suppressions and other checked source findings are preserved. The marke
 binding, English prose context and execution remain conditions. The intended
 rendered text changes, and the source-only proposals are not composed or applied
 and do not grant compiler authority or increase global coverage.
+
+The independent `--rule-set pde --preview-conditional-paragraph-gaps` option
+proposes an LF or CRLF blank line before a narrowly recognized nested standalone
+paragraph marker. Exact edits, suppression ownership, non-whitespace syntax and
+other supported source findings are rechecked; marker binding and prose execution
+remain conditional. Adding a blank line can change rendered output: an isolated
+owned Typst fixture produced different PDFs. The proposal is not applied or
+composed and does not authorize compilation or establish whole-document coverage.
 
 The independent `--rule-set pde --preview-conditional-prose-spacers` option
 proposes removing a literal `#dots_space` and horizontal separator immediately
@@ -156,6 +176,10 @@ JSON includes:
   proposes a paragraph break for the bounded nested prose-footnote pattern
   followed by an existing standalone marker. These edits are not composed
   with the other gap proposals and may change rendered layout.
+  Another independent `conditional_prose_footnote_display_gap_previews` list
+  proposes the break when a direct display follows the footnote. The helper
+  binding, actual execution and whether the display is separate at runtime
+  remain conditions; it can change rendering and grants no write authority.
 - `--preview-conditional-punctuation` independently previews horizontal
   whitespace removal between an existing period/comma and a nested prose
   footnote. A separate `conditional_punctuation_move_previews` list proposes

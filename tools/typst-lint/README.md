@@ -106,6 +106,7 @@ inspection route:
 /path/to/typst-packages/tools/typst-lint/typst-lint inspect-document --root /absolute/project --entrypoint main.typ --rule-set pde --preview-conditional-scoped-calls --format json
 /path/to/typst-packages/tools/typst-lint/typst-lint inspect-document --root /absolute/project --entrypoint main.typ --rule-set pde --preview-conditional-continuations --format json
 /path/to/typst-packages/tools/typst-lint/typst-lint inspect-document --root /absolute/project --entrypoint main.typ --rule-set pde --preview-conditional-capitalization --format json
+/path/to/typst-packages/tools/typst-lint/typst-lint inspect-document --root /absolute/project --entrypoint main.typ --rule-set pde --preview-conditional-paragraph-gaps --format json
 /path/to/typst-packages/tools/typst-lint/typst-lint inspect-document --root /absolute/project --entrypoint main.typ --rule-set pde --preview-conditional-prose-spacers --format json
 /path/to/typst-packages/tools/typst-lint/typst-lint inspect-document --root /absolute/project --entrypoint main.typ --rule-set pde --preview-conditional-aligned-spacers --format json
 /path/to/typst-packages/tools/typst-lint/typst-lint inspect-document --root /absolute/project --entrypoint main.typ --rule-set pde --preview-conditional-prose-markers --format json
@@ -122,6 +123,11 @@ for a narrow literal raw marker-label form. The helper bindings and execution
 remain unproved; this diagnostic-only report does not apply source edits.
 It also compares direct literal scope prefixes across captured include occurrences
 as conditional namespace-collision hints, without asserting execution order.
+Its separate `mannot-scope` annotation section counts supported raw calls
+lexically inside displays and conditionally reports calls outside them, including
+wrappers in deferred outer contexts. Runtime bindings, execution and display
+ownership remain unproved; hints can duplicate the independent raw annotation
+section and never authorize edits or compilation.
 
 This route captures literal relative includes with the fixed `book-v1` budget
 (64 source files and 400,000 syntax nodes), retains separate repeated include
@@ -266,8 +272,13 @@ its dependencies still execute in the PDF preview; included sources are not
 automatically excluded. Use it only with non-adversarial inputs. The sandbox
 denies network and writes outside its workspace, but does not prevent every read
 or transient input modification within it. See the preview contract for limits.
-Without `--preview`, the ordinary compile gate remains blocked; the preview
-neither accepts compiler-tail arguments nor publishes a PDF. Optional
+The ordinary, unprofiled compile gate remains blocked; the preview neither
+accepts compiler-tail arguments nor publishes a PDF. The separate explicit
+[`--compile-original --pdf-stdout` route](DOCUMENT_ORIGINAL_COMPILE_CONTRACT.md)
+compiles captured original bytes without linting or applying source edits. It
+returns PDF bytes through a pipe and reports on stderr; its success does not
+mean lint coverage is complete. Shell redirection is caller-managed and can
+truncate files before the process starts. Optional
 `--discover-dependencies` derives current dependency paths from a sandboxed
 read-only baseline using the manifest's explicit font selection, and refuses if
 the captured baseline's PDF or observed dependencies differ from that probe.
