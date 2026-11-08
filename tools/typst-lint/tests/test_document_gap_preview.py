@@ -1,5 +1,6 @@
 """Independent previews over real parser trees; consumers are never modified."""
 from pathlib import Path
+import random
 import sys
 import unittest
 from unittest.mock import patch
@@ -11,7 +12,60 @@ import document_gap_preview
 from document_display import RULE_ID, analyze, preview_gap_edits
 from edit_plan import Edit, plan
 from syntax_client import EXECUTABLE, parse
-from typst_lint import digest, load_rules
+from suppression import Scope
+from typst_lint import SafetyError, digest, load_rules
+
+
+class ScopeMappingTests(unittest.TestCase):
+    def test_index_matches_original_for_overlapping_unsorted_and_insertion_edits(self):
+        rng = random.Random(4813)
+        explicit = [
+            (Edit(2, 8, b''), Edit(4, 5, b'a'), Edit(8, 8, b'xy')),
+            (Edit(3, 3, b'xy'), Edit(3, 3, b'z'), Edit(1, 6, b'')),
+            (Edit(7, 2, b''), Edit(2, 2, b''), Edit(6, 6, b'a')),
+        ]
+        cases = explicit + [tuple(Edit(rng.randrange(-2, 15), rng.randrange(-2, 15),
+                                      b'x' * rng.randrange(4)) for _ in range(rng.randrange(10)))
+                            for _ in range(500)]
+        for edits in cases:
+            index = document_gap_preview._MappedEdits(edits)
+            for position in range(-3, 18):
+                try:
+                    expected = document_gap_preview._mapped(position, edits)
+                except SafetyError as error:
+                    with self.subTest(edits=edits, position=position), self.assertRaisesRegex(
+                            SafetyError, str(error)):
+                        index.mapped(position)
+                else:
+                    with self.subTest(edits=edits, position=position):
+                        self.assertEqual(index.mapped(position), expected)
+
+    def test_scopes_preserve_complete_mapping_and_custom_iteration_behavior(self):
+        scopes = (Scope(frozenset({'rule'}), 'reason', 3, 8, 1),
+                  Scope(frozenset({'other'}), 'why', 12, 14, 10))
+        edits = (Edit(8, 8, b'xy'), Edit(0, 1, b''), Edit(6, 7, b'z'))
+        expected = tuple((scope.rules, scope.reason,
+                          document_gap_preview._mapped(scope.start, edits),
+                          document_gap_preview._mapped(scope.end, edits),
+                          document_gap_preview._mapped(scope.directive_start, edits)) for scope in scopes)
+        with patch.object(document_gap_preview, 'resolve', return_value=scopes):
+            self.assertEqual(document_gap_preview._scopes(None, [], edits), expected)
+            # Iterator inputs historically get consumed by the first _mapped
+            # call, including its own first traversal. Keep that behavior.
+            actual = document_gap_preview._scopes(None, [], iter(edits))
+        self.assertEqual(actual, tuple((scope.rules, scope.reason, scope.start,
+                                       scope.end, scope.directive_start) for scope in scopes))
+
+    def test_large_independent_scopes_are_indexed_once(self):
+        edits = tuple(Edit(i * 3, i * 3 + 1, b'') for i in range(6000))
+        scopes = tuple(Scope(frozenset({'rule'}), 'reason', i * 3, i * 3 + 1, i * 3 + 2)
+                       for i in range(6000))
+        with patch.object(document_gap_preview, 'resolve', return_value=scopes), \
+             patch.object(document_gap_preview, '_mapped', side_effect=AssertionError('quadratic fallback')):
+            actual = document_gap_preview._scopes(None, [], edits)
+        self.assertEqual(len(actual), 6000)
+        self.assertEqual(actual[0][2:], (0, 0, 1))
+        self.assertEqual(actual[-1][2:], (11998, 11998, 11999))
 
 
 @unittest.skipUnless(EXECUTABLE.is_file(), 'Requires the pinned syntax adapter')

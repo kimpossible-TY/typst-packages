@@ -1,6 +1,8 @@
 """Verify independent, read-only previews of source display-gap edits."""
+from bisect import bisect_left, bisect_right
+
 from document_display import RULE_ID, STANDALONE, analyze_all, preview_gap_edits
-from edit_plan import plan
+from edit_plan import Edit, plan
 from suppression import resolve
 from syntax_client import parse
 from typst_lint import InputError, SafetyError, digest
@@ -34,10 +36,43 @@ def _mapped(position, edits):
                           for edit in edits if edit.end <= position)
 
 
+class _MappedEdits:
+    """Index ordinary edits without assuming ordering or non-overlap."""
+
+    def __init__(self, edits):
+        by_start = sorted((edit.start, edit.end) for edit in edits)
+        self.starts = [start for start, _ in by_start]
+        self.farthest_end = []
+        farthest = None
+        for _, end in by_start:
+            farthest = end if farthest is None else max(farthest, end)
+            self.farthest_end.append(farthest)
+        by_end = sorted((edit.end, len(edit.replacement) - (edit.end - edit.start))
+                        for edit in edits)
+        self.ends = [end for end, _ in by_end]
+        self.shifts = [0]
+        for _, delta in by_end:
+            self.shifts.append(self.shifts[-1] + delta)
+
+    def mapped(self, position):
+        before = bisect_left(self.starts, position)
+        if before and self.farthest_end[before - 1] > position:
+            raise SafetyError('A directive boundary lies inside a proposed gap')
+        return position + self.shifts[bisect_right(self.ends, position)]
+
+
 def _scopes(tree, catalog, edits=()):
-    return tuple((scope.rules, scope.reason, _mapped(scope.start, edits),
-                  _mapped(scope.end, edits), _mapped(scope.directive_start, edits))
-                 for scope in resolve(tree, {rule['id'] for rule in catalog}))
+    scopes = resolve(tree, {rule['id'] for rule in catalog})
+    # Preserve historical iteration and custom-object semantics on unusual
+    # callers; normal plan output consists of an immutable tuple of Edits.
+    if (type(scopes) is tuple and scopes and type(edits) in (tuple, list)
+            and all(type(edit) is Edit and type(edit.start) is int and type(edit.end) is int
+                    and type(edit.replacement) is bytes for edit in edits)):
+        mapped = _MappedEdits(edits).mapped
+    else:
+        mapped = lambda position: _mapped(position, edits)
+    return tuple((scope.rules, scope.reason, mapped(scope.start),
+                  mapped(scope.end), mapped(scope.directive_start)) for scope in scopes)
 
 
 def preview(tree, path, catalog, *, baseline_displays=None):
