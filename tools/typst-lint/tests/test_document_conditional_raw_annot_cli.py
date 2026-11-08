@@ -83,8 +83,15 @@ class ConditionalRawAnnotCliTests(unittest.TestCase):
         with patch.object(raw_annot, 'analyze', side_effect=AssertionError('ran without opt-in')):
             report = document_cli.report_document(str(self.root), 'main.typ', rule_set='pde')
         self.assertNotIn('conditional_raw_annotations', report)
-        with patch.object(document_cli, 'MAX_REPORT_ITEMS', 14), \
-             patch.object(raw_annot, 'analyze', wraps=raw_annot.analyze) as analyzed:
+        # A normal report establishes that earlier independent sections fit.
+        # Enlarge only the raw-annotation results so this checks that section's
+        # contribution without depending on the other sections' item counts.
+        report = document_cli.report_document(str(self.root), 'main.typ', rule_set='pde',
+                                              preview_conditional_scoped_calls=True)
+        large = dict(report['conditional_raw_annotations']['by_file'][0])
+        large['diagnostics'] = [{}] * 1001
+        with patch.object(document_cli, 'MAX_REPORT_ITEMS', 1000), \
+             patch.object(raw_annot, 'analyze', return_value=large) as analyzed:
             with self.assertRaisesRegex(InputError, 'report item limit'):
                 document_cli.report_document(str(self.root), 'main.typ', rule_set='pde',
                                              preview_conditional_scoped_calls=True)
