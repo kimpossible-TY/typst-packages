@@ -61,6 +61,18 @@ equivalence remain unproved; the complete candidate PDF can reflect multiple
 rules, so a PDF difference cannot be attributed to this stage alone. This
 selection neither grants source-write permission nor completes rule coverage.
 
+The separate `--conditional-adjacent-punctuation` selection can also be used
+with the standard profile, the existing G/P/S combinations and conditional
+continuations. It moves an immediately trailing comma or period to immediately
+before a supported literal prose footnote. Each move consists of an inseparable
+insertion and deletion; source-pattern selection, both edits, their conditions,
+the hash chain, suppression targets and cross-rule findings are checked again
+during replay. Unproved nested paragraph-marker boundaries withhold the source.
+The report counts moves and edits separately. Actual helper binding, execution
+and render equivalence are unproved, and the punctuation can visibly move. PDF
+comparisons cover all selected stages, not this stage alone. This option does
+not authorize writing source or establish complete rule coverage.
+
 When this option is selected, a successful report includes
 `conditional_spacer_preview.planned_edits`: the number of spacer-token edits
 actually included in the whole-document plan, excluding every withheld source.

@@ -96,6 +96,16 @@ def continuation_preview_summary(records):
                 pdf_attribution='The PDF comparison covers all planned edits and does not attribute differences to this rule.')
 
 
+def adjacent_punctuation_summary(records):
+    steps = [step for record in records for step in record['steps'] if step.get('atomic_edits') is True
+             and step['rule_id'] == 'pde.prose-footnote-punctuation']
+    count = sum(len(step['edits']) for step in steps)
+    return dict(planned_moves=count // 2, planned_edits=count, atomic_pairs=True,
+                eligibility='Only bounded adjacent literal prose footnotes are selected; builtin binding and execution remain unproved.',
+                render_effect='Moving punctuation across a footnote can visibly change output.',
+                pdf_attribution='The PDF comparison covers all selected stages and cannot establish which caused a difference.')
+
+
 def _object(pairs):
     result = {}
     for key, value in pairs:
@@ -165,6 +175,8 @@ def main(arguments=None, *, gate=False):
                         help='Also preview conditional proof and nested math-footnote gap edits')
     parser.add_argument('--conditional-continuations', action='store_true',
                         help='Preview conditional prose continuation line joins; rendering equivalence is unproved')
+    parser.add_argument('--conditional-adjacent-punctuation', action='store_true',
+                        help='Move adjacent prose punctuation across footnotes atomically; rendering may change')
     parser.add_argument('--conditional-punctuation', action='store_true',
                         help='Also preview conditional prose-footnote spacing (requires --conditional-gaps)')
     parser.add_argument('--conditional-spacers', action='store_true',
@@ -242,7 +254,8 @@ def main(arguments=None, *, gate=False):
                                                            footnote_evidence=evidence,
                                                            classify_deferred=args.partial_unsupported_preview,
                                                            classify_unproven_binding=args.partial_unproven_binding_preview,
-                                                           conditional_continuations=args.conditional_continuations)
+                                                           conditional_continuations=args.conditional_continuations,
+                                                           conditional_adjacent_punctuation=args.conditional_adjacent_punctuation)
                 if record is not None:
                     if record['verification'] == 'withheld':
                         if (args.partial_unsupported_preview and
@@ -335,7 +348,8 @@ def main(arguments=None, *, gate=False):
                                                            withheld_records=withheld if partial_requested else None,
                                                            partial_unproven_binding=args.partial_unproven_binding_preview,
                                                            explicit_withheld_sources=explicit_paths,
-                                                           conditional_continuations=args.conditional_continuations)
+                                                           conditional_continuations=args.conditional_continuations,
+                                                           conditional_adjacent_punctuation=args.conditional_adjacent_punctuation)
         result = dict(schema=1, tool_version=VERSION, mode='preview-compile', status=2, phase='preview',
                       compiler_invoked=True, pdf_generated=True, source_files_modified=False,
                       publication_authority=False, global_coverage_complete=False,
@@ -355,7 +369,8 @@ def main(arguments=None, *, gate=False):
                           (['pde.proof-trailing-gap', 'pde.footnote-trailing-gap'] if args.conditional_gaps else [])
                           + (['pde.prose-footnote-punctuation'] if args.conditional_punctuation else [])
                           + (['pde.unaligned-footnote-no-spacer'] if args.conditional_spacers else [])
-                          + (['pde.continuation-line'] if args.conditional_continuations else [])),
+                          + (['pde.continuation-line'] if args.conditional_continuations else [])
+                          + (['pde.prose-footnote-punctuation'] if args.conditional_adjacent_punctuation and not args.conditional_punctuation else [])),
                       partially_inspected_rule_ids=[document_display.STANDALONE, script_rule.RULE_ID, document_display.RULE_ID],
                       uninspected_rule_ids=[rule['id'] for rule in catalog['rules'] if rule['id'] not in
                                            (document_display.STANDALONE, script_rule.RULE_ID, document_display.RULE_ID)],
@@ -376,6 +391,8 @@ def main(arguments=None, *, gate=False):
             result['conditional_spacer_preview'] = spacer_preview_summary(records)
         if args.conditional_continuations:
             result['conditional_continuation_preview'] = continuation_preview_summary(records)
+        if args.conditional_adjacent_punctuation:
+            result['conditional_adjacent_punctuation_preview'] = adjacent_punctuation_summary(records)
         if review is not None:
             result['source_review'] = review
         if cancel is not None and cancel.is_set():
@@ -414,6 +431,8 @@ def main(arguments=None, *, gate=False):
                 result['conditional_spacer_preview'] = spacer_preview_summary([])
             if args.conditional_continuations:
                 result['conditional_continuation_preview'] = continuation_preview_summary([])
+            if args.conditional_adjacent_punctuation:
+                result['conditional_adjacent_punctuation_preview'] = adjacent_punctuation_summary([])
         if isinstance(error, runtime.CompilerFailure) and error.invocation is not None:
             starts.observe(error.invocation)
             result['compiler_stage'] = document_preview_compile._PURPOSE_STAGES.get(error.invocation.purpose)
@@ -468,6 +487,9 @@ def main(arguments=None, *, gate=False):
             info = result['conditional_continuation_preview']
             print(f"Conditional continuation joins planned: {info['planned_edits']}. "
                   f"{info['eligibility']} {info['render_effect']} {info['pdf_attribution']}", file=stream)
+        if 'conditional_adjacent_punctuation_preview' in result:
+            info = result['conditional_adjacent_punctuation_preview']
+            print(f"Conditional adjacent punctuation moves planned: {info['planned_moves']} ({info['planned_edits']} atomic-pair edits). {info['eligibility']} {info['render_effect']} {info['pdf_attribution']}", file=stream)
     else:
         print(f"typst-lint preview-compile: PDF generated; {result['observed_dependencies']} observed dependencies; "
               f"baseline/candidate identical: {result['pdfs_identical']}", file=stream)
@@ -480,6 +502,9 @@ def main(arguments=None, *, gate=False):
             info = result['conditional_continuation_preview']
             print(f"Conditional continuation joins planned: {info['planned_edits']}. "
                   f"{info['eligibility']} {info['render_effect']} {info['pdf_attribution']}", file=stream)
+        if 'conditional_adjacent_punctuation_preview' in result:
+            info = result['conditional_adjacent_punctuation_preview']
+            print(f"Conditional adjacent punctuation moves planned: {info['planned_moves']} ({info['planned_edits']} atomic-pair edits). {info['eligibility']} {info['render_effect']} {info['pdf_attribution']}", file=stream)
         if partial_requested:
             print(f"Partial preview: {len(result['withheld_sources'])} source(s) kept at their captured original bytes; "
                   f"{result['planned_sources']} source(s) have candidate edits.", file=stream)

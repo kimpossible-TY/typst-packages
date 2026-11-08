@@ -38,9 +38,13 @@ def _profile(value):
     return value
 
 
-def _verification(profile, conditional_continuations):
+def _verification(profile, conditional_continuations, conditional_adjacent_punctuation=False):
     base = _VERIFICATIONS[profile]
-    return base + '-conditional-continuation-reanalysis' if conditional_continuations else base
+    if conditional_continuations:
+        base += '-conditional-continuation-reanalysis'
+    if conditional_adjacent_punctuation:
+        base += '-conditional-adjacent-punctuation-reanalysis'
+    return base
 
 
 class _FindingMapper:
@@ -99,11 +103,12 @@ def _same_findings(before_tree, before, after_tree, after, edits):
 
 
 def preview(tree, path, catalog, *, profile=_STANDARD, footnote_evidence=None, classify_deferred=False,
-            classify_unproven_binding=False, conditional_continuations=False):
+            classify_unproven_binding=False, conditional_continuations=False,
+            conditional_adjacent_punctuation=False):
     """Return hash-chained edits or a withheld result for this source."""
     _profile(profile)
-    if type(conditional_continuations) is not bool:
-        raise InputError('Conditional continuation selection must be a Boolean')
+    if type(conditional_continuations) is not bool or type(conditional_adjacent_punctuation) is not bool:
+        raise InputError('Conditional source selections must be Boolean')
     if type(classify_deferred) is not bool:
         raise InputError('Deferred classification must be an explicit Boolean')
     if type(classify_unproven_binding) is not bool or (classify_unproven_binding and not classify_deferred):
@@ -639,6 +644,54 @@ def preview(tree, path, catalog, *, profile=_STANDARD, footnote_evidence=None, c
                     render_equivalence_proved=False, edit_permission=False, compiler_permission=False) for row in rows]
                 steps.append(dict(rule_id=continuation.RULE, baseline_sha256=digest(before.source),
                                   candidate_sha256=digest(candidate), edits=conditional_rows))
+        if conditional_adjacent_punctuation:
+            import document_adjacent_punctuation_preview as adjacent
+            import paragraph_rules
+            before = current
+            selected = adjacent.preview(before, path, catalog=catalog)
+            exact_edits, targets = adjacent._select(before, path, catalog)
+            if selected is None and exact_edits:
+                raise SafetyError('Conditional adjacent punctuation candidates were omitted')
+            if selected is not None:
+                if type(selected) is not dict:
+                    raise SafetyError('Conditional adjacent punctuation proof is invalid')
+                if selected.get('verification') == 'withheld':
+                    raise SafetyError('Conditional adjacent punctuation withheld: ' + str(selected.get('reason', 'unknown')))
+                if (selected.get('verification') != 'conditional-adjacent-punctuation-syntax-directives-and-reanalysis'
+                        or selected.get('atomic_edits') is not True
+                        or any(selected.get(key) is not False for key in ('runtime_binding_proved', 'execution_proved',
+                            'render_equivalence_proved', 'edit_permission', 'compiler_permission'))
+                        or type(selected.get('conditions')) is not tuple
+                        or selected['conditions'] != adjacent.CONDITIONS):
+                    raise SafetyError('Conditional adjacent punctuation proof is invalid')
+                rows = selected.get('edits')
+                if (type(rows) is not list or not rows or len(rows) != 2 * len(targets)
+                        or any(type(row) is not dict or set(row) != {'start', 'end', 'replacement', 'rule_id'}
+                            or row.get('rule_id') != adjacent.RULE or type(row.get('start')) is not int
+                            or type(row.get('end')) is not int or type(row.get('replacement')) is not str
+                            or not 0 <= row['start'] <= row['end'] <= len(before.source) for row in rows)):
+                    raise SafetyError('Conditional adjacent punctuation edit selection is invalid')
+                edits = tuple(Edit(row['start'], row['end'], row['replacement'].encode('utf-8')) for row in rows)
+                proposal = plan(before.source, edits)
+                candidate = proposal.candidate()
+                if (proposal.deferred or len(proposal.edits) != len(edits)
+                        or tuple(proposal.edits) != exact_edits
+                        or digest(before.source) != selected.get('baseline_sha256')
+                        or digest(candidate) != selected.get('candidate_sha256')):
+                    raise SafetyError('Conditional adjacent punctuation edit pairing or hash mismatch')
+                current = parse(candidate, tree.mode)
+                if (current.nodes[0].errors or adjacent._select(current, path, catalog)[0]
+                        or adjacent.preview(current, path, catalog=catalog) is not None):
+                    raise SafetyError('Conditional adjacent punctuation stage did not converge')
+                for checked in (before, current):
+                    hints = paragraph_rules.analyze_conditional_nested_gap(checked, path, catalog=catalog)
+                    if any(reason.startswith(paragraph_rules.NESTED_GAP_UNRESOLVED) for reason in hints.skips):
+                        raise SafetyError('Conditional punctuation cannot establish an unrelated paragraph marker boundary')
+                conditional_rows = [dict(row, conditions=list(selected['conditions']), atomic_edits=True,
+                    runtime_binding_proved=False, execution_proved=False, render_equivalence_proved=False,
+                    edit_permission=False, compiler_permission=False) for row in rows]
+                steps.append(dict(rule_id=adjacent.RULE, baseline_sha256=digest(before.source),
+                                  candidate_sha256=digest(candidate), atomic_edits=True, edits=conditional_rows))
         final_displays = analyze_all(current, path, catalog=catalog)
         final_scripts = analyze_script(current, path, catalog=catalog, _verify=False, _allow_code_call=True)
         if (current.nodes[0].errors or final_scripts.parse_errors or final_scripts.skips
@@ -662,13 +715,15 @@ def preview(tree, path, catalog, *, profile=_STANDARD, footnote_evidence=None, c
         if not steps:
             return None
         result = dict(path=path, baseline_sha256=digest(baseline), candidate_sha256=digest(current.source),
-                      verification=_verification(profile, conditional_continuations), steps=steps,
+                      verification=_verification(profile, conditional_continuations, conditional_adjacent_punctuation), steps=steps,
                       unresolved_display_contexts={rid: len(value.skips) for rid, value in final_displays.items()})
-        if profile != _STANDARD or conditional_continuations:
+        if profile != _STANDARD or conditional_continuations or conditional_adjacent_punctuation:
             result.update(profile=profile, runtime_binding_proved=False, render_equivalence_proved=False,
                           edit_permission=False)
         if conditional_continuations:
             result['conditional_continuations'] = True
+        if conditional_adjacent_punctuation:
+            result['conditional_adjacent_punctuation'] = True
         return result
     except (InputError, SafetyError, OSError, ValueError, RecursionError) as error:
         return dict(path=path, baseline_sha256=digest(baseline), candidate_sha256=None,
@@ -687,7 +742,8 @@ def _same_data(expected, supplied):
     return expected == supplied
 
 
-def replay(tree, path, catalog, record, *, profile=_STANDARD, footnote_evidence=None, conditional_continuations=False):
+def replay(tree, path, catalog, record, *, profile=_STANDARD, footnote_evidence=None, conditional_continuations=False,
+           conditional_adjacent_punctuation=False):
     """Recompute and replay a sequence in memory for a downstream consumer.
 
     Serialized plans are data, not authority: reject stale or altered records and
@@ -695,14 +751,17 @@ def replay(tree, path, catalog, record, *, profile=_STANDARD, footnote_evidence=
     protected write receipt or a compiler resource snapshot.
     """
     expected = preview(tree, path, catalog, profile=profile, footnote_evidence=footnote_evidence,
-                       conditional_continuations=conditional_continuations)
-    return _replay_expected(tree, record, expected, profile=profile, conditional_continuations=conditional_continuations)
+                       conditional_continuations=conditional_continuations,
+                       conditional_adjacent_punctuation=conditional_adjacent_punctuation)
+    return _replay_expected(tree, record, expected, profile=profile, conditional_continuations=conditional_continuations,
+                            conditional_adjacent_punctuation=conditional_adjacent_punctuation)
 
 
-def _replay_expected(tree, record, expected, *, profile=_STANDARD, conditional_continuations=False):
+def _replay_expected(tree, record, expected, *, profile=_STANDARD, conditional_continuations=False,
+                     conditional_adjacent_punctuation=False):
     _profile(profile)
     if (type(record) is not dict or expected is None or not _same_data(expected, record)
-            or expected['verification'] != _verification(profile, conditional_continuations)):
+            or expected['verification'] != _verification(profile, conditional_continuations, conditional_adjacent_punctuation)):
         raise SafetyError('Sequence is stale, altered, incomplete or withheld')
     current = tree.source
     for step in record['steps']:
@@ -746,7 +805,7 @@ def validate_explicit_withheld(context, paths):
 
 def replay_document(context, records, catalog, *, profile=_STANDARD, footnote_evidence=None,
                     partial_unsupported=False, withheld_records=None, partial_unproven_binding=False,
-                    explicit_withheld_sources=(), conditional_continuations=False):
+                    explicit_withheld_sources=(), conditional_continuations=False, conditional_adjacent_punctuation=False):
     """Derive an immutable in-memory source map from one issued include capture.
 
     Every captured source must have exactly its current sequence record or no
@@ -755,8 +814,8 @@ def replay_document(context, records, catalog, *, profile=_STANDARD, footnote_ev
     closure and the returned mapping is not compiler or write authority.
     """
     _profile(profile)
-    if type(conditional_continuations) is not bool:
-        raise SafetyError('Conditional continuation selection must be a Boolean')
+    if type(conditional_continuations) is not bool or type(conditional_adjacent_punctuation) is not bool:
+        raise SafetyError('Conditional source selections must be Boolean')
     if type(partial_unsupported) is not bool:
         raise SafetyError('Partial preview selection must be an explicit Boolean')
     if (type(partial_unproven_binding) is not bool
@@ -802,7 +861,8 @@ def replay_document(context, records, catalog, *, profile=_STANDARD, footnote_ev
         expected = preview(source.tree, source.path, catalog, profile=profile, footnote_evidence=footnote_evidence,
                            classify_deferred=partial_unsupported,
                            classify_unproven_binding=partial_unproven_binding,
-                           conditional_continuations=conditional_continuations)
+                           conditional_continuations=conditional_continuations,
+                           conditional_adjacent_punctuation=conditional_adjacent_punctuation)
         if excluded is not None:
             if (not partial_unsupported or expected is None or expected.get('verification') != 'withheld'
                     or expected.get('reason_code') not in (('unsupported-deferred-footnote-binding',
@@ -815,7 +875,8 @@ def replay_document(context, records, catalog, *, profile=_STANDARD, footnote_ev
             candidates[source.path] = source.source
         else:
             candidates[source.path] = _replay_expected(source.tree, record, expected, profile=profile,
-                                                       conditional_continuations=conditional_continuations)
+                                                       conditional_continuations=conditional_continuations,
+                                                       conditional_adjacent_punctuation=conditional_adjacent_punctuation)
     conditional_calls = {record['path']: tuple(offset for step in record['steps']
                          for offset in step.get('conditional_footnote_calls', ())) for record in records}
     conditional_calls = {path: offsets for path, offsets in conditional_calls.items() if offsets}
