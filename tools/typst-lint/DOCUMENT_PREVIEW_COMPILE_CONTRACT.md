@@ -47,6 +47,20 @@ compiled privately; PDF differences are reported and may be intentional under
 the selected style policy. They do not authorize applying edits. This stage does
 not claim complete inspection, and the rule remains in `uninspected_rule_ids`.
 
+The separate `--conditional-continuations` selection can be used with the
+standard profile or any existing G/P/S profile. It previews bounded, literal
+prose continuation joins after the other selected stages. Each source newline
+and its indentation becomes one space; paragraph breaks, comments, unknown
+sentence boundaries and unsupported structures are not selected. The exact
+selection, hash chain, directive ownership and source-pattern findings are
+rechecked at replay. A selected file with an unproved nested paragraph-marker
+boundary is withheld rather than silently skipping that interaction. The
+report includes the number of continuation edits actually planned and the
+conditions for reviewed edits. Runtime execution, prose ownership and visual
+equivalence remain unproved; the complete candidate PDF can reflect multiple
+rules, so a PDF difference cannot be attributed to this stage alone. This
+selection neither grants source-write permission nor completes rule coverage.
+
 When this option is selected, a successful report includes
 `conditional_spacer_preview.planned_edits`: the number of spacer-token edits
 actually included in the whole-document plan, excluding every withheld source.

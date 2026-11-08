@@ -167,7 +167,7 @@ def _compile_captured(context, records, catalog, snapshot, *, entrypoint, deadli
                     cancel_event=None, expected_dependencies=None, expected_baseline_sha256=None,
                     profile='standard', starts=None, footnote_evidence=None,
                     partial_unsupported=False, withheld_records=None, partial_unproven_binding=False,
-                    explicit_withheld_sources=(), original_only=False):
+                    explicit_withheld_sources=(), conditional_continuations=False, original_only=False):
     """Compile baseline and candidate from explicit captured bytes in private.
 
     macOS sandbox-exec denies networking and writes outside the temporary
@@ -214,7 +214,8 @@ def _compile_captured(context, records, catalog, snapshot, *, entrypoint, deadli
                                                        partial_unsupported=partial_unsupported,
                                                        withheld_records=withheld_records,
                                                        partial_unproven_binding=partial_unproven_binding,
-                                                       explicit_withheld_sources=explicit_withheld_sources)
+                                                       explicit_withheld_sources=explicit_withheld_sources,
+                                                       conditional_continuations=conditional_continuations)
     cancelled()
     external_fonts = [item for item in snapshot.files
                       if item.request.role == 'font' and item.request.root != 'project']
@@ -380,13 +381,13 @@ def compile_preview(context, records, catalog, snapshot, *, entrypoint, deadline
                     cancel_event=None, expected_dependencies=None, expected_baseline_sha256=None,
                     profile='standard', starts=None, footnote_evidence=None,
                     partial_unsupported=False, withheld_records=None, partial_unproven_binding=False,
-                    explicit_withheld_sources=()):
+                    explicit_withheld_sources=(), conditional_continuations=False):
     return _compile_captured(context, records, catalog, snapshot, entrypoint=entrypoint,
         deadline_seconds=deadline_seconds, cancel_event=cancel_event, expected_dependencies=expected_dependencies,
         expected_baseline_sha256=expected_baseline_sha256, profile=profile, starts=starts,
         footnote_evidence=footnote_evidence, partial_unsupported=partial_unsupported,
         withheld_records=withheld_records, partial_unproven_binding=partial_unproven_binding,
-        explicit_withheld_sources=explicit_withheld_sources)
+        explicit_withheld_sources=explicit_withheld_sources, conditional_continuations=conditional_continuations)
 
 
 def compile_original(context, snapshot, *, entrypoint, deadline_seconds=120.0, cancel_event=None,

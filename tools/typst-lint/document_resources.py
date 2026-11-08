@@ -284,7 +284,7 @@ def stage_original(context, snapshot, *, project_root='project'):
 
 def stage_document(context, records, catalog, snapshot, *, project_root='project', profile='standard',
                    footnote_evidence=None, partial_unsupported=False, withheld_records=None,
-                   partial_unproven_binding=False, explicit_withheld_sources=()):
+                   partial_unproven_binding=False, explicit_withheld_sources=(), conditional_continuations=False):
     """Bind verified source candidates to explicit captured resource bytes.
 
     The mapping is for private staging experiments only. It neither establishes
@@ -312,7 +312,8 @@ def stage_document(context, records, catalog, snapshot, *, project_root='project
     candidates = replay_document(context, records, catalog, profile=profile, footnote_evidence=footnote_evidence,
                                  partial_unsupported=partial_unsupported, withheld_records=withheld_records,
                                  partial_unproven_binding=partial_unproven_binding,
-                                 explicit_withheld_sources=explicit_withheld_sources)
+                                 explicit_withheld_sources=explicit_withheld_sources,
+                                 conditional_continuations=conditional_continuations)
     staged = {(item.request.root, item.request.path):
               candidates[item.request.path] if item.request.root == project_root and item.request.path in candidates
               else item.data for item in snapshot.files}
