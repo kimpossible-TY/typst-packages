@@ -177,6 +177,8 @@ def main(arguments=None, *, gate=False):
                         help='Preview conditional prose continuation line joins; rendering equivalence is unproved')
     parser.add_argument('--conditional-modern-highlights', action='store_true',
                         help='Preview only conditional modern text-utils highlight splits; rendering may change')
+    parser.add_argument('--compose-modern-highlights', action='store_true',
+                        help='Add conditional modern highlight splits after the selected sequence; rendering may change')
     parser.add_argument('--conditional-adjacent-punctuation', action='store_true',
                         help='Move adjacent prose punctuation across footnotes atomically; rendering may change')
     parser.add_argument('--conditional-punctuation', action='store_true',
@@ -208,8 +210,11 @@ def main(arguments=None, *, gate=False):
     if args.conditional_modern_highlights and (args.conditional_gaps or args.conditional_punctuation
             or args.conditional_spacers or args.conditional_facade_footnotes or args.conditional_continuations
             or args.conditional_adjacent_punctuation or args.partial_unsupported_preview
-            or args.partial_unproven_binding_preview or args.withhold_source or args.review_edits):
+            or args.partial_unproven_binding_preview or args.withhold_source or args.review_edits
+            or args.compose_modern_highlights):
         parser.error('--conditional-modern-highlights is an exclusive preview and does not support --review-edits')
+    if args.compose_modern_highlights and args.review_edits:
+        parser.error('--compose-modern-highlights does not yet support --review-edits')
     if args.conditional_punctuation and not args.conditional_gaps:
         parser.error('--conditional-punctuation requires --conditional-gaps')
     if args.conditional_spacers and not args.conditional_gaps:
@@ -274,16 +279,17 @@ def main(arguments=None, *, gate=False):
                             raise SafetyError(f"{item.path}: {record['reason']}")
                     else:
                         records.append(record)
-            if withheld and not records:
+            if withheld and not records and not args.compose_modern_highlights:
                 raise NoPartialPreview(withheld, [rule['id'] for rule in catalog['rules'] if rule['id'] not in
                     (document_display.STANDALONE, script_rule.RULE_ID, document_display.RULE_ID)])
             return records, withheld
 
         # Preserve the existing fail-before-discovery behavior unless this
         # profile needs a resource-bound facade proof for planning.
-        planned = None if args.conditional_facade_footnotes or args.conditional_modern_highlights else plan_records(None)
+        planned = None if (args.conditional_facade_footnotes or args.conditional_modern_highlights
+                           or args.compose_modern_highlights) else plan_records(None)
         footnote_session = None
-        if args.conditional_facade_footnotes or args.conditional_modern_highlights:
+        if args.conditional_facade_footnotes or args.conditional_modern_highlights or args.compose_modern_highlights:
             import conditional_footnote_binding
             import namespace_multiroot
             require('packages' in roots and 'cache' in roots, 'Conditional evidence requires package and cache roots')
@@ -349,18 +355,21 @@ def main(arguments=None, *, gate=False):
             records, withheld = None, []
         elif planned is None:
             phase = 'planning'
-            planned = plan_records(footnote_evidence)
+            planned = plan_records(footnote_evidence if args.conditional_facade_footnotes else None)
         if not args.conditional_modern_highlights:
             records, withheld = planned
         review = review_sources(context, records, withheld if partial_requested else None) if args.review_edits else None
         phase = 'compile'
         compile_options = {'modern_highlight_evidence': modern_evidence} if modern_evidence is not None else {}
+        if args.compose_modern_highlights:
+            compile_options = dict(composed_modern_evidence=footnote_evidence,
+                                   sequence_facade_evidence=args.conditional_facade_footnotes)
         preview = document_preview_compile.compile_preview(context, records, catalog['rules'], snapshot,
                                                            entrypoint=args.entrypoint, cancel_event=cancel,
                                                            expected_dependencies=observed,
                                                            expected_baseline_sha256=discovery_baseline_sha256,
                                                            profile=profile, starts=starts,
-                                                           footnote_evidence=footnote_evidence,
+                                                           footnote_evidence=None if args.compose_modern_highlights else footnote_evidence,
                                                            partial_unsupported=args.partial_unsupported_preview,
                                                            withheld_records=withheld if partial_requested else None,
                                                            partial_unproven_binding=args.partial_unproven_binding_preview,
@@ -368,10 +377,11 @@ def main(arguments=None, *, gate=False):
                                                            conditional_continuations=args.conditional_continuations,
                                                            conditional_adjacent_punctuation=args.conditional_adjacent_punctuation,
                                                            **compile_options)
-        modern_summary = preview.modern_highlight_evidence if args.conditional_modern_highlights else None
+        modern_summary = preview.modern_highlight_evidence if (args.conditional_modern_highlights
+                                                              or args.compose_modern_highlights) else None
         planned_sources = modern_summary['source_count'] if modern_summary is not None else len(records)
-        planned_edits = modern_summary['candidate_count'] if modern_summary is not None else sum(
-            len(step['edits']) for record in records for step in record['steps'])
+        sequence_edits = sum(len(step['edits']) for record in (records or ()) for step in record['steps'])
+        planned_edits = sequence_edits + (modern_summary['candidate_count'] if modern_summary is not None else 0)
         result = dict(schema=1, tool_version=VERSION, mode='preview-compile', status=2, phase='preview',
                       compiler_invoked=True, pdf_generated=True, source_files_modified=False,
                       publication_authority=False, global_coverage_complete=False,
@@ -385,7 +395,7 @@ def main(arguments=None, *, gate=False):
                       discovery_performed=observed is not None,
                       discovery_observed_dependencies=len(observed) if observed is not None else None,
                       dependency_closure_proved=False, compiler_sha256=preview.compiler_sha256,
-                      sequence_profile='modern-highlight-only' if modern_summary is not None else profile,
+                      sequence_profile=('modern-highlight-only' if args.conditional_modern_highlights else profile),
                       conditional_facade_footnotes=args.conditional_facade_footnotes,
                       conditionally_previewed_rule_ids=(
                           (['pde.proof-trailing-gap', 'pde.footnote-trailing-gap'] if args.conditional_gaps else [])
@@ -394,11 +404,13 @@ def main(arguments=None, *, gate=False):
                           + (['pde.continuation-line'] if args.conditional_continuations else [])
                           + (['pde.prose-footnote-punctuation'] if args.conditional_adjacent_punctuation and not args.conditional_punctuation else [])
                           + (['pde.text-only-highlight'] if modern_summary is not None else [])),
-                      partially_inspected_rule_ids=(['pde.text-only-highlight'] if modern_summary is not None else
-                          [document_display.STANDALONE, script_rule.RULE_ID, document_display.RULE_ID]),
+                      partially_inspected_rule_ids=(['pde.text-only-highlight'] if args.conditional_modern_highlights else
+                          [document_display.STANDALONE, script_rule.RULE_ID, document_display.RULE_ID]
+                          + (['pde.text-only-highlight'] if args.compose_modern_highlights else [])),
                       uninspected_rule_ids=[rule['id'] for rule in catalog['rules'] if rule['id'] not in
-                                           (('pde.text-only-highlight',) if modern_summary is not None else
-                                            (document_display.STANDALONE, script_rule.RULE_ID, document_display.RULE_ID))],
+                                           (('pde.text-only-highlight',) if args.conditional_modern_highlights else
+                                            (document_display.STANDALONE, script_rule.RULE_ID, document_display.RULE_ID)
+                                            + (('pde.text-only-highlight',) if args.compose_modern_highlights else ()))],
                       source_apply_gate=dict(eligible=False,
                           blockers=['global_rule_coverage_incomplete', 'dependency_closure_unproved',
                                     'live_source_freshness_unproved', 'protected_source_transaction_unavailable']
@@ -412,6 +424,9 @@ def main(arguments=None, *, gate=False):
             result['conditional_modern_highlight_preview'] = dict(modern_summary,
                 condition='Runtime helper binding and execution are unproved.',
                 render_effect='Highlight splitting may change emphasis, smart-quote direction, spacing and layout.')
+            if args.compose_modern_highlights:
+                result['composed_modern_highlights'] = True
+                result['sequence_planned_edits'] = sequence_edits
         if partial_requested:
             if args.partial_unsupported_preview:
                 result['partial_unsupported_preview'] = True
@@ -466,6 +481,25 @@ def main(arguments=None, *, gate=False):
                 result['conditional_continuation_preview'] = continuation_preview_summary([])
             if args.conditional_adjacent_punctuation:
                 result['conditional_adjacent_punctuation_preview'] = adjacent_punctuation_summary([])
+        if isinstance(error, document_preview_compile.NoComposedPreview):
+            result['composed_modern_highlights'] = True
+            result['global_coverage_complete'] = False
+            result['uninspected_rule_ids'] = [rule['id'] for rule in catalog['rules']]
+            result['conditional_modern_highlight_preview'] = dict(error.summary,
+                condition='Runtime helper binding and execution are unproved.',
+                render_effect='Highlight splitting may change emphasis, smart-quote direction, spacing and layout.')
+            if partial_requested:
+                result['withheld_sources'] = describe_withheld(withheld, catalog['rules'])
+                if args.withhold_source:
+                    result['explicit_source_withholding'] = True
+                if args.partial_unsupported_preview:
+                    result['partial_unsupported_preview'] = True
+                if args.partial_unproven_binding_preview:
+                    result['partial_unproven_binding_preview'] = True
+            result['source_apply_gate'] = dict(eligible=False, blockers=['global_rule_coverage_incomplete',
+                'dependency_closure_unproved', 'live_source_freshness_unproved',
+                'protected_source_transaction_unavailable', 'no_verified_candidate_edits']
+                + (['partial_preview_withheld_files'] if withheld else []))
         if isinstance(error, runtime.CompilerFailure) and error.invocation is not None:
             starts.observe(error.invocation)
             result['compiler_stage'] = document_preview_compile._PURPOSE_STAGES.get(error.invocation.purpose)

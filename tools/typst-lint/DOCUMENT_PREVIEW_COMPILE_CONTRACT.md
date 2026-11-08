@@ -21,6 +21,8 @@ typst-lint preview-compile --root /absolute/project --entrypoint main.typ \
   --manifest /absolute/font-seed.json --discover-dependencies --conditional-gaps --conditional-spacers --conditional-facade-footnotes --format json
 typst-lint preview-compile --root /absolute/project --entrypoint main.typ \
   --manifest /absolute/font-seed.json --discover-dependencies --conditional-modern-highlights --format json
+typst-lint preview-compile --root /absolute/project --entrypoint main.typ \
+  --manifest /absolute/font-seed.json --discover-dependencies --compose-modern-highlights --format json
 typst-style compile --preview --root /absolute/project --entrypoint main.typ \
   --manifest /absolute/font-seed.json --discover-dependencies --format json
 typst-style compile --preview --root /absolute/project --entrypoint main.typ \
@@ -43,6 +45,31 @@ the preview does not prove coverage, runtime binding or execution. Splitting
 may change emphasis, smart-quote direction and layout; PDF-byte comparison only
 describes these particular captured runs. Source application and publication
 remain unavailable.
+
+`--compose-modern-highlights` is a distinct opt-in that appends supported
+modern highlight splits to the selected standard/G/P/S sequence and optional
+continuation/adjacent-punctuation stages. The selected sequence is rederived and
+replayed first, then an issued intermediate include/import context and binding
+are rebuilt from its exact bytes. Highlight diagnostics and candidates are
+recomputed there, including unchanged package selection, source routes and
+suppression. The final candidate map is rechecked and used directly for private
+staging. Each reported source has baseline/intermediate/final hashes; each
+stage lists its own input/output hashes and byte edit spans. These offsets are
+relative to that stage's own input, not the original file.
+
+An explicitly withheld or recognized unsupported source remains unchanged in
+both stages. If the modern stage would change another finding's route source or
+an existing conditional-footnote facade, the complete preview is refused.
+Modern edits in a source with facade-proven conditional footnote calls are
+currently refused because their final offsets are not reissued. When both
+stages have no verified edits, compilation is refused and the report retains
+withheld sources, incomplete evidence and an ineligible source-apply gate.
+The option cannot be combined with the modern-only option or `--review-edits`.
+Runtime selection/execution, visual equivalence and complete coverage remain
+unproved; highlighting changes may alter pagination and page count. Original
+source application and publication remain unavailable.
+The compiler deadline applies separately to each Typst process, not to total
+planning and verification wall time.
 
 The opt-in `--conditional-gaps` profile appends source-local nested math
 footnote and proof gap stages to the standard sequence. Every step is replayed

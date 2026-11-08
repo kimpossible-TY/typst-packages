@@ -36,6 +36,13 @@ class PreviewCompilerDiagnostics(SafetyError):
         self.invocation = invocation
 
 
+class NoComposedPreview(SafetyError):
+    """Both verified stages are empty; retain the partial-preview summary."""
+    def __init__(self, summary):
+        super().__init__('No verified composed candidate edits')
+        self.summary = summary
+
+
 _PURPOSE_STAGES = {'document-discovery-compile': 'discovery',
                    'document-preview-baseline': 'baseline',
                    'document-preview-candidate': 'candidate'}
@@ -169,7 +176,8 @@ def _compile_captured(context, records, catalog, snapshot, *, entrypoint, deadli
                     profile='standard', starts=None, footnote_evidence=None,
                     partial_unsupported=False, withheld_records=None, partial_unproven_binding=False,
                     explicit_withheld_sources=(), conditional_continuations=False, conditional_adjacent_punctuation=False,
-                    original_only=False, modern_highlight_evidence=None):
+                    original_only=False, modern_highlight_evidence=None,
+                    composed_modern_evidence=None, sequence_facade_evidence=False):
     """Compile baseline and candidate from explicit captured bytes in private.
 
     macOS sandbox-exec denies networking and writes outside the temporary
@@ -209,7 +217,27 @@ def _compile_captured(context, records, catalog, snapshot, *, entrypoint, deadli
     if any(len(name) > 64 for name in roots):
         raise SafetyError('Preview resource root ID is too long')
     modern_summary = None
-    if modern_highlight_evidence is not None:
+    composed_view = None
+    if composed_modern_evidence is not None:
+        import document_composed_modern_highlight as composed_modern
+        import document_footnote_evidence as footnote_capture
+        if (original_only is not False or modern_highlight_evidence is not None
+                or type(composed_modern_evidence) is not footnote_capture.PreviewFootnoteEvidence
+                or composed_modern_evidence._snapshot is not snapshot
+                or composed_modern_evidence._session._context is not context
+                or footnote_evidence is not None or type(sequence_facade_evidence) is not bool):
+            raise SafetyError('Composed modern preview requires the matching issued resource capture')
+        candidates, modern_summary, composed_view = composed_modern.stage(composed_modern_evidence, records,
+            profile=profile, partial_unsupported=partial_unsupported, withheld_records=withheld_records,
+            partial_unproven_binding=partial_unproven_binding, explicit_withheld_sources=explicit_withheld_sources,
+            conditional_continuations=conditional_continuations,
+            conditional_adjacent_punctuation=conditional_adjacent_punctuation,
+            sequence_facade_evidence=sequence_facade_evidence)
+        if not modern_summary['source_count']:
+            raise NoComposedPreview(modern_summary)
+    elif sequence_facade_evidence is not False:
+        raise SafetyError('Sequence facade selection requires a composed modern preview')
+    elif modern_highlight_evidence is not None:
         import document_modern_highlight_evidence as modern_evidence
         if (original_only is not False or type(modern_highlight_evidence) is not modern_evidence.CapturedModernHighlightEvidence
                 or modern_highlight_evidence._snapshot is not snapshot
@@ -309,6 +337,10 @@ def _compile_captured(context, records, catalog, snapshot, *, entrypoint, deadli
                                  pdf, pdf_fd, pdf_identity, deps, deps_fd, deps_identity)
         if modern_highlight_evidence is not None:
             modern_evidence._valid(modern_highlight_evidence)
+        if composed_view is not None:
+            import document_intermediate_context
+            document_intermediate_context.assert_intermediate(composed_view)
+            footnote_capture._valid(composed_modern_evidence)
         envbase = base / 'environment'
         _mkdir(envbase)
         for name in ('home', 'cache', 'config', 'data', 'tmp'):
@@ -386,6 +418,9 @@ def _compile_captured(context, records, catalog, snapshot, *, entrypoint, deadli
         document_resources.assert_capture(snapshot)
         if modern_highlight_evidence is not None:
             modern_evidence._valid(modern_highlight_evidence)
+        if composed_view is not None:
+            document_intermediate_context.assert_intermediate(composed_view)
+            footnote_capture._valid(composed_modern_evidence)
         check_workspace(force=True)
         cancelled()
         if original_only:
@@ -404,7 +439,8 @@ def compile_preview(context, records, catalog, snapshot, *, entrypoint, deadline
                     profile='standard', starts=None, footnote_evidence=None,
                     partial_unsupported=False, withheld_records=None, partial_unproven_binding=False,
                     explicit_withheld_sources=(), conditional_continuations=False, conditional_adjacent_punctuation=False,
-                    modern_highlight_evidence=None):
+                    modern_highlight_evidence=None, composed_modern_evidence=None,
+                    sequence_facade_evidence=False):
     return _compile_captured(context, records, catalog, snapshot, entrypoint=entrypoint,
         deadline_seconds=deadline_seconds, cancel_event=cancel_event, expected_dependencies=expected_dependencies,
         expected_baseline_sha256=expected_baseline_sha256, profile=profile, starts=starts,
@@ -412,7 +448,9 @@ def compile_preview(context, records, catalog, snapshot, *, entrypoint, deadline
         withheld_records=withheld_records, partial_unproven_binding=partial_unproven_binding,
         explicit_withheld_sources=explicit_withheld_sources, conditional_continuations=conditional_continuations,
         conditional_adjacent_punctuation=conditional_adjacent_punctuation,
-        modern_highlight_evidence=modern_highlight_evidence)
+        modern_highlight_evidence=modern_highlight_evidence,
+        composed_modern_evidence=composed_modern_evidence,
+        sequence_facade_evidence=sequence_facade_evidence)
 
 
 def compile_original(context, snapshot, *, entrypoint, deadline_seconds=120.0, cancel_event=None,

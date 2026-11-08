@@ -26,3 +26,7 @@ remain unproved. The view does not authorize compilation, source application
 or publication. Combining later edits still requires a new checked final
 resource mapping, cross-source route validation and the existing compiler
 staging/dependency checks. Validation is not a concurrent-write lock.
+The separate opt-in `preview-compile --compose-modern-highlights` uses this
+view for its intermediate analysis, and independently validates the final
+resource map before private staging; it does not make this context itself a
+compiler or source-write authority.

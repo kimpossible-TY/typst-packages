@@ -324,10 +324,12 @@ def assert_intermediate(value):
 
 def derive(proof, records, *, profile='standard', partial_unsupported=False, withheld_records=None,
            partial_unproven_binding=False, explicit_withheld_sources=(), conditional_continuations=False,
-           conditional_adjacent_punctuation=False):
+           conditional_adjacent_punctuation=False, sequence_facade_evidence=True):
     """Recompute/replay source sequences and issue a restricted in-memory view."""
     if type(proof) is not footnote.PreviewFootnoteEvidence:
         raise InputError('Issued preview resource evidence is required')
+    if type(sequence_facade_evidence) is not bool:
+        raise InputError('Sequence facade evidence selection must be a Boolean')
     resources = footnote._valid(proof)
     issued_session = binding._ISSUED.get(id(proof._session))
     if issued_session is None or len(issued_session) != 4:
@@ -340,7 +342,8 @@ def derive(proof, records, *, profile='standard', partial_unsupported=False, wit
     stable_records = _copy_records(records)
     stable_withheld = _copy_records(withheld_records)
     candidates = sequence.replay_document(baseline, stable_records, catalog, profile=profile,
-        footnote_evidence=proof, partial_unsupported=partial_unsupported, withheld_records=stable_withheld,
+        footnote_evidence=proof if sequence_facade_evidence else None,
+        partial_unsupported=partial_unsupported, withheld_records=stable_withheld,
         partial_unproven_binding=partial_unproven_binding, explicit_withheld_sources=explicit_withheld_sources,
         conditional_continuations=conditional_continuations,
         conditional_adjacent_punctuation=conditional_adjacent_punctuation)

@@ -320,8 +320,17 @@ modern text-utils highlight splits. It cannot be combined with the other
 conditional stages, `--withhold-source` or `--review-edits`; it requires the
 reviewed helper and its route to match the captured resources. The report
 counts proposed and unpreviewed diagnostics and retains incomplete coverage.
-Highlight splitting may change emphasis, quote direction and layout, and
+Highlight splitting may change emphasis, quote direction, layout and page count, and
 runtime binding and execution remain unproved.
+The separate `--compose-modern-highlights` option instead appends that stage to
+the selected standard/G/P/S, continuation and adjacent-punctuation sequence.
+It replays the sequence, reissues an in-memory intermediate graph, and checks
+the final source map and captured package routes before private compilation.
+The JSON report includes per-stage hashes and changed byte spans. Explicitly
+withheld sources stay unchanged in both stages. A highlight edit in the same
+source as a facade-proven footnote is currently refused, as is a change to
+another finding's route or a captured footnote facade. `--review-edits` is not
+available with this composed profile; these checks do not grant source writes.
 Adding `--conditional-punctuation` appends the separate conditional prose
 footnote spacing stage; it requires `--conditional-gaps`.
 For the separately opted-in spacer and facade profile,
