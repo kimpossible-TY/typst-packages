@@ -21,7 +21,7 @@
 | --- | --- | --- | --- | --- |
 | `core.parenthesized-scripts` | 제안 | 기본 | 기본 | 파서로 범위가 확인된 스크립트 피연산자; 불명확한 구문은 보류. |
 | `core.scoped-function-call` | 제안 | C | — | 제한된 문자 그대로의 scoped wrapper 콜백·호출 형태. 복잡하거나 지연된 callback은 보류한다. |
-| `core.scoped-marker-tags` | 진단 | — | — | 확인된 scoped 콜백의 태그만; 외부 참조를 임의로 바꾸지 않는다. |
+| `core.scoped-marker-tags` | 진단 | C | — | 제한된 literal scoped 콜백의 math raw marker label을 조건부 진단한다. wrapper·marker 바인딩과 실행은 미증명이며 외부 참조를 임의로 바꾸지 않는다. |
 | `core.scoped-anchor-access` | 제안 | — | — | 검토된 CeTZ 증거와 유일한 마커·방향이 확인된 경우. |
 | `core.scoped-reference-access` | 제안 | — | — | 동일 scope와 단일 리터럴 대상이 확인된 경우. |
 | `core.local-overlay-api` | 진단 | — | — | 알려진 로컬 annotation 콜백 안의 제한된 raw API 호출. |
@@ -49,7 +49,7 @@
 | `pde.proof-trailing-gap` | 제안 | L | G | 알려진 proof helper와 제한된 경계; G는 조건부 후보다. |
 | `pde.footnote-trailing-gap` | 제안 | L | G | 확인된 각주와 제한된 경계; G 결합 컴파일은 중첩 수식 각주 후보에 한정된다. 별도 소스 미리보기는 기존 marker 앞 중첩 산문의 제한된 후보를 제안한다. |
 | `pde.prose-footnote-punctuation` | 제안 | L | P | 제한된 직접 문장과 builtin 각주. 문서 검사는 조건부로 각주 앞 공백 제거와 각주 뒤 문장부호 이동을 각각 독립 미리보기로 제공한다. `--footnote-punctuation-evidence`는 일부 진단에 별도 출처 근거를 붙인다. P 결합 컴파일은 공백 제거만 포함한다. |
-| `pde.aligned-footnote-spacer` | 제안 | L | — | 정렬 수식과 확인된 spacer 바인딩만. |
+| `pde.aligned-footnote-spacer` | 제안 | L, 독립 미리보기 | — | 독립 미리보기는 제한된 정렬 수식 각주에 spacer 삽입을 제안한다. 실제 바인딩과 실행은 조건부이며 렌더가 달라질 수 있다. |
 | `pde.unaligned-footnote-no-spacer` | 제안 | L | S | 기존 명세대로 제한된 비정렬 수식 각주 앞 spacer를 제거하는 조건부 후보. 실제 렌더는 달라질 수 있다. |
 | `pde.prose-footnote-no-spacer` | 제안 | L, 독립 미리보기 | — | 독립 미리보기는 중첩 산문에서 기존 구두점에 밀착된 리터럴 spacer와 수평 공백만 제거한다. 실제 바인딩과 실행은 조건부이며 렌더가 달라질 수 있다. |
 | `pde.standalone-display` | 제안 | 기본 | 기본 | 파서가 확인한 display와 제한된 직접 문장·라벨. |

@@ -333,6 +333,7 @@ class CapturedRelativePublishIntegrationTests(_GraphPublicationFixture):
             with self.subTest(kind=kind):
                 f = self.fixture()
                 old = file_state(f.output)
+                original_dependency = file_state(f.dependency)
                 path = str(f.dependency)
                 if kind == 'bytes':
                     behavior = f'pathlib.Path({path!r}).write_bytes(b"#let count=99\\n")'
@@ -348,7 +349,36 @@ class CapturedRelativePublishIntegrationTests(_GraphPublicationFixture):
                         with self.assertRaises(store.PublicationError) as error:
                             self.publish(pub, fix)
                         saved = file_state(f.dependency)
-                self.assert_compile_zero_failure(error.exception.report)
+                report = error.exception.report
+                self.assertIsNotNone(report)
+                self.assertEqual(report.gate_status, 3)
+                self.assertEqual(report.phase, 'aborted_unpublished')
+                self.assertIs(report.compiler_invoked, True)
+                # The in-flight guard can observe the drift before or after
+                # the synthetic compiler exits. In the former case it kills
+                # the still-running process group; neither is a publication.
+                self.assertIn(report.compiler_status, (0, -signal.SIGKILL))
+                self.assertEqual(report.compile_report.compiler_status, report.compiler_status)
+                self.assertEqual(report.compile_report.safety_gate, 'refused')
+                self.assertIn('Committed graph authority is stale', report.reason)
+                self.assertIn('Stale baseline', report.reason)
+                self.assertEqual(report.source_commit, 'committed')
+                self.assertEqual(report.resource_report.fonts, ())
+                attempts = [i for i in report.attempted_invocations if i.purpose == 'compile']
+                self.assertEqual(len(attempts), 1)
+                self.assertEqual(attempts[0].returncode, report.compiler_status)
+                self.assertEqual(attempts[0].termination_reason, 'safety refusal')
+                self.assertEqual(attempts[0].lifecycle,
+                                 'exited' if report.compiler_status == 0 else 'signaled')
+                if kind == 'bytes':
+                    self.assertEqual(saved[0], b'#let count=99\n')
+                    self.assertNotEqual(saved[0], original_dependency[0])
+                elif kind == 'inode':
+                    self.assertNotEqual(saved[2], original_dependency[2])
+                else:
+                    self.assertEqual(stat.S_IMODE(saved[3]), 0o600)
+                    self.assertNotEqual(stat.S_IMODE(saved[3]),
+                                        stat.S_IMODE(original_dependency[3]))
                 self.assertEqual(file_state(f.output), old)
                 self.assertEqual(file_state(f.dependency), saved)
                 self.assert_committed(f)

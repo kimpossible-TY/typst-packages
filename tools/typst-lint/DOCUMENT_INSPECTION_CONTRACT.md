@@ -82,6 +82,15 @@ both runtime bindings and prose execution; it can change rendering, grants no
 compiler or source-write authority, is not composed with other plans, and does
 not increase global coverage.
 
+The independent `--rule-set pde --preview-conditional-aligned-spacers`
+option proposes inserting a literal `#dots_space` before a supported direct
+footnote in a nested aligned display. A finding and its suppression are
+rechecked against the source and candidate. The intended spacer and footnote
+bindings, the display's execution and runtime context are conditions, and the
+inserted spacer may change rendering. The plan is not composed or applied,
+does not grant compiler or source-write authority, and does not increase global
+coverage.
+
 The scoped-call option separately reports `conditional_detached_annotations` for
 direct scoped annotation calls outside a display in supported literal callback
 bodies. These are diagnostic-only hints with independent suppression and
@@ -89,6 +98,11 @@ unresolved context; they do not produce edits or complete rule coverage.
 The separate `conditional_raw_overlays` report covers a narrow direct
 `annot-cetz` spelling outside displays. Its helper identity and execution are
 likewise conditional; alias/shadow and unsupported contexts are withheld.
+The separate `conditional_marker_tags` report detects literal global labels in
+direct math `mark` calls within supported `local-scope-annotations` callbacks.
+Wrapper and raw marker binding, callback execution, and scope ownership remain
+conditions. Dynamic calls, nested effects, aliases and known shadowing remain
+unsupported; no label is changed and global rule coverage remains incomplete.
 
 JSON includes:
 
