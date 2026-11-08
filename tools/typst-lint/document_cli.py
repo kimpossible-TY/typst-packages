@@ -29,7 +29,8 @@ CONDITIONAL_RULES = ('pde.text-only-highlight', 'pde.paragraph-marker-gap')
 
 def report_document(root, entrypoint, *, rule_set='core', package_path=None,
                     preview_display_gaps=False, preview_standalone_displays=False,
-                    preview_sequence=False, local_rule_hints=False):
+                    preview_sequence=False, local_rule_hints=False,
+                    reference_package_path=None, reference_facade=None):
     """Inspect retained source bytes without reading consumer configuration.
 
     Literal includes inside unknown containers are inventory entries, not proof
@@ -49,6 +50,17 @@ def report_document(root, entrypoint, *, rule_set='core', package_path=None,
             'Sequence previews require explicit --rule-set pde')
     require(type(local_rule_hints) is bool and (not local_rule_hints or rule_set == 'pde'),
             'Source-local rule hints require explicit --rule-set pde')
+    reference_requested = reference_package_path is not None or reference_facade is not None
+    require(not reference_requested or (rule_set == 'pde' and package_path is not None
+            and reference_package_path is not None and type(reference_facade) is str),
+            'Reference provenance requires --rule-set pde, --package-path, '
+            '--reference-package-path and --reference-facade')
+    if reference_requested:
+        relative(reference_facade)
+        require(reference_facade.endswith('.typ')
+                and len(reference_facade.encode('utf-8')) <= include_context.MAX_PATH_BYTES
+                and not any(ord(char) < 32 or ord(char) == 127 for char in reference_facade),
+                'Reference facade must be a bounded project-relative Typst path')
     raw_root = os.fspath(root)
     require(type(raw_root) is str and len(raw_root) <= include_context.MAX_ROOT_BYTES,
             'Document root must be a bounded canonical absolute path')
@@ -95,6 +107,17 @@ def report_document(root, entrypoint, *, rule_set='core', package_path=None,
     sequence_previews = []
     local_findings, local_suppressed, local_files, local_contexts = [], [], [], []
     items = len(captured.sources) + len(captured.edges) + len(captured.occurrences) + len(captured.unresolved)
+    reference_report = None
+    if reference_requested:
+        from conditional_reference_provenance import ConditionalReferenceProvenance
+        analyzer = ConditionalReferenceProvenance(imports, namespaces, reference_package_path)
+        export = analyzer.export(reference_facade)
+        reference_report = dict(reference_package_path=analyzer.package_path,
+            reference_package_evidence=[asdict(evidence) for evidence in analyzer.package_evidence],
+            facade=reference_facade, export=asdict(export), call_binding_proved=False,
+            runtime_selection_proved=False, catalog_checked=False, edit_permission=False)
+        items += 1 + len(export.route) + len(export.source_hashes) + len(export.package_evidence)
+        require(items <= MAX_REPORT_ITEMS, 'Document inspection report item limit exceeded')
     for item in captured.sources:
         gap_preview = None
         standalone_preview = None
@@ -298,6 +321,8 @@ def report_document(root, entrypoint, *, rule_set='core', package_path=None,
             diagnostics=sorted(local_findings, key=lambda row: (row['path'], row['line'], row['column'], row['rule_id'])),
             suppressed=sorted(local_suppressed, key=lambda row: (row['path'], row['line'], row['column'], row['rule_id'])),
             source_contexts=local_contexts, coverage=local_files, edit_permission=False)
+    if reference_report is not None:
+        report['reference_provenance'] = reference_report
     return report
 
 
@@ -321,6 +346,10 @@ def main(arguments=None):
                         help='Preview hash-chained standalone, script and gap passes (requires --rule-set pde)')
     parser.add_argument('--local-rule-hints', action='store_true',
                         help='Inspect included files independently for additional conditional PDE hints')
+    parser.add_argument('--reference-package-path',
+                        help='Explicit canonical root containing the reviewed project-references package')
+    parser.add_argument('--reference-facade',
+                        help='Graph-captured project-relative .typ file whose project-ref export is traced')
     parser.add_argument('--format', choices=('json', 'text'), default='text')
     args = parser.parse_args(sys.argv[1:] if arguments is None else arguments)
     try:
@@ -329,7 +358,9 @@ def main(arguments=None):
                                  preview_display_gaps=args.preview_display_gaps,
                                  preview_standalone_displays=args.preview_standalone_displays,
                                  preview_sequence=args.preview_sequence,
-                                 local_rule_hints=args.local_rule_hints)
+                                 local_rule_hints=args.local_rule_hints,
+                                 reference_package_path=args.reference_package_path,
+                                 reference_facade=args.reference_facade)
     except (InputError, PackageInputError, OSError, ValueError) as error:
         result = dict(schema=1, tool_version=VERSION, mode='inspect-document', status=2,
                       phase='input', compiler_invoked=False, applied_fixes=[], error=str(error))
@@ -352,6 +383,10 @@ def main(arguments=None):
             for finding in result['local_rule_hints']['diagnostics']:
                 print(f"{finding['path']}:{finding['line']}:{finding['column']}: "
                       f"source-local conditional {finding['rule_id']}: {finding['explanation']}")
+        if 'reference_provenance' in result:
+            reference = result['reference_provenance']
+            detail = reference['export']['reason'] or 'runtime binding and initialization remain unproved'
+            print(f"Reference export {reference['facade']}: {reference['export']['status']} ({detail})")
         if result['namespace_evidence'] is not None:
             unresolved = sum(len(row['reasons']) + len(row['parse_errors'])
                              for row in result['conditional_coverage'])

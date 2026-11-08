@@ -59,7 +59,7 @@ class DocumentSequencePreviewTests(unittest.TestCase):
                                                  'x.typ', self.catalog, changed)
 
     def test_partial_script_withholds_even_an_earlier_standalone_edit(self):
-        source = b'Thus $ x^/*comment*/i $\n\nHence.\n'
+        source = b'Thus $ x^#(value + 1) $\n\nHence.\n'
         report = document_sequence_preview.preview(parse(source), 'x.typ', self.catalog)
         self.assertEqual(report['verification'], 'withheld')
         self.assertFalse(report['steps'])
@@ -106,7 +106,7 @@ class DocumentSequencePreviewTests(unittest.TestCase):
     def test_document_replay_refuses_a_withheld_source(self):
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory).resolve()
-            source = b'$ x^/*comment*/i $\n'
+            source = b'$ x^#(value + 1) $\n'
             (root / 'main.typ').write_bytes(source)
             context = include_context.load_include_context(root, (('main.typ', source),))
             record = document_sequence_preview.preview(context.sources[0].tree, 'main.typ', self.catalog)

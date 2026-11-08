@@ -78,6 +78,49 @@ class DocumentCliTests(unittest.TestCase):
         self.assertEqual(invalid['phase'], 'input')
         self.assertIn('require explicit --rule-set pde', invalid['error'])
 
+    def test_nested_footnote_hints_are_conditional_and_do_not_apply_edits(self):
+        source = b'#block[Claim#footnote[Text]\n\nNext.\n]\n'
+        target = self.write('main.typ', source)
+        report = self.run_cli('--rule-set', 'pde', '--local-rule-hints')
+        hints = report['local_rule_hints']
+        ids = {item['rule_id'] for item in hints['diagnostics']}
+        self.assertIn('pde.prose-footnote-punctuation', ids)
+        self.assertIn('pde.footnote-trailing-gap', ids)
+        self.assertFalse(hints['edit_permission'] or report['applied_fixes'] or report['proposed_edits'])
+        self.assertEqual(target.read_bytes(), source)
+
+    def test_explicit_reference_facade_provenance_is_conditional_and_reports_shadowing(self):
+        main = self.write('main.typ', b'#import "Styles/styles.typ": *\n')
+        facade = self.write('Styles/styles.typ', b'#import "@local/math-blocks:0.2.0": *\n')
+        packages = self.namespace_packages()
+        references = self.root / 'reference-packages'
+        destination = references / 'local/project-references/0.1.0'
+        destination.mkdir(parents=True)
+        source = TOOL.parents[1] / 'local/project-references/0.1.0'
+        for filename in ('typst.toml', 'lib.typ'):
+            shutil.copyfile(source / filename, destination / filename)
+        options = ('--rule-set', 'pde', '--package-path', str(packages),
+                   '--reference-package-path', str(references), '--reference-facade', 'main.typ')
+        result = self.run_cli(*options)
+        proof = result['reference_provenance']
+        self.assertEqual(proof['export']['status'], 'CONDITIONAL')
+        self.assertFalse(proof['call_binding_proved'] or proof['runtime_selection_proved']
+                         or proof['catalog_checked'] or proof['edit_permission'])
+        self.assertEqual(proof['reference_package_evidence'][0]['import_path'], '@local/project-references:0.1.0')
+        self.assertTrue(proof['export']['route'])
+        self.assertEqual(main.read_bytes(), b'#import "Styles/styles.typ": *\n')
+        facade.write_bytes(facade.read_bytes() + b'#let project-ref = none\n')
+        refused = self.run_cli(*options)['reference_provenance']
+        self.assertEqual(refused['export']['status'], 'UNAVAILABLE')
+        self.assertTrue(refused['export']['reason'])
+        self.assertTrue(refused['reference_package_evidence'])
+
+    def test_reference_facade_options_require_both_roots_and_facade(self):
+        self.write('main.typ', b'Hello.\n')
+        report = self.run_cli('--rule-set', 'pde', '--reference-facade', 'main.typ')
+        self.assertEqual(report['phase'], 'input')
+        self.assertIn('--reference-package-path', report['error'])
+
     def namespace_packages(self):
         package_root = self.root / 'packages'
         roots = [('local', name, version, 'lib.typ', TOOL.parents[1])
@@ -216,7 +259,7 @@ class DocumentCliTests(unittest.TestCase):
         self.assertNotIn('proposed_edits', result)
 
     def test_partial_script_source_keeps_findings_and_withholds_every_edit(self):
-        self.write('main.typ', b'$x^/* comment */i$ and $y^j$.\n')
+        self.write('main.typ', b'$x^#(value + 1)$ and $y^j$.\n')
         result = self.run_cli()
         self.assertEqual(len(result['diagnostics']), 1)
         self.assertEqual(result['proposed_edits'], [])

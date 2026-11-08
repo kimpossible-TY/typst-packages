@@ -56,9 +56,9 @@ class DocumentCodeScriptTests(unittest.TestCase):
                 self.assertFalse(final.diagnostics or final.edits or final.skips)
 
     def test_comments_and_other_code_expressions_remain_unsupported(self):
-        for source in (b'$x^/* comment */#f(2)$', b'$x^/* comment */#value$',
+        for source in (b'$x^// comment\n#f(2)$', b'$x^// comment\n#value$',
                        b'$x^#(value + 1)$', b'$x^#{value}$', b'$x^#f().value$',
-                       b'$x^#a.at(0).value$', b'$x^/* comment */i$'):
+                       b'$x^#a.at(0).value$', b'$x^// comment\ni$'):
             with self.subTest(source=source):
                 result = analyze(parse(source), 'x.typ', _allow_code_call=True)
                 self.assertTrue(result.skips)

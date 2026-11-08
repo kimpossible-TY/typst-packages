@@ -27,8 +27,8 @@ The default `--rule-set core` inspects each unique captured source once for
 record that selection. Inline suppression directives are honored for both rules.
 The document route additionally accepts a direct `#`-escaped function call,
 identifier or static identifier-field chain as a script operand and groups the
-hash together with it. Whitespace before the hash is preserved; comments between
-the operator and operand, computed receivers and other escapes remain unsupported.
+hash together with it. Whitespace and block comments before the operand are
+preserved; line comments, computed receivers and other escapes remain unsupported.
 This opt-in analysis does not change the ordinary single-source or
 protected-write profiles. Candidates still require fresh parsing and script
 reanalysis, and the result grants no source-application authority.
@@ -64,11 +64,18 @@ JSON includes:
   hashes. These are in-memory math-script proposals only.
 - With `--rule-set pde --local-rule-hints`, ten paragraph, continuation,
   footnote and cancellation backends inspect each captured file independently.
-  Continuation additionally inspects nested literal markup as a source pattern.
+  Continuation and footnotes additionally inspect nested literal markup as source patterns.
   Findings and refusals are separate conditional hints, without edits; actual
   include-site bindings, execution, styles and rendering remain unproved.
   The report retains these rules in `coverage.uninspected` because their document
   context is not established. Shared resolver refusals appear once per source.
+- With `--rule-set pde`, `--package-path`, `--reference-package-path` and
+  `--reference-facade`, the separately captured reference package and graph
+  namespace evidence trace a selected facade's `project-ref` export. A
+  CONDITIONAL result is not proof of a particular call's binding or execution;
+  an UNAVAILABLE result retains the separately captured package evidence and
+  explains the refusal. Runtime selection, catalog membership and editing remain
+  unproved. No package roots are inferred from ambient caches.
 - With explicit `--rule-set pde --preview-display-gaps`, `display_gap_previews`
   separately provides independently verified source-bound gap edits and candidate
   hashes. Each candidate is based on the original source, not on the script

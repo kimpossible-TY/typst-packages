@@ -57,17 +57,22 @@ def analyze(tree, path, *, _verify=True, catalog=None, _allow_code_call=False):
                 raise AdapterError('Attachment operand has no matching operator')
             between = preceding[operator_index+1:]
             start = operand.start
+            # In document mode, block comments are retained in place between
+            # the script operator and the grouping. They are not inline lint
+            # directives (those use line comments). Line comments and all
+            # ordinary/protected profiles remain conservative.
+            allowed_trivia = ('Space', 'BlockComment') if _allow_code_call else ('Space',)
             # Document-only opt-in: a code call or direct value/field reference
             # is an entire math operand, but its leading # belongs to the
-            # attachment. Parenthesize the hash as well; comments and other
+            # attachment. Parenthesize the hash as well; line comments and other
             # code expressions stay partial. Ordinary profiles stay unchanged.
             if (_allow_code_call and (operand.kind in ('FuncCall', 'Ident')
                                      or _direct_field_reference(operand, nodes)) and between
                     and between[-1].kind == 'Hash' and between[-1].end == operand.start
-                    and all(n.kind == 'Space' for n in between[:-1])):
+                    and all(n.kind in allowed_trivia for n in between[:-1])):
                 start = between[-1].start
                 between = between[:-1]
-            if any(n.kind not in ('Space',) for n in between) or operand.start == operand.end:
+            if any(n.kind not in allowed_trivia for n in between) or operand.start == operand.end:
                 skips.append(f'Unsupported escaped/commented/empty script operand at byte {operand.start}')
                 continue
             line = source[:operand.start].count(b'\n') + 1

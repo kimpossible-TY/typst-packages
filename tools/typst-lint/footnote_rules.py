@@ -6,13 +6,15 @@ The dispatcher uses Resolution.spacer_proof, produced from reviewed package
 bytes and lexical AST facts. It supplies no synthetic proof. See FOOTNOTE_CONTRACT.md.
 """
 from dataclasses import dataclass
+from bisect import bisect_left
+from collections.abc import Mapping
 import re
 
 from edit_plan import Edit
 from static_resolver import SpacerProof
 from prose_boundary import footnote_boundaries, valid_insertion_proof
 from suppression import resolve as resolve_suppressions
-from typst_lint import Diagnostic, digest, load_rules
+from typst_lint import Diagnostic, InputError, digest, load_rules
 
 GAP = 'pde.footnote-trailing-gap'
 PUNCT = 'pde.prose-footnote-punctuation'
@@ -20,6 +22,9 @@ ALIGNED = 'pde.aligned-footnote-spacer'
 UNALIGNED = 'pde.unaligned-footnote-no-spacer'
 PROSE = 'pde.prose-footnote-no-spacer'
 RULE_IDS = (GAP, PUNCT, ALIGNED, UNALIGNED, PROSE)
+_NESTED_EXCLUDED = frozenset(('Equation', 'Math', 'Code', 'CodeBlock', 'Heading',
+                              'ListItem', 'EnumItem', 'TermItem', 'Raw', 'Str'))
+_BLANK_AFTER_FOOTNOTE = re.compile(rb'(\r?\n)([ \t]*\r?\n)+')
 
 
 @dataclass(frozen=True)
@@ -237,3 +242,130 @@ def analyze(tree, path, resolution, spacer_proof=None):
                     inspect(j, True, alignment(j))
     return {r: FootnoteResult(tuple(findings[r]), tuple(edits[r]), tuple(dict.fromkeys(skips[r])),
                               suppressed=tuple(suppressed[r])) for r in RULE_IDS}
+
+
+def analyze_conditional_nested(tree, path, resolution, *, catalog=None):
+    """Inspect nested literal markup patterns without asserting execution or edits.
+
+    Root markup is owned by ``analyze``. These additional hints are conditional
+    on the named functions having their intended bindings and the surrounding
+    markup executing and rendering in the expected context. No result carries
+    a proposed edit or proves absence of other violations.
+    """
+    source, nodes = tree.source, tree.nodes
+    reason = ('Nested source pattern only; include-site bindings, execution, '
+              'styles and rendered context are unproved.')
+    if nodes[0].errors:
+        errors = tuple((n.start, n.end) for n in nodes if n.kind == 'Error') or ((0, len(source)),)
+        return {rid: FootnoteResult(skips=('Malformed Typst syntax; no source pattern diagnosis',),
+                                   parse_errors=errors) for rid in RULE_IDS}
+    if resolution.source_sha256 != digest(source) or len(resolution.facts) != len(nodes):
+        return {rid: FootnoteResult(skips=('Stale or mismatched static resolution',)) for rid in RULE_IDS}
+    if tree.mode != 'markup' or nodes[0].kind != 'Markup':
+        return {rid: FootnoteResult(skips=('Only markup source patterns are supported',)) for rid in RULE_IDS}
+    records = load_rules()[0]['rules'] if catalog is None else catalog
+    if (type(records) not in (tuple, list) or any(not isinstance(item, Mapping)
+            or type(item.get('id')) is not str for item in records)):
+        raise InputError('Conditional footnote analysis requires rule metadata records')
+    metadata = {item['id']: item for item in records}
+    if (len(metadata) != len(records) or any(rid not in metadata or
+            any(type(metadata[rid].get(key)) is not str or not metadata[rid][key]
+                for key in ('grade', 'source')) for rid in RULE_IDS)):
+        raise InputError('Missing or invalid footnote rule metadata')
+    scopes = resolve_suppressions(tree, set(metadata))
+    parents = {child: index for index, node in enumerate(nodes) for child in node.children}
+    excluded = {}
+    for index, node in enumerate(nodes):
+        parent = parents.get(index)
+        excluded[index] = (parent is not None and
+                           (excluded[parent] or nodes[parent].kind in _NESTED_EXCLUDED))
+    findings, suppressed = ({rid: [] for rid in RULE_IDS} for _ in range(2))
+    newlines = [index for index, byte in enumerate(source) if byte == 10]
+
+    def add(rid, start, explanation):
+        line_index = bisect_left(newlines, start)
+        line_start = 0 if not line_index else newlines[line_index - 1] + 1
+        column = len(source[line_start:start].decode('utf-8')) + 1
+        rule = metadata[rid]
+        finding = Diagnostic(rid, rule['grade'], path, line_index + 1, column, explanation, rule['source'])
+        (suppressed if any(scope.covers(rid, start) for scope in scopes) else findings)[rid].append(finding)
+
+    def aligned(math_id):
+        pending = list(nodes[math_id].children)
+        while pending:
+            item = nodes[pending.pop()]
+            if item.kind in ('FuncCall', 'ContentBlock', 'CodeBlock', 'Str',
+                             'LineComment', 'BlockComment', 'Equation'):
+                continue
+            if item.kind in ('MathAlignPoint', 'Linebreak'):
+                return True
+            pending.extend(item.children)
+        return False
+
+    def inspect(container_id, *, math=False, has_alignment=False):
+        container = nodes[container_id]
+        siblings = container.children
+        for position, call_id in enumerate(siblings):
+            call = nodes[call_id]
+            if (call.kind != 'FuncCall' or position == 0
+                    or nodes[siblings[position - 1]].kind != 'Hash'):
+                continue
+            mark = nodes[siblings[position - 1]]
+            if (mark.end != call.start or not source[mark.start:call.end].startswith(b'#footnote[')
+                    or source[call.end - 1:call.end] != b']' or len(call.children) != 2
+                    or nodes[call.children[0]].kind != 'Ident'
+                    or nodes[call.children[1]].kind != 'Args'):
+                continue
+            args = nodes[call.children[1]]
+            if len(args.children) != 1 or nodes[args.children[0]].kind != 'ContentBlock':
+                continue
+            binding = resolution.facts[call_id].binding
+            if binding is not None and (binding.kind != 'builtin' or binding.name != 'footnote'):
+                continue
+            previous = position - 2
+            if previous >= 0 and nodes[siblings[previous]].kind == 'Space':
+                previous -= 1
+            before = nodes[siblings[previous]] if previous >= 0 else None
+            has_hash = (previous >= 1 and nodes[siblings[previous - 1]].kind == 'Hash'
+                        and nodes[siblings[previous - 1]].end == before.start)
+            adjacent_expression = (has_hash and
+                not source[before.end:mark.start].strip(b' \t\r\n'))
+            spacer = (adjacent_expression and before.kind == 'Ident'
+                      and source[before.start:before.end] == b'dots_space')
+            unknown_expression = (adjacent_expression and not spacer and before.kind in
+                                  ('Ident', 'FieldAccess', 'Parenthesized', 'FuncCall'))
+            if not math:
+                if spacer:
+                    add(PROSE, nodes[siblings[previous - 1]].start,
+                        'Remove this spacer if it and the footnote have their expected bindings and render as prose.')
+                if not unknown_expression and (mark.start == 0 or source[mark.start - 1:mark.start] not in (b'.', b',')):
+                    add(PUNCT, mark.start,
+                        'Place this footnote immediately after a comma or period if it renders as prose.')
+            elif not unknown_expression:
+                if has_alignment and not spacer:
+                    add(ALIGNED, mark.start,
+                        'Add the proven spacer if this aligned display and footnote render as written.')
+                elif not has_alignment and spacer:
+                    add(UNALIGNED, nodes[siblings[previous - 1]].start,
+                        'Remove this spacer if this unaligned display and footnote render as written.')
+            gap = _BLANK_AFTER_FOOTNOTE.match(source, call.end, container.end)
+            if gap:
+                following = gap.end()
+                while following < container.end and source[following] in b' \t\r\n':
+                    following += 1
+                if following < container.end:
+                    add(GAP, mark.start,
+                        'Avoid this blank source line if the footnote and following content render as written.')
+
+    for body_id, body in enumerate(nodes):
+        if body_id == 0 or body.kind != 'Markup' or excluded[body_id]:
+            continue
+        inspect(body_id)
+        for child_id in body.children:
+            equation = nodes[child_id]
+            if equation.kind == 'Equation' and equation.display:
+                for math_id in equation.children:
+                    if nodes[math_id].kind == 'Math':
+                        inspect(math_id, math=True, has_alignment=aligned(math_id))
+    return {rid: FootnoteResult(tuple(findings[rid]), (), (reason,),
+                                suppressed=tuple(suppressed[rid])) for rid in RULE_IDS}

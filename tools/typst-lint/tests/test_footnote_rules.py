@@ -6,7 +6,8 @@ import unittest
 TOOL = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(TOOL))
 from edit_plan import plan
-from footnote_rules import GAP, PUNCT, ALIGNED, UNALIGNED, PROSE, SpacerProof, analyze
+from footnote_rules import (GAP, PUNCT, ALIGNED, UNALIGNED, PROSE, SpacerProof,
+                            analyze, analyze_conditional_nested)
 from static_resolver import resolve
 from syntax_client import EXECUTABLE, parse
 from typst_lint import digest
@@ -127,6 +128,71 @@ class FootnoteRules(unittest.TestCase):
         for source in (b'#block[This. #footnote[X]]', b'`This. #footnote[X]`',
                        b'#let f() = [This. #footnote[X]]', b'$x #footnote[X]$'):
             self.assertFalse(self.run_source(source)[PUNCT].diagnostics)
+
+    def test_conditional_nested_prose_hints_never_offer_edits(self):
+        source = b'#block[This. #footnote[X]\n\nNext.]'
+        tree = parse(source)
+        result = analyze_conditional_nested(tree, 'x.typ', resolve(tree))
+        self.assertEqual(len(result[PUNCT].diagnostics), 1)
+        self.assertEqual(len(result[GAP].diagnostics), 1)
+        self.assertTrue(all(not item.edits and item.skips for item in result.values()))
+        self.assertFalse(self.run_source(source)[PUNCT].diagnostics)
+
+    def test_conditional_nested_math_and_prose_spacers(self):
+        examples = (
+            (b'#block[$\n A &= B #footnote[X]\n$]', ALIGNED),
+            (b'#block[$\n A = B #dots_space #footnote[X]\n$]', UNALIGNED),
+            (b'#block[This.#dots_space #footnote[X]]', PROSE),
+        )
+        for source, expected in examples:
+            with self.subTest(source=source):
+                tree = parse(source)
+                result = analyze_conditional_nested(tree, 'x.typ', resolve(tree))
+                self.assertEqual(len(result[expected].diagnostics), 1)
+                self.assertTrue(all(not item.edits for item in result.values()))
+        source = b'#block[$\n A = B #footnote[$x & y$]\n$]'
+        tree = parse(source)
+        self.assertFalse(analyze_conditional_nested(tree, 'x.typ', resolve(tree))[ALIGNED].diagnostics)
+
+    def test_conditional_nested_refuses_unrelated_and_ambiguous_sources(self):
+        for source in (
+            b'This. #footnote[X]',
+            b'#block[$x #footnote[X]$]',
+            b'`#block[This. #footnote[X]]`',
+            b'#block[$\n A &= B #unknown #footnote[X]\n$]',
+        ):
+            with self.subTest(source=source):
+                tree = parse(source)
+                result = analyze_conditional_nested(tree, 'x.typ', resolve(tree))
+                self.assertFalse(any(item.diagnostics or item.edits for item in result.values()))
+
+    def test_conditional_nested_binding_is_explicitly_unproved(self):
+        source = b'#let footnote(body) = body\n#block[This. #footnote[X]]'
+        tree = parse(source)
+        result = analyze_conditional_nested(tree, 'x.typ', resolve(tree))
+        self.assertEqual(len(result[PUNCT].diagnostics), 1)
+        self.assertFalse(result[PUNCT].edits)
+        self.assertTrue(any('bindings' in reason and 'unproved' in reason for reason in result[PUNCT].skips))
+
+    def test_conditional_nested_honors_suppression_and_stale_resolution(self):
+        source = (b'#block[This.\n// typst-lint: ignore-next pde.prose-footnote-punctuation -- intentional\n'
+                  b'#footnote[X]\n]')
+        tree = parse(source)
+        result = analyze_conditional_nested(tree, 'x.typ', resolve(tree))
+        self.assertFalse(result[PUNCT].diagnostics)
+        self.assertEqual(len(result[PUNCT].suppressed), 1)
+        from dataclasses import replace
+        stale = replace(resolve(tree), source_sha256='0' * 64)
+        result = analyze_conditional_nested(tree, 'x.typ', stale)
+        self.assertTrue(all(item.skips and not item.diagnostics for item in result.values()))
+
+    def test_conditional_nested_large_and_unicode_positions(self):
+        source = ('한글\n' + '#block[This. #footnote[X]]\n' * 1000).encode()
+        tree = parse(source)
+        result = analyze_conditional_nested(tree, 'x.typ', resolve(tree))
+        self.assertEqual(len(result[PUNCT].diagnostics), 1000)
+        self.assertEqual((result[PUNCT].diagnostics[0].line, result[PUNCT].diagnostics[0].column), (2, 14))
+        self.assertFalse(any(item.edits for item in result.values()))
 
 
 if __name__ == '__main__':
