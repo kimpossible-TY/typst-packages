@@ -100,7 +100,8 @@ def report_document(root, entrypoint, *, rule_set='core', package_path=None):
             items += len(conditional.unresolved) + len(conditional.parse_errors)
             for finding in (*conditional.diagnostics, *conditional.suppressed):
                 items += (1 + len(finding.source_hashes) + len(finding.package_evidence)
-                          + len(finding.package_requests) + len(finding.route) + len(finding.conditions))
+                          + len(finding.package_requests) + len(finding.route) + len(finding.conditions)
+                          + sum(1 + len(route) for route in finding.content_context))
         require(items <= MAX_REPORT_ITEMS, 'Document inspection report item limit exceeded')
         if conditional is not None:
             metadata = next(rule for rule in catalog['rules'] if rule['id'] == 'pde.text-only-highlight')

@@ -18,6 +18,8 @@ from typst_lint import digest, load_rules
 
 RULE_ID = 'pde.text-only-highlight'
 TEXT_UTILS = '@local/text-utils:0.1.2'
+MATH_BLOCKS = '@local/math-blocks:0.2.0'
+_CONTENT_WRAPPERS = frozenset(('proof', 'theorem', 'note'))
 CONDITIONS = (
     'Every referenced module loads and initializes successfully; initializer purity is not proved.',
     'Runtime imports select the exact captured package versions and bytes; ambient package selection is not proved.',
@@ -62,6 +64,7 @@ class ConditionalDiagnostic:
     package_requests: tuple[str, ...]
     route: tuple[NameRoute, ...]
     conditions: tuple[str, ...] = CONDITIONS
+    content_context: tuple[tuple[NameRoute, ...], ...] = ()
     status: str = field(default='CONDITIONAL', init=False)
     edit_permission: bool = field(default=False, init=False)
 
@@ -78,8 +81,9 @@ class ConditionalHighlightResult:
 
 @dataclass(frozen=True)
 class _Value:
-    """Only the canonical helper carries a value; all other exports are opaque."""
+    """Conditional helper/wrapper names; remaining exports stay opaque."""
     route: tuple[NameRoute, ...]
+    canonical_name: str = 'highlighted'
 
 
 @dataclass(frozen=True)
@@ -97,15 +101,17 @@ class _Module:
         return frozenset(source.path for source in self.sources)
 
 
-def _descendants(tree, index):
+def _descendants(tree, index, skip=()):
     pending = list(reversed(tree.nodes[index].children))
     while pending:
         child = pending.pop()
+        if child in skip:
+            continue
         yield child
         pending.extend(reversed(tree.nodes[child].children))
 
 
-def _assignment(tree, index):
+def _assignment(tree, index, skip=()):
     """Unknown active mutation defeats lexical identity, even inside arguments.
 
     A function body is deferred. Parameter defaults are still checked
@@ -114,6 +120,8 @@ def _assignment(tree, index):
     pending = [index]
     while pending:
         current = pending.pop()
+        if current in skip:
+            continue
         node = tree.nodes[current]
         if node.kind == 'Closure':
             pending.extend(c for c in node.children if tree.nodes[c].kind == 'Params')
@@ -194,6 +202,44 @@ def _module_alias(tree, index):
     return None
 
 
+def _combined_import(tree, index):
+    """Exact official AST for ``import literal as module: simple-items``.
+
+    Native Typst binds the module alias first, then the explicit/wildcard
+    names. Keep this conditional grammar separate from trusted import_shape.
+    """
+    parts = graph.significant(tree, index)
+    request = graph.import_request(tree, index)
+    if (request is None or len(parts) != 6
+            or tuple(tree.nodes[c].kind for c in parts[2:5]) != ('As', 'Ident', 'Colon')):
+        return None
+    alias = graph.raw(tree, parts[3]).decode('utf-8')
+    if tree.nodes[parts[5]].kind == 'Star':
+        return graph.ImportShape(index, request, None), alias
+    if tree.nodes[parts[5]].kind != 'ImportItems':
+        return None
+    items = []
+    for item in graph.significant(tree, parts[5]):
+        if tree.nodes[item].kind == 'Comma':
+            continue
+        local = None
+        if tree.nodes[item].kind == 'RenamedImportItem':
+            values = graph.significant(tree, item)
+            if (len(values) != 3 or tree.nodes[values[1]].kind != 'As'
+                    or tree.nodes[values[2]].kind != 'Ident'):
+                return None
+            item, local = values[0], graph.raw(tree, values[2]).decode('utf-8')
+        values = graph.significant(tree, item)
+        if (tree.nodes[item].kind != 'ImportItemPath' or len(values) != 1
+                or tree.nodes[values[0]].kind != 'Ident'):
+            return None
+        name = graph.raw(tree, values[0]).decode('utf-8')
+        items.append((name, local or name))
+    if not items or len({local for _, local in items}) != len(items):
+        return None
+    return graph.ImportShape(index, request, tuple(items)), alias
+
+
 class _Analyzer:
     def __init__(self, context, namespaces):
         self.graph = context
@@ -234,11 +280,19 @@ class _Analyzer:
             self.exhaust('Conditional namespace AST work limit exceeded')
         return self.exhausted is None
 
+    def charge_scope(self, env, sources, packages, requests, context):
+        # Each inherited namespace/evidence/context container is copied once;
+        # immutable route entries inside the context remain shared.
+        self.ast_work += sum(map(len, (env, sources, packages, requests, context))) + 1
+        if self.ast_work > MAX_AST_WORK:
+            self.exhaust('Conditional namespace AST work limit exceeded')
+        return self.exhausted is None
+
     def route(self, previous, step):
         if len(previous.route) >= MAX_ROUTE_ENTRIES:
             self.exhaust('Conditional namespace route limit exceeded')
             return None
-        return _Value(previous.route + (step,))
+        return _Value(previous.route + (step,), previous.canonical_name)
 
     def bindings(self, env):
         if len(env) > MAX_BINDINGS:
@@ -249,9 +303,15 @@ class _Analyzer:
         if self.exhausted:
             return _Module(reason=self.exhausted)
         shape = graph.import_shape(tree, index)
-        if shape is not None and shape.items is not None and len(shape.items) > MAX_BINDINGS:
+        combined = _combined_import(tree, index) if shape is None else None
+        if combined is not None:
+            shape, module_name = combined
+            alias = (shape.request, module_name)
+        else:
+            alias = _module_alias(tree, index) if shape is None else None
+        if (shape is not None and shape.items is not None
+                and len(shape.items) + int(combined is not None) > MAX_BINDINGS):
             return self.exhaust('Conditional namespace binding limit exceeded')
-        alias = _module_alias(tree, index) if shape is None else None
         request = shape.request if shape else (alias[0] if alias else None)
         if request is None:
             return _Module(reason='Dynamic or unsupported import namespace', intrinsic_refusal=True)
@@ -262,16 +322,18 @@ class _Analyzer:
                 # when the package's namespace has no reviewed shape. Their
                 # values remain opaque, and successful loading stays explicit.
                 if shape is not None and shape.items is not None and _PACKAGE.fullmatch(request):
-                    return _Module(tuple((local, None) for _, local in shape.items), requests=(request,))
-                if alias is not None and _PACKAGE.fullmatch(request):
+                    names = ((alias[1], None),) if combined is not None else ()
+                    return _Module(names + tuple((local, None) for _, local in shape.items), requests=(request,))
+                if shape is None and alias is not None and _PACKAGE.fullmatch(request):
                     return _Module(((alias[1], None),), requests=(request,))
                 return _Module(reason=f'Wildcard package namespace unavailable: {request}', intrinsic_refusal=True)
             exports = {}
             origins = dict(package.origins)
             for name in package.exports:
+                supported = ((name == 'highlighted' and origins.get(name) == TEXT_UTILS)
+                             or (request == MATH_BLOCKS and name in _CONTENT_WRAPPERS))
                 exports[name] = (_Value((NameRoute(request, package.evidence.source_sha256,
-                    'package-export', request, name, name),))
-                    if name == 'highlighted' and origins.get(name) == TEXT_UTILS else None)
+                    'package-export', request, name, name),), name) if supported else None)
             if not self.bindings(exports):
                 return _Module(reason=self.exhausted)
             module = _Module(tuple(sorted(exports.items())), packages=(package.evidence,), requests=(request,))
@@ -282,19 +344,20 @@ class _Analyzer:
             module = self.module(target, active)
             if module.reason:
                 return module
-        if alias is not None:
+        if shape is None and alias is not None:
             return _Module(((alias[1], None),), module.sources, module.packages, module.requests,
                            height=module.height)
         exports = dict(module.exports)
         items = tuple((name, name) for name in exports) if shape.items is None else shape.items
         if any(name not in exports for name, _ in items):
             return _Module(reason=f'Requested namespace export unavailable: {request}', intrinsic_refusal=True)
-        incoming = []
+        incoming = [(alias[1], None)] if combined is not None else []
         for original, local in items:
             value = exports[original]
             if value is not None:
                 value = self.route(value, NameRoute(path, digest(tree.source),
-                    'wildcard-import' if shape.items is None else 'named-import',
+                    ('combined-' if combined is not None else '') +
+                    ('wildcard-import' if shape.items is None else 'named-import'),
                     request, original, local))
                 if self.exhausted:
                     return _Module(reason=self.exhausted)
@@ -417,6 +480,29 @@ def _body_math(tree, call_id):
     return rendered(bodies[0]), None
 
 
+def _wrapper_bodies(tree, index, canonical_name):
+    """One direct literal body of a recognized wrapper; no callback model."""
+    children = tree.nodes[index].children
+    if len(children) != 2 or tree.nodes[children[1]].kind != 'Args':
+        return ()
+    bodies = []
+    named = set()
+    for child in graph.significant(tree, children[1]):
+        kind = tree.nodes[child].kind
+        if kind == 'ContentBlock':
+            bodies.append(child)
+        elif kind == 'Named':
+            parts = graph.significant(tree, child)
+            if (len(parts) != 3 or tree.nodes[parts[0]].kind != 'Ident'
+                    or canonical_name == 'proof' or graph.raw(tree, parts[0]) != b'title'
+                    or 'title' in named):
+                return ()
+            named.add('title')
+        elif kind not in ('LeftParen', 'RightParen', 'Comma'):
+            return ()
+    return tuple(bodies) if len(bodies) == 1 else ()
+
+
 class ConditionalHighlightAnalyzer:
     """One immutable capture session; parsed dependency trees are reused only here."""
     def __init__(self, import_graph, namespace_capture, *, known_rule_ids=None):
@@ -453,74 +539,105 @@ def _analyze(tree, path, analyzer):
     if not analyzer.charge_ast(tree):
         return ConditionalHighlightResult(unresolved=(analyzer.exhausted,))
     scopes = suppressions(tree, analyzer.known_rule_ids)
-    env, sources = {}, {path: SourceHash(path, digest(source))}
-    packages = {p.import_path: p for p in analyzer.evidence}
-    requests = set()
     findings, suppressed, unresolved = [], [], []
-    for index in nodes[0].children:
+
+    def call_value(index, env):
         node = nodes[index]
-        if node.kind in graph._TRIVIA or node.kind in ('Hash', 'Semicolon'):
-            continue
-        if _assignment(tree, index):
-            env.clear()
-            unresolved.append(f'Unknown active namespace mutation at byte {node.start}')
-            continue
-        if _namespace_injection(tree, index):
-            env.clear()
-            unresolved.append(f'Expression-position namespace declaration at byte {node.start}')
-            continue
-        if node.kind == 'ModuleImport':
-            incoming = analyzer.incoming(tree, index, path, (path,))
-            if incoming.reason:
+        if node.kind == 'FuncCall' and node.children and nodes[node.children[0]].kind == 'Ident':
+            return env.get(graph.raw(tree, node.children[0]).decode('utf-8'))
+        return None
+
+    def nested(index, env, skip=()):
+        for child in _descendants(tree, index, skip):
+            value = call_value(child, env)
+            if value is not None and value.canonical_name == 'highlighted':
+                unresolved.append(f'Nested or deferred helper call has unresolved execution context at byte {nodes[child].start}')
+
+    def scan(sequence, env, sources, packages, requests, context=()):
+        mutated_outer = False
+        for index in nodes[sequence].children:
+            if analyzer.exhausted:
+                break
+            node = nodes[index]
+            if node.kind in graph._TRIVIA or node.kind in ('Hash', 'Semicolon'):
+                continue
+            value = call_value(index, env)
+            bodies = (_wrapper_bodies(tree, index, value.canonical_name) if value is not None
+                      and value.canonical_name in _CONTENT_WRAPPERS else ())
+            # Admitted literal bodies are scanned exactly once below. Outer
+            # assignment/descendant scans skip these subtrees, retaining the
+            # three source-wide walks charged by charge_ast rather than depth*n.
+            if _assignment(tree, index, bodies):
                 env.clear()
-                unresolved.append(f'{incoming.reason} at byte {node.start}')
-            else:
-                env.update(incoming.exports)
-                if not analyzer.bindings(env):
-                    return ConditionalHighlightResult(unresolved=(analyzer.exhausted,))
-                sources.update((s.path, s) for s in incoming.sources)
-                packages.update((p.import_path, p) for p in incoming.packages)
-                requests.update(incoming.requests)
-            continue
-        # Never diagnose a callback, content-internal call, deferred closure or
-        # unknown scope as though it had this root's lexical/render context.
-        for child in _descendants(tree, index):
-            call = nodes[child]
-            if call.kind == 'FuncCall' and call.children:
-                callee = call.children[0]
-                if nodes[callee].kind == 'Ident' and env.get(graph.raw(tree, callee).decode('utf-8')) is not None:
-                    unresolved.append(f'Nested or deferred helper call has unresolved execution context at byte {call.start}')
-        if node.kind == 'LetBinding':
-            binding = _let(tree, index, env, path, analyzer)
-            if binding is None:
+                mutated_outer = True
+                unresolved.append(f'Unknown active namespace mutation at byte {node.start}')
+                continue
+            if _namespace_injection(tree, index):
                 env.clear()
-                unresolved.append(f'Unsupported root namespace declaration at byte {node.start}')
-            else:
-                env[binding[0]] = binding[1]
-                if not analyzer.bindings(env):
-                    return ConditionalHighlightResult(unresolved=(analyzer.exhausted,))
-            continue
-        if node.kind in ('ModuleInclude', 'CodeBlock', 'Conditional', 'WhileLoop', 'ForLoop', 'Contextual'):
-            env.clear()
-            unresolved.append(f'Unknown root namespace scope at byte {node.start}')
-            continue
-        if node.kind != 'FuncCall' or not node.children or nodes[node.children[0]].kind != 'Ident':
-            continue
-        value = env.get(graph.raw(tree, node.children[0]).decode('utf-8'))
-        if value is None:
-            continue
-        has_math, reason = _body_math(tree, index)
-        if reason:
-            unresolved.append(f'{reason} at byte {node.start}')
-        if not has_math:
-            continue
-        line = source[:node.start].count(b'\n') + 1
-        column = len(source[source.rfind(b'\n', 0, node.start) + 1:node.start].decode('utf-8')) + 1
-        finding = ConditionalDiagnostic(RULE_ID, path, line, column, node.start, node.end,
-            'Keep math outside text highlighting, conditional on the captured helper identity and execution context.',
-            digest(source), tuple(sources[k] for k in sorted(sources)),
-            tuple(packages[k] for k in sorted(packages)), tuple(sorted(requests)), value.route)
-        (suppressed if any(s.covers(RULE_ID, node.start) for s in scopes) else findings).append(finding)
+                unresolved.append(f'Expression-position namespace declaration at byte {node.start}')
+                continue
+            if node.kind == 'ModuleImport':
+                incoming = analyzer.incoming(tree, index, path, (path,))
+                if incoming.reason:
+                    env.clear()
+                    unresolved.append(f'{incoming.reason} at byte {node.start}')
+                else:
+                    env.update(incoming.exports)
+                    analyzer.bindings(env)
+                    sources.update((s.path, s) for s in incoming.sources)
+                    packages.update((p.import_path, p) for p in incoming.packages)
+                    requests.update(incoming.requests)
+                continue
+            nested(index, env, bodies)
+            if node.kind == 'LetBinding':
+                binding = _let(tree, index, env, path, analyzer)
+                if binding is None:
+                    env.clear()
+                    unresolved.append(f'Unsupported root namespace declaration at byte {node.start}')
+                else:
+                    env[binding[0]] = binding[1]
+                    analyzer.bindings(env)
+                continue
+            if node.kind in ('ModuleInclude', 'CodeBlock', 'Conditional', 'WhileLoop', 'ForLoop', 'Contextual'):
+                env.clear()
+                mutated_outer = True
+                unresolved.append(f'Unknown root namespace scope at byte {node.start}')
+                continue
+            if bodies:
+                for body in bodies:
+                    parts = graph.significant(tree, body)
+                    markup = next((c for c in parts if nodes[c].kind == 'Markup'), None)
+                    if markup is None or not analyzer.charge_scope(env, sources, packages, requests, context):
+                        break
+                    changed = scan(markup, dict(env), dict(sources), dict(packages), set(requests),
+                                   context + (value.route,))
+                    if changed:
+                        # Local declarations stay inside the content scope;
+                        # assignments/default mutations can change outer vars.
+                        env.clear()
+                        mutated_outer = True
+                continue
+            if value is None or value.canonical_name != 'highlighted':
+                continue
+            has_math, reason = _body_math(tree, index)
+            if reason:
+                unresolved.append(f'{reason} at byte {node.start}')
+            if not has_math:
+                continue
+            line = source[:node.start].count(b'\n') + 1
+            column = len(source[source.rfind(b'\n', 0, node.start) + 1:node.start].decode('utf-8')) + 1
+            conditions = CONDITIONS + (('Every enclosing recognized literal content wrapper executes and renders this body.',)
+                                       if context else ())
+            finding = ConditionalDiagnostic(RULE_ID, path, line, column, node.start, node.end,
+                'Keep math outside text highlighting, conditional on the captured helper identity and execution context.',
+                digest(source), tuple(sources[k] for k in sorted(sources)),
+                tuple(packages[k] for k in sorted(packages)), tuple(sorted(requests)), value.route,
+                conditions=conditions, content_context=context)
+            (suppressed if any(s.covers(RULE_ID, node.start) for s in scopes) else findings).append(finding)
+        return mutated_outer
+
+    scan(0, {}, {path: SourceHash(path, digest(source))},
+         {p.import_path: p for p in analyzer.evidence}, set())
     if analyzer.exhausted:
         return ConditionalHighlightResult(unresolved=(analyzer.exhausted,))
     return ConditionalHighlightResult(tuple(findings), tuple(suppressed), tuple(unresolved))

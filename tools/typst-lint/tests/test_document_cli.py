@@ -336,6 +336,23 @@ class DocumentCliTests(unittest.TestCase):
             with self.assertRaisesRegex(InputError, 'report item limit'):
                 document_cli.report_document(str(self.root), 'main.typ')
 
+    def test_report_budget_includes_nested_wrapper_provenance(self):
+        package_root = self.namespace_packages()
+        target = self.conditional_fixture()
+        target.write_bytes(target.read_bytes().replace(
+            b'#highlighted[Text and $x^2$ together.]',
+            b'#proof[#note[#highlighted[Text and $x^2$ together.]]]'))
+        with patch.object(document_cli, 'MAX_REPORT_ITEMS', 32):
+            with self.assertRaisesRegex(InputError, 'report item limit'):
+                document_cli.report_document(str(self.root), 'main.typ', rule_set='pde',
+                                             package_path=package_root)
+        with patch.object(document_cli, 'MAX_REPORT_ITEMS', 40):
+            result = document_cli.report_document(str(self.root), 'main.typ', rule_set='pde',
+                                                  package_path=package_root)
+        finding, = result['conditional_diagnostics']
+        self.assertEqual(len(finding['content_context']), 2)
+        self.assertFalse(finding['edit_permission'])
+
     def test_explicit_package_namespace_hints_are_separate_and_never_edits(self):
         package_root = self.namespace_packages()
         target = self.conditional_fixture()
@@ -361,6 +378,25 @@ class DocumentCliTests(unittest.TestCase):
         self.assertTrue(all(d['rule_id'] != 'pde.text-only-highlight' for d in result['diagnostics']))
         self.assertTrue(all(e['rule_id'] == 'core.parenthesized-scripts' for e in result['proposed_edits']))
         self.assertEqual(target.read_bytes(), original)
+
+    def test_conditional_literal_body_scope_keeps_script_candidates_separate(self):
+        package_root = self.namespace_packages()
+        target = self.conditional_fixture()
+        source = target.read_bytes() + (
+            b'#proof[Before #highlighted[Math $y^2$.] After.]\n'
+            b'#proof[#let highlighted(body) = body\n#highlighted[$z^2$]]\n'
+            b'#highlighted[$w^2$]\n')
+        target.write_bytes(source)
+        result = self.run_cli('--rule-set', 'pde', '--package-path', str(package_root))
+        self.assertEqual(len(result['conditional_diagnostics']), 3)
+        self.assertTrue(all(not row['edit_permission'] for row in result['conditional_diagnostics']))
+        self.assertTrue(all(row['rule_id'] == 'core.parenthesized-scripts'
+                            for row in result['proposed_edits']))
+        self.assertEqual(len(result['proposed_edits']), 8)
+        self.assertEqual(result['applied_fixes'], [])
+        self.assertEqual(target.read_bytes(), source)
+        self.assertFalse(result['coverage']['global_complete'])
+        self.assertIn('pde.text-only-highlight', result['coverage']['uninspected'])
 
     def test_namespace_hints_withhold_later_shadowed_or_unreviewed_helpers(self):
         package_root = self.namespace_packages()

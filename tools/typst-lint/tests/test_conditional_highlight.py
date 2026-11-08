@@ -129,6 +129,59 @@ class ConditionalHighlightTests(unittest.TestCase):
         self.assertEqual([r.operation for r in result.diagnostics[0].route],
                          ['package-export', 'named-import', 'alias', 'named-import', 'alias'])
 
+    def test_combined_module_alias_and_named_or_wildcard_import(self):
+        for declaration, call, operation in (
+            (b'#import "@local/text-utils:0.1.2" as helpers: highlighted as hi\n',
+             b'#hi[$x$]', 'combined-named-import'),
+            (b'#import "@local/text-utils:0.1.2" as helpers: *\n',
+             b'#highlighted[$x$]', 'combined-wildcard-import'),
+            (b'#import "Styles/styles.typ" as styles: highlighted as hi\n',
+             b'#hi[$x$]', 'combined-named-import')):
+            with self.subTest(declaration=declaration):
+                tree = parse(declaration + call)
+                imported = next(i for i, n in enumerate(tree.nodes) if n.kind == 'ModuleImport')
+                self.assertIsNone(graph.import_shape(tree, imported), 'Trusted grammar stays unchanged')
+                result = self.analyze(declaration + call)
+                self.assertEqual(len(result.diagnostics), 1, result.unresolved)
+                self.assertEqual(result.diagnostics[0].route[-1].operation, operation)
+        figures = FIGURES.replace(
+            b'#import "@preview/fletcher:0.5.8": diagram, node, edge',
+            b'#import "@preview/fletcher:0.5.8" as fletcher: diagram, node, edge')
+        result = self.analyze(figures=figures)
+        self.assertEqual(len(result.diagnostics), 1, result.unresolved)
+        self.assertIn('@preview/fletcher:0.5.8', result.diagnostics[0].package_requests)
+
+    def test_combined_alias_is_bound_before_items_and_later_shadows_win(self):
+        # Native Typst's module alias is bound first; a same-name explicit or
+        # wildcard item can overwrite it with the actual imported helper.
+        for items in (b'highlighted', b'*'):
+            source = b'#import "@local/text-utils:0.1.2" as highlighted: ' + items + b'\n#highlighted[$x$]'
+            self.assertEqual(len(self.analyze(source).diagnostics), 1)
+        for declaration in (
+            b'#import "@local/text-utils:0.1.2" as highlighted: paragraph_tab\n',
+            b'#import "@preview/fletcher:0.5.8" as highlighted: diagram, node, edge\n',
+            b'#import "@local/text-utils:0.1.2" as helpers: paragraph_tab as highlighted\n'):
+            with self.subTest(declaration=declaration):
+                self.assertFalse(self.analyze(PREFIX + declaration + b'#highlighted[$x$]').diagnostics)
+        source = (b'#import "@local/text-utils:0.1.2" as helpers: highlighted as hi\n'
+                  b'#let hi(body) = body\n#hi[$x$]')
+        self.assertFalse(self.analyze(source).diagnostics)
+
+    def test_combined_unknown_wildcard_and_unsupported_items_refuse(self):
+        for declaration in (
+            b'#import "@preview/unreviewed:1.0.0" as module: *\n',
+            b'#import "@local/text-utils:0.1.2" as module: nested.highlighted\n',
+            b'#import "@local/text-utils:0.1.2" as module: highlighted as hi, paragraph_tab as hi\n'):
+            with self.subTest(declaration=declaration):
+                result = self.analyze(PREFIX + declaration + b'#highlighted[$x$]')
+                self.assertFalse(result.diagnostics)
+                self.assertTrue(result.unresolved)
+        malformed = PREFIX + b'#import "@local/text-utils:0.1.2" as module: highlighted as\n#highlighted[$x$]'
+        context = self.capture(malformed)
+        result = conditional.analyze(parse(malformed), 'main.typ', context, self.namespaces)
+        self.assertFalse(result.diagnostics)
+        self.assertTrue(result.parse_errors)
+
     def test_statement_order_rebinding_and_unknown_mutation(self):
         source = (PREFIX + b'#highlighted[$before$]\n'
                   b'#let highlighted(body) = body\n#highlighted[$shadowed$]\n'
@@ -192,6 +245,97 @@ class ConditionalHighlightTests(unittest.TestCase):
                 result = self.analyze(PREFIX + call)
                 self.assertFalse(result.diagnostics)
                 self.assertTrue(any('context' in r for r in result.unresolved))
+
+    def test_recognized_literal_wrapper_bodies_have_conditional_context_routes(self):
+        source = PREFIX + b'\n'.join(b'#' + name + b'[Text #highlighted[A $x$ B].]'
+                                    for name in (b'proof', b'theorem', b'note'))
+        result = self.analyze(source)
+        self.assertEqual(len(result.diagnostics), 3, result.unresolved)
+        self.assertFalse(result.unresolved)
+        for finding, wrapper in zip(result.diagnostics, ('proof', 'theorem', 'note')):
+            self.assertEqual(len(finding.content_context), 1)
+            self.assertEqual(finding.content_context[0][0].request, conditional.MATH_BLOCKS)
+            self.assertEqual(finding.content_context[0][-1].local_name, wrapper)
+            self.assertIn('Every enclosing recognized literal content wrapper', finding.conditions[-1])
+            self.assertFalse(finding.edit_permission)
+
+    def test_literal_body_aliases_shadowing_and_sibling_scopes_are_ordered(self):
+        source = (b'#import "Styles/styles.typ": proof as demonstrate, highlighted as hi\n'
+                  b'#demonstrate[#let saved = hi\n#saved[$first$]\n'
+                  b'#let hi(body) = body\n#hi[$shadowed$]]\n'
+                  b'#demonstrate[#hi[$sibling$]]\n#hi[$root$]')
+        result = self.analyze(source)
+        self.assertEqual(len(result.diagnostics), 3, result.unresolved)
+        self.assertEqual(result.diagnostics[0].route[-1].local_name, 'saved')
+        self.assertEqual(result.diagnostics[0].content_context[0][-1].local_name, 'demonstrate')
+        self.assertFalse(result.diagnostics[-1].content_context)
+
+    def test_literal_body_local_imports_and_unknown_wildcards_do_not_escape(self):
+        source = (PREFIX + b'#proof[#import "@local/text-utils:0.1.2": highlighted as local-hi\n'
+                  b'#local-hi[$first$]\n#import "@preview/unknown:1.0.0": *\n'
+                  b'#local-hi[$unresolved$]]\n#highlighted[$root$]')
+        result = self.analyze(source)
+        self.assertEqual(len(result.diagnostics), 2, result.unresolved)
+        self.assertTrue(any('Wildcard package namespace unavailable' in reason for reason in result.unresolved))
+        self.assertTrue(result.diagnostics[0].content_context)
+        self.assertFalse(result.diagnostics[1].content_context)
+
+    def test_literal_body_active_and_default_mutations_invalidate_outer_bindings(self):
+        source = (PREFIX + b'#proof[#highlighted[$before$]\n#(highlighted = fake)\n'
+                  b'#highlighted[$after$]]\n#highlighted[$outer-after$]')
+        result = self.analyze(source)
+        self.assertEqual(len(result.diagnostics), 1, result.unresolved)
+        self.assertTrue(any('mutation' in reason for reason in result.unresolved))
+        for body in (b'#let poison(a:{highlighted=fake;none})=a\n#highlighted[$x$]',
+                     b'#note[#(highlighted=fake)]\n#highlighted[$x$]'):
+            with self.subTest(body=body):
+                result = self.analyze(PREFIX + b'#proof[' + body + b']\n#highlighted[$outer$]')
+                self.assertFalse(result.diagnostics)
+                self.assertTrue(any('mutation' in reason for reason in result.unresolved))
+
+    def test_literal_body_suppression_and_unknown_or_deferred_wrappers(self):
+        for body in (
+            f'// typst-lint: ignore-next {conditional.RULE_ID} -- intentional\n#proof[#highlighted[$x$]]'.encode(),
+            f'#proof[\n// typst-lint: ignore-next {conditional.RULE_ID} -- intentional\n#highlighted[$x$]]'.encode()):
+            result = self.analyze(PREFIX + body)
+            self.assertFalse(result.diagnostics)
+            self.assertEqual(len(result.suppressed), 1)
+        for body in (b'#let proof(body)=body\n#proof[#highlighted[$x$]]',
+                     b'#let f()=[#proof[#highlighted[$x$]]]',
+                     b'#{proof[#highlighted[$x$]]}',
+                     b'#proof(..args)[#highlighted[$x$]]',
+                     b'#proof(unknown: 1)[#highlighted[$x$]]',
+                     b'#proof(title: "invalid")[#highlighted[$x$]]',
+                     b'#note(unknown: 1)[#highlighted[$x$]]',
+                     b'#note(body: [duplicate])[#highlighted[$x$]]'):
+            with self.subTest(body=body):
+                result = self.analyze(PREFIX + body)
+                self.assertFalse(result.diagnostics)
+                self.assertTrue(result.unresolved)
+        malformed = PREFIX + b'#theorem(title: "A", title: "B")[#highlighted[$x$]]'
+        result = conditional.analyze(parse(malformed), 'main.typ', self.capture(malformed), self.namespaces)
+        self.assertFalse(result.diagnostics)
+        self.assertTrue(result.parse_errors)
+        for wrapper in (b'note', b'theorem'):
+            result = self.analyze(PREFIX + b'#' + wrapper + b'(title: "Valid")[#highlighted[$x$]]')
+            self.assertEqual(len(result.diagnostics), 1, result.unresolved)
+
+    def test_nested_literal_scope_copy_work_uses_existing_session_budget(self):
+        source = PREFIX + b'#proof[' * 12 + b'#highlighted[$x$]' + b']' * 12
+        context = self.capture(source)
+        tree = parse(source)
+        # Cost the genuine shared module facts normally, then leave only a
+        # small additional budget beyond the three root syntax scans.
+        session = conditional.ConditionalHighlightAnalyzer(context, self.namespaces)
+        session._analyzer.module('Styles/styles.typ', ('main.typ',))
+        session._analyzer.module('Chapter1/figures.typ', ('main.typ',))
+        root_work = session._analyzer.ast_work + 3 * len(tree.nodes)
+        with patch.object(conditional, 'MAX_AST_WORK', root_work + 100):
+            result = session.analyze(tree, 'main.typ')
+            self.assertFalse(result.diagnostics)
+            self.assertIn('AST work limit', result.unresolved[0])
+            self.assertGreater(session._analyzer.ast_work, root_work)
+            self.assertEqual(result, session.analyze(tree, 'main.typ'))
 
     def test_call_owned_suppression_and_unrelated_directive(self):
         for rule in (conditional.RULE_ID, 'core.parenthesized-scripts'):

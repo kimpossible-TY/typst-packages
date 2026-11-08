@@ -84,8 +84,11 @@ such as a label's following period, stays unresolved rather than being moved
 onto its own line.
 With explicit PDE selection, `--package-path` additionally captures six exact
 package namespace contracts and relative import sources. This can trace
-`highlighted` through the actual PDE wildcard facade and report literal math
-inside a root-level helper body. `conditional_diagnostics` records source/package
+`highlighted` through the actual PDE wildcard facade, including combined module
+alias/item imports. It reports literal math inside root helper calls and the
+direct literal bodies of captured `proof`, `theorem` and `note` wrappers. Local
+shadowing, aliases and scope boundaries remain explicit.
+`conditional_diagnostics` records source/package
 hashes, ordered name routes and the outstanding initialization, runtime package
 selection and rendering conditions. These hints have no edits, stay separate
 from source findings and leave that rule in `coverage.uninspected`. Only an

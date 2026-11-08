@@ -42,7 +42,8 @@ JSON includes:
 - `conditional_diagnostics`, `conditional_suppressed` and
   `conditional_coverage`: opt-in helper namespace hints with explicit outstanding
   conditions and no edit permission. `namespace_evidence` records the retained
-  package/source facts. Conditional hints do not remove a rule from
+  package/source facts; nested hints include the admitted wrapper name routes in
+  `content_context`, counted against the report budget. Conditional hints do not remove a rule from
   `coverage.uninspected` or add it to `coverage.available_backends`.
 - `proposed_edits`: source-bound byte offsets, replacement strings and baseline
   hashes. These are in-memory math-script proposals only.
