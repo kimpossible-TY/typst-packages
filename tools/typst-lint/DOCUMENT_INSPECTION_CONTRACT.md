@@ -69,6 +69,13 @@ JSON includes:
   include-site bindings, execution, styles and rendering remain unproved.
   The report retains these rules in `coverage.uninspected` because their document
   context is not established. Shared resolver refusals appear once per source.
+- With explicit `--rule-set pde --preview-conditional-gaps`, report independent
+  source-only previews for proof boundaries and nested display-math footnote
+  gaps. Each candidate is freshly parsed, checked for non-whitespace syntax and
+  suppression changes, and reanalyzed by its own rule subset. A withheld
+  preview is reported as such. These previews use the original bytes separately;
+  they are not composed with each other or the ordinary preview sequence, and
+  do not prove binding, execution, PDF equivalence or source-write permission.
 - With `--rule-set pde`, `--package-path`, `--reference-package-path` and
   `--reference-facade`, the separately captured reference package and graph
   namespace evidence trace a selected facade's `project-ref` export. A

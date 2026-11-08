@@ -10,7 +10,7 @@ REPO = TOOL.parents[1]
 sys.path.insert(0, str(TOOL))
 from edit_plan import Edit, plan
 from package_loader import load_packages
-from proof_rules import RULE_ID, analyze, analyze_conditional
+from proof_rules import RULE_ID, analyze, analyze_conditional, preview_conditional
 from script_rule import analyze as scripts
 from static_resolver import MATH_BLOCKS, MATH_BLOCKS_SOURCE_SHA256, PackageSource, is_proof_binding, resolve
 from suppression import resolve as suppressions
@@ -302,6 +302,64 @@ class ProofRuleTests(unittest.TestCase):
                 tree = parse(b'#block[\n#proof[Done.]\n' + following + b'\n]')
                 result = analyze_conditional(tree, 'fixture.typ', resolve(tree))
                 self.assertFalse(result.diagnostics or result.edits)
+
+    def test_conditional_preview_is_explicit_reparsed_and_idempotent(self):
+        for body in (b'#block[\n#proof[Done.]\nNext.\n]',
+                     b'#block[\r\n  #proof[Done.] <claim>\r\n  $ A = B $\r\n]',
+                     b'#block[\n#proof[One.]\nNext.\n#proof[Two.]\n#note[Body.]\n]',
+                     b'#block[\n#proof[Nested.]\nNext.\n]\n#proof[Root.]\nNext.'):
+            with self.subTest(body=body):
+                tree = parse(body)
+                resolution = resolve(tree)
+                plain = analyze_conditional(tree, 'fixture.typ', resolution)
+                self.assertFalse(plain.edits)
+                result = preview_conditional(tree, 'fixture.typ', resolution)
+                self.assertEqual(len(result.edits), len(result.diagnostics), result.skips)
+                self.assertTrue(result.edits)
+                self.assertTrue(any('PDF equivalence' in reason for reason in result.skips))
+                candidate = plan(body, result.edits).candidate()
+                final_tree = parse(candidate)
+                self.assertFalse(final_tree.nodes[0].errors)
+                final = preview_conditional(final_tree, 'fixture.typ', resolve(final_tree))
+                self.assertFalse(final.diagnostics or final.edits)
+
+    def test_conditional_preview_fails_closed_when_syntax_changes(self):
+        for tail in (b'= Heading', b'- item', b'+ item', b'1. item', b'/ term: definition'):
+            with self.subTest(tail=tail):
+                source = b'#block[\n#proof[X] ' + tail + b'\n]'
+                tree = parse(source)
+                result = preview_conditional(tree, 'fixture.typ', resolve(tree))
+                self.assertTrue(result.diagnostics)
+                self.assertFalse(result.edits)
+                self.assertTrue(any('preview_unavailable' in reason for reason in result.skips))
+
+    def test_conditional_preview_preserves_suppression_targets(self):
+        source = (b'// typst-lint: ignore-next core.parenthesized-scripts -- intentional\n'
+                  b'#block[\n#proof[$ x^i $]\nNext.\n]')
+        tree = parse(source)
+        result = preview_conditional(tree, 'fixture.typ', resolve(tree))
+        self.assertTrue(result.edits, result.skips)
+        candidate = plan(source, result.edits).candidate()
+        ids = {r['id'] for r in load_rules()[0]['rules']}
+        for text in (source, candidate):
+            scopes = suppressions(parse(text), ids)
+            self.assertEqual(len(scopes), 1)
+            self.assertTrue(text[scopes[0].start:scopes[0].end].startswith(b'#block['))
+        source = (b'#block[\n// typst-lint: ignore-next pde.proof-trailing-gap -- intentional\n'
+                  b'#proof[X]\nNext.\n]')
+        tree = parse(source)
+        result = preview_conditional(tree, 'fixture.typ', resolve(tree))
+        self.assertFalse(result.diagnostics or result.edits)
+        self.assertEqual(len(result.suppressed), 1)
+
+    def test_conditional_preview_parse_failure_keeps_diagnostic_only(self):
+        source = b'#block[\n#proof[X]\nNext.\n]'
+        tree = parse(source)
+        with patch('proof_rules.parse', side_effect=AdapterError('unavailable')):
+            result = preview_conditional(tree, 'fixture.typ', resolve(tree))
+        self.assertTrue(result.diagnostics)
+        self.assertFalse(result.edits)
+        self.assertTrue(any('preview_unavailable' in reason for reason in result.skips))
 
 
 if __name__ == '__main__':

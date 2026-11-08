@@ -4,11 +4,11 @@ Only insertion proposals are returned. No package evaluation, source writes or
 compiler invocation happens here. See PROOF_CONTRACT.md for the exact boundary.
 """
 from dataclasses import dataclass
-from bisect import bisect_left
+from bisect import bisect_left, bisect_right
 from collections.abc import Mapping
 
 from edit_plan import Edit, plan
-from static_resolver import is_proof_binding
+from static_resolver import is_proof_binding, resolve
 from suppression import resolve as resolve_suppressions
 from syntax_client import AdapterError, parse
 from typst_lint import Diagnostic, InputError, SafetyError, digest, load_rules
@@ -186,7 +186,7 @@ def analyze(tree, path, resolution):
                        suppressed=tuple(suppressed))
 
 
-def analyze_conditional(tree, path, resolution, *, catalog=None):
+def analyze_conditional(tree, path, resolution, *, catalog=None, _preview_candidates=None):
     """Report literal proof-boundary source patterns without proposing edits.
 
     The include-site binding, execution, output semantics and rendered context
@@ -326,4 +326,105 @@ def analyze_conditional(tree, path, resolution, *, catalog=None):
                 suppressed.append(finding)
             else:
                 findings.append(finding)
+                if _preview_candidates is not None:
+                    _preview_candidates.append((start, end, after.start))
     return ProofResult(tuple(findings), (), (reason,), suppressed=tuple(suppressed))
+
+
+def _preview_signature(tree, gaps):
+    """Ignore only the specifically selected markup separator whitespace."""
+    starts = tuple(start for start, _ in gaps)
+
+    def ignored(node):
+        pos = bisect_right(starts, node.start) - 1
+        return (node.kind in _WHITESPACE and pos >= 0
+                and gaps[pos][0] <= node.start <= node.end <= gaps[pos][1])
+
+    def visit(index):
+        node = tree.nodes[index]
+        children, positions = [], {}
+        for child in node.children:
+            if node.kind == 'Markup' and ignored(tree.nodes[child]):
+                continue
+            positions[child] = len(children)
+            children.append(visit(child))
+        if any(child not in positions for _, child in node.operands):
+            raise SafetyError('Selected whitespace is a typed syntax operand')
+        roles = tuple((role, positions[child]) for role, child in node.operands)
+        raw = tree.source[node.start:node.end] if not node.children else b''
+        return node.kind, node.display, roles, raw, tuple(children)
+
+    return visit(0)
+
+
+def preview_conditional(tree, path, resolution, *, catalog=None):
+    """Return source-only conditional proof-separation proposals, never apply.
+
+    Every candidate is reparsed as a batch; only its selected separator can
+    differ in the syntax signature. Suppression targets must map identically,
+    and the candidates must disappear on independent source reanalysis.
+    Neither proof binding, execution nor PDF equivalence follows from this.
+    """
+    candidates = []
+    initial = analyze_conditional(tree, path, resolution, catalog=catalog,
+                                  _preview_candidates=candidates)
+    if not candidates:
+        return initial
+    source = tree.source
+    edits, gaps = [], []
+    for start, end, following in candidates:
+        gap = source[end:following]
+        gaps.append((end, following))
+        if b'\n' in gap:
+            first_lf = gap.index(b'\n')
+            newline = b'\r\n' if first_lf and gap[first_lf - 1:first_lf] == b'\r' else b'\n'
+            at = end + first_lf + 1
+            edits.append(Edit(at, at, newline))
+        else:
+            lf = source.find(b'\n', end)
+            if lf < 0:
+                lf = source.rfind(b'\n', 0, end)
+            newline = b'\r\n' if lf > 0 and source[lf - 1:lf] == b'\r' else b'\n'
+            edits.append(Edit(end, end, newline * 2))
+    try:
+        gaps.sort()
+        planned = plan(source, edits)
+        if planned.deferred:
+            raise SafetyError('Conflicting conditional proof boundary proposals')
+        proposed = planned.candidate()
+        candidate = parse(proposed, tree.mode)
+        if candidate.nodes[0].errors:
+            raise SafetyError('Conditional proof candidate failed to parse')
+        positions = [edit.start for edit in planned.edits]
+        shifts = [0]
+        for edit in planned.edits:
+            shifts.append(shifts[-1] + len(edit.replacement))
+
+        def mapped(position, *, end=False):
+            return position + shifts[(bisect_left if end else bisect_right)(positions, position)]
+
+        candidate_gaps = tuple((mapped(start, end=True), mapped(end)) for start, end in gaps)
+        if _preview_signature(tree, tuple(gaps)) != _preview_signature(candidate, candidate_gaps):
+            raise SafetyError('Proof separation would change non-separator syntax or attachment')
+        records = load_rules()[0]['rules'] if catalog is None else catalog
+        ids = {record['id'] for record in records}
+        before = resolve_suppressions(tree, ids)
+        after = resolve_suppressions(candidate, ids)
+        expected = tuple((scope.rules, scope.reason, mapped(scope.start),
+                          mapped(scope.end, end=True), mapped(scope.directive_start)) for scope in before)
+        actual = tuple((scope.rules, scope.reason, scope.start, scope.end, scope.directive_start) for scope in after)
+        if actual != expected:
+            raise SafetyError('Proof separation would retarget a suppression directive')
+        remaining = []
+        checked = analyze_conditional(candidate, path, resolve(candidate, packages=()), catalog=catalog,
+                                       _preview_candidates=remaining)
+        original_starts = {mapped(original) for original, _, _ in candidates}
+        if checked.parse_errors or any(start in original_starts for start, _, _ in remaining):
+            raise SafetyError('Conditional proof candidate did not converge')
+    except (AdapterError, SafetyError, RecursionError) as error:
+        return ProofResult(initial.diagnostics, (),
+                           (*initial.skips, f'preview_unavailable: {error}'),
+                           initial.parse_errors, initial.suppressed)
+    return ProofResult(initial.diagnostics, tuple(planned.edits),
+                       (*initial.skips, 'Source-only preview; PDF equivalence and binding remain unproved.'),
+                       initial.parse_errors, initial.suppressed)

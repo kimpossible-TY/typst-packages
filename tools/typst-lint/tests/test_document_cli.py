@@ -111,6 +111,26 @@ class DocumentCliTests(unittest.TestCase):
         self.assertFalse(hints['edit_permission'] or report['applied_fixes'] or report['proposed_edits'])
         self.assertEqual(target.read_bytes(), source)
 
+    def test_conditional_gap_previews_are_opt_in_independent_and_read_only(self):
+        self.write('main.typ', b'#include "chapter.typ"\n')
+        source = (b'#block[\n#proof[Done.]\nNext.\n'
+                  b'$\n A #footnote[Reason.]\n\n B\n$\n]')
+        target = self.write('chapter.typ', source)
+        ordinary = self.run_cli('--rule-set', 'pde')
+        self.assertNotIn('conditional_gap_previews', ordinary)
+        report = self.run_cli('--rule-set', 'pde', '--preview-conditional-gaps')
+        previews = report['conditional_gap_previews']
+        self.assertEqual(len(previews), 2)
+        self.assertEqual({row['edits'][0]['rule_id'] for row in previews},
+                         {'pde.proof-trailing-gap', 'pde.footnote-trailing-gap'})
+        self.assertTrue(all(row['baseline_sha256'] == digest(source) and not row['edit_permission']
+                            and not row['render_equivalence_proved'] for row in previews))
+        self.assertIn('not-composed', report['conditional_gap_preview_status'])
+        self.assertFalse(report['applied_fixes'])
+        self.assertEqual(target.read_bytes(), source)
+        refused = self.run_cli('--preview-conditional-gaps')
+        self.assertEqual(refused['phase'], 'input')
+
     def test_explicit_reference_facade_provenance_is_conditional_and_reports_shadowing(self):
         main = self.write('main.typ', b'#import "Styles/styles.typ": *\n')
         facade = self.write('Styles/styles.typ', b'#import "@local/math-blocks:0.2.0": *\n')

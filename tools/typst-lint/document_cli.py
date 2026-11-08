@@ -29,7 +29,7 @@ CONDITIONAL_RULES = ('pde.text-only-highlight', 'pde.paragraph-marker-gap')
 
 def report_document(root, entrypoint, *, rule_set='core', package_path=None,
                     preview_display_gaps=False, preview_standalone_displays=False,
-                    preview_sequence=False, local_rule_hints=False,
+                    preview_sequence=False, local_rule_hints=False, preview_conditional_gaps=False,
                     reference_package_path=None, reference_facade=None, reference_cache_path=None,
                     reference_calls=False):
     """Inspect retained source bytes without reading consumer configuration.
@@ -51,6 +51,8 @@ def report_document(root, entrypoint, *, rule_set='core', package_path=None,
             'Sequence previews require explicit --rule-set pde')
     require(type(local_rule_hints) is bool and (not local_rule_hints or rule_set == 'pde'),
             'Source-local rule hints require explicit --rule-set pde')
+    require(type(preview_conditional_gaps) is bool and (not preview_conditional_gaps or rule_set == 'pde'),
+            'Conditional gap previews require explicit --rule-set pde')
     reference_requested = (reference_package_path is not None or reference_facade is not None
                            or reference_cache_path is not None)
     require(type(reference_calls) is bool and (not reference_calls or reference_requested),
@@ -109,6 +111,7 @@ def report_document(root, entrypoint, *, rule_set='core', package_path=None,
     gap_previews = []
     standalone_previews = []
     sequence_previews = []
+    conditional_gap_previews = []
     local_findings, local_suppressed, local_files, local_contexts = [], [], [], []
     items = len(captured.sources) + len(captured.edges) + len(captured.occurrences) + len(captured.unresolved)
     reference_report = None
@@ -156,6 +159,33 @@ def report_document(root, entrypoint, *, rule_set='core', package_path=None,
                 local_reasons, local_results = analyze_local(item.tree, item.path, catalog['rules'])
             else:
                 local_results = None
+            if preview_conditional_gaps:
+                from footnote_rules import preview_conditional_math_gaps
+                from proof_rules import preview_conditional as preview_proof_gaps
+                from static_resolver import resolve
+                local_resolution = resolve(item.tree, packages=())
+                footnote_preview = preview_conditional_math_gaps(item.tree, item.path, local_resolution,
+                                                                 catalog=catalog['rules'])
+                proof_preview = preview_proof_gaps(item.tree, item.path, local_resolution, catalog=catalog['rules'])
+                previews = [] if footnote_preview is None else [footnote_preview]
+                if proof_preview.edits:
+                    proof_plan = plan(item.source, proof_preview.edits)
+                    previews.append(dict(path=item.path, rule_id='pde.proof-trailing-gap',
+                        baseline_sha256=digest(item.source), candidate_sha256=digest(proof_plan.candidate()),
+                        verification='conditional-parse-syntax-directives-and-proof-reanalysis',
+                        runtime_binding_proved=False, render_equivalence_proved=False, edit_permission=False,
+                        edits=[dict(start=edit.start, end=edit.end, replacement=edit.replacement.decode('utf-8'),
+                                    rule_id='pde.proof-trailing-gap') for edit in proof_plan.edits]))
+                elif any(reason.startswith('preview_unavailable:') for reason in proof_preview.skips):
+                    previews.append(dict(path=item.path, rule_id='pde.proof-trailing-gap',
+                        baseline_sha256=digest(item.source), candidate_sha256=None, verification='withheld',
+                        runtime_binding_proved=False, render_equivalence_proved=False, edit_permission=False,
+                        edits=[], reasons=[reason for reason in proof_preview.skips
+                                           if reason.startswith('preview_unavailable:')]))
+                for preview in previews:
+                    items += 1 + len(preview['edits']) + len(preview.get('reasons', ()))
+                    require(items <= MAX_REPORT_ITEMS, 'Document inspection report item limit exceeded')
+                    conditional_gap_previews.append(preview)
         except (InputError, OSError, ValueError) as error:
             raise InputError(f'{item.path}: {error}') from error
         # Keep unsupported baseline operands diagnostic-only, then independently
@@ -335,6 +365,9 @@ def report_document(root, entrypoint, *, rule_set='core', package_path=None,
     if preview_sequence:
         report['sequence_previews'] = sequence_previews
         report['sequence_preview_status'] = 'hash-chained-read-only-not-a-write-transaction'
+    if preview_conditional_gaps:
+        report['conditional_gap_previews'] = conditional_gap_previews
+        report['conditional_gap_preview_status'] = 'independent-source-only-not-composed-or-render-verified'
     if local_rule_hints:
         from document_local_rules import RULE_IDS as LOCAL_RULE_IDS
         report['local_rule_hints'] = dict(rule_ids=list(LOCAL_RULE_IDS),
@@ -369,6 +402,8 @@ def main(arguments=None):
                         help='Preview hash-chained standalone, script and gap passes (requires --rule-set pde)')
     parser.add_argument('--local-rule-hints', action='store_true',
                         help='Inspect included files independently for additional conditional PDE hints')
+    parser.add_argument('--preview-conditional-gaps', action='store_true',
+                        help='Preview independent proof and nested math-footnote gaps (requires --rule-set pde)')
     parser.add_argument('--reference-package-path',
                         help='Explicit canonical root containing the reviewed project-references package')
     parser.add_argument('--reference-facade',
@@ -386,6 +421,7 @@ def main(arguments=None):
                                  preview_standalone_displays=args.preview_standalone_displays,
                                  preview_sequence=args.preview_sequence,
                                  local_rule_hints=args.local_rule_hints,
+                                 preview_conditional_gaps=args.preview_conditional_gaps,
                                  reference_package_path=args.reference_package_path,
                                  reference_facade=args.reference_facade,
                                  reference_cache_path=args.reference_cache_path,

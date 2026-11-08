@@ -244,7 +244,7 @@ def analyze(tree, path, resolution, spacer_proof=None):
                               suppressed=tuple(suppressed[r])) for r in RULE_IDS}
 
 
-def analyze_conditional_nested(tree, path, resolution, *, catalog=None):
+def analyze_conditional_nested(tree, path, resolution, *, catalog=None, _math_gap_edits=None):
     """Inspect nested literal markup patterns without asserting execution or edits.
 
     Root markup is owned by ``analyze``. These additional hints are conditional
@@ -288,7 +288,9 @@ def analyze_conditional_nested(tree, path, resolution, *, catalog=None):
         column = len(source[line_start:start].decode('utf-8')) + 1
         rule = metadata[rid]
         finding = Diagnostic(rid, rule['grade'], path, line_index + 1, column, explanation, rule['source'])
-        (suppressed if any(scope.covers(rid, start) for scope in scopes) else findings)[rid].append(finding)
+        is_suppressed = any(scope.covers(rid, start) for scope in scopes)
+        (suppressed if is_suppressed else findings)[rid].append(finding)
+        return not is_suppressed
 
     def aligned(math_id):
         pending = list(nodes[math_id].children)
@@ -354,8 +356,13 @@ def analyze_conditional_nested(tree, path, resolution, *, catalog=None):
                 while following < container.end and source[following] in b' \t\r\n':
                     following += 1
                 if following < container.end:
-                    add(GAP, mark.start,
+                    active = add(GAP, mark.start,
                         'Avoid this blank source line if the footnote and following content render as written.')
+                    # Internal preview collector: source-only, never edits prose
+                    # paragraphs or changes a comment's attachment.
+                    if (active and math and _math_gap_edits is not None
+                            and not source[following:following + 2] in (b'//', b'/*')):
+                        _math_gap_edits.append(Edit(call.end, gap.end(), gap.group(1)))
 
     for body_id, body in enumerate(nodes):
         if body_id == 0 or body.kind != 'Markup' or excluded[body_id]:
@@ -369,3 +376,51 @@ def analyze_conditional_nested(tree, path, resolution, *, catalog=None):
                         inspect(math_id, math=True, has_alignment=aligned(math_id))
     return {rid: FootnoteResult(tuple(findings[rid]), (), (reason,),
                                 suppressed=tuple(suppressed[rid])) for rid in RULE_IDS}
+
+
+def preview_conditional_math_gaps(tree, path, resolution, *, catalog=None):
+    """Construct a reanalyzed in-memory preview for nested math gaps only.
+
+    Conditional binding, execution and rendering remain unproved. The returned
+    edits have no source-write authority and must not be treated as safe fixes.
+    """
+    from document_gap_preview import _scopes, _syntax_signature
+    from edit_plan import plan
+    from static_resolver import resolve
+    from syntax_client import parse
+    from typst_lint import SafetyError
+
+    records = load_rules()[0]['rules'] if catalog is None else catalog
+    edits = []
+    baseline = analyze_conditional_nested(tree, path, resolution, catalog=records, _math_gap_edits=edits)
+    if not edits:
+        return None
+    try:
+        candidate_plan = plan(tree.source, edits)
+        if candidate_plan.deferred or len(candidate_plan.edits) != len(edits):
+            raise SafetyError('Overlapping or ineffective conditional footnote gaps')
+        candidate = candidate_plan.candidate()
+        parsed = parse(candidate, tree.mode)
+        if parsed.nodes[0].errors or _syntax_signature(tree) != _syntax_signature(parsed):
+            raise SafetyError('Candidate changes non-whitespace syntax or fails to parse')
+        if _scopes(tree, records, candidate_plan.edits) != _scopes(parsed, records):
+            raise SafetyError('Candidate changes an inline directive target')
+        final = analyze_conditional_nested(parsed, path, resolve(parsed), catalog=records)
+        for rule_id in RULE_IDS:
+            before, after = baseline[rule_id], final[rule_id]
+            expected = len(before.diagnostics) - (len(edits) if rule_id == GAP else 0)
+            if (len(after.diagnostics) != expected or len(after.suppressed) != len(before.suppressed)
+                    or sorted(d.explanation for d in after.suppressed) !=
+                       sorted(d.explanation for d in before.suppressed)
+                    or (rule_id != GAP and sorted(d.explanation for d in after.diagnostics) !=
+                        sorted(d.explanation for d in before.diagnostics))):
+                raise SafetyError('Conditional footnote findings changed or gap reanalysis failed')
+        return dict(path=path, baseline_sha256=digest(tree.source), candidate_sha256=digest(candidate),
+                    verification='conditional-parse-syntax-directives-and-footnote-reanalysis',
+                    runtime_binding_proved=False, render_equivalence_proved=False,
+                    edit_permission=False, edits=[dict(start=e.start, end=e.end,
+                      replacement=e.replacement.decode('utf-8'), rule_id=GAP) for e in candidate_plan.edits])
+    except (InputError, SafetyError, OSError, ValueError, RecursionError) as error:
+        return dict(path=path, baseline_sha256=digest(tree.source), candidate_sha256=None,
+                    verification='withheld', runtime_binding_proved=False,
+                    render_equivalence_proved=False, edit_permission=False, edits=[], reason=str(error))

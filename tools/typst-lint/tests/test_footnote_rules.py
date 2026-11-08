@@ -1,13 +1,17 @@
 """Partial rule tests; synthetic spacer proofs exercise the resolver contract."""
 from pathlib import Path
+import os
+import shutil
+import subprocess
 import sys
+import tempfile
 import unittest
 
 TOOL = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(TOOL))
 from edit_plan import plan
 from footnote_rules import (GAP, PUNCT, ALIGNED, UNALIGNED, PROSE, SpacerProof,
-                            analyze, analyze_conditional_nested)
+                            analyze, analyze_conditional_nested, preview_conditional_math_gaps)
 from static_resolver import resolve
 from syntax_client import EXECUTABLE, parse
 from typst_lint import digest
@@ -193,6 +197,57 @@ class FootnoteRules(unittest.TestCase):
         self.assertEqual(len(result[PUNCT].diagnostics), 1000)
         self.assertEqual((result[PUNCT].diagnostics[0].line, result[PUNCT].diagnostics[0].column), (2, 14))
         self.assertFalse(any(item.edits for item in result.values()))
+
+    def test_conditional_math_gap_preview_reanalyzes_and_preserves_crlf(self):
+        source = '#block[$\r\n 한글 #footnote[Reason.]\r\n \t\r\n B\r\n$]'.encode()
+        tree = parse(source)
+        result = preview_conditional_math_gaps(tree, 'fixture.typ', resolve(tree))
+        self.assertEqual(result['verification'], 'conditional-parse-syntax-directives-and-footnote-reanalysis')
+        self.assertFalse(result['runtime_binding_proved'] or result['render_equivalence_proved'] or result['edit_permission'])
+        self.assertEqual(len(result['edits']), 1)
+        edit = result['edits'][0]
+        candidate = source[:edit['start']] + edit['replacement'].encode() + source[edit['end']:]
+        self.assertEqual(candidate, source.replace(b'\r\n \t\r\n', b'\r\n'))
+        self.assertEqual(result['candidate_sha256'], digest(candidate))
+        parsed = parse(candidate)
+        self.assertIsNone(preview_conditional_math_gaps(parsed, 'fixture.typ', resolve(parsed)))
+
+    def test_conditional_math_gap_preview_refuses_prose_comment_and_suppression(self):
+        for source in (b'#block[Text.#footnote[X]\n\nNext.]',
+                       b'#block[$\n A #footnote[X]\n\n // comment\n B\n$]',
+                       b'#block[$\n A #footnote[X]\n\n /* comment */ B\n$]',
+                       b'#block[\n// typst-lint: ignore-next pde.footnote-trailing-gap -- deliberate\n'
+                       b'$\n A #footnote[X]\n\n B\n$]'):
+            with self.subTest(source=source):
+                tree = parse(source)
+                self.assertIsNone(preview_conditional_math_gaps(tree, 'fixture.typ', resolve(tree)))
+
+    @unittest.skipUnless(os.environ.get('TYPST_LINT_RENDER_TESTS') == '1' and shutil.which('typst'),
+                         'Opt in with TYPST_LINT_RENDER_TESTS=1 and Typst 0.15.1')
+    def test_conditional_math_gap_fixture_pdf_matches(self):
+        version = subprocess.check_output(['typst', '--version'], text=True)
+        if not version.startswith('typst 0.15.1 '):
+            self.skipTest('Fixture comparison pins Typst 0.15.1')
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            (root / 'packages').mkdir()
+            (root / 'cache').mkdir()
+            source = b'#block[$\n A #footnote[Reason.]\n\n B\n$]'
+            tree = parse(source)
+            result = preview_conditional_math_gaps(tree, 'fixture.typ', resolve(tree))
+            self.assertTrue(result and result['edits'])
+            edit = result['edits'][0]
+            candidate = source[:edit['start']] + edit['replacement'].encode() + source[edit['end']:]
+            rendered = []
+            for label, contents in (('before', source), ('after', candidate)):
+                entry = root / 'main.typ'
+                entry.write_bytes(contents)
+                output = root / f'{label}.pdf'
+                subprocess.run(['typst', 'compile', '--root', str(root), '--creation-timestamp', '0',
+                                '--package-path', str(root / 'packages'), '--package-cache-path', str(root / 'cache'),
+                                str(entry), str(output)], check=True, capture_output=True, timeout=30)
+                rendered.append(output.read_bytes())
+            self.assertEqual(rendered[0], rendered[1])
 
 
 if __name__ == '__main__':
