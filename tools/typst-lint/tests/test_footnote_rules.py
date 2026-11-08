@@ -13,7 +13,7 @@ sys.path.insert(0, str(TOOL))
 from edit_plan import plan
 from footnote_rules import (GAP, PUNCT, ALIGNED, UNALIGNED, PROSE, SpacerProof,
                             analyze, analyze_conditional_nested, preview_conditional_math_gaps,
-                            preview_conditional_prose_punctuation)
+                            preview_conditional_prose_punctuation, preview_conditional_unaligned_spacers)
 from static_resolver import resolve
 from syntax_client import EXECUTABLE, parse
 from typst_lint import digest
@@ -213,6 +213,103 @@ class FootnoteRules(unittest.TestCase):
         self.assertEqual(result['candidate_sha256'], digest(candidate))
         parsed = parse(candidate)
         self.assertIsNone(preview_conditional_math_gaps(parsed, 'fixture.typ', resolve(parsed)))
+
+    def test_conditional_unaligned_spacer_preview_preserves_other_tokens_and_converges(self):
+        source = '#block[$\r\n 한글 = B #dots_space #footnote[Reason.]\r\n$]'.encode()
+        tree = parse(source)
+        initial = analyze_conditional_nested(tree, 'fixture.typ', resolve(tree))
+        self.assertEqual(len(initial[UNALIGNED].diagnostics), 1)
+        self.assertTrue(all(not item.edits for item in initial.values()))
+        result = preview_conditional_unaligned_spacers(tree, 'fixture.typ', resolve(tree))
+        self.assertEqual(result['verification'], 'conditional-spacer-token-syntax-directives-and-footnote-reanalysis')
+        self.assertFalse(result['runtime_binding_proved'] or result['render_equivalence_proved'] or result['edit_permission'])
+        self.assertEqual(len(result['edits']), 1)
+        edit = result['edits'][0]
+        self.assertEqual(edit['rule_id'], UNALIGNED)
+        self.assertEqual(source[edit['start']:edit['end']], b'#dots_space')
+        candidate = source[:edit['start']] + edit['replacement'].encode() + source[edit['end']:]
+        self.assertEqual(candidate, source.replace(b'#dots_space', b''))
+        self.assertEqual(result['candidate_sha256'], digest(candidate))
+        parsed = parse(candidate)
+        self.assertIsNone(preview_conditional_unaligned_spacers(parsed, 'fixture.typ', resolve(parsed)))
+
+    def test_conditional_unaligned_spacer_preview_skips_aligned_prose_and_suppression(self):
+        for source in (b'#block[$\n A &= B #dots_space #footnote[X]\n$]',
+                       b'#block[This.#dots_space #footnote[X]]',
+                       b'#block[$\n A = B #dots_space /* comment */ #footnote[X]\n$]',
+                       b'// typst-lint: ignore-next pde.unaligned-footnote-no-spacer -- deliberate\n'
+                       b'#block[$\n A = B #dots_space #footnote[X]\n$]'):
+            with self.subTest(source=source):
+                tree = parse(source)
+                self.assertFalse(tree.nodes[0].errors)
+                self.assertIsNone(preview_conditional_unaligned_spacers(tree, 'fixture.typ', resolve(tree)))
+
+    def test_conditional_unaligned_spacer_preview_matches_multiple_independent_calls(self):
+        source = b'#block[$\n A #dots_space #footnote[X] + B #dots_space #footnote[Y]\n$]'
+        tree = parse(source)
+        result = preview_conditional_unaligned_spacers(tree, 'fixture.typ', resolve(tree))
+        self.assertEqual(len(result['edits']), 2)
+        candidate = plan(source, [__import__('edit_plan').Edit(row['start'], row['end'], b'')
+                                  for row in result['edits']]).candidate()
+        self.assertEqual(candidate, source.replace(b'#dots_space', b''))
+
+    def test_conditional_unaligned_spacer_preview_withholds_changed_other_findings(self):
+        from dataclasses import replace
+        from unittest.mock import patch
+        import footnote_rules
+        source = (b'#block[Claim #footnote[Prose.]\n\n'
+                  b'$\n A = B #dots_space #footnote[Math.]\n$]')
+        tree = parse(source)
+        original = footnote_rules.analyze_conditional_nested
+        def changed(current, path, resolution, **kwargs):
+            result = original(current, path, resolution, **kwargs)
+            if kwargs.get('_unaligned_spacer_edits') is None and result[PUNCT].diagnostics:
+                item = result[PUNCT].diagnostics[0]
+                result[PUNCT] = replace(result[PUNCT], diagnostics=(replace(item, column=item.column + 1),))
+            return result
+        with patch.object(footnote_rules, 'analyze_conditional_nested', side_effect=changed):
+            result = preview_conditional_unaligned_spacers(tree, 'fixture.typ', resolve(tree))
+        self.assertEqual(result['verification'], 'withheld')
+        self.assertFalse(result['edits'] or result['edit_permission'])
+
+    def test_conditional_unaligned_spacer_preview_refuses_unsupported_math_directive(self):
+        source = (b'#block[$\n A = B\n'
+                  b'// typst-lint: ignore-next core.parenthesized-scripts -- intentional\n'
+                  b'#dots_space #footnote[X]\n$]')
+        tree = parse(source)
+        from typst_lint import InputError
+        with self.assertRaises(InputError):
+            preview_conditional_unaligned_spacers(tree, 'fixture.typ', resolve(tree))
+
+    @unittest.skipUnless(os.environ.get('TYPST_LINT_RENDER_TESTS') == '1' and shutil.which('typst'),
+                         'Opt in with TYPST_LINT_RENDER_TESTS=1 and Typst 0.15.1')
+    def test_conditional_unaligned_spacer_pdf_depends_on_spacer_binding(self):
+        if not subprocess.check_output(['typst', '--version'], text=True).startswith('typst 0.15.1 '):
+            self.skipTest('Fixture comparison pins Typst 0.15.1')
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            (root / 'packages').mkdir()
+            (root / 'cache').mkdir()
+            for extent, expected_identical in ((b'0pt', True), (b'8pt', False)):
+                with self.subTest(extent=extent):
+                    source = (b'#set page(width: 300pt, height: 250pt, margin: 30pt)\n'
+                              b'#let dots_space = h(' + extent + b')\n'
+                              b'#block[$\n A = B #dots_space #footnote[Reason.]\n$]')
+                    tree = parse(source)
+                    result = preview_conditional_unaligned_spacers(tree, 'fixture.typ', resolve(tree))
+                    self.assertTrue(result and result['edits'], result)
+                    edit = result['edits'][0]
+                    candidate = source[:edit['start']] + source[edit['end']:]
+                    rendered = []
+                    for label, contents in (('before', source), ('after', candidate)):
+                        entry = root / 'main.typ'
+                        entry.write_bytes(contents)
+                        output = root / f'{label}.pdf'
+                        subprocess.run(['typst', 'compile', '--root', str(root), '--creation-timestamp', '0',
+                                        '--package-path', str(root / 'packages'), '--package-cache-path', str(root / 'cache'),
+                                        str(entry), str(output)], check=True, capture_output=True, timeout=30)
+                        rendered.append(output.read_bytes())
+                    self.assertEqual(rendered[0] == rendered[1], expected_identical)
 
     def test_conditional_math_gap_preview_refuses_prose_comment_and_suppression(self):
         for source in (b'#block[Text.#footnote[X]\n\nNext.]',

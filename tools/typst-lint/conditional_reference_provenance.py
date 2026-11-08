@@ -19,6 +19,15 @@ from typst_lint import digest
 
 NAME = 'project-ref'
 MAX_CALL_IMPORT_HASH_BYTES = 128 * 1024 * 1024
+# These parser nodes represent literal math layout only. Unknown/new node
+# kinds, computed fields, function calls and code escapes are deliberately
+# excluded, so an equation is never treated as call-free based on spelling.
+_CALL_FREE_MATH_KINDS = frozenset((
+    'Equation', 'Dollar', 'Math', 'Space', 'MathText', 'MathIdent',
+    'MathShorthand', 'MathAttach', 'MathDelimited', 'MathFrac', 'MathPrimes',
+    'MathAlignPoint', 'LeftParen', 'RightParen', 'Hat', 'Underscore', 'Slash',
+    'Str', 'Linebreak', 'LineComment', 'BlockComment',
+))
 CONDITIONS = (
     'The runtime selects the exact captured packages and source files.',
     'Live paths may have changed since capture; the snapshot is not a filesystem lease.',
@@ -306,6 +315,7 @@ class ConditionalReferenceProvenance:
         returns = [False] * len(nodes)
         injections = [False] * len(nodes)
         calls_below = [False] * len(nodes)
+        call_free_math = [False] * len(nodes)
         for index in range(len(nodes) - 1, -1, -1):
             node = nodes[index]
             children = node.children
@@ -317,6 +327,8 @@ class ConditionalReferenceProvenance:
                 or any(mutations[c] for c in effect_children))
             returns[index] = node.kind == 'FuncReturn' or any(returns[c] for c in effect_children)
             calls_below[index] = node.kind == 'FuncCall' or any(calls_below[c] for c in children)
+            call_free_math[index] = (node.kind in _CALL_FREE_MATH_KINDS
+                                     and all(call_free_math[c] for c in children))
             if node.kind == 'Closure':
                 injections[index] = any(injections[c] for c in effect_children)
             elif node.kind in ('ContentBlock', 'CodeBlock'):
@@ -411,6 +423,10 @@ class ConditionalReferenceProvenance:
                               math_footnote)
                 return
             if node.kind == 'Equation':
+                if call_free_math[index]:
+                    # No code escapes, calls, field lookups, or unfamiliar
+                    # syntax can occur within this exact captured equation.
+                    return
                 reason = 'Code expressions inside equations are not inspected'
                 if reason not in unresolved:
                     unresolved.append(reason)

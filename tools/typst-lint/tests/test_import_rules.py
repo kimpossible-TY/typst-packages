@@ -10,7 +10,7 @@ TOOL = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(TOOL))
 from edit_plan import plan
 from import_graph import load_import_graph, rebase_graph
-from import_rules import ORDER, REDUNDANT, analyze
+from import_rules import ORDER, REDUNDANT, analyze, analyze_conditional_order
 from syntax_client import EXECUTABLE, parse
 
 STYLES = b'#import "Styles/styles.typ": *\n'
@@ -48,6 +48,61 @@ class ImportRulesTests(unittest.TestCase):
         self.assertEqual(candidate, source)
         self.assertFalse(any(r.edits for r in result.values()))
         return result
+
+    def test_conditional_order_covers_facade_figure_and_annotation_without_edits(self):
+        for first, second in ((FIGURES, STYLES),
+                              (b'#import "@preview/mannot:0.4.0": *\n', FIGURES),
+                              (b'#import "@preview/mannot:0.4.0": *\n', STYLES)):
+            with self.subTest(first=first, second=second):
+                source = first + second
+                result = analyze_conditional_order(parse(source), 'main.typ')
+                self.assertEqual(len(result.diagnostics), 1)
+                self.assertEqual(result.diagnostics[0].line, 2)
+                self.assertIn('Conditional source hint', result.diagnostics[0].explanation)
+                self.assertFalse(result.edits)
+                self.assertIn('target identity', result.skips[0])
+        for source in (STYLES, FIGURES, STYLES + FIGURES,
+                       STYLES + FIGURES + b'#import "@preview/mannot:0.4.0": *\n'):
+            with self.subTest(source=source):
+                self.assertFalse(analyze_conditional_order(parse(source), 'main.typ').diagnostics)
+
+    def test_conditional_order_ignores_nested_dynamic_and_unrelated_paths(self):
+        for source in (b'#block[#import "figures.typ": *]\n' + STYLES,
+                       b'#import ("fig" + "ures.typ"): *\n' + STYLES,
+                       b'#import "elsewhere.typ": *\n' + STYLES,
+                       b'#import "@preview/mannot:0.3.0": *\n' + STYLES,
+                       b'#import "/other/figures.typ": *\n' + STYLES):
+            with self.subTest(source=source):
+                tree = parse(source)
+                self.assertFalse(tree.nodes[0].errors)
+                self.assertFalse(analyze_conditional_order(tree, 'main.typ').diagnostics)
+
+    def test_conditional_order_suppression_unicode_and_invalid_metadata(self):
+        source = ('// 한글\r\n#import "figures.typ": *\r\n'
+                  '// typst-lint: ignore-next pde.import-order -- deliberate\r\n'
+                  '#import "Styles/styles.typ": *\r\n').encode()
+        result = analyze_conditional_order(parse(source), 'main.typ')
+        self.assertFalse(result.diagnostics)
+        self.assertEqual(len(result.suppressed), 1)
+        self.assertEqual((result.suppressed[0].line, result.suppressed[0].column), (4, 1))
+        from typst_lint import InputError
+        with self.assertRaises(InputError):
+            analyze_conditional_order(parse(STYLES), 'main.typ', catalog=[])
+
+    def test_conditional_order_reports_each_inversion_across_unrelated_imports(self):
+        source = (b'#import "@preview/mannot:0.4.0": *\n'
+                  b'#import "unrelated.typ": *\n'
+                  b'#import "figures.typ": *\n'
+                  b'#import "Styles/styles.typ": *\n')
+        result = analyze_conditional_order(parse(source), 'main.typ')
+        self.assertEqual([finding.line for finding in result.diagnostics], [3, 4])
+        self.assertFalse(result.edits)
+
+    def test_conditional_order_reports_malformed_source_without_edits(self):
+        source = b'#import "Styles/styles.typ\n'
+        result = analyze_conditional_order(parse(source), 'bad.typ')
+        self.assertTrue(result.parse_errors)
+        self.assertFalse(result.diagnostics or result.edits)
 
     def test_order_and_redundancy_positive_exact_candidate_and_idempotence(self):
         source = FIGURES + STYLES + COMPAT + b'#tag + #diagram\n'

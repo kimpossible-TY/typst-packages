@@ -9,6 +9,7 @@ from continuation_rules import RULE_ID as CONTINUATION, analyze_conditional as c
 from dataclasses import replace
 from footnote_rules import (RULE_IDS as FOOTNOTES, analyze as footnotes,
                             analyze_conditional_nested as nested_footnotes)
+from import_rules import ORDER as IMPORT_ORDER, analyze_conditional_order
 from paragraph_rules import (RULE_IDS as PARAGRAPHS, MARKER_GAP,
                              analyze as paragraphs, analyze_conditional_nested_gap)
 from proof_rules import RULE_ID as PROOF, analyze_conditional as proof
@@ -16,7 +17,7 @@ from prose_marker_rules import RULE_ID as PROSE_MARKER, analyze_conditional as p
 from static_resolver import resolve
 from theme_rules import CONTEXT as THEME_CONTEXT, analyze_conditional as theme_context
 
-RULE_IDS = (*PARAGRAPHS, CONTINUATION, *FOOTNOTES, CANCEL, PROOF, PROSE_MARKER, THEME_CONTEXT)
+RULE_IDS = (*PARAGRAPHS, CONTINUATION, *FOOTNOTES, CANCEL, PROOF, PROSE_MARKER, THEME_CONTEXT, IMPORT_ORDER)
 
 
 def analyze(tree, path, catalog):
@@ -44,4 +45,5 @@ def analyze(tree, path, catalog):
     results[PROOF] = proof(tree, path, resolution, catalog=catalog)
     results[PROSE_MARKER] = prose_marker(tree, path, catalog=catalog)
     results[THEME_CONTEXT] = theme_context(tree, path, resolution, catalog=catalog)
+    results[IMPORT_ORDER] = analyze_conditional_order(tree, path, catalog=catalog)
     return resolution.skips, results

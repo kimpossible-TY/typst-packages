@@ -245,7 +245,7 @@ def analyze(tree, path, resolution, spacer_proof=None):
 
 
 def analyze_conditional_nested(tree, path, resolution, *, catalog=None, _math_gap_edits=None,
-                               _prose_punctuation_edits=None):
+                               _prose_punctuation_edits=None, _unaligned_spacer_edits=None):
     """Inspect nested literal markup patterns without asserting execution or edits.
 
     Root markup is owned by ``analyze``. These additional hints are conditional
@@ -359,8 +359,11 @@ def analyze_conditional_nested(tree, path, resolution, *, catalog=None, _math_ga
                     add(ALIGNED, mark.start,
                         'Add the proven spacer if this aligned display and footnote render as written.')
                 elif not has_alignment and spacer:
-                    add(UNALIGNED, nodes[siblings[previous - 1]].start,
+                    active = add(UNALIGNED, nodes[siblings[previous - 1]].start,
                         'Remove this spacer if this unaligned display and footnote render as written.')
+                    if active and _unaligned_spacer_edits is not None:
+                        _unaligned_spacer_edits.append(Edit(nodes[siblings[previous - 1]].start,
+                                                            before.end, b''))
             gap = _BLANK_AFTER_FOOTNOTE.match(source, call.end, container.end)
             if gap:
                 following = gap.end()
@@ -412,6 +415,106 @@ def preview_conditional_prose_punctuation(tree, path, resolution, *, catalog=Non
     baseline = analyze_conditional_nested(tree, path, resolution, catalog=records,
                                           _prose_punctuation_edits=edits)
     return _preview_conditional_edits(tree, path, records, baseline, edits, PUNCT)
+
+
+def _signature_without_spacers(tree, edits):
+    """Drop only each explicitly selected, two-token spacer from a syntax tree."""
+    from document_gap_preview import _syntax_signature
+    from typst_lint import SafetyError
+    if not edits:
+        return _syntax_signature(tree)
+    expected = {(edit.start, edit.end) for edit in edits}
+    if len(expected) != len(edits) or any(
+            tree.source[start:end] != b'#dots_space' for start, end in expected):
+        raise SafetyError('Invalid conditional spacer token selection')
+    removed = set()
+    for i, node in enumerate(tree.nodes):
+        if node.kind == 'Hash' and (node.start, node.end + len(b'dots_space')) in expected:
+            if (i + 1 >= len(tree.nodes) or tree.nodes[i + 1].kind != 'Ident'
+                    or tree.nodes[i + 1].start != node.end
+                    or tree.source[tree.nodes[i + 1].start:tree.nodes[i + 1].end] != b'dots_space'
+                    or tree.nodes[i + 1].end != node.end + len(b'dots_space')
+                    or node.children or tree.nodes[i + 1].children):
+                raise SafetyError('Conditional spacer is not an exact syntax-token pair')
+            removed.update((i, i + 1))
+    if len(removed) != 2 * len(expected):
+        raise SafetyError('Conditional spacer syntax-token pair is missing')
+    nodes = tree.nodes
+    kept = [i for i, node in enumerate(nodes)
+            if i not in removed and node.kind not in ('Space', 'Parbreak')]
+    remap = {old: new for new, old in enumerate(kept)}
+    parents = {child: parent for parent, node in enumerate(nodes) for child in node.children}
+    result = []
+    for i in kept:
+        node = nodes[i]
+        parent = parents.get(i)
+        if parent is not None and parent not in remap:
+            raise SafetyError('Unexpected descendant of removed spacer or whitespace')
+        if any(target not in remap for _, target in node.operands):
+            raise SafetyError('A syntax operand refers to a removed spacer')
+        operands = tuple((name, remap[target]) for name, target in node.operands)
+        result.append((node.kind, remap.get(parent), node.display, node.errors, operands,
+                       tree.source[node.start:node.end] if not node.children else None))
+    return tuple(result)
+
+
+def preview_conditional_unaligned_spacers(tree, path, resolution, *, catalog=None):
+    """Preview exact spacer-token removals; binding and rendering stay conditional."""
+    from collections import Counter
+    from document_gap_preview import _scopes
+    from document_sequence_preview import _FindingMapper
+    from edit_plan import plan
+    from static_resolver import resolve
+    from syntax_client import parse
+    from typst_lint import SafetyError
+
+    records = load_rules()[0]['rules'] if catalog is None else catalog
+    edits = []
+    baseline = analyze_conditional_nested(tree, path, resolution, catalog=records,
+                                          _unaligned_spacer_edits=edits)
+    if not edits:
+        return None
+    try:
+        proposal = plan(tree.source, edits)
+        if proposal.deferred or len(proposal.edits) != len(edits):
+            raise SafetyError('Conflicting conditional spacer proposals')
+        candidate = proposal.candidate()
+        parsed = parse(candidate, tree.mode)
+        if (parsed.nodes[0].errors
+                or _signature_without_spacers(tree, proposal.edits) != _signature_without_spacers(parsed, ())):
+            raise SafetyError('Removing spacer changes additional syntax or fails to parse')
+        if _scopes(tree, records, proposal.edits) != _scopes(parsed, records):
+            raise SafetyError('Removing spacer changes an inline directive target')
+        after = analyze_conditional_nested(parsed, path, resolve(parsed), catalog=records)
+        base_mapper, mapped, final_mapper = (_FindingMapper(tree.source),
+            _FindingMapper(tree.source, proposal.edits), _FindingMapper(candidate))
+        targets = {edit.start for edit in proposal.edits}
+        matched = [item for item in baseline[UNALIGNED].diagnostics if base_mapper.offset(item) in targets]
+        if len(matched) != len(proposal.edits):
+            raise SafetyError('Every selected spacer must match one active diagnostic')
+
+        def keys(items, mapper):
+            return Counter((item.rule_id, item.grade, item.path, mapper.mapped(item),
+                            item.explanation, item.source) for item in items)
+
+        for rule_id in RULE_IDS:
+            original = keys(baseline[rule_id].diagnostics, mapped)
+            if rule_id == UNALIGNED:
+                original.subtract(keys(matched, mapped))
+            if (any(count < 0 for count in original.values())
+                    or +original != keys(after[rule_id].diagnostics, final_mapper)
+                    or keys(baseline[rule_id].suppressed, mapped) != keys(after[rule_id].suppressed, final_mapper)
+                    or after[rule_id].parse_errors):
+                raise SafetyError('Conditional spacer changed another finding or suppression')
+        return dict(path=path, baseline_sha256=digest(tree.source), candidate_sha256=digest(candidate),
+                    verification='conditional-spacer-token-syntax-directives-and-footnote-reanalysis',
+                    runtime_binding_proved=False, render_equivalence_proved=False,
+                    edit_permission=False, edits=[dict(start=edit.start, end=edit.end,
+                        replacement='', rule_id=UNALIGNED) for edit in proposal.edits])
+    except (InputError, SafetyError, OSError, ValueError, RecursionError) as error:
+        return dict(path=path, baseline_sha256=digest(tree.source), candidate_sha256=None,
+                    verification='withheld', runtime_binding_proved=False,
+                    render_equivalence_proved=False, edit_permission=False, edits=[], reason=str(error))
 
 
 def _preview_conditional_edits(tree, path, records, baseline, edits, edited_rule):

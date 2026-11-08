@@ -249,6 +249,30 @@ class ConditionalReferenceProvenanceTests(unittest.TestCase):
                 self.assertEqual(result.status, 'PARTIAL', result.unresolved)
                 self.assertTrue(result.unresolved)
 
+    def test_literal_equations_do_not_create_uninspected_call_context(self):
+        facade = b'#import "@local/math-blocks:0.2.0": *\n'
+        for equation in (b'$x+y$', b'$\n x_1^2 + alpha/beta \n$',
+                         '$한글 + 2$'.encode()):
+            with self.subTest(equation=equation):
+                main = b'#import "Styles/styles.typ": *\n' + equation + b'\n#project-ref("book", <x>)\n'
+                result = self.capture(facade, main).calls('main.typ')
+                self.assertEqual(result.status, 'CONDITIONAL', result.unresolved)
+                self.assertEqual(len(result.calls), 1)
+                self.assertFalse(result.calls[0].edit_permission)
+
+    def test_dynamic_equations_remain_partial_including_aliases_and_fields(self):
+        facade = b'#import "@local/math-blocks:0.2.0": *\n'
+        equations = (b'$ #project-ref("book", <x>) $', b'$ #cite("book", <x>) $',
+                     b'$ mystery(x) $', b'$ vec.field $', b'$ #none $')
+        for equation in equations:
+            with self.subTest(equation=equation):
+                main = (b'#import "Styles/styles.typ": *\n#let cite = project-ref\n'
+                        + equation + b'\n')
+                result = self.capture(facade, main).calls('main.typ')
+                self.assertEqual(result.status, 'PARTIAL', result.unresolved)
+                self.assertFalse(result.calls)
+                self.assertIn('Code expressions inside equations are not inspected', result.unresolved)
+
     def test_direct_display_math_footnote_content_traces_reference_conditionally(self):
         facade = b'#import "@local/math-blocks:0.2.0": *\n'
         main = (b'#import "Styles/styles.typ": *\n'

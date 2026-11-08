@@ -62,8 +62,8 @@ JSON includes:
   `coverage.uninspected` or add it to `coverage.available_backends`.
 - `proposed_edits`: source-bound byte offsets, replacement strings and baseline
   hashes. These are in-memory math-script proposals only.
-- With `--rule-set pde --local-rule-hints`, thirteen paragraph, continuation,
-  footnote, proof, theme and cancellation rule subsets inspect each captured file independently.
+- With `--rule-set pde --local-rule-hints`, fourteen paragraph, continuation,
+  footnote, proof, theme, import-order and cancellation rule subsets inspect each captured file independently.
   Continuation and footnotes additionally inspect nested literal markup as source patterns.
   Findings and refusals are separate conditional hints, without edits; actual
   include-site bindings, execution, styles and rendering remain unproved.
@@ -79,6 +79,11 @@ JSON includes:
 - `--preview-conditional-punctuation` independently previews only horizontal
   whitespace removal between an existing period/comma and a nested prose
   footnote. It does not add or move punctuation, or compose with other plans.
+- `--preview-conditional-spacers` independently previews exact `#dots_space`
+  token removal before a footnote in an unaligned nested display. The token's
+  binding and effects are unproved: removing it can change the rendered PDF.
+  An empty preview does not establish complete inspection or absence of other
+  violations. This preview is never automatically applied or composed.
 - With `--rule-set pde`, `--package-path`, `--reference-package-path` and
   `--reference-facade`, the separately captured reference package and graph
   namespace evidence trace a selected facade's `project-ref` export. A
@@ -94,6 +99,11 @@ JSON includes:
   equation code, deferred functions and unsupported execution remain uninspected.
   Trace evidence does not prove runtime execution, catalog membership or edit
   safety, and analysis budget exhaustion discards that file's partial calls.
+- `--reference-arguments` uses that same conditional trace to report wrong
+  arity, named arguments and statically known wrong argument types. Spread and
+  unknown values stay unresolved; it neither checks catalog membership nor
+  proposes edits. It requires the explicit reference provenance options and
+  can be combined with `--reference-calls` without retracing each file.
 - Optional `--reference-cache-path` adds a second explicit namespace root for
   this reference-export trace only. The first existing package version wins,
   including an incomplete or unreviewed one. For this multi-root route the

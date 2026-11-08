@@ -99,6 +99,17 @@ def _file_signature(info):
             info.st_mtime_ns, info.st_ctime_ns)
 
 
+_FILE_SIGNATURE_FIELDS = ('device', 'inode', 'mode', 'links', 'uid', 'gid', 'size', 'mtime_ns', 'ctime_ns')
+
+
+def _signature_difference(expected, *observed):
+    """Describe changed fields without revealing metadata values or relaxing checks."""
+    fields = [name for index, name in enumerate(_FILE_SIGNATURE_FIELDS)
+              if index >= len(expected)
+              or any(len(actual) <= index or actual[index] != expected[index] for actual in observed)]
+    return ', '.join(fields) if fields else 'unknown'
+
+
 def _directory_signature(info):
     # Unrelated changes to ancestor directory contents must not fail a read.
     return info.st_dev, info.st_ino, info.st_mode
@@ -206,7 +217,7 @@ class _Snapshot:
                  f'Package input changed while opening: {path}')
         source = self._read_bytes(fd, limit, path)
         _require(len(source) == before.st_size,
-                 f'Package input changed while reading: {path}')
+                 f'Package input changed while reading: {path} (byte count differs from captured size)')
         record = _File(path, fd, parent.fd, name, before, source, limit)
         self._verify_file(record)
         try:
@@ -219,10 +230,14 @@ class _Snapshot:
     @staticmethod
     def _verify_file(record):
         expected = _file_signature(record.before)
-        _require(expected == _file_signature(os.fstat(record.fd))
-                 and expected == _file_signature(os.stat(
-                     record.name, dir_fd=record.parent_fd, follow_symlinks=False)),
-                 f'Package input changed while reading: {record.path}')
+        opened = _file_signature(os.fstat(record.fd))
+        if expected != opened:
+            fields = _signature_difference(expected, opened)
+            raise PackageInputError(f'Package input changed while reading: {record.path} (metadata: {fields})')
+        named = _file_signature(os.stat(record.name, dir_fd=record.parent_fd, follow_symlinks=False))
+        if expected != named:
+            fields = _signature_difference(expected, named)
+            raise PackageInputError(f'Package input changed while reading: {record.path} (metadata: {fields})')
 
     def verify(self):
         # Re-read both original open files, catching same-size edits as well as

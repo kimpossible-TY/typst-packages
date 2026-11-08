@@ -5,6 +5,8 @@ pure exports/re-exports. It never establishes symbol identity or initializer
 safety. These rules never write files or extend the source selection.
 """
 from collections import Counter
+from collections.abc import Mapping
+from bisect import bisect_left
 from dataclasses import dataclass, replace
 import re
 from pathlib import PurePosixPath
@@ -15,7 +17,7 @@ from import_graph import (GraphAnalyzer, ImportGraph, import_request, import_sha
 from static_resolver import MANNOT_NAMESPACE, SCOPED_ANNOTATIONS
 from suppression import resolve as resolve_suppressions
 from syntax_client import parse
-from typst_lint import Diagnostic, SafetyError, load_rules
+from typst_lint import Diagnostic, InputError, SafetyError, load_rules
 
 ORDER = 'pde.import-order'
 REDUNDANT = 'pde.no-redundant-facade-import'
@@ -50,6 +52,67 @@ class _Statement:
 def _style_path(path, names):
     parts = PurePosixPath(path).parts if path else ()
     return len(parts) >= 2 and parts[-2] == 'Styles' and parts[-1] in names
+
+
+def analyze_conditional_order(tree, path, *, catalog=None):
+    """Report out-of-order literal root import spellings as conditional hints.
+
+    Paths and the recognized annotation requests classify source conventions
+    only. No graph, module ownership, initializer, execution, or edit safety is
+    proved. Imports inside blocks or dynamic requests are not inspected.
+    """
+    source, nodes = tree.source, tree.nodes
+    if nodes[0].errors:
+        errors = tuple((n.start, n.end) for n in nodes if n.kind == 'Error')
+        return ImportResult(skips=('Malformed Typst syntax; no source pattern diagnosis',),
+                            parse_errors=errors or ((0, len(source)),))
+    if tree.mode != 'markup' or nodes[0].kind != 'Markup':
+        return ImportResult(skips=('Only direct root markup imports are inspected',))
+    records = load_rules()[0]['rules'] if catalog is None else catalog
+    if (type(records) not in (tuple, list) or any(not isinstance(row, Mapping)
+            or type(row.get('id')) is not str or not row['id'] for row in records)):
+        raise InputError('Conditional import order requires rule metadata records')
+    selected = [row for row in records if row['id'] == ORDER]
+    if (len(selected) != 1 or any(type(selected[0].get(key)) is not str or not selected[0][key]
+                                   for key in ('grade', 'source'))):
+        raise InputError('Missing or invalid import order metadata')
+    scopes = resolve_suppressions(tree, {row['id'] for row in records})
+    siblings = nodes[0].children
+    findings, suppressed = [], []
+    highest = -1
+    newlines = [-1] + [i for i, byte in enumerate(source) if byte == 10]
+    for position, index in enumerate(siblings):
+        node = nodes[index]
+        if node.kind != 'ModuleImport' or position == 0:
+            continue
+        previous = nodes[siblings[position - 1]]
+        if previous.kind != 'Hash' or previous.end != node.start:
+            continue
+        request = import_request(tree, index)
+        if request is None:
+            continue
+        category = None
+        if request in (MANNOT_NAMESPACE, SCOPED_ANNOTATIONS):
+            category = 2
+        elif not request.startswith(('@', '/')) and _style_path(request, ('styles.typ',)):
+            category = 0
+        elif not request.startswith(('@', '/')) and PurePosixPath(request).name == 'figures.typ':
+            category = 1
+        if category is None:
+            continue
+        if category < highest:
+            start = previous.start
+            line = bisect_left(newlines, start)
+            column = len(source[newlines[line - 1] + 1:start].decode('utf-8')) + 1
+            rule = selected[0]
+            finding = Diagnostic(ORDER, rule['grade'], path, line, column,
+                'Conditional source hint: if these imports are the facade, figure and annotation modules, '
+                'place the facade before figures and annotations.', rule['source'])
+            (suppressed if any(scope.covers(ORDER, start) for scope in scopes) else findings).append(finding)
+        highest = max(highest, category)
+    return ImportResult(tuple(findings), (),
+        ('Source spellings only; import target identity, initialization, execution and reorder safety are unproved.',),
+        suppressed=tuple(suppressed))
 
 
 def analyze(tree, path, *, graph=None, _verify=True):

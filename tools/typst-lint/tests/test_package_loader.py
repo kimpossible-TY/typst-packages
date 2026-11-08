@@ -4,6 +4,7 @@ import hashlib
 import os
 from pathlib import Path
 import shutil
+import stat
 import sys
 import tempfile
 import unittest
@@ -73,6 +74,27 @@ class PackageLoaderTests(unittest.TestCase):
                 setattr(item, field, None)
         self.source_path.write_bytes(b'changed after snapshot')
         self.assertEqual(result.sources[0].source, self.source)
+
+    def test_metadata_change_is_rejected_with_field_names(self):
+        before = self.source_path.read_bytes()
+        with loader._Snapshot(self.directory) as snapshot:
+            snapshot.read(snapshot.directory_root, 'lib.typ', loader.MAX_SOURCE_BYTES)
+            current_mode = self.source_path.stat().st_mode
+            self.source_path.chmod(current_mode ^ stat.S_IXUSR)
+            with self.assertRaisesRegex(loader.PackageInputError,
+                                        r'changed while reading: .*metadata: .*mode'):
+                snapshot.verify()
+        self.assertEqual(self.source_path.read_bytes(), before)
+
+    def test_size_mismatch_is_reported_without_accepting_truncated_read(self):
+        with patch.object(loader._Snapshot, '_read_bytes', return_value=b''), \
+             self.assertRaisesRegex(loader.PackageInputError, 'byte count differs'):
+            loader.read_snapshot_file(self.source_path, loader.MAX_SOURCE_BYTES)
+
+    def test_ctime_only_change_is_named_without_values(self):
+        expected = loader._file_signature(self.source_path.stat())
+        changed = (*expected[:-1], expected[-1] + 1)
+        self.assertEqual(loader._signature_difference(expected, changed), 'ctime_ns')
 
     def test_same_named_unreviewed_copy_never_supplies_a_contract(self):
         self.source_path.write_bytes(b'#let paragraph_tab = "not the reviewed implementation"\n')

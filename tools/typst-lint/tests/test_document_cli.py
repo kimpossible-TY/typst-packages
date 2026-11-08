@@ -53,7 +53,7 @@ class DocumentCliTests(unittest.TestCase):
         result = self.run_cli('--rule-set', 'pde', '--local-rule-hints')
         hints = result['local_rule_hints']
         self.assertFalse(hints['edit_permission'])
-        self.assertEqual(len(hints['rule_ids']), 13)
+        self.assertEqual(len(hints['rule_ids']), 14)
         found = {(row['path'], row['rule_id']) for row in hints['diagnostics']}
         self.assertIn(('chapter.typ', 'pde.continuation-line'), found)
         self.assertIn(('chapter.typ', 'pde.theme-cancelmark'), found)
@@ -110,6 +110,36 @@ class DocumentCliTests(unittest.TestCase):
         self.assertFalse(hints['edit_permission'] or report['applied_fixes'] or report['proposed_edits'])
         self.assertEqual(target.read_bytes(), source)
 
+    def test_merged_marker_hints_give_suppression_precedence(self):
+        import document_local_rules
+        import paragraph_rules
+        from static_resolver import resolve
+        from syntax_client import parse
+        from typst_lint import Diagnostic, load_rules
+        tree = parse(b'#block[\n#paragraph_tab\nAfter.\n]')
+        catalog = load_rules()[0]['rules']
+        initial = paragraph_rules.analyze(tree, 'main.typ', resolve(tree), catalog=catalog)
+        rule = next(row for row in catalog if row['id'] == paragraph_rules.MARKER_GAP)
+        finding = Diagnostic(rule['id'], rule['grade'], 'main.typ', 2, 1, 'test', rule['source'])
+        initial[paragraph_rules.MARKER_GAP] = paragraph_rules.ParagraphResult(diagnostics=(finding,))
+        conditional = paragraph_rules.ParagraphResult(suppressed=(finding,))
+        with patch.object(document_local_rules, 'paragraphs', return_value=initial), \
+             patch.object(document_local_rules, 'analyze_conditional_nested_gap', return_value=conditional):
+            _, results = document_local_rules.analyze(tree, 'main.typ', catalog)
+        self.assertFalse(results[paragraph_rules.MARKER_GAP].diagnostics)
+        self.assertEqual(results[paragraph_rules.MARKER_GAP].suppressed, (finding,))
+
+    def test_import_order_hint_is_conditional_and_read_only(self):
+        source = b'#import "figures.typ": *\n#import "Styles/styles.typ": *\n'
+        target = self.write('main.typ', source)
+        report = self.run_cli('--rule-set', 'pde', '--local-rule-hints')
+        hints = report['local_rule_hints']
+        findings = [item for item in hints['diagnostics'] if item['rule_id'] == 'pde.import-order']
+        self.assertEqual(len(findings), 1)
+        self.assertIn('Conditional source hint', findings[0]['explanation'])
+        self.assertFalse(hints['edit_permission'] or report['applied_fixes'] or report['proposed_edits'])
+        self.assertEqual(target.read_bytes(), source)
+
     def test_prose_and_theme_hints_in_included_source_are_conditional(self):
         self.write('main.typ', b'#include "chapter.typ"\n')
         source = (b'First ordinary paragraph.\n\nSecond ordinary paragraph.\n\n'
@@ -156,6 +186,21 @@ class DocumentCliTests(unittest.TestCase):
         self.assertEqual(target.read_bytes(), source)
         refused = self.run_cli('--preview-conditional-punctuation')
         self.assertEqual(refused['phase'], 'input')
+
+    def test_conditional_spacer_preview_is_opt_in_and_read_only(self):
+        source = b'#block[$\n A = B #dots_space #footnote[Reason.]\n$]'
+        target = self.write('main.typ', source)
+        self.assertNotIn('conditional_spacer_previews', self.run_cli('--rule-set', 'pde'))
+        report = self.run_cli('--rule-set', 'pde', '--preview-conditional-spacers')
+        rows = report['conditional_spacer_previews']
+        self.assertEqual(len(rows), 1)
+        edit = rows[0]['edits'][0]
+        self.assertEqual(edit['rule_id'], 'pde.unaligned-footnote-no-spacer')
+        self.assertEqual(source[edit['start']:edit['end']], b'#dots_space')
+        self.assertFalse(rows[0]['edit_permission'] or rows[0]['runtime_binding_proved']
+                         or rows[0]['render_equivalence_proved'])
+        self.assertEqual(target.read_bytes(), source)
+        self.assertEqual(self.run_cli('--preview-conditional-spacers')['phase'], 'input')
 
     def test_explicit_reference_facade_provenance_is_conditional_and_reports_shadowing(self):
         main = self.write('main.typ', b'#import "Styles/styles.typ": *\n')
@@ -228,6 +273,60 @@ class DocumentCliTests(unittest.TestCase):
         report = self.run_cli('--rule-set', 'pde', '--reference-calls')
         self.assertEqual(report['phase'], 'input')
         self.assertIn('requires explicit reference provenance', report['error'])
+
+    def test_reference_argument_hints_reuse_conditional_call_trace(self):
+        source = (b'#import "Styles/styles.typ": *\n'
+                  b'#project-ref("book", "wrong")\n#project-ref("book", variable)\n')
+        target = self.write('main.typ', source)
+        self.write('Styles/styles.typ', b'#import "@local/math-blocks:0.2.0": *\n')
+        packages = self.namespace_packages()
+        references = self.root / 'reference-packages'
+        shutil.copytree(TOOL / 'tests/fixtures/reviewed-packages/local/project-references',
+                        references / 'local/project-references')
+        report = self.run_cli('--rule-set', 'pde', '--package-path', str(packages),
+                              '--reference-package-path', str(references),
+                              '--reference-facade', 'Styles/styles.typ', '--reference-calls',
+                              '--reference-arguments')
+        provenance = report['reference_provenance']
+        call_row = next(row for row in provenance['calls_by_file'] if row['path'] == 'main.typ')
+        arg_row = next(row for row in provenance['arguments_by_file'] if row['path'] == 'main.typ')
+        self.assertEqual(len(call_row['calls']), 2)
+        self.assertEqual(len(arg_row['diagnostics']), 1)
+        self.assertEqual(arg_row['status'], 'PARTIAL')
+        self.assertEqual(arg_row['diagnostics'][0]['rule_id'], 'core.project-ref-arguments')
+        self.assertFalse(arg_row['edit_permission'] or arg_row['catalog_checked'])
+        self.assertEqual(target.read_bytes(), source)
+        import conditional_reference_provenance as provenance
+        original = provenance.ConditionalReferenceProvenance.calls
+        with patch.object(provenance.ConditionalReferenceProvenance, 'calls', autospec=True,
+                          side_effect=original) as trace:
+            document_cli.report_document(str(self.root), 'main.typ', rule_set='pde',
+                package_path=str(packages), reference_package_path=str(references),
+                reference_facade='Styles/styles.typ', reference_calls=True, reference_arguments=True)
+        self.assertEqual(trace.call_count, 1)
+        refused = self.run_cli('--rule-set', 'pde', '--reference-arguments')
+        self.assertEqual(refused['phase'], 'input')
+
+    def test_reference_argument_budget_refuses_before_finding_serialization(self):
+        import conditional_reference_arguments
+        source = (b'#import "Styles/styles.typ": *\n' + b'#project-ref("book", "wrong")\n' * 20)
+        self.write('main.typ', source)
+        self.write('Styles/styles.typ', b'#import "@local/math-blocks:0.2.0": *\n')
+        packages = self.namespace_packages()
+        references = self.root / 'reference-packages'
+        shutil.copytree(TOOL / 'tests/fixtures/reviewed-packages/local/project-references',
+                        references / 'local/project-references')
+        original = document_cli.asdict
+        def guarded(value):
+            if isinstance(value, conditional_reference_arguments.ArgumentFinding):
+                raise AssertionError('Budget must be checked before serializing findings')
+            return original(value)
+        with patch.object(document_cli, 'MAX_REPORT_ITEMS', 100), \
+             patch.object(document_cli, 'asdict', side_effect=guarded):
+            with self.assertRaisesRegex(InputError, 'report item limit'):
+                document_cli.report_document(str(self.root), 'main.typ', rule_set='pde',
+                    package_path=str(packages), reference_package_path=str(references),
+                    reference_facade='Styles/styles.typ', reference_arguments=True)
 
     def namespace_packages(self):
         package_root = self.root / 'packages'

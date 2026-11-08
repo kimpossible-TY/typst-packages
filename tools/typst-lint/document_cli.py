@@ -30,9 +30,9 @@ CONDITIONAL_RULES = ('pde.text-only-highlight', 'pde.paragraph-marker-gap')
 def report_document(root, entrypoint, *, rule_set='core', package_path=None,
                     preview_display_gaps=False, preview_standalone_displays=False,
                     preview_sequence=False, local_rule_hints=False, preview_conditional_gaps=False,
-                    preview_conditional_punctuation=False,
+                    preview_conditional_punctuation=False, preview_conditional_spacers=False,
                     reference_package_path=None, reference_facade=None, reference_cache_path=None,
-                    reference_calls=False):
+                    reference_calls=False, reference_arguments=False):
     """Inspect retained source bytes without reading consumer configuration.
 
     Literal includes inside unknown containers are inventory entries, not proof
@@ -57,10 +57,15 @@ def report_document(root, entrypoint, *, rule_set='core', package_path=None,
     require(type(preview_conditional_punctuation) is bool
             and (not preview_conditional_punctuation or rule_set == 'pde'),
             'Conditional punctuation previews require explicit --rule-set pde')
+    require(type(preview_conditional_spacers) is bool
+            and (not preview_conditional_spacers or rule_set == 'pde'),
+            'Conditional spacer previews require explicit --rule-set pde')
     reference_requested = (reference_package_path is not None or reference_facade is not None
                            or reference_cache_path is not None)
     require(type(reference_calls) is bool and (not reference_calls or reference_requested),
             'Reference call tracing requires explicit reference provenance options')
+    require(type(reference_arguments) is bool and (not reference_arguments or reference_requested),
+            'Reference argument hints require explicit reference provenance options')
     require(not reference_requested or (rule_set == 'pde' and package_path is not None
             and reference_package_path is not None and type(reference_facade) is str),
             'Reference provenance requires --rule-set pde, --package-path, '
@@ -117,6 +122,7 @@ def report_document(root, entrypoint, *, rule_set='core', package_path=None,
     sequence_previews = []
     conditional_gap_previews = []
     conditional_punctuation_previews = []
+    conditional_spacer_previews = []
     local_findings, local_suppressed, local_files, local_contexts = [], [], [], []
     items = len(captured.sources) + len(captured.edges) + len(captured.occurrences) + len(captured.unresolved)
     reference_report = None
@@ -137,17 +143,46 @@ def report_document(root, entrypoint, *, rule_set='core', package_path=None,
             reference_report['namespace_selections'] = [asdict(item) for item in reference_namespaces.selections]
             reference_report['namespace_unavailable'] = [asdict(item) for item in reference_namespaces.unavailable]
         items += 1 + len(export.route) + len(export.source_hashes) + len(export.package_evidence)
-        if reference_calls:
-            reference_report['calls_by_file'] = []
+        if reference_calls or reference_arguments:
+            if reference_calls:
+                reference_report['calls_by_file'] = []
+            if reference_arguments:
+                from conditional_reference_arguments import analyze as analyze_reference_arguments
+                reference_report['arguments_by_file'] = []
             for selected in captured.sources:
-                traced = analyzer.calls(selected.path)
-                row = dict(path=selected.path, **asdict(traced))
-                items += 1 + len(traced.unresolved)
-                for call in traced.calls:
-                    items += (1 + len(call.route) + len(call.source_hashes) + len(call.package_evidence)
-                              + len(call.package_requests) + len(call.conditions))
+                arguments = (analyze_reference_arguments(analyzer, selected.path, catalog=catalog['rules'])
+                             if reference_arguments else None)
+                traced = arguments.trace if arguments is not None else analyzer.calls(selected.path)
+                if reference_calls:
+                    items += 1 + (len(arguments.unresolved) if traced is None else len(traced.unresolved))
+                    if traced is not None:
+                        for call in traced.calls:
+                            items += (1 + len(call.route) + len(call.source_hashes) + len(call.package_evidence)
+                                      + len(call.package_requests) + len(call.conditions))
+                            require(items <= MAX_REPORT_ITEMS, 'Document inspection report item limit exceeded')
+                    require(items <= MAX_REPORT_ITEMS, 'Document inspection report item limit exceeded')
+                    if traced is None:
+                        row = dict(path=selected.path, status='UNAVAILABLE', calls=[],
+                                   unresolved=list(arguments.unresolved), edit_permission=False)
+                    else:
+                        row = dict(path=selected.path, **asdict(traced))
+                    reference_report['calls_by_file'].append(row)
+                if arguments is not None:
+                    items += 1 + len(arguments.unresolved)
+                    for group in (arguments.diagnostics, arguments.suppressed):
+                        for finding in group:
+                            items += (1 + len(finding.route) + len(finding.source_hashes)
+                                      + len(finding.package_evidence) + len(finding.package_requests)
+                                      + len(finding.conditions))
+                            require(items <= MAX_REPORT_ITEMS, 'Document inspection report item limit exceeded')
+                    require(items <= MAX_REPORT_ITEMS, 'Document inspection report item limit exceeded')
+                    row = dict(path=selected.path, status=arguments.status,
+                               diagnostics=[asdict(item) for item in arguments.diagnostics],
+                               suppressed=[asdict(item) for item in arguments.suppressed],
+                               unresolved=list(arguments.unresolved), edit_permission=arguments.edit_permission,
+                               catalog_checked=arguments.catalog_checked)
+                    reference_report['arguments_by_file'].append(row)
                 require(items <= MAX_REPORT_ITEMS, 'Document inspection report item limit exceeded')
-                reference_report['calls_by_file'].append(row)
         require(items <= MAX_REPORT_ITEMS, 'Document inspection report item limit exceeded')
     for item in captured.sources:
         gap_preview = None
@@ -200,6 +235,15 @@ def report_document(root, entrypoint, *, rule_set='core', package_path=None,
                     items += 1 + len(punctuation['edits'])
                     require(items <= MAX_REPORT_ITEMS, 'Document inspection report item limit exceeded')
                     conditional_punctuation_previews.append(punctuation)
+            if preview_conditional_spacers:
+                from footnote_rules import preview_conditional_unaligned_spacers
+                from static_resolver import resolve
+                spacer = preview_conditional_unaligned_spacers(
+                    item.tree, item.path, resolve(item.tree, packages=()), catalog=catalog['rules'])
+                if spacer is not None:
+                    items += 1 + len(spacer['edits'])
+                    require(items <= MAX_REPORT_ITEMS, 'Document inspection report item limit exceeded')
+                    conditional_spacer_previews.append(spacer)
         except (InputError, OSError, ValueError) as error:
             raise InputError(f'{item.path}: {error}') from error
         # Keep unsupported baseline operands diagnostic-only, then independently
@@ -385,6 +429,9 @@ def report_document(root, entrypoint, *, rule_set='core', package_path=None,
     if preview_conditional_punctuation:
         report['conditional_punctuation_previews'] = conditional_punctuation_previews
         report['conditional_punctuation_preview_status'] = 'independent-source-only-not-composed-or-render-verified'
+    if preview_conditional_spacers:
+        report['conditional_spacer_previews'] = conditional_spacer_previews
+        report['conditional_spacer_preview_status'] = 'partial-independent-source-only-not-composed-or-render-verified'
     if local_rule_hints:
         from document_local_rules import RULE_IDS as LOCAL_RULE_IDS
         report['local_rule_hints'] = dict(rule_ids=list(LOCAL_RULE_IDS),
@@ -423,6 +470,8 @@ def main(arguments=None):
                         help='Preview independent proof and nested math-footnote gaps (requires --rule-set pde)')
     parser.add_argument('--preview-conditional-punctuation', action='store_true',
                         help='Preview independent prose footnote punctuation spacing (requires --rule-set pde)')
+    parser.add_argument('--preview-conditional-spacers', action='store_true',
+                        help='Preview conditional unaligned footnote spacer removals (requires --rule-set pde)')
     parser.add_argument('--reference-package-path',
                         help='Explicit canonical root containing the reviewed project-references package')
     parser.add_argument('--reference-facade',
@@ -431,6 +480,8 @@ def main(arguments=None):
                         help='Explicit second namespace root, consulted after --package-path for reference tracing')
     parser.add_argument('--reference-calls', action='store_true',
                         help='Trace direct project-reference calls in each captured file (requires reference provenance)')
+    parser.add_argument('--reference-arguments', action='store_true',
+                        help='Inspect arguments of conditionally traced project-reference calls')
     parser.add_argument('--format', choices=('json', 'text'), default='text')
     args = parser.parse_args(sys.argv[1:] if arguments is None else arguments)
     try:
@@ -442,10 +493,12 @@ def main(arguments=None):
                                  local_rule_hints=args.local_rule_hints,
                                  preview_conditional_gaps=args.preview_conditional_gaps,
                                  preview_conditional_punctuation=args.preview_conditional_punctuation,
+                                 preview_conditional_spacers=args.preview_conditional_spacers,
                                  reference_package_path=args.reference_package_path,
                                  reference_facade=args.reference_facade,
                                  reference_cache_path=args.reference_cache_path,
-                                 reference_calls=args.reference_calls)
+                                 reference_calls=args.reference_calls,
+                                 reference_arguments=args.reference_arguments)
     except (InputError, PackageInputError, OSError, ValueError) as error:
         result = dict(schema=1, tool_version=VERSION, mode='inspect-document', status=2,
                       phase='input', compiler_invoked=False, applied_fixes=[], error=str(error))
