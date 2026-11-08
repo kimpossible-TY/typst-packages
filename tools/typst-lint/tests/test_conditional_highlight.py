@@ -14,7 +14,7 @@ import conditional_highlight as conditional
 import import_graph as graph
 from namespace_packages import load_namespace_packages
 from syntax_client import EXECUTABLE, parse
-from typst_lint import digest
+from typst_lint import InputError, digest
 
 STYLE = b'''#import "@local/text-utils:0.1.2": *
 #import "@local/math-blocks:0.2.0": *
@@ -87,12 +87,13 @@ class ConditionalHighlightTests(unittest.TestCase):
         self.put('main.typ', source)
         return graph.load_import_graph(self.root, (('main.typ', source),))
 
-    def analyze(self, source=MAIN, style=STYLE, figures=FIGURES, context=None, namespaces=None):
+    def analyze(self, source=MAIN, style=STYLE, figures=FIGURES, context=None, namespaces=None,
+                rule_ids=(conditional.RULE_ID,)):
         tree = parse(source)
         self.assertFalse(tree.nodes[0].errors, source)
         return conditional.analyze(tree, 'main.typ',
             self.capture(source, style, figures) if context is None else context,
-            self.namespaces if namespaces is None else namespaces)
+            self.namespaces if namespaces is None else namespaces, rule_ids=rule_ids)
 
     def test_realistic_wildcard_facade_and_figures_keep_conditional_identity(self):
         result = self.analyze()
@@ -527,6 +528,136 @@ class ConditionalHighlightTests(unittest.TestCase):
         result = self.analyze(style=STYLE + poison)
         self.assertFalse(result.diagnostics)
         self.assertTrue(any('mutation' in reason for reason in result.unresolved))
+
+    def test_marker_rule_is_explicit_opt_in_and_default_highlight_is_unchanged(self):
+        default = self.analyze()
+        self.assertEqual(default, self.analyze(rule_ids=(conditional.RULE_ID,)))
+        self.assertEqual([d.rule_id for d in default.diagnostics], [conditional.RULE_ID])
+        both = self.analyze(rule_ids=conditional.SUPPORTED_RULE_IDS)
+        self.assertEqual({d.rule_id for d in both.diagnostics}, set(conditional.SUPPORTED_RULE_IDS))
+        marker = self.analyze(rule_ids=(conditional.MARKER_GAP,))
+        self.assertEqual([d.rule_id for d in marker.diagnostics], [conditional.MARKER_GAP])
+        self.assertEqual(marker.diagnostics[0].conditions, conditional.MARKER_CONDITIONS)
+        self.assertFalse(marker.diagnostics[0].edit_permission)
+        self.assertFalse(hasattr(marker, 'edits'))
+        for selected in ((), ['pde.paragraph-marker-gap'], ('unknown',), (conditional.MARKER_GAP,) * 2):
+            with self.subTest(selected=selected), self.assertRaises(InputError):
+                conditional.ConditionalHighlightAnalyzer(self.capture(), self.namespaces, rule_ids=selected)
+
+    def test_marker_export_and_immutable_alias_identity_not_spelling(self):
+        source = (b'#import "@local/text-utils:0.1.2": paragraph-tab as p\n'
+                  b'#let saved = p\n#let p = "shadowed"\n#saved\nText.\n')
+        result = self.analyze(source, rule_ids=(conditional.MARKER_GAP,))
+        self.assertEqual(len(result.diagnostics), 1, result.unresolved)
+        finding = result.diagnostics[0]
+        self.assertEqual(finding.route[0].imported_name, 'paragraph-tab')
+        self.assertEqual(finding.route[-1].local_name, 'saved')
+        self.assertEqual((finding.line, finding.column), (4, 1))
+        for source in (b'#paragraph_tab\nText.',
+                       PREFIX + b'#let paragraph_tab = "unrelated"\n#paragraph_tab\nText.',
+                       PREFIX + b'#import "@preview/unknown:1.0.0": other as paragraph_tab\n#paragraph_tab\nText.'):
+            with self.subTest(source=source):
+                self.assertFalse(self.analyze(source, rule_ids=(conditional.MARKER_GAP,)).diagnostics)
+
+    def test_marker_checks_whole_source_line_and_literal_body_openers(self):
+        for body in (b'Text #paragraph_tab\nNext.', b'#paragraph_tab // same-line comment\nNext.',
+                     b'#proof[#paragraph_tab\nNext.]', b'#proof[#paragraph_tab]',
+                     b'#proof[\n#paragraph_tab]', b'#proof[\nText.\n#paragraph_tab]'):
+            with self.subTest(body=body):
+                result = self.analyze(PREFIX + body, rule_ids=(conditional.MARKER_GAP,))
+                self.assertFalse(result.diagnostics)
+                self.assertTrue(any('whole physical source line' in reason for reason in result.unresolved))
+        # A body opener is not a blank line, even when Markup.start points to
+        # only the newline after '['. The complete previous physical line wins.
+        source = PREFIX + b'#proof[\n#paragraph_tab\nNext.\n]'
+        result = self.analyze(source, rule_ids=(conditional.MARKER_GAP,))
+        self.assertEqual(len(result.diagnostics), 1, result.unresolved)
+        self.assertEqual(len(result.diagnostics[0].content_context), 1)
+        self.assertFalse(self.analyze(PREFIX + b'#proof[\n\n#paragraph_tab\nNext.\n]',
+                                     rule_ids=(conditional.MARKER_GAP,)).diagnostics)
+
+    def test_marker_blank_lines_crlf_bom_and_bare_cr(self):
+        for gap in (b'\n', b' \t\n', b'\r\n', b' \t\r\n'):
+            with self.subTest(gap=gap):
+                self.assertFalse(self.analyze(PREFIX + gap + b'#paragraph_tab\nText.',
+                                             rule_ids=(conditional.MARKER_GAP,)).diagnostics)
+        result = self.analyze(PREFIX + b' \t#paragraph_tab \t\r\nText.', rule_ids=(conditional.MARKER_GAP,))
+        self.assertEqual(len(result.diagnostics), 1, result.unresolved)
+        result = self.analyze(PREFIX + b'\xef\xbb\xbf\n#paragraph_tab\nText.', rule_ids=(conditional.MARKER_GAP,))
+        self.assertEqual(len(result.diagnostics), 1, 'BOM is not a blank source line')
+        result = self.analyze(PREFIX + b'#paragraph_tab\r', rule_ids=(conditional.MARKER_GAP,))
+        self.assertFalse(result.diagnostics)
+        self.assertTrue(any('Bare-CR' in reason for reason in result.unresolved))
+
+    def test_marker_preceding_barriers_are_patterns_not_edit_permission(self):
+        for preceding in (b'// preceding comment', b'#footnote[remark]', b'= Heading',
+                          b'$ X=Y $', b'$ X=Y $ <equation-label>', b'#block[Content.]'):
+            with self.subTest(preceding=preceding):
+                result = self.analyze(PREFIX + preceding + b'\n#paragraph_tab\nText.',
+                                      rule_ids=(conditional.MARKER_GAP,))
+                self.assertEqual(len(result.diagnostics), 1, result.unresolved)
+                self.assertFalse(result.diagnostics[0].edit_permission)
+                self.assertIn('does not prove paragraph rendering', result.diagnostics[0].conditions[-1])
+
+    def test_marker_following_heading_display_target_takes_precedence(self):
+        for following in (b'\n// intervening comment\n= Heading', b'\n/* comment */\n$ X=Y $'):
+            with self.subTest(following=following):
+                result = self.analyze(PREFIX + b'#paragraph_tab' + following, rule_ids=(conditional.MARKER_GAP,))
+                self.assertFalse(result.diagnostics)
+                self.assertTrue(any('marker-target rule takes precedence' in reason for reason in result.unresolved))
+        self.assertEqual(len(self.analyze(PREFIX + b'#paragraph_tab\n$x$ then text.',
+                                         rule_ids=(conditional.MARKER_GAP,)).diagnostics), 1)
+
+    def test_marker_local_scopes_unknown_contexts_and_active_mutation(self):
+        source = (PREFIX + b'#proof[\n#let p = paragraph_tab\n#p\nText.\n]\n'
+                  b'#proof[\n#let paragraph_tab = "unrelated"\n#paragraph_tab\nText.\n]\n'
+                  b'#paragraph_tab\nRoot text.')
+        result = self.analyze(source, rule_ids=(conditional.MARKER_GAP,))
+        self.assertEqual(len(result.diagnostics), 2, result.unresolved)
+        self.assertTrue(result.diagnostics[0].content_context)
+        self.assertFalse(result.diagnostics[1].content_context)
+        for body in (b'#let callback()=[\n#paragraph_tab\nText.]',
+                     b'#block[\n#paragraph_tab\nText.]', b'#proof[\n#block[\n#paragraph_tab\nText.]]'):
+            with self.subTest(body=body):
+                result = self.analyze(PREFIX + body, rule_ids=(conditional.MARKER_GAP,))
+                self.assertFalse(result.diagnostics)
+                self.assertTrue(any('unresolved binding/execution context' in reason for reason in result.unresolved))
+        source = PREFIX + b'#proof[\n#(paragraph_tab = fake)\n#paragraph_tab\nText.]\n#paragraph_tab\nRoot.'
+        result = self.analyze(source, rule_ids=(conditional.MARKER_GAP,))
+        self.assertFalse(result.diagnostics)
+        self.assertTrue(any('mutation' in reason for reason in result.unresolved))
+
+    def test_marker_uses_hash_suppression_anchor_and_shared_source_validation(self):
+        for rule in (conditional.MARKER_GAP, conditional.RULE_ID):
+            source = PREFIX + f'// typst-lint: ignore-next {rule} -- intentional\n#paragraph_tab\nText.'.encode()
+            result = self.analyze(source, rule_ids=(conditional.MARKER_GAP,))
+            self.assertEqual(len(result.suppressed), int(rule == conditional.MARKER_GAP))
+            self.assertEqual(len(result.diagnostics), int(rule != conditional.MARKER_GAP))
+        source = PREFIX + b'#paragraph_tab\nText.'
+        result = self.analyze(source + b' ', context=self.capture(source), rule_ids=(conditional.MARKER_GAP,))
+        self.assertFalse(result.diagnostics)
+        self.assertTrue(any('snapshot' in reason for reason in result.unresolved))
+
+    def test_opt_in_rules_have_separate_and_shared_coverage_reasons(self):
+        source = PREFIX + b'#let callback()=[#highlighted[$x$]\n#paragraph_tab\nText.]'
+        result = self.analyze(source, rule_ids=conditional.SUPPORTED_RULE_IDS)
+        highlight = result.reasons_for(conditional.RULE_ID)
+        marker = result.reasons_for(conditional.MARKER_GAP)
+        self.assertEqual(len(highlight), 1, highlight)
+        self.assertEqual(len(marker), 1, marker)
+        self.assertIn('helper call', highlight[0])
+        self.assertNotIn('paragraph-marker', highlight[0])
+        self.assertIn('paragraph-marker', marker[0])
+        self.assertNotIn('helper call', marker[0])
+        self.assertEqual(set(result.unresolved), set(highlight + marker))
+        source = PREFIX + b'#import "@preview/unknown:1.0.0": *'
+        result = self.analyze(source, rule_ids=conditional.SUPPORTED_RULE_IDS)
+        self.assertEqual(result.reasons_for(conditional.RULE_ID), result.reasons_for(conditional.MARKER_GAP))
+        self.assertTrue(result.reasons_for(conditional.MARKER_GAP))
+        with patch.object(conditional, 'MAX_AST_WORK', 1):
+            result = self.analyze(rule_ids=conditional.SUPPORTED_RULE_IDS)
+        self.assertEqual(result.reasons_for(conditional.RULE_ID), result.reasons_for(conditional.MARKER_GAP))
+        self.assertIn('AST work limit', result.unresolved[0])
 
 
 if __name__ == '__main__':

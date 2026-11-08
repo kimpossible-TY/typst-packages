@@ -23,6 +23,7 @@ from typst_lint import (InputError, VERSION, checked_path, digest, load_rules,
 
 INCLUDE_BUDGET = 'book-v1'
 MAX_REPORT_ITEMS = 100_000
+CONDITIONAL_RULES = ('pde.text-only-highlight', 'pde.paragraph-marker-gap')
 
 
 def report_document(root, entrypoint, *, rule_set='core', package_path=None):
@@ -65,7 +66,8 @@ def report_document(root, entrypoint, *, rule_set='core', package_path=None):
         require(all(retained.get(item.path) == item.source for item in captured.sources),
                 'Conditional namespace graph differs from the included source snapshot')
         conditional_session = ConditionalHighlightAnalyzer(imports, namespaces,
-            known_rule_ids=(rule['id'] for rule in catalog['rules']))
+            known_rule_ids=(rule['id'] for rule in catalog['rules']),
+            rule_ids=CONDITIONAL_RULES)
         namespace_report = dict(package_path=namespaces.package_path,
             packages=[dict(**asdict(item.evidence), exports=list(item.exports),
                            origins=[list(origin) for origin in item.origins]) for item in namespaces.packages],
@@ -97,23 +99,27 @@ def report_document(root, entrypoint, *, rule_set='core', package_path=None):
             items += sum(len(value.diagnostics) + len(value.suppressed) + len(value.skips)
                          for value in displays.values())
         if conditional is not None:
-            items += len(conditional.unresolved) + len(conditional.parse_errors)
+            items += sum(1 + len(conditional.reasons_for(rid)) + len(conditional.parse_errors)
+                         for rid in CONDITIONAL_RULES)
             for finding in (*conditional.diagnostics, *conditional.suppressed):
                 items += (1 + len(finding.source_hashes) + len(finding.package_evidence)
                           + len(finding.package_requests) + len(finding.route) + len(finding.conditions)
                           + sum(1 + len(route) for route in finding.content_context))
         require(items <= MAX_REPORT_ITEMS, 'Document inspection report item limit exceeded')
         if conditional is not None:
-            metadata = next(rule for rule in catalog['rules'] if rule['id'] == 'pde.text-only-highlight')
+            metadata = {rule['id']: rule for rule in catalog['rules']}
             def conditional_record(finding):
-                return dict(**asdict(finding), grade=metadata['grade'], source=metadata['source'])
+                rule = metadata[finding.rule_id]
+                return dict(**asdict(finding), grade=rule['grade'], source=rule['source'])
             conditional_findings.extend(conditional_record(finding) for finding in conditional.diagnostics)
             conditional_suppressed.extend(conditional_record(finding) for finding in conditional.suppressed)
-            conditional_files.append(dict(path=item.path, source_sha256=item.identity.source_sha256,
-                rule_id='pde.text-only-highlight', status='conditional',
-                diagnostics=len(conditional.diagnostics), suppressed=len(conditional.suppressed),
-                reasons=list(conditional.unresolved), parse_errors=[list(span) for span in conditional.parse_errors],
-                edit_permission=False))
+            for rid in CONDITIONAL_RULES:
+                conditional_files.append(dict(path=item.path, source_sha256=item.identity.source_sha256,
+                    rule_id=rid, status='conditional',
+                    diagnostics=sum(finding.rule_id == rid for finding in conditional.diagnostics),
+                    suppressed=sum(finding.rule_id == rid for finding in conditional.suppressed),
+                    reasons=list(conditional.reasons_for(rid)),
+                    parse_errors=[list(span) for span in conditional.parse_errors], edit_permission=False))
         reasons = list(result.skips)
         if result.skips and result.edits:
             reasons.append('Incomplete script coverage; all proposals for this source are withheld')
@@ -188,7 +194,7 @@ def report_document(root, entrypoint, *, rule_set='core', package_path=None):
         proposed_edits=proposed, proposal_status='partial-not-applicable-transaction',
         coverage=dict(global_complete=False, enabled=enabled,
             available_backends=backends, uninspected=[rid for rid in enabled if rid not in backends],
-            conditional_hint_backends=['pde.text-only-highlight'] if conditional_session is not None else [],
+            conditional_hint_backends=list(CONDITIONAL_RULES) if conditional_session is not None else [],
             files=files,
             unresolved_obligations=['other-style-rules', 'import-and-package-resolution',
                 'include-runtime-execution', 'render-context-and-resources',
@@ -239,7 +245,7 @@ def main(arguments=None):
             unresolved = sum(len(row['reasons']) + len(row['parse_errors'])
                              for row in result['conditional_coverage'])
             print(f"Conditional helper inspection: {len(result['conditional_diagnostics'])} hints, "
-                  f"{unresolved} unresolved contexts; no edit permission")
+                  f"{unresolved} unresolved rule contexts; no edit permission")
         if result['conditional_diagnostics']:
             print('Helper hints require successful module initialization and exact runtime package selection; no edit permission')
         for blocker in result['blockers']:

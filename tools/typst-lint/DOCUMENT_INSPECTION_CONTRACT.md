@@ -33,6 +33,9 @@ import sources and six pinned package namespace roots for separate conditional
 helper hints. It does not resolve full package initialization dependencies,
 reference catalogs or runtime resources. See
 `CONDITIONAL_HIGHLIGHT_CONTRACT.md` for the separate evidence and refusal model.
+The explicit namespace route selects conditional highlight and paragraph-marker
+gap hints. Each has its own metadata, suppression and coverage reasons; neither
+becomes an available source backend or a script proposal.
 
 JSON includes:
 

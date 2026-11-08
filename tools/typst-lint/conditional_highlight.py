@@ -14,9 +14,11 @@ from namespace_packages import verify_namespace_capture
 from package_loader import PackageEvidence
 from suppression import resolve as suppressions
 from syntax_client import AdapterError, parse
-from typst_lint import digest, load_rules
+from typst_lint import InputError, digest, load_rules
 
 RULE_ID = 'pde.text-only-highlight'
+MARKER_GAP = 'pde.paragraph-marker-gap'
+SUPPORTED_RULE_IDS = (RULE_ID, MARKER_GAP)
 TEXT_UTILS = '@local/text-utils:0.1.2'
 MATH_BLOCKS = '@local/math-blocks:0.2.0'
 _CONTENT_WRAPPERS = frozenset(('proof', 'theorem', 'note'))
@@ -24,6 +26,10 @@ CONDITIONS = (
     'Every referenced module loads and initializes successfully; initializer purity is not proved.',
     'Runtime imports select the exact captured package versions and bytes; ambient package selection is not proved.',
     'The reported source call actually executes and its literal body is rendered in the intended document context.',
+)
+MARKER_CONDITIONS = CONDITIONS[:2] + (
+    'The reported source marker is emitted and used as a paragraph marker in the intended document context.',
+    'The document applies the captured paragraph-tab transformation; this source pattern does not prove paragraph rendering.',
 )
 _ASSIGNMENTS = frozenset(('Eq', 'PlusEq', 'HyphEq', 'StarEq', 'SlashEq'))
 _PACKAGE = re.compile(r'^@(local|preview)/([a-z][a-z0-9-]*):[0-9]+\.[0-9]+\.[0-9]+$')
@@ -75,8 +81,15 @@ class ConditionalHighlightResult:
     suppressed: tuple[ConditionalDiagnostic, ...] = ()
     unresolved: tuple[str, ...] = ()
     parse_errors: tuple[tuple[int, int], ...] = ()
+    rule_reasons: tuple[tuple[str, tuple[str, ...]], ...] = ()
     status: str = field(default='CONDITIONAL', init=False)
     edit_permission: bool = field(default=False, init=False)
+
+    def reasons_for(self, rule_id):
+        for selected, reasons in self.rule_reasons:
+            if selected == rule_id:
+                return reasons
+        return self.unresolved if not self.rule_reasons and rule_id == RULE_ID else ()
 
 
 @dataclass(frozen=True)
@@ -241,8 +254,9 @@ def _combined_import(tree, index):
 
 
 class _Analyzer:
-    def __init__(self, context, namespaces):
+    def __init__(self, context, namespaces, rule_ids):
         self.graph = context
+        self.rule_ids = frozenset(rule_ids)
         self.reason = _graph_reason(context)
         self.packages = {}
         self.evidence = ()
@@ -271,11 +285,12 @@ class _Analyzer:
         self.refusals[path] = refusal
         return refusal
 
-    def charge_ast(self, tree):
+    def charge_ast(self, tree, *, passes=3):
         # Each root sequence is walked for active assignment, namespace
         # injection and nested-call ownership. Charge all three walks even
-        # when a refusal or deferred body would skip part of the work.
-        self.ast_work += 3 * len(tree.nodes)
+        # when a refusal or deferred body would skip part of the work. Opt-in
+        # marker discovery also scans unknown-context Markup sibling rows.
+        self.ast_work += passes * len(tree.nodes)
         if self.ast_work > MAX_AST_WORK:
             self.exhaust('Conditional namespace AST work limit exceeded')
         return self.exhausted is None
@@ -330,10 +345,13 @@ class _Analyzer:
             exports = {}
             origins = dict(package.origins)
             for name in package.exports:
+                marker = (MARKER_GAP in self.rule_ids and request == TEXT_UTILS
+                          and name in ('paragraph-tab', 'paragraph_tab'))
                 supported = ((name == 'highlighted' and origins.get(name) == TEXT_UTILS)
-                             or (request == MATH_BLOCKS and name in _CONTENT_WRAPPERS))
+                             or (request == MATH_BLOCKS and name in _CONTENT_WRAPPERS) or marker)
                 exports[name] = (_Value((NameRoute(request, package.evidence.source_sha256,
-                    'package-export', request, name, name),), name) if supported else None)
+                    'package-export', request, name, name),), 'paragraph_tab' if marker else name)
+                    if supported else None)
             if not self.bindings(exports):
                 return _Module(reason=self.exhausted)
             module = _Module(tuple(sorted(exports.items())), packages=(package.evidence,), requests=(request,))
@@ -503,10 +521,49 @@ def _wrapper_bodies(tree, index, canonical_name):
     return tuple(bodies) if len(bodies) == 1 else ()
 
 
+def _marker_gap(tree, sequence, position):
+    """Physical source-line pattern, not proof of a rendered prose paragraph."""
+    source, nodes = tree.source, tree.nodes
+    siblings = nodes[sequence].children
+    marker = nodes[siblings[position]]
+    previous = nodes[siblings[position - 1]] if position else None
+    if previous is None or previous.kind != 'Hash' or previous.end != marker.start:
+        return False, marker.start, marker.end, 'Paragraph marker requires adjacent same-Markup Hash+Ident'
+    start, end = previous.start, marker.end
+    line_start = source.rfind(b'\n', 0, start) + 1
+    line_end = source.find(b'\n', end)
+    line_end = len(source) if line_end < 0 else line_end
+    prefix = source[line_start:start]
+    if line_start == 0 and prefix.startswith(b'\xef\xbb\xbf'):
+        prefix = prefix[3:]
+    if prefix.strip(b' \t') or source[end:line_end].strip(b' \t\r'):
+        return False, start, end, 'Paragraph marker is not standalone on its whole physical source line'
+    previous_start = source.rfind(b'\n', 0, max(0, line_start - 1)) + 1
+    preceding_line = source[previous_start:line_start]
+    physical_line = source[line_start:min(len(source), line_end + 1)]
+    if b'\r' in (preceding_line + physical_line).replace(b'\r\n', b''):
+        return False, start, end, 'Bare-CR paragraph-marker source boundaries are unsupported'
+    target_position = position + 1
+    while target_position < len(siblings) and nodes[siblings[target_position]].kind in graph._TRIVIA:
+        target_position += 1
+    target = nodes[siblings[target_position]] if target_position < len(siblings) else None
+    if target is not None and (target.kind == 'Heading' or (target.kind == 'Equation' and target.display)):
+        return False, start, end, 'Paragraph-marker target is a heading/display; marker-target rule takes precedence'
+    # Never clip an opener/BOM off the previous physical source line and then
+    # mistake its remaining newline for a blank line inside this Markup.
+    blank = (previous_start >= nodes[sequence].start and preceding_line.endswith(b'\n')
+             and not preceding_line.strip(b' \t\r\n'))
+    return not blank, start, end, None
+
+
 class ConditionalHighlightAnalyzer:
-    """One immutable capture session; parsed dependency trees are reused only here."""
-    def __init__(self, import_graph, namespace_capture, *, known_rule_ids=None):
-        self._analyzer = _Analyzer(import_graph, namespace_capture)
+    """One captured session; default highlight-only, marker gaps opt in explicitly."""
+    def __init__(self, import_graph, namespace_capture, *, known_rule_ids=None, rule_ids=(RULE_ID,)):
+        if (type(rule_ids) not in (tuple, frozenset) or not rule_ids
+                or any(type(rid) is not str or rid not in SUPPORTED_RULE_IDS for rid in rule_ids)
+                or len(set(rule_ids)) != len(rule_ids)):
+            raise InputError('Conditional inspection requires explicit supported rule IDs')
+        self._analyzer = _Analyzer(import_graph, namespace_capture, rule_ids)
         # Catalog configuration is captured once, separately from source
         # analysis. Callers with an already loaded catalog can pass its IDs.
         self._analyzer.known_rule_ids = frozenset(known_rule_ids if known_rule_ids is not None
@@ -516,30 +573,43 @@ class ConditionalHighlightAnalyzer:
         return _analyze(tree, path, self._analyzer)
 
 
-def analyze(tree, path, import_graph, namespace_capture):
+def analyze(tree, path, import_graph, namespace_capture, *, rule_ids=(RULE_ID,)):
     """Return separate CONDITIONAL findings; no trusted binding or edit exists."""
-    return ConditionalHighlightAnalyzer(import_graph, namespace_capture).analyze(tree, path)
+    return ConditionalHighlightAnalyzer(import_graph, namespace_capture, rule_ids=rule_ids).analyze(tree, path)
 
 
 def _analyze(tree, path, analyzer):
     source, nodes = tree.source, tree.nodes
+
+    def refusal(reason, parse_errors=()):
+        return ConditionalHighlightResult(unresolved=(reason,), parse_errors=parse_errors,
+            rule_reasons=tuple((rid, (reason,)) for rid in SUPPORTED_RULE_IDS if rid in analyzer.rule_ids))
+
     if nodes[0].errors:
-        return ConditionalHighlightResult(unresolved=('Malformed root Typst syntax',),
-            parse_errors=tuple((n.start, n.end) for n in nodes if n.kind == 'Error') or ((0, len(source)),))
+        return refusal('Malformed root Typst syntax',
+            tuple((n.start, n.end) for n in nodes if n.kind == 'Error') or ((0, len(source)),))
     if analyzer.reason:
-        return ConditionalHighlightResult(unresolved=(analyzer.reason,))
+        return refusal(analyzer.reason)
     if analyzer.exhausted:
-        return ConditionalHighlightResult(unresolved=(analyzer.exhausted,))
+        return refusal(analyzer.exhausted)
     import_graph = analyzer.graph
     item = import_graph.source_for(path)
     if path not in import_graph.selected or item is None or item.source != source:
-        return ConditionalHighlightResult(unresolved=('Root source differs from the selected captured snapshot',))
+        return refusal('Root source differs from the selected captured snapshot')
     if tree.mode != 'markup':
-        return ConditionalHighlightResult(unresolved=('Only root markup calls have conditional namespace ownership',))
-    if not analyzer.charge_ast(tree):
-        return ConditionalHighlightResult(unresolved=(analyzer.exhausted,))
+        return refusal('Only root markup calls have conditional namespace ownership')
+    marker_enabled = MARKER_GAP in analyzer.rule_ids
+    if not analyzer.charge_ast(tree, passes=4 if marker_enabled else 3):
+        return refusal(analyzer.exhausted)
     scopes = suppressions(tree, analyzer.known_rule_ids)
     findings, suppressed, unresolved = [], [], []
+    rule_reasons = {rid: [] for rid in analyzer.rule_ids}
+
+    def record(reason, rule_id=None):
+        unresolved.append(reason)
+        for rid in rule_reasons:
+            if rule_id is None or rid == rule_id:
+                rule_reasons[rid].append(reason)
 
     def call_value(index, env):
         node = nodes[index]
@@ -550,12 +620,33 @@ def _analyze(tree, path, analyzer):
     def nested(index, env, skip=()):
         for child in _descendants(tree, index, skip):
             value = call_value(child, env)
-            if value is not None and value.canonical_name == 'highlighted':
-                unresolved.append(f'Nested or deferred helper call has unresolved execution context at byte {nodes[child].start}')
+            if (RULE_ID in analyzer.rule_ids and value is not None
+                    and value.canonical_name == 'highlighted'):
+                record(f'Nested or deferred helper call has unresolved execution context at byte {nodes[child].start}', RULE_ID)
+            if marker_enabled and nodes[child].kind == 'Markup':
+                siblings = nodes[child].children
+                for position, candidate in enumerate(siblings):
+                    marker = nodes[candidate]
+                    value = env.get(graph.raw(tree, candidate).decode('utf-8')) if marker.kind == 'Ident' else None
+                    previous = nodes[siblings[position - 1]] if position else None
+                    if (value is not None and value.canonical_name == 'paragraph_tab' and previous is not None
+                            and previous.kind == 'Hash' and previous.end == marker.start):
+                        record(f'Nested paragraph-marker expression has unresolved binding/execution context at byte {previous.start}', MARKER_GAP)
+
+    def emit(rule_id, start, end, message, value, sources, packages, requests, context, conditions):
+        line = source[:start].count(b'\n') + 1
+        column = len(source[source.rfind(b'\n', 0, start) + 1:start].decode('utf-8')) + 1
+        conditions += (('Every enclosing recognized literal content wrapper executes and renders this body.',)
+                       if context else ())
+        finding = ConditionalDiagnostic(rule_id, path, line, column, start, end, message,
+            digest(source), tuple(sources[k] for k in sorted(sources)),
+            tuple(packages[k] for k in sorted(packages)), tuple(sorted(requests)), value.route,
+            conditions=conditions, content_context=context)
+        (suppressed if any(s.covers(rule_id, start) for s in scopes) else findings).append(finding)
 
     def scan(sequence, env, sources, packages, requests, context=()):
         mutated_outer = False
-        for index in nodes[sequence].children:
+        for position, index in enumerate(nodes[sequence].children):
             if analyzer.exhausted:
                 break
             node = nodes[index]
@@ -566,21 +657,21 @@ def _analyze(tree, path, analyzer):
                       and value.canonical_name in _CONTENT_WRAPPERS else ())
             # Admitted literal bodies are scanned exactly once below. Outer
             # assignment/descendant scans skip these subtrees, retaining the
-            # three source-wide walks charged by charge_ast rather than depth*n.
+            # bounded source-wide walks charged by charge_ast rather than depth*n.
             if _assignment(tree, index, bodies):
                 env.clear()
                 mutated_outer = True
-                unresolved.append(f'Unknown active namespace mutation at byte {node.start}')
+                record(f'Unknown active namespace mutation at byte {node.start}')
                 continue
             if _namespace_injection(tree, index):
                 env.clear()
-                unresolved.append(f'Expression-position namespace declaration at byte {node.start}')
+                record(f'Expression-position namespace declaration at byte {node.start}')
                 continue
             if node.kind == 'ModuleImport':
                 incoming = analyzer.incoming(tree, index, path, (path,))
                 if incoming.reason:
                     env.clear()
-                    unresolved.append(f'{incoming.reason} at byte {node.start}')
+                    record(f'{incoming.reason} at byte {node.start}')
                 else:
                     env.update(incoming.exports)
                     analyzer.bindings(env)
@@ -593,7 +684,7 @@ def _analyze(tree, path, analyzer):
                 binding = _let(tree, index, env, path, analyzer)
                 if binding is None:
                     env.clear()
-                    unresolved.append(f'Unsupported root namespace declaration at byte {node.start}')
+                    record(f'Unsupported root namespace declaration at byte {node.start}')
                 else:
                     env[binding[0]] = binding[1]
                     analyzer.bindings(env)
@@ -601,7 +692,7 @@ def _analyze(tree, path, analyzer):
             if node.kind in ('ModuleInclude', 'CodeBlock', 'Conditional', 'WhileLoop', 'ForLoop', 'Contextual'):
                 env.clear()
                 mutated_outer = True
-                unresolved.append(f'Unknown root namespace scope at byte {node.start}')
+                record(f'Unknown root namespace scope at byte {node.start}')
                 continue
             if bodies:
                 for body in bodies:
@@ -617,27 +708,35 @@ def _analyze(tree, path, analyzer):
                         env.clear()
                         mutated_outer = True
                 continue
-            if value is None or value.canonical_name != 'highlighted':
+            if marker_enabled:
+                marker = env.get(graph.raw(tree, index).decode('utf-8')) if node.kind == 'Ident' else value
+                if marker is not None and marker.canonical_name == 'paragraph_tab':
+                    if node.kind != 'Ident':
+                        record(f'Paragraph marker requires own-line Hash+Ident at byte {node.start}', MARKER_GAP)
+                        continue
+                    gap, start, end, reason = _marker_gap(tree, sequence, position)
+                    if reason:
+                        record(f'{reason} at byte {start}', MARKER_GAP)
+                    if gap:
+                        emit(MARKER_GAP, start, end,
+                             'Place a whitespace-only blank source line before the standalone paragraph marker.',
+                             marker, sources, packages, requests, context, MARKER_CONDITIONS)
+                    continue
+            if RULE_ID not in analyzer.rule_ids or value is None or value.canonical_name != 'highlighted':
                 continue
             has_math, reason = _body_math(tree, index)
             if reason:
-                unresolved.append(f'{reason} at byte {node.start}')
+                record(f'{reason} at byte {node.start}', RULE_ID)
             if not has_math:
                 continue
-            line = source[:node.start].count(b'\n') + 1
-            column = len(source[source.rfind(b'\n', 0, node.start) + 1:node.start].decode('utf-8')) + 1
-            conditions = CONDITIONS + (('Every enclosing recognized literal content wrapper executes and renders this body.',)
-                                       if context else ())
-            finding = ConditionalDiagnostic(RULE_ID, path, line, column, node.start, node.end,
+            emit(RULE_ID, node.start, node.end,
                 'Keep math outside text highlighting, conditional on the captured helper identity and execution context.',
-                digest(source), tuple(sources[k] for k in sorted(sources)),
-                tuple(packages[k] for k in sorted(packages)), tuple(sorted(requests)), value.route,
-                conditions=conditions, content_context=context)
-            (suppressed if any(s.covers(RULE_ID, node.start) for s in scopes) else findings).append(finding)
+                value, sources, packages, requests, context, CONDITIONS)
         return mutated_outer
 
     scan(0, {}, {path: SourceHash(path, digest(source))},
          {p.import_path: p for p in analyzer.evidence}, set())
     if analyzer.exhausted:
-        return ConditionalHighlightResult(unresolved=(analyzer.exhausted,))
-    return ConditionalHighlightResult(tuple(findings), tuple(suppressed), tuple(unresolved))
+        return refusal(analyzer.exhausted)
+    return ConditionalHighlightResult(tuple(findings), tuple(suppressed), tuple(unresolved),
+        rule_reasons=tuple((rid, tuple(rule_reasons[rid])) for rid in SUPPORTED_RULE_IDS if rid in rule_reasons))

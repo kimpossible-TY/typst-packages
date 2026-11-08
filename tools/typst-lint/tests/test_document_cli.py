@@ -425,6 +425,63 @@ class DocumentCliTests(unittest.TestCase):
         self.assertEqual(result['suppressed_count'], 0)
         self.assertEqual([d['rule_id'] for d in result['diagnostics']], ['core.parenthesized-scripts'])
 
+    def test_conditional_marker_gaps_have_separate_metadata_and_rule_coverage(self):
+        package_root = self.namespace_packages()
+        target = self.conditional_fixture()
+        source = target.read_bytes() + (
+            b'= Heading\n#paragraph_tab\nProse $y^2$.\n'
+            b'= Another\n#paragraph-tab\nMore prose.\n'
+            b'#paragraph_tab\n= Structural target\n')
+        target.write_bytes(source)
+        result = self.run_cli('--rule-set', 'pde', '--package-path', str(package_root))
+        gap = 'pde.paragraph-marker-gap'
+        findings = [row for row in result['conditional_diagnostics'] if row['rule_id'] == gap]
+        self.assertEqual(len(findings), 2)
+        metadata = next(row for row in document_cli.load_rules()[0]['rules'] if row['id'] == gap)
+        self.assertTrue(all(row['source'] == metadata['source'] and row['grade'] == metadata['grade']
+                            and not row['edit_permission'] for row in findings))
+        rows = {row['rule_id']: row for row in result['conditional_coverage']}
+        self.assertEqual(rows[gap]['diagnostics'], 2)
+        self.assertTrue(any('target' in reason for reason in rows[gap]['reasons']))
+        self.assertEqual(rows['pde.text-only-highlight']['reasons'], [])
+        self.assertEqual(len(result['coverage']['uninspected']), 30)
+        self.assertIn(gap, result['coverage']['uninspected'])
+        self.assertNotIn(gap, result['coverage']['available_backends'])
+        self.assertEqual(result['coverage']['conditional_hint_backends'], list(document_cli.CONDITIONAL_RULES))
+        self.assertEqual(len(result['proposed_edits']), 4)
+        self.assertTrue(all(row['rule_id'] == 'core.parenthesized-scripts' for row in result['proposed_edits']))
+        self.assertEqual(target.read_bytes(), source)
+
+    def test_conditional_marker_suppression_keeps_highlight_and_script_findings(self):
+        package_root = self.namespace_packages()
+        target = self.conditional_fixture()
+        source = target.read_bytes() + (
+            b'// typst-lint: ignore-next pde.paragraph-marker-gap -- intentional\n'
+            b'#paragraph-tab\nProse.\n')
+        target.write_bytes(source)
+        result = self.run_cli('--rule-set', 'pde', '--package-path', str(package_root))
+        self.assertEqual([row['rule_id'] for row in result['conditional_diagnostics']],
+                         ['pde.text-only-highlight'])
+        self.assertEqual([row['rule_id'] for row in result['conditional_suppressed']],
+                         ['pde.paragraph-marker-gap'])
+        self.assertEqual(result['suppressed_count'], 0)
+        self.assertEqual(len(result['proposed_edits']), 2)
+        self.assertEqual(target.read_bytes(), source)
+
+    def test_conditional_marker_shadow_and_literal_wrapper_scope(self):
+        package_root = self.namespace_packages()
+        target = self.conditional_fixture()
+        target.write_bytes(target.read_bytes() + (
+            b'#let paragraph_tab = "other"\n#paragraph_tab\nUnrelated.\n'
+            b'#proof[\n#paragraph-tab\nLiteral body.\n]\n'))
+        result = self.run_cli('--rule-set', 'pde', '--package-path', str(package_root))
+        findings = [row for row in result['conditional_diagnostics']
+                    if row['rule_id'] == 'pde.paragraph-marker-gap']
+        finding, = findings
+        self.assertTrue(finding['content_context'])
+        self.assertTrue(any('paragraph-tab transformation' in condition for condition in finding['conditions']))
+        self.assertEqual(result['applied_fixes'], [])
+
     def test_namespace_option_requires_pde_and_unsafe_evidence_refuses(self):
         self.write('main.typ', b'$x^i$\n')
         result = self.run_cli('--package-path', str(self.root / 'never-opened'))

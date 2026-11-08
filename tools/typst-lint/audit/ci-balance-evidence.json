@@ -1,4 +1,5 @@
 {
+  "audited_commit": "7bfa9663422847da311539acd1db6ee8bb3de0f4",
   "baseline_commit": "bca33cfac3afd0678bba035e05ce28d3b1f62725",
   "case_identity_multiplicity_preserved": true,
   "case_ids_sha256": "c1ee0a096940b728f495087dc5f92d0c6bbc692e2deb4d9b1a633f12fb1d27fc",
@@ -13,10 +14,31 @@
   ],
   "model": {
     "observed_max_test_seconds": 1322.003,
-    "observed_next_ci_seconds": null,
+    "observed_next_ci_seconds": 892,
+    "observed_next_ci_test_seconds": 846.206,
     "predicted_max_test_seconds": 701.713,
     "source_head": "baf1ae666606c3d075bc2fbc4e7d0a50173e6d54",
     "source_run": 42430203586
+  },
+  "observed_measured_ci": {
+    "aggregate_gates": 2,
+    "completed_utc": "2026-11-08T03:07:03Z",
+    "conclusion": "success",
+    "elapsed_seconds": 892,
+    "execution_jobs": 8,
+    "head": "7bfa9663422847da311539acd1db6ee8bb3de0f4",
+    "passed_per_interpreter": 2030,
+    "prediction_error_percent": 20.5915,
+    "prediction_error_seconds": 144.493,
+    "prior_elapsed_seconds": 1319,
+    "prior_run": 42438457219,
+    "prior_slowest_unittest_seconds": 1274.603,
+    "reduction_percent": 32.373,
+    "reduction_seconds": 427,
+    "run": 42440322213,
+    "skipped_per_interpreter": 55,
+    "slowest_unittest_seconds": 846.206,
+    "tests_per_interpreter": 2085
   },
   "original_order_per_shard_preserved": true,
   "other_modules_whole": true,

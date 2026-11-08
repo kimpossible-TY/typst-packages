@@ -1,4 +1,4 @@
-# Conditional PDE highlight inspection
+# Conditional PDE namespace inspection
 
 ```sh
 typst-lint inspect-document --root /absolute/project --entrypoint main.typ --rule-set pde --package-path /absolute/captured-packages --format json
@@ -29,6 +29,13 @@ The report still has three source backends, 30 uninspected PDE rules and
 `global_complete=false`. The highlight rule remains uninspected for full rule
 acceptance. No compiler or writer runs and no consumer configuration is read.
 
+The Python analyzer and one-shot `analyze` retain highlight-only defaults.
+Explicit `rule_ids=(RULE_ID, MARKER_GAP)` selects both supported rules in the same
+capture session. `result.reasons_for(rule_id)` separates each rule's refusals;
+the old `unresolved` field remains their combined record. The document CLI selects
+both under explicit PDE/package-path inspection and counts each serialized
+coverage reason/error and context route against the report budget.
+
 ## Retained namespace facts
 
 An explicitly selected canonical package root is captured with retained
@@ -44,7 +51,8 @@ entrypoint bytes, package metadata and complete exported name sets:
 
 Only `text-utils.highlighted` has a recognized highlight-helper origin. The three
 selected math-blocks wrapper names carry conditional content-context routes;
-other exported values remain opaque. A dependent wildcard namespace requires its
+the marker rule recognizes the two exact constants described below. Other
+exported values remain opaque. A dependent wildcard namespace requires its
 captured
 namespace prerequisite: scoped-annotations requires mannot, and cetz-helpers
 requires CeTZ. Missing or mismatched packages retain explicit unavailable
@@ -96,6 +104,42 @@ it never reports complete coverage or grants repair authority.
 Admitted content bodies are excluded from their enclosing mutation/descendant
 walk and scanned once in their own scope. Scope-copy work is charged separately,
 and the public report item limit includes all nested context routes.
+
+## Paragraph-marker source gap
+
+The exact text-utils bytes define `paragraph-tab` and `paragraph_tab` as the same
+immutable U+F000 marker value. This rule additionally traces both exports and
+immutable aliases, without trusting a matching source spelling. It requires
+adjacent same-Markup Hash/Ident nodes and a marker occupying its entire physical
+source line. Wrapper delimiters and same-line comments cannot be discarded to
+make the marker standalone.
+
+The immediately previous complete physical source line must be whitespace-only
+and end in LF or CRLF. File/body openings and a BOM are not blank lines. A
+previous heading, display, call or comment may therefore produce a gap hint.
+The following substantive sibling is checked separately: a heading/display
+withholds the gap for marker-target precedence, including across comments.
+Bare-CR boundaries and unknown/deferred contexts remain unresolved.
+
+Marker hints use their Hash span as the suppression/diagnostic anchor and add
+conditions that the marker is emitted in the intended paragraph context and
+the captured paragraph-tab transformation is active. They grant no edits,
+capitalization proof or paragraph/rendering certificate. The marker rule stays
+among the 30 uninspected PDE obligations.
+
+The actual snapshot has 549 typed export spellings (404 underscore and 145
+hyphen), including 186 at root. Of 21 source-gap candidates, eight root calls
+are reported and 13 callback-contained candidates remain deferred. Per-rule
+gap coverage records 31 common namespace barriers and 307 deferred typed
+expressions; these 338 reasons are not 338 missing blank lines. The existing
+29 highlight records and every source diagnostic/script proposal are unchanged.
+See `audit/conditional-marker-gap-evidence.json`.
+
+One owned genuine-facade heading/marker/prose fixture reaches one-to-zero hints
+after one manual newline insertion. Two native compilations preserve word
+order and the observed 18pt marker spacing; its word boxes also happen to match.
+This is a snapshot observation, not a general geometry/PDF guarantee or public
+repair output.
 
 ## Local characterization
 
