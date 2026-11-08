@@ -152,6 +152,22 @@ class DocumentPreviewCliTests(unittest.TestCase):
         self.assertIn('preview_pdfs_differ', report['source_apply_gate']['blockers'])
         self.assertTrue(report['uninspected_rule_ids'])
 
+    def test_conditional_profile_is_explicit_and_propagated_to_compile(self):
+        fake = SimpleNamespace(baseline_sha256='a' * 64, candidate_sha256='a' * 64,
+            pdfs_identical=True, dependency_count=1, unobserved_capture_count=0,
+            system_font_files=0, compiler_sha256='c' * 64)
+        output = io.StringIO()
+        with patch.object(document_preview_cli.document_preview_compile, 'compile_preview', return_value=fake) as compiler, \
+             contextlib.redirect_stdout(output):
+            status = document_preview_cli.main(self.command()[3:] + ['--conditional-gaps', '--format', 'json'])
+        report = json.loads(output.getvalue())
+        self.assertEqual(status, 2)
+        self.assertEqual(compiler.call_args.kwargs['profile'], 'conditional-gaps')
+        self.assertEqual(report['sequence_profile'], 'conditional-gaps')
+        self.assertIn('pde.proof-trailing-gap', report['conditionally_previewed_rule_ids'])
+        self.assertIn('pde.proof-trailing-gap', report['uninspected_rule_ids'])
+        self.assertFalse(report['source_apply_gate']['eligible'] or report['source_files_modified'])
+
     @unittest.skipUnless(os.environ.get('TYPST_LINT_RENDER_TESTS') == '1'
                          and sys.platform == 'darwin', 'Opt in on macOS with the reviewed Typst compiler')
     def test_real_preview_reports_success_and_can_stream_pdf(self):

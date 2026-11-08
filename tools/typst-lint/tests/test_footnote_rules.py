@@ -6,12 +6,14 @@ import subprocess
 import sys
 import tempfile
 import unittest
+import xml.etree.ElementTree as ET
 
 TOOL = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(TOOL))
 from edit_plan import plan
 from footnote_rules import (GAP, PUNCT, ALIGNED, UNALIGNED, PROSE, SpacerProof,
-                            analyze, analyze_conditional_nested, preview_conditional_math_gaps)
+                            analyze, analyze_conditional_nested, preview_conditional_math_gaps,
+                            preview_conditional_prose_punctuation)
 from static_resolver import resolve
 from syntax_client import EXECUTABLE, parse
 from typst_lint import digest
@@ -248,6 +250,62 @@ class FootnoteRules(unittest.TestCase):
                                 str(entry), str(output)], check=True, capture_output=True, timeout=30)
                 rendered.append(output.read_bytes())
             self.assertEqual(rendered[0], rendered[1])
+
+    def test_conditional_prose_punctuation_preview_removes_only_horizontal_space(self):
+        source = '#block[한글. \t#footnote[Why?] next, #footnote[Also.]]'.encode()
+        tree = parse(source)
+        result = preview_conditional_prose_punctuation(tree, 'fixture.typ', resolve(tree))
+        self.assertEqual(result['verification'], 'conditional-parse-syntax-directives-and-footnote-reanalysis')
+        self.assertFalse(result['runtime_binding_proved'] or result['render_equivalence_proved'] or result['edit_permission'])
+        self.assertEqual(len(result['edits']), 2)
+        proposal = plan(source, [__import__('edit_plan').Edit(row['start'], row['end'], row['replacement'].encode())
+                                 for row in result['edits']])
+        candidate = proposal.candidate()
+        self.assertEqual(candidate, '#block[한글.#footnote[Why?] next,#footnote[Also.]]'.encode())
+        self.assertEqual(result['candidate_sha256'], digest(candidate))
+        parsed = parse(candidate)
+        self.assertIsNone(preview_conditional_prose_punctuation(parsed, 'fixture.typ', resolve(parsed)))
+
+    def test_conditional_prose_punctuation_refuses_ambiguous_and_suppressed(self):
+        for source in (b'#block[This #footnote[X].]', b'#block[This; #footnote[X]]',
+                       b'#block[This.\n#footnote[X]]', b'#block[This. /* comment */ #footnote[X]]',
+                       b'#block[This.#dots_space #footnote[X]]',
+                       b'// typst-lint: ignore-next pde.prose-footnote-punctuation -- deliberate\n'
+                       b'#block[This. #footnote[X]]'):
+            with self.subTest(source=source):
+                tree = parse(source)
+                self.assertIsNone(preview_conditional_prose_punctuation(tree, 'fixture.typ', resolve(tree)))
+
+    @unittest.skipUnless(os.environ.get('TYPST_LINT_RENDER_TESTS') == '1'
+                         and shutil.which('typst') and shutil.which('pdftotext'),
+                         'Opt in with TYPST_LINT_RENDER_TESTS=1, Typst 0.15.1 and pdftotext')
+    def test_conditional_prose_punctuation_fixture_preserves_text_and_note(self):
+        if not subprocess.check_output(['typst', '--version'], text=True).startswith('typst 0.15.1 '):
+            self.skipTest('Fixture comparison pins Typst 0.15.1')
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            (root / 'packages').mkdir()
+            (root / 'cache').mkdir()
+            source = (b'#set page(width: 300pt, height: 250pt, margin: 30pt)\n'
+                      b'#block[This holds. #footnote[Reason.] Next sentence.]')
+            tree = parse(source)
+            result = preview_conditional_prose_punctuation(tree, 'fixture.typ', resolve(tree))
+            self.assertTrue(result and result['edits'])
+            edit = result['edits'][0]
+            candidate = source[:edit['start']] + edit['replacement'].encode() + source[edit['end']:]
+            words = []
+            for label, contents in (('before', source), ('after', candidate)):
+                entry = root / 'main.typ'
+                entry.write_bytes(contents)
+                output = root / f'{label}.pdf'
+                subprocess.run(['typst', 'compile', '--root', str(root), '--creation-timestamp', '0',
+                                '--package-path', str(root / 'packages'), '--package-cache-path', str(root / 'cache'),
+                                str(entry), str(output)], check=True, capture_output=True, timeout=30)
+                xml = subprocess.check_output(['pdftotext', '-bbox', str(output), '-'], timeout=30)
+                words.append([(node.text or '', tuple(node.attrib.items()))
+                              for node in ET.fromstring(xml).iter() if node.tag.endswith('}word')])
+            self.assertEqual(words[0], words[1])
+            self.assertIn('Reason.', ''.join(word for word, _ in words[1]))
 
 
 if __name__ == '__main__':

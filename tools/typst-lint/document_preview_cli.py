@@ -96,6 +96,8 @@ def main(arguments=None, *, gate=False):
     parser.add_argument('--pdf-stdout', action='store_true', help='Emit only the candidate PDF to stdout')
     parser.add_argument('--review-edits', action='store_true',
                         help='Include bounded per-source, per-stage edits and hashes in the JSON report')
+    parser.add_argument('--conditional-gaps', action='store_true',
+                        help='Also preview conditional proof and nested math-footnote gap edits')
     args = parser.parse_args(sys.argv[1:] if arguments is None else arguments)
     if args.review_edits and args.format != 'json' and not args.pdf_stdout:
         parser.error('--review-edits requires --format json or --pdf-stdout')
@@ -107,6 +109,7 @@ def main(arguments=None, *, gate=False):
     phase = 'input'
     result = None
     discovery_completed = False
+    profile = 'conditional-gaps' if args.conditional_gaps else 'standard'
     try:
         raw_root = args.root
         root = _absolute_root(raw_root)
@@ -122,7 +125,7 @@ def main(arguments=None, *, gate=False):
         for item in context.sources:
             if cancel is not None and cancel.is_set():
                 raise runtime.CompilerFailure('cancelled', kind=runtime.CompilerFailureKind.CANCELLED)
-            record = document_sequence_preview.preview(item.tree, item.path, catalog['rules'])
+            record = document_sequence_preview.preview(item.tree, item.path, catalog['rules'], profile=profile)
             if record is not None:
                 if record['verification'] == 'withheld':
                     raise SafetyError(f"{item.path}: {record['reason']}")
@@ -158,7 +161,8 @@ def main(arguments=None, *, gate=False):
         preview = document_preview_compile.compile_preview(context, records, catalog['rules'], snapshot,
                                                            entrypoint=args.entrypoint, cancel_event=cancel,
                                                            expected_dependencies=observed,
-                                                           expected_baseline_sha256=discovery_baseline_sha256)
+                                                           expected_baseline_sha256=discovery_baseline_sha256,
+                                                           profile=profile)
         result = dict(schema=1, tool_version=VERSION, mode='preview-compile', status=2, phase='preview',
                       compiler_invoked=True, pdf_generated=True, source_files_modified=False,
                       publication_authority=False, global_coverage_complete=False,
@@ -172,6 +176,9 @@ def main(arguments=None, *, gate=False):
                       discovery_performed=observed is not None,
                       discovery_observed_dependencies=len(observed) if observed is not None else None,
                       dependency_closure_proved=False, compiler_sha256=preview.compiler_sha256,
+                      sequence_profile=profile,
+                      conditionally_previewed_rule_ids=(['pde.proof-trailing-gap', 'pde.footnote-trailing-gap']
+                                                        if args.conditional_gaps else []),
                       partially_inspected_rule_ids=[document_display.STANDALONE, script_rule.RULE_ID, document_display.RULE_ID],
                       uninspected_rule_ids=[rule['id'] for rule in catalog['rules'] if rule['id'] not in
                                            (document_display.STANDALONE, script_rule.RULE_ID, document_display.RULE_ID)],

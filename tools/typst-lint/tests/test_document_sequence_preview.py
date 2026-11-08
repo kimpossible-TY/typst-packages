@@ -16,13 +16,113 @@ import document_sequence_preview
 import include_context
 from edit_plan import Edit, plan
 from syntax_client import EXECUTABLE, parse
-from typst_lint import SafetyError, digest, load_rules
+from typst_lint import InputError, SafetyError, digest, load_rules
 
 
 @unittest.skipUnless(EXECUTABLE.is_file(), 'Requires the pinned syntax adapter')
 class DocumentSequencePreviewTests(unittest.TestCase):
     def setUp(self):
         self.catalog = load_rules()[0]['rules']
+
+    def test_opt_in_conditional_gaps_are_chained_with_all_standard_stages(self):
+        source = (b'Thus $ x^i $\n\nHence.\n\n#block[\n$\nA #footnote[X]\n\nB\n$\n'
+                  b'#proof[Done.]\nNext.\n]')
+        tree = parse(source)
+        standard = document_sequence_preview.preview(tree, 'main.typ', self.catalog)
+        report = document_sequence_preview.preview(tree, 'main.typ', self.catalog, profile='conditional-gaps')
+        self.assertEqual([s['rule_id'] for s in standard['steps']],
+                         ['pde.standalone-display', 'core.parenthesized-scripts', 'pde.display-continuation-gap'])
+        self.assertEqual([s['rule_id'] for s in report['steps']],
+                         [s['rule_id'] for s in standard['steps']]
+                         + ['pde.footnote-trailing-gap', 'pde.proof-trailing-gap'])
+        self.assertEqual(report['profile'], 'conditional-gaps')
+        for key in ('runtime_binding_proved', 'render_equivalence_proved', 'edit_permission'):
+            self.assertFalse(report[key])
+        current = source
+        for step in report['steps']:
+            self.assertEqual(step['baseline_sha256'], digest(current))
+            edits = tuple(Edit(e['start'], e['end'], e['replacement'].encode()) for e in step['edits'])
+            current = plan(current, edits).candidate()
+            self.assertEqual(step['candidate_sha256'], digest(current))
+        self.assertEqual(document_sequence_preview.replay(tree, 'main.typ', self.catalog, report,
+                                                          profile='conditional-gaps'), current)
+        self.assertIsNone(document_sequence_preview.preview(parse(current), 'main.typ', self.catalog,
+                                                             profile='conditional-gaps'))
+        with self.assertRaises(SafetyError):
+            document_sequence_preview.replay(tree, 'main.typ', self.catalog, report)
+        with self.assertRaises(SafetyError):
+            document_sequence_preview.replay(tree, 'main.typ', self.catalog, standard, profile='conditional-gaps')
+
+    def test_conditional_profile_does_not_trust_forged_or_partial_records(self):
+        source = b'#block[\n$\nA #footnote[X]\n\nB\n$\n#proof[Done.]\nNext.\n]'
+        tree = parse(source)
+        report = document_sequence_preview.preview(tree, 'main.typ', self.catalog, profile='conditional-gaps')
+        for mutation in ('profile', 'offset', 'hash', 'drop', 'permission'):
+            changed = deepcopy(report)
+            if mutation == 'profile': changed['profile'] = 'standard'
+            elif mutation == 'offset': changed['steps'][0]['edits'][0]['start'] += 1
+            elif mutation == 'hash': changed['steps'][1]['baseline_sha256'] = '0' * 64
+            elif mutation == 'drop': changed['steps'].pop()
+            elif mutation == 'permission': changed['edit_permission'] = True
+            with self.subTest(mutation=mutation), self.assertRaises(SafetyError):
+                document_sequence_preview.replay(tree, 'main.typ', self.catalog, changed, profile='conditional-gaps')
+        for profile in (None, True, 'conditional', 'STANDARD'):
+            with self.subTest(profile=profile), self.assertRaises(InputError):
+                document_sequence_preview.preview(tree, 'main.typ', self.catalog, profile=profile)
+
+    def test_conditional_replay_requires_every_candidate_source(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory).resolve()
+            main = b'#include "child.typ"\n'
+            child = b'#block[\n#proof[Done.]\nNext.\n]'
+            (root / 'main.typ').write_bytes(main)
+            (root / 'child.typ').write_bytes(child)
+            context = include_context.load_include_context(root, (('main.typ', main),))
+            item = context.source_for('child.typ')
+            record = document_sequence_preview.preview(item.tree, item.path, self.catalog,
+                                                        profile='conditional-gaps')
+            with self.assertRaises(SafetyError):
+                document_sequence_preview.replay_document(context, [], self.catalog, profile='conditional-gaps')
+            replayed = document_sequence_preview.replay_document(context, [record], self.catalog,
+                                                                  profile='conditional-gaps')
+            self.assertEqual(replayed['child.typ'], child.replace(b']\nNext.', b']\n\nNext.'))
+            self.assertEqual((root / 'child.typ').read_bytes(), child)
+            with self.assertRaises(SafetyError):
+                document_sequence_preview.replay_document(context, [record], self.catalog)
+
+    def test_conditional_cross_rule_reanalysis_refuses_changed_footnote(self):
+        source = b'#block[\nText #footnote[X]\n\nNext.\n#proof[Done.]\nFollowing.\n]'
+        tree = parse(source)
+        position = source.index(b'footnote')
+        fake = document_sequence_preview.proof_rules.ProofResult(
+            diagnostics=(object(),), edits=(Edit(position, position + len(b'footnote'), b'otherfun'),))
+        with patch.object(document_sequence_preview.proof_rules, 'preview_conditional', return_value=fake):
+            report = document_sequence_preview.preview(tree, 'main.typ', self.catalog, profile='conditional-gaps')
+        self.assertEqual(report['verification'], 'withheld')
+        self.assertEqual(report['steps'], [])
+        self.assertIn('changed footnote', report['reason'])
+
+    def test_conditional_utf8_crlf_and_suppressed_findings_survive_mapping(self):
+        source = ('#block[\r\n한글. #footnote[이유]\r\n\r\n다음.\r\n'
+                  '// typst-lint: ignore-next pde.proof-trailing-gap -- intentional\r\n'
+                  '#proof[첫째.]\r\n다음.\r\n\r\n#proof[둘째.]\r\n다음.\r\n]').encode()
+        tree = parse(source)
+        report = document_sequence_preview.preview(tree, 'main.typ', self.catalog, profile='conditional-gaps')
+        self.assertEqual(report['verification'], 'hash-chained-three-rule-and-conditional-gap-reanalysis', report)
+        candidate = document_sequence_preview.replay(tree, 'main.typ', self.catalog, report,
+                                                     profile='conditional-gaps')
+        self.assertEqual(candidate.count(b'\r\n'), source.count(b'\r\n') + 1)
+        self.assertIn(b'#proof[' + '첫째.'.encode() + b']\r\n' + '다음.'.encode(), candidate)
+        self.assertIn(b'#proof[' + '둘째.'.encode() + b']\r\n\r\n' + '다음.'.encode(), candidate)
+
+    def test_conditional_recursion_error_withholds_all_stages(self):
+        source = b'Thus $ x^i $\n\nHence.\n\n#block[\n#proof[Done.]\nNext.\n]'
+        tree = parse(source)
+        with patch.object(document_sequence_preview.proof_rules, 'preview_conditional', side_effect=RecursionError):
+            report = document_sequence_preview.preview(tree, 'main.typ', self.catalog, profile='conditional-gaps')
+        self.assertEqual(report['verification'], 'withheld')
+        self.assertFalse(report['steps'])
+        self.assertIsNone(report['candidate_sha256'])
 
     def test_three_passes_are_hash_chained_and_replay_to_noop(self):
         source = b'#wrap[\r\n  Thus $ x^i $ <id>\r\n\r\n  Hence.\r\n]'

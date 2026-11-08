@@ -55,6 +55,30 @@ class DocumentPreviewCompileTests(unittest.TestCase):
                                              entrypoint='main.typ', deadline_seconds=value)
             capture.assert_not_called()
 
+    @unittest.skipUnless(os.environ.get('TYPST_LINT_RENDER_TESTS') == '1'
+                         and sys.platform == 'darwin' and compiler.SANDBOX.is_file(),
+                         'Opt in on macOS with the reviewed Typst compiler')
+    def test_conditional_profile_compiles_a_private_combined_fixture(self):
+        source = (b'#import "@local/sample:0.1.0": proof\n'
+                  b'#proof[Done.]\nNext.\n#block[$\n A #footnote[Reason.]\n\n B\n$]\n')
+        (self.project / 'main.typ').write_bytes(source)
+        package = self.packages / 'local/sample/0.1.0/lib.typ'
+        package.write_bytes(b'#let proof(body) = block(body)\n')
+        context = include_context.load_include_context(self.project, (('main.typ', source),))
+        records = [r for item in context.sources
+                   if (r := sequence.preview(item.tree, item.path, self.catalog, profile='conditional-gaps'))]
+        self.assertEqual({step['rule_id'] for row in records for step in row['steps']},
+                         {'pde.proof-trailing-gap', 'pde.footnote-trailing-gap'})
+        requests = [resources.ResourceRequest('project', 'main.typ', 'source')]
+        requests += [resources.ResourceRequest('packages', f'local/sample/0.1.0/{name}', 'package')
+                     for name in ('typst.toml', 'lib.typ')]
+        snapshot = resources.capture({'project': str(self.project), 'packages': str(self.packages),
+                                      'cache': str(self.cache)}, requests)
+        result = compiler.compile_preview(context, records, self.catalog, snapshot,
+                                          entrypoint='main.typ', profile='conditional-gaps')
+        self.assertTrue(result.pdfs_identical)
+        self.assertEqual((self.project / 'main.typ').read_bytes(), source)
+
     def test_pre_cancelled_preview_refuses_before_compiler_capture(self):
         cancel = threading.Event()
         cancel.set()

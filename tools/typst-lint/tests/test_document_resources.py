@@ -129,6 +129,23 @@ class DocumentResourceCaptureTests(unittest.TestCase):
         with self.assertRaises(SafetyError):
             resources.stage_document(context, [record], catalog, newer)
 
+    def test_conditional_profile_is_bound_to_replayed_records(self):
+        source = b'#block[\n#proof[Done.]\nNext.\n$\n A #footnote[Reason.]\n\n B\n$\n]'
+        (self.root / 'main.typ').write_bytes(source)
+        context = include_context.load_include_context(self.root, (('main.typ', source),))
+        catalog = load_rules()[0]['rules']
+        snapshot = resources.capture(self.roots, [self.req('main.typ', 'source')])
+        tree = context.source_for('main.typ').tree
+        record = document_sequence_preview.preview(tree, 'main.typ', catalog, profile='conditional-gaps')
+        self.assertTrue(record['steps'])
+        staged = resources.stage_document(context, [record], catalog, snapshot, profile='conditional-gaps')
+        self.assertNotEqual(staged['project', 'main.typ'], source)
+        self.assertEqual((self.root / 'main.typ').read_bytes(), source)
+        with self.assertRaises(SafetyError):
+            resources.stage_document(context, [record], catalog, snapshot)
+        with self.assertRaises(SafetyError):
+            resources.stage_document(context, [], catalog, snapshot, profile='conditional-gaps')
+
     def test_reflectively_modified_issued_capture_is_rejected(self):
         snapshot = resources.capture(self.roots, [self.req('image.png')])
         object.__setattr__(snapshot.files[0], 'data', b'changed')

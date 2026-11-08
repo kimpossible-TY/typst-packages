@@ -114,8 +114,9 @@ class CancelRuleTests(unittest.TestCase):
         self.assert_count('#let saved = math.cancel\n#import math: *\n$saved(x)$', 0)
         # The complete reviewed namespace excludes cancel; partial package
         # namespaces cannot establish absence of a same-named export.
-        packages = tuple(PackageSource(path, str(TOOL.parents[1] / relative),
-                                       (TOOL.parents[1] / relative).read_bytes())
+        fixture = TOOL / 'tests/fixtures/reviewed-packages'
+        packages = tuple(PackageSource(path, str(fixture / relative),
+                                       (fixture / relative).read_bytes())
                          for path, relative in (
                              (TEXT_UTILS, 'local/text-utils/0.1.2/lib.typ'),
                              (MATH_BLOCKS, 'local/math-blocks/0.2.0/lib.typ')))

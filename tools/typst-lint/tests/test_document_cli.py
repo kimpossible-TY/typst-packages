@@ -131,6 +131,20 @@ class DocumentCliTests(unittest.TestCase):
         refused = self.run_cli('--preview-conditional-gaps')
         self.assertEqual(refused['phase'], 'input')
 
+    def test_conditional_punctuation_preview_is_opt_in_and_read_only(self):
+        source = b'#block[Claim. #footnote[Reason.]]'
+        target = self.write('main.typ', source)
+        ordinary = self.run_cli('--rule-set', 'pde')
+        self.assertNotIn('conditional_punctuation_previews', ordinary)
+        report = self.run_cli('--rule-set', 'pde', '--preview-conditional-punctuation')
+        rows = report['conditional_punctuation_previews']
+        self.assertEqual(len(rows), 1)
+        self.assertEqual(rows[0]['edits'][0]['rule_id'], 'pde.prose-footnote-punctuation')
+        self.assertFalse(rows[0]['edit_permission'] or rows[0]['render_equivalence_proved'])
+        self.assertEqual(target.read_bytes(), source)
+        refused = self.run_cli('--preview-conditional-punctuation')
+        self.assertEqual(refused['phase'], 'input')
+
     def test_explicit_reference_facade_provenance_is_conditional_and_reports_shadowing(self):
         main = self.write('main.typ', b'#import "Styles/styles.typ": *\n')
         facade = self.write('Styles/styles.typ', b'#import "@local/math-blocks:0.2.0": *\n')

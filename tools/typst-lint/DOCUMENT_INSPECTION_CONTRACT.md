@@ -76,6 +76,9 @@ JSON includes:
   preview is reported as such. These previews use the original bytes separately;
   they are not composed with each other or the ordinary preview sequence, and
   do not prove binding, execution, PDF equivalence or source-write permission.
+- `--preview-conditional-punctuation` independently previews only horizontal
+  whitespace removal between an existing period/comma and a nested prose
+  footnote. It does not add or move punctuation, or compose with other plans.
 - With `--rule-set pde`, `--package-path`, `--reference-package-path` and
   `--reference-facade`, the separately captured reference package and graph
   namespace evidence trace a selected facade's `project-ref` export. A

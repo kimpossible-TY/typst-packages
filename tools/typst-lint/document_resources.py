@@ -252,7 +252,7 @@ def capture(roots, requests, *, allow_apple_asset_fonts=False):
                                   tuple(files), total, apple_asset_fonts=allow_apple_asset_fonts))
 
 
-def stage_document(context, records, catalog, snapshot, *, project_root='project'):
+def stage_document(context, records, catalog, snapshot, *, project_root='project', profile='standard'):
     """Bind verified source candidates to explicit captured resource bytes.
 
     The mapping is for private staging experiments only. It neither establishes
@@ -271,7 +271,7 @@ def stage_document(context, records, catalog, snapshot, *, project_root='project
         resource = resources.get((project_root, source.path))
         if resource is None or resource.data != source.source:
             raise SafetyError('A captured document source is absent or differs from the resource snapshot')
-    candidates = replay_document(context, records, catalog)
+    candidates = replay_document(context, records, catalog, profile=profile)
     staged = {(item.request.root, item.request.path):
               candidates[item.request.path] if item.request.root == project_root and item.request.path in candidates
               else item.data for item in snapshot.files}

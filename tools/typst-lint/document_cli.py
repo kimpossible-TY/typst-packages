@@ -30,6 +30,7 @@ CONDITIONAL_RULES = ('pde.text-only-highlight', 'pde.paragraph-marker-gap')
 def report_document(root, entrypoint, *, rule_set='core', package_path=None,
                     preview_display_gaps=False, preview_standalone_displays=False,
                     preview_sequence=False, local_rule_hints=False, preview_conditional_gaps=False,
+                    preview_conditional_punctuation=False,
                     reference_package_path=None, reference_facade=None, reference_cache_path=None,
                     reference_calls=False):
     """Inspect retained source bytes without reading consumer configuration.
@@ -53,6 +54,9 @@ def report_document(root, entrypoint, *, rule_set='core', package_path=None,
             'Source-local rule hints require explicit --rule-set pde')
     require(type(preview_conditional_gaps) is bool and (not preview_conditional_gaps or rule_set == 'pde'),
             'Conditional gap previews require explicit --rule-set pde')
+    require(type(preview_conditional_punctuation) is bool
+            and (not preview_conditional_punctuation or rule_set == 'pde'),
+            'Conditional punctuation previews require explicit --rule-set pde')
     reference_requested = (reference_package_path is not None or reference_facade is not None
                            or reference_cache_path is not None)
     require(type(reference_calls) is bool and (not reference_calls or reference_requested),
@@ -112,6 +116,7 @@ def report_document(root, entrypoint, *, rule_set='core', package_path=None,
     standalone_previews = []
     sequence_previews = []
     conditional_gap_previews = []
+    conditional_punctuation_previews = []
     local_findings, local_suppressed, local_files, local_contexts = [], [], [], []
     items = len(captured.sources) + len(captured.edges) + len(captured.occurrences) + len(captured.unresolved)
     reference_report = None
@@ -186,6 +191,15 @@ def report_document(root, entrypoint, *, rule_set='core', package_path=None,
                     items += 1 + len(preview['edits']) + len(preview.get('reasons', ()))
                     require(items <= MAX_REPORT_ITEMS, 'Document inspection report item limit exceeded')
                     conditional_gap_previews.append(preview)
+            if preview_conditional_punctuation:
+                from footnote_rules import preview_conditional_prose_punctuation
+                from static_resolver import resolve
+                punctuation = preview_conditional_prose_punctuation(
+                    item.tree, item.path, resolve(item.tree, packages=()), catalog=catalog['rules'])
+                if punctuation is not None:
+                    items += 1 + len(punctuation['edits'])
+                    require(items <= MAX_REPORT_ITEMS, 'Document inspection report item limit exceeded')
+                    conditional_punctuation_previews.append(punctuation)
         except (InputError, OSError, ValueError) as error:
             raise InputError(f'{item.path}: {error}') from error
         # Keep unsupported baseline operands diagnostic-only, then independently
@@ -368,6 +382,9 @@ def report_document(root, entrypoint, *, rule_set='core', package_path=None,
     if preview_conditional_gaps:
         report['conditional_gap_previews'] = conditional_gap_previews
         report['conditional_gap_preview_status'] = 'independent-source-only-not-composed-or-render-verified'
+    if preview_conditional_punctuation:
+        report['conditional_punctuation_previews'] = conditional_punctuation_previews
+        report['conditional_punctuation_preview_status'] = 'independent-source-only-not-composed-or-render-verified'
     if local_rule_hints:
         from document_local_rules import RULE_IDS as LOCAL_RULE_IDS
         report['local_rule_hints'] = dict(rule_ids=list(LOCAL_RULE_IDS),
@@ -404,6 +421,8 @@ def main(arguments=None):
                         help='Inspect included files independently for additional conditional PDE hints')
     parser.add_argument('--preview-conditional-gaps', action='store_true',
                         help='Preview independent proof and nested math-footnote gaps (requires --rule-set pde)')
+    parser.add_argument('--preview-conditional-punctuation', action='store_true',
+                        help='Preview independent prose footnote punctuation spacing (requires --rule-set pde)')
     parser.add_argument('--reference-package-path',
                         help='Explicit canonical root containing the reviewed project-references package')
     parser.add_argument('--reference-facade',
@@ -422,6 +441,7 @@ def main(arguments=None):
                                  preview_sequence=args.preview_sequence,
                                  local_rule_hints=args.local_rule_hints,
                                  preview_conditional_gaps=args.preview_conditional_gaps,
+                                 preview_conditional_punctuation=args.preview_conditional_punctuation,
                                  reference_package_path=args.reference_package_path,
                                  reference_facade=args.reference_facade,
                                  reference_cache_path=args.reference_cache_path,

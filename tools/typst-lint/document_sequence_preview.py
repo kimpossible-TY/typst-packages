@@ -7,15 +7,89 @@ from document_display import RULE_ID as GAP, STANDALONE, analyze_all
 from document_gap_preview import _scopes, preview as preview_gap
 from document_standalone_preview import preview as preview_standalone
 from edit_plan import Edit, plan
+from array import array
+from bisect import bisect_right
+from collections import Counter
+import footnote_rules
 import include_context
+import proof_rules
 from script_rule import RULE_ID as SCRIPT, analyze as analyze_script
+from static_resolver import resolve
 from syntax_client import parse
 from types import MappingProxyType
 from typst_lint import InputError, SafetyError, digest
 
 
-def preview(tree, path, catalog):
+_STANDARD = 'standard'
+_CONDITIONAL = 'conditional-gaps'
+_VERIFICATIONS = {_STANDARD: 'hash-chained-parse-and-three-rule-reanalysis',
+                  _CONDITIONAL: 'hash-chained-three-rule-and-conditional-gap-reanalysis'}
+
+
+def _profile(value):
+    if type(value) is not str or value not in _VERIFICATIONS:
+        raise InputError('Unknown document preview profile')
+    return value
+
+
+class _FindingMapper:
+    def __init__(self, source, edits=()):
+        self.source = source
+        self.lines = [0] + [i + 1 for i, byte in enumerate(source) if byte == 10]
+        self.columns = {}
+        self.edits = tuple(edits)
+        self.starts = [edit.start for edit in self.edits]
+        self.ends = [edit.end for edit in self.edits]
+        if self.starts != sorted(self.starts) or self.ends != sorted(self.ends):
+            raise SafetyError('Unordered conditional edits')
+        self.shifts = [0]
+        for edit in self.edits:
+            self.shifts.append(self.shifts[-1] + len(edit.replacement) - (edit.end - edit.start))
+
+    def offset(self, finding):
+        if (type(finding.line) is not int or not 1 <= finding.line <= len(self.lines)
+                or type(finding.column) is not int):
+            raise SafetyError('Invalid diagnostic location')
+        start = self.lines[finding.line - 1]
+        end = self.lines[finding.line] - 1 if finding.line < len(self.lines) else len(self.source)
+        columns = self.columns.get(finding.line)
+        if columns is None:
+            text = self.source[start:end].decode('utf-8')
+            columns = array('I', [0])
+            offset = 0
+            for char in text:
+                offset += len(char.encode('utf-8'))
+                columns.append(offset)
+            self.columns[finding.line] = columns
+        if not 1 <= finding.column <= len(columns):
+            raise SafetyError('Invalid diagnostic column')
+        return start + columns[finding.column - 1]
+
+    def mapped(self, finding):
+        position = self.offset(finding)
+        index = bisect_right(self.starts, position) - 1
+        if index >= 0 and self.edits[index].start < position < self.edits[index].end:
+            raise SafetyError('An existing conditional finding lies inside an edit')
+        return position + self.shifts[bisect_right(self.ends, position)]
+
+
+def _keys(source, findings, edits=()):
+    keys = Counter()
+    mapper = _FindingMapper(source, edits)
+    for finding in findings:
+        keys[(finding.rule_id, finding.grade, finding.path, mapper.mapped(finding),
+              finding.explanation, finding.source)] += 1
+    return keys
+
+
+def _same_findings(before_tree, before, after_tree, after, edits):
+    return (_keys(before_tree.source, before.diagnostics, edits) == _keys(after_tree.source, after.diagnostics)
+            and _keys(before_tree.source, before.suppressed, edits) == _keys(after_tree.source, after.suppressed))
+
+
+def preview(tree, path, catalog, *, profile=_STANDARD):
     """Return hash-chained edits or a withheld result for this source."""
+    _profile(profile)
     baseline = tree.source
     current = tree
     steps = []
@@ -60,6 +134,89 @@ def preview(tree, path, catalog):
                                      for e in proposal.edits]))
             current = candidate_tree
         apply_display(preview_gap, GAP)
+        if profile == _CONDITIONAL and (b'#proof' in current.source or b'#footnote' in current.source):
+            before_tree = current
+            before_resolution = resolve(before_tree, packages=())
+            notes_before = footnote_rules.analyze_conditional_nested(before_tree, path, before_resolution, catalog=catalog)
+            proof_before = proof_rules.analyze_conditional(before_tree, path, before_resolution, catalog=catalog)
+            note_preview = footnote_rules.preview_conditional_math_gaps(before_tree, path, before_resolution, catalog=catalog)
+            if note_preview is not None:
+                if note_preview['verification'] == 'withheld':
+                    raise SafetyError('Conditional footnote preview withheld: ' + note_preview['reason'])
+                if note_preview['verification'] != 'conditional-parse-syntax-directives-and-footnote-reanalysis':
+                    raise SafetyError('Conditional footnote preview has unknown verification')
+                edits = tuple(Edit(row['start'], row['end'], row['replacement'].encode('utf-8'))
+                              for row in note_preview['edits'])
+                candidate_plan = plan(before_tree.source, edits)
+                candidate = candidate_plan.candidate()
+                if (candidate_plan.deferred or len(candidate_plan.edits) != len(edits)
+                        or digest(before_tree.source) != note_preview['baseline_sha256']
+                        or digest(candidate) != note_preview['candidate_sha256']):
+                    raise SafetyError('Conditional footnote preview hash or edit mismatch')
+                current = parse(candidate, tree.mode)
+                current_resolution = resolve(current, packages=())
+                notes_after = footnote_rules.analyze_conditional_nested(current, path, current_resolution, catalog=catalog)
+                proof_after = proof_rules.analyze_conditional(current, path, current_resolution, catalog=catalog)
+                if not _same_findings(before_tree, proof_before, current, proof_after, edits):
+                    raise SafetyError('Conditional footnote stage changed proof findings or suppressions')
+                for rid in footnote_rules.RULE_IDS:
+                    first, last = notes_before[rid], notes_after[rid]
+                    if rid != footnote_rules.GAP:
+                        if not _same_findings(before_tree, first, current, last, edits):
+                            raise SafetyError('Conditional footnote stage changed another footnote rule')
+                        continue
+                    expected = _keys(before_tree.source, first.diagnostics, edits)
+                    calls = {(node.start - 1, node.end) for node in before_tree.nodes if node.kind == 'FuncCall'}
+                    mapper = _FindingMapper(before_tree.source)
+                    target_mapper = _FindingMapper(before_tree.source, edits)
+                    diagnosed = {}
+                    for finding in first.diagnostics:
+                        diagnosed.setdefault(mapper.offset(finding), []).append(finding)
+                    matched = {}
+                    for start, end in calls:
+                        if start in diagnosed:
+                            matched.setdefault(end, []).extend(diagnosed[start])
+                    for edit in edits:
+                        matching = matched.get(edit.start, ())
+                        if len(matching) != 1:
+                            raise SafetyError('Conditional footnote edit does not match one diagnosed call')
+                        finding = matching[0]
+                        key = (finding.rule_id, finding.grade, finding.path, target_mapper.mapped(finding),
+                               finding.explanation, finding.source)
+                        expected[key] -= 1
+                    if (any(count < 0 for count in expected.values())
+                            or +expected != _keys(current.source, last.diagnostics)
+                            or _keys(before_tree.source, first.suppressed, edits) != _keys(current.source, last.suppressed)):
+                        raise SafetyError('Conditional footnote findings changed beyond selected math gaps')
+                steps.append(dict(rule_id=footnote_rules.GAP, baseline_sha256=digest(before_tree.source),
+                                  candidate_sha256=digest(candidate), edits=note_preview['edits']))
+            before_tree = current
+            before_resolution = resolve(before_tree, packages=())
+            notes_before = footnote_rules.analyze_conditional_nested(before_tree, path, before_resolution, catalog=catalog)
+            proof_preview = proof_rules.preview_conditional(before_tree, path, before_resolution, catalog=catalog)
+            if len(proof_preview.diagnostics) != len(proof_preview.edits):
+                raise SafetyError('Conditional proof preview was withheld for at least one finding')
+            if proof_preview.edits:
+                edits = proof_preview.edits
+                candidate_plan = plan(before_tree.source, edits)
+                if candidate_plan.deferred or len(candidate_plan.edits) != len(edits):
+                    raise SafetyError('Conditional proof preview contains conflicting edits')
+                candidate = candidate_plan.candidate()
+                current = parse(candidate, tree.mode)
+                notes_after = footnote_rules.analyze_conditional_nested(current, path, resolve(current, packages=()), catalog=catalog)
+                if any(not _same_findings(before_tree, notes_before[rid], current, notes_after[rid], edits)
+                       for rid in footnote_rules.RULE_IDS):
+                    raise SafetyError('Conditional proof stage changed footnote findings or suppressions')
+                proof_after = proof_rules.analyze_conditional(current, path, resolve(current, packages=()), catalog=catalog)
+                if (proof_after.diagnostics or _keys(before_tree.source, proof_preview.suppressed, edits)
+                        != _keys(current.source, proof_after.suppressed)):
+                    raise SafetyError('Conditional proof stage failed final reanalysis')
+                if footnote_rules.preview_conditional_math_gaps(current, path, resolve(current, packages=()), catalog=catalog):
+                    raise SafetyError('Conditional proof stage introduced footnote gap edits')
+                steps.append(dict(rule_id=proof_rules.RULE_ID, baseline_sha256=digest(before_tree.source),
+                                  candidate_sha256=digest(candidate),
+                                  edits=[dict(start=e.start, end=e.end, replacement=e.replacement.decode('utf-8'),
+                                              rule_id=proof_rules.RULE_ID) for e in candidate_plan.edits]))
         final_displays = analyze_all(current, path, catalog=catalog)
         final_scripts = analyze_script(current, path, catalog=catalog, _verify=False, _allow_code_call=True)
         if (current.nodes[0].errors or final_scripts.parse_errors or final_scripts.skips
@@ -68,10 +225,14 @@ def preview(tree, path, catalog):
             raise SafetyError('Final candidate failed the three selected source checks')
         if not steps:
             return None
-        return dict(path=path, baseline_sha256=digest(baseline), candidate_sha256=digest(current.source),
-                    verification='hash-chained-parse-and-three-rule-reanalysis', steps=steps,
-                    unresolved_display_contexts={rid: len(value.skips) for rid, value in final_displays.items()})
-    except (InputError, SafetyError, OSError, ValueError) as error:
+        result = dict(path=path, baseline_sha256=digest(baseline), candidate_sha256=digest(current.source),
+                      verification=_VERIFICATIONS[profile], steps=steps,
+                      unresolved_display_contexts={rid: len(value.skips) for rid, value in final_displays.items()})
+        if profile == _CONDITIONAL:
+            result.update(profile=profile, runtime_binding_proved=False, render_equivalence_proved=False,
+                          edit_permission=False)
+        return result
+    except (InputError, SafetyError, OSError, ValueError, RecursionError) as error:
         return dict(path=path, baseline_sha256=digest(baseline), candidate_sha256=None,
                     verification='withheld', steps=[], reason=str(error))
 
@@ -88,20 +249,21 @@ def _same_data(expected, supplied):
     return expected == supplied
 
 
-def replay(tree, path, catalog, record):
+def replay(tree, path, catalog, record, *, profile=_STANDARD):
     """Recompute and replay a sequence in memory for a downstream consumer.
 
     Serialized plans are data, not authority: reject stale or altered records and
     check the hash chain again as edits are applied. The returned bytes are not a
     protected write receipt or a compiler resource snapshot.
     """
-    expected = preview(tree, path, catalog)
-    return _replay_expected(tree, record, expected)
+    expected = preview(tree, path, catalog, profile=profile)
+    return _replay_expected(tree, record, expected, profile=profile)
 
 
-def _replay_expected(tree, record, expected):
+def _replay_expected(tree, record, expected, *, profile=_STANDARD):
+    _profile(profile)
     if (type(record) is not dict or expected is None or not _same_data(expected, record)
-            or expected['verification'] != 'hash-chained-parse-and-three-rule-reanalysis'):
+            or expected['verification'] != _VERIFICATIONS[profile]):
         raise SafetyError('Sequence is stale, altered, incomplete or withheld')
     current = tree.source
     for step in record['steps']:
@@ -120,7 +282,7 @@ def _replay_expected(tree, record, expected):
     return current
 
 
-def replay_document(context, records, catalog):
+def replay_document(context, records, catalog, *, profile=_STANDARD):
     """Derive an immutable in-memory source map from one issued include capture.
 
     Every captured source must have exactly its current sequence record or no
@@ -128,6 +290,7 @@ def replay_document(context, records, catalog):
     foreign record refuses the whole map. Includes establish no import/resource
     closure and the returned mapping is not compiler or write authority.
     """
+    _profile(profile)
     include_context.assert_include_context(context)
     if type(records) is not list or len(records) > len(context.sources):
         raise SafetyError('Invalid document sequence record set')
@@ -140,11 +303,11 @@ def replay_document(context, records, catalog):
         raise SafetyError('Document sequence contains a foreign path')
     candidates = {}
     for source in context.sources:
-        expected = preview(source.tree, source.path, catalog)
+        expected = preview(source.tree, source.path, catalog, profile=profile)
         record = indexed.get(source.path)
         if expected is None and record is None:
             candidates[source.path] = source.source
         else:
-            candidates[source.path] = _replay_expected(source.tree, record, expected)
+            candidates[source.path] = _replay_expected(source.tree, record, expected, profile=profile)
     include_context.assert_include_context(context)
     return MappingProxyType(candidates)

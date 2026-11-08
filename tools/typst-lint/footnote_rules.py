@@ -244,7 +244,8 @@ def analyze(tree, path, resolution, spacer_proof=None):
                               suppressed=tuple(suppressed[r])) for r in RULE_IDS}
 
 
-def analyze_conditional_nested(tree, path, resolution, *, catalog=None, _math_gap_edits=None):
+def analyze_conditional_nested(tree, path, resolution, *, catalog=None, _math_gap_edits=None,
+                               _prose_punctuation_edits=None):
     """Inspect nested literal markup patterns without asserting execution or edits.
 
     Root markup is owned by ``analyze``. These additional hints are conditional
@@ -341,8 +342,18 @@ def analyze_conditional_nested(tree, path, resolution, *, catalog=None, _math_ga
                     add(PROSE, nodes[siblings[previous - 1]].start,
                         'Remove this spacer if it and the footnote have their expected bindings and render as prose.')
                 if not unknown_expression and (mark.start == 0 or source[mark.start - 1:mark.start] not in (b'.', b',')):
-                    add(PUNCT, mark.start,
+                    active = add(PUNCT, mark.start,
                         'Place this footnote immediately after a comma or period if it renders as prose.')
+                    # Only remove horizontal space after punctuation already
+                    # present in a literal text sibling. Do not invent or move
+                    # punctuation, touch a spacer, or cross a line/comment.
+                    left = mark.start
+                    while left > container.start and source[left - 1:left] in (b' ', b'\t'):
+                        left -= 1
+                    if (active and _prose_punctuation_edits is not None and not spacer
+                            and before is not None and before.kind == 'Text' and left < mark.start
+                            and left > container.start and source[left - 1:left] in (b'.', b',')):
+                        _prose_punctuation_edits.append(Edit(left, mark.start, b''))
             elif not unknown_expression:
                 if has_alignment and not spacer:
                     add(ALIGNED, mark.start,
@@ -384,15 +395,32 @@ def preview_conditional_math_gaps(tree, path, resolution, *, catalog=None):
     Conditional binding, execution and rendering remain unproved. The returned
     edits have no source-write authority and must not be treated as safe fixes.
     """
+    records = load_rules()[0]['rules'] if catalog is None else catalog
+    edits = []
+    baseline = analyze_conditional_nested(tree, path, resolution, catalog=records, _math_gap_edits=edits)
+    return _preview_conditional_edits(tree, path, records, baseline, edits, GAP)
+
+
+def preview_conditional_prose_punctuation(tree, path, resolution, *, catalog=None):
+    """Preview only whitespace removal after existing comma/period in prose.
+
+    This source-only proposal is conditional on the intended footnote binding
+    and execution context, and does not authorize writes or claim PDF equality.
+    """
+    records = load_rules()[0]['rules'] if catalog is None else catalog
+    edits = []
+    baseline = analyze_conditional_nested(tree, path, resolution, catalog=records,
+                                          _prose_punctuation_edits=edits)
+    return _preview_conditional_edits(tree, path, records, baseline, edits, PUNCT)
+
+
+def _preview_conditional_edits(tree, path, records, baseline, edits, edited_rule):
     from document_gap_preview import _scopes, _syntax_signature
     from edit_plan import plan
     from static_resolver import resolve
     from syntax_client import parse
     from typst_lint import SafetyError
 
-    records = load_rules()[0]['rules'] if catalog is None else catalog
-    edits = []
-    baseline = analyze_conditional_nested(tree, path, resolution, catalog=records, _math_gap_edits=edits)
     if not edits:
         return None
     try:
@@ -408,18 +436,18 @@ def preview_conditional_math_gaps(tree, path, resolution, *, catalog=None):
         final = analyze_conditional_nested(parsed, path, resolve(parsed), catalog=records)
         for rule_id in RULE_IDS:
             before, after = baseline[rule_id], final[rule_id]
-            expected = len(before.diagnostics) - (len(edits) if rule_id == GAP else 0)
+            expected = len(before.diagnostics) - (len(edits) if rule_id == edited_rule else 0)
             if (len(after.diagnostics) != expected or len(after.suppressed) != len(before.suppressed)
                     or sorted(d.explanation for d in after.suppressed) !=
                        sorted(d.explanation for d in before.suppressed)
-                    or (rule_id != GAP and sorted(d.explanation for d in after.diagnostics) !=
+                    or (rule_id != edited_rule and sorted(d.explanation for d in after.diagnostics) !=
                         sorted(d.explanation for d in before.diagnostics))):
                 raise SafetyError('Conditional footnote findings changed or gap reanalysis failed')
         return dict(path=path, baseline_sha256=digest(tree.source), candidate_sha256=digest(candidate),
                     verification='conditional-parse-syntax-directives-and-footnote-reanalysis',
                     runtime_binding_proved=False, render_equivalence_proved=False,
                     edit_permission=False, edits=[dict(start=e.start, end=e.end,
-                      replacement=e.replacement.decode('utf-8'), rule_id=GAP) for e in candidate_plan.edits])
+                      replacement=e.replacement.decode('utf-8'), rule_id=edited_rule) for e in candidate_plan.edits])
     except (InputError, SafetyError, OSError, ValueError, RecursionError) as error:
         return dict(path=path, baseline_sha256=digest(tree.source), candidate_sha256=None,
                     verification='withheld', runtime_binding_proved=False,

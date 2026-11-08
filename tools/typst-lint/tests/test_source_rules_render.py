@@ -29,7 +29,7 @@ class SourceRulesRenderTests(unittest.TestCase):
                   b'#show: apply-paragraph-tabs\n'
                   b'Baseline.\n#paragraph_tab\nthis consequence $x^i$ follows.\n\n'
                   b'#paragraph_tab\niPhone remains unchanged.\n')
-        packages = TOOL.parents[1]
+        packages = TOOL / 'tests/fixtures/reviewed-packages'
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory).resolve()
             input_file, pdf, xml = root/'fixture.typ', root/'fixture.pdf', root/'fixture.xml'

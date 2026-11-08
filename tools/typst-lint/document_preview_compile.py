@@ -91,7 +91,8 @@ def _workspace_guard(base, allowed_files, allowed_dirs, output_limits):
 
 
 def compile_preview(context, records, catalog, snapshot, *, entrypoint, deadline_seconds=120.0,
-                    cancel_event=None, expected_dependencies=None, expected_baseline_sha256=None):
+                    cancel_event=None, expected_dependencies=None, expected_baseline_sha256=None,
+                    profile='standard'):
     """Compile baseline and candidate from explicit captured bytes in private.
 
     macOS sandbox-exec denies networking and writes outside the temporary
@@ -130,7 +131,7 @@ def compile_preview(context, records, catalog, snapshot, *, entrypoint, deadline
         raise SafetyError('Preview requires explicit project, packages and cache roots')
     if any(len(name) > 64 for name in roots):
         raise SafetyError('Preview resource root ID is too long')
-    candidates = document_resources.stage_document(context, records, catalog, snapshot)
+    candidates = document_resources.stage_document(context, records, catalog, snapshot, profile=profile)
     cancelled()
     external_fonts = [item for item in snapshot.files
                       if item.request.role == 'font' and item.request.root != 'project']
@@ -161,7 +162,7 @@ def compile_preview(context, records, catalog, snapshot, *, entrypoint, deadline
 
     with tempfile.TemporaryDirectory(prefix='typst-document-preview-') as directory, ExitStack() as stack:
         base = Path(directory).resolve()
-        profile = _sandbox_profile(base)
+        sandbox_profile = _sandbox_profile(base)
         compiler = base / 'typst'
         runtime._write_private(compiler, compiler_bytes, 0o500)
         _, private_compiler = runtime._capture(compiler, runtime._MAX_EXECUTABLE, executable=True)
@@ -218,7 +219,7 @@ def compile_preview(context, records, catalog, snapshot, *, entrypoint, deadline
                 _workspace_guard(base, allowed_files, allowed_dirs, output_limits)
                 last_check[0] = time.monotonic()
 
-        probe = runtime._run([str(SANDBOX), '-p', profile, str(compiler), '--version'],
+        probe = runtime._run([str(SANDBOX), '-p', sandbox_profile, str(compiler), '--version'],
                              purpose='document-preview-version', cwd=base, environment=environment,
                              deadline=time.monotonic() + min(float(deadline_seconds), 10.0),
                              cancel_event=cancel_event, check_workspace=check_workspace)
@@ -227,7 +228,7 @@ def compile_preview(context, records, catalog, snapshot, *, entrypoint, deadline
         outputs = {}
         for label in ('baseline', 'candidate'):
             workspace, staged, system_fonts, project_fonts, pdf, pdf_fd, pdf_id, deps, deps_fd, deps_id = workspaces[label]
-            command = [str(SANDBOX), '-p', profile, str(compiler), 'compile',
+            command = [str(SANDBOX), '-p', sandbox_profile, str(compiler), 'compile',
                        '--root', str(staged['project']), '--package-path', str(staged['packages']),
                        '--package-cache-path', str(staged['cache']), '--ignore-system-fonts',
                        '--font-path', str(system_fonts) + os.pathsep + str(project_fonts),

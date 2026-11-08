@@ -11,6 +11,8 @@ typst-lint preview-compile --root /absolute/project --entrypoint main.typ \
   --manifest /absolute/resources.json --format json
 typst-lint preview-compile --root /absolute/project --entrypoint main.typ \
   --manifest /absolute/font-seed.json --discover-dependencies --format json
+typst-lint preview-compile --root /absolute/project --entrypoint main.typ \
+  --manifest /absolute/font-seed.json --discover-dependencies --conditional-gaps --format json
 typst-style compile --preview --root /absolute/project --entrypoint main.typ \
   --manifest /absolute/font-seed.json --discover-dependencies --format json
 typst-style compile --preview --root /absolute/project --entrypoint main.typ \
@@ -18,6 +20,14 @@ typst-style compile --preview --root /absolute/project --entrypoint main.typ \
 typst-lint preview-compile --root /absolute/project --entrypoint main.typ \
   --manifest /absolute/resources.json --pdf-stdout > /path/to/new-preview.pdf
 ```
+
+The opt-in `--conditional-gaps` profile appends source-local nested math
+footnote and proof gap stages to the standard sequence. Every step is replayed
+from the captured source with the same profile, hash and suppression checks;
+the final candidate is reanalyzed against the affected rules. These stages
+remain conditional on runtime binding and execution, and do not grant source
+application authority. Their rules remain in `uninspected_rule_ids` for full
+coverage. Prose punctuation previews are not included in this profile.
 
 The `typst-style compile --preview` form explicitly selects the same preview
 engine and cancellation handling. It does not accept an ordinary compiler tail
