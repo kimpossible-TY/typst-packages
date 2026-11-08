@@ -57,6 +57,49 @@ class PreviewFootnoteEvidenceTests(unittest.TestCase):
         self.assertFalse(calls.runtime_binding_proved or calls.edit_permission or calls.compiler_permission)
         proof.validate_staged_facades({'main.typ': candidate}, {'main.typ': (call.start,)})
 
+    def test_combined_import_alias_cannot_restore_builtin_footnote(self):
+        prefix = b'#import "styles.typ": *\n'
+        call = b'#block[$ x #dots_space #footnote[Note] $]'
+        cases = (
+            (b'#import "styles.typ" as footnote: paragraph_tab\n', 0),
+            (b'#import "styles.typ" as footnote: paragraph_tab as footnote\n', 0),
+            (b'#import "styles.typ" as other: paragraph_tab as footnote\n', 0),
+            (b'#import "styles.typ" as other: paragraph_tab\n', 1),
+        )
+        for statement, expected in cases:
+            with self.subTest(statement=statement):
+                self.source = prefix + statement + call
+                (self.project / 'main.typ').write_bytes(self.source)
+                proof, session, snapshot = self.capture()
+                self.assertEqual(len(proof.candidate_calls('main.typ', self.source).calls), expected)
+                record = document_sequence_preview.preview(session._context.source_for('main.typ').tree,
+                    'main.typ', load_rules()[0]['rules'], profile='conditional-gaps-and-spacers',
+                    footnote_evidence=proof)
+                if expected:
+                    self.assertNotEqual(record['verification'], 'withheld', record)
+                    document_resources.stage_document(session._context, [record], load_rules()[0]['rules'],
+                        snapshot, profile='conditional-gaps-and-spacers', footnote_evidence=proof)
+                else:
+                    self.assertTrue(record is None or record['verification'] == 'withheld', record)
+
+    def test_combined_wildcard_proof_and_shadow_remain_distinct(self):
+        call = b'#block[$ x #dots_space #footnote[Note] $]'
+        for alias, expected in ((b'other', 1), (b'footnote', 0)):
+            with self.subTest(alias=alias):
+                self.source = b'#import "styles.typ" as ' + alias + b': *\n' + call
+                (self.project / 'main.typ').write_bytes(self.source)
+                proof, session, snapshot = self.capture()
+                self.assertEqual(len(proof.candidate_calls('main.typ', self.source).calls), expected)
+                record = document_sequence_preview.preview(session._context.source_for('main.typ').tree,
+                    'main.typ', load_rules()[0]['rules'], profile='conditional-gaps-and-spacers',
+                    footnote_evidence=proof)
+                if expected:
+                    self.assertNotEqual(record['verification'], 'withheld', record)
+                    document_resources.stage_document(session._context, [record], load_rules()[0]['rules'],
+                        snapshot, profile='conditional-gaps-and-spacers', footnote_evidence=proof)
+                else:
+                    self.assertTrue(record is None or record['verification'] == 'withheld', record)
+
     def test_shadow_and_dynamic_import_are_recomputed_per_candidate(self):
         proof, _, _ = self.capture()
         for prefix in (b'#let footnote = none\n', b'#import "unknown.typ": *\n'):

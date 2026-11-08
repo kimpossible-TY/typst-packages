@@ -828,6 +828,13 @@ class _Resolver:
         source_module = bool(source_binding and source_binding.kind == 'module'
                              and source_binding.package == CETZ)
         module = source_binding if builtin_math or source_module else self.module_binding(path)
+        # Typst binds the module alias before applying named or wildcard
+        # imports, including `import source as name: items`.  The latter can
+        # overwrite the alias when an item has the same local name.
+        if (len(children) >= 6 and self.nodes[children[2]].kind == 'As'
+                and self.nodes[children[3]].kind == 'Ident'
+                and self.nodes[children[4]].kind == 'Colon'):
+            state.bind(self.text(children[3]), module)
         facade = self.facade_bindings(i, path) if module is None else None
         if facade is not None:
             for local, binding in facade:

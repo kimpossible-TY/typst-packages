@@ -172,10 +172,14 @@ class _FootnoteResolver(_Resolver):
 
     def import_node(self, index, state):
         shape = import_graph.import_shape(self.tree, index)
+        combined = conditional._combined_import(self.tree, index) if shape is None else None
+        alias = None
+        if combined is not None:
+            shape, alias = combined
         before = state.lookup('footnote')
         # Let the existing resolver handle *all* other names and import effects.
         super().import_node(index, state)
-        if shape is None or shape.items is not None:
+        if shape is None or shape.items is not None or alias == 'footnote':
             return
         if shape.request.startswith('@'):
             if shape.request not in self.engine.packages:

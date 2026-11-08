@@ -51,6 +51,39 @@ class ConditionalFootnoteBindingTests(unittest.TestCase):
         self.assertTrue(call.conditions)
         self.assertFalse(call.edit_permission or call.compiler_permission or result.edit_permission)
 
+    def test_combined_import_binds_module_alias_before_imported_items(self):
+        call = b'#block[$ x #footnote[Note] $]'
+        prefix = b'#import "styles.typ": *\n'
+        cases = (
+            (b'#import "styles.typ" as footnote: paragraph_tab\n', False),
+            (b'#import "styles.typ" as footnote: paragraph_tab as footnote\n', False),
+            (b'#import "styles.typ" as other: paragraph_tab as footnote\n', False),
+            (b'#import "styles.typ" as other: paragraph_tab\n', True),
+            (b'#let footnote = none\n#import "styles.typ" as other: paragraph_tab\n', False),
+        )
+        for statement, expected in cases:
+            with self.subTest(statement=statement):
+                result = self.session(prefix + statement + call).analyze('main.typ')
+                self.assertEqual(bool(result.calls), expected, result)
+        # A later unrelated import must not erase a preceding module shadow.
+        result = self.session(prefix + cases[0][0] + cases[3][0] + call).analyze('main.typ')
+        self.assertFalse(result.calls)
+
+    def test_combined_wildcard_preserves_only_proven_existing_builtin(self):
+        call = b'#block[$ x #footnote[Note] $]'
+        wildcard = b'#import "styles.typ" as other: *\n'
+        result = self.session(wildcard + call).analyze('main.typ')
+        self.assertEqual(len(result.calls), 1, result.unresolved)
+        self.assertFalse(result.calls[0].edit_permission or result.calls[0].compiler_permission)
+        for prefix, statement in ((b'#let footnote = none\n', wildcard),
+                                  (b'', b'#import "styles.typ" as footnote: *\n')):
+            with self.subTest(prefix=prefix, statement=statement):
+                self.assertFalse(self.session(prefix + statement + call).analyze('main.typ').calls)
+        # A facade that actually exports footnote must never be treated as an
+        # absence proof, even when the module alias itself is unrelated.
+        facade = b'#let footnote(body) = body\n'
+        self.assertFalse(self.session(wildcard + call, facade).analyze('main.typ').calls)
+
     def test_facade_export_and_preceding_or_following_shadows_are_not_promoted(self):
         use = b'#block[$\n x #footnote[Note]\n$]'
         cases = (

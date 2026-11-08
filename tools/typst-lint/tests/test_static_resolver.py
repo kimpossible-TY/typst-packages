@@ -123,6 +123,23 @@ class ResolverTests(unittest.TestCase):
         result = self.check(IMPORT + '#import "unknown.typ": other\n#paragraph_tab')
         self.assertEqual(self.last(result).binding.name, 'paragraph_tab')
 
+    def test_combined_import_alias_precedes_selected_item_binding(self):
+        # Typst applies the module alias before the item bindings. A same-name
+        # imported item is therefore the final value, not the module alias.
+        source = ('#import "@local/text-utils:0.1.2" '
+                  'as paragraph_tab: paragraph_tab\n#paragraph_tab')
+        result = self.check(source)
+        fact = self.last(result)
+        self.assertEqual((fact.binding.kind, fact.binding.name, fact.binding.package),
+                         ('api', 'paragraph_tab', TEXT_UTILS))
+
+        # A differently named selected item cannot undo the module alias.
+        source = ('#import "@local/text-utils:0.1.2" '
+                  'as footnote: paragraph_tab\n#footnote[Note]')
+        result = self.check(source)
+        fact = self.facts(result, 'Ident', 'footnote')[-1]
+        self.assertFalse(fact.binding and fact.binding.kind == 'builtin')
+
     def test_wildcard_unknown_in_inner_scope_does_not_leak(self):
         result = self.check(IMPORT + '#{ import "unknown.typ": *; paragraph_tab }\n#paragraph_tab')
         self.assertIsNone(self.facts(result, 'Ident', 'paragraph_tab')[-2].binding)
