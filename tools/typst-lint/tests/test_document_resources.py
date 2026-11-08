@@ -59,6 +59,13 @@ class DocumentResourceCaptureTests(unittest.TestCase):
         with self.assertRaises(SafetyError):
             resources.capture(roots, requests)
 
+    def test_root_ids_and_directory_components_cannot_alias_in_private_staging(self):
+        with self.assertRaises(SafetyError):
+            resources.capture({'project': str(self.root), 'PROJECT': str(self.root)}, [self.req('image.png')])
+        with self.assertRaises(SafetyError):
+            resources.capture(self.roots, [self.req('fonts/sample.otf', 'font'),
+                                           self.req('FONTS/other.otf', 'font')])
+
     def test_untyped_or_unselected_roots_and_roles_are_refused(self):
         for request in (resources.ResourceRequest([], 'image.png', 'resource'),
                         resources.ResourceRequest('other', 'image.png', 'resource'),

@@ -11,7 +11,8 @@ binary reader rejects symbolic links, non-regular or multiply linked files,
 unsafe mode/owner and changes while reading. A second verification of every
 captured file detects changes observed during the batch. This is a sampled
 consistency check, not an atomic filesystem snapshot or a live lock. Duplicate,
-case/NFC-colliding paths and repeated file identities refuse the batch. The
+case/NFC-colliding paths or directory components, case-colliding root IDs and
+repeated file identities refuse the batch. The
 fixed bounds are 512 files, 64 MiB per file, 192 MiB aggregate bytes, 64 path
 components and 128 KiB aggregate relative path bytes. Font bytes remain in
 memory and are never serialized by this module.

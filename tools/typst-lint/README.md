@@ -147,6 +147,13 @@ can bind a sequence's source candidates to caller-selected package, font and
 other resource bytes for private staging experiments. It neither proves complete
 compiler resources nor invokes the compiler or writes a consumer.
 
+The explicit macOS [`preview-compile` route](DOCUMENT_PREVIEW_COMPILE_CONTRACT.md)
+can compile the captured baseline and candidate in a private network-denied
+workspace using a caller-supplied resource manifest. It optionally streams the
+candidate PDF to stdout, never changes consumer sources and still exits 2 because
+global rule coverage is incomplete. The ordinary `typst-style compile` gate and
+its source/output transaction requirements are unchanged.
+
 The ordinary modes above remain read-only. Reports may include AST-backed proposed edits
 with baseline hashes, but label them `partial-not-applicable-transaction`.
 They are **not** permission or proof that the complete protected write contract

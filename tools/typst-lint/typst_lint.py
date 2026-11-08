@@ -484,6 +484,9 @@ def report(root, mode, *, package_path=None, _verify=True, _analysis_observer=No
 
 def main(argv=None, *, gate=False):
     arguments = list(sys.argv[1:] if argv is None else argv)
+    if not gate and arguments[:1] == ['preview-compile']:
+        from document_preview_cli import main as preview_compile_main
+        return preview_compile_main(arguments[1:])
     if not gate and arguments[:1] == ['inspect-document']:
         from document_cli import main as document_main
         return document_main(arguments[1:])

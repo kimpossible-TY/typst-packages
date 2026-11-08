@@ -179,6 +179,7 @@ def capture(roots, requests, *, allow_apple_asset_fonts=False):
     if type(roots) is not dict or not roots or len(roots) > 8:
         raise SafetyError('Explicit resource roots are required')
     normalized = {}
+    root_names = set()
     for name, raw in roots.items():
         if (type(name) is not str or not name.isascii() or not name.isidentifier()
                 or type(raw) is not str or len(raw) > MAX_PATH_BYTES or not raw.startswith('/')
@@ -190,10 +191,13 @@ def capture(roots, requests, *, allow_apple_asset_fonts=False):
                 raise SafetyError('Resource root path byte limit exceeded')
         except UnicodeError as error:
             raise SafetyError('Resource roots must be UTF-8') from error
+        if name.casefold() in root_names:
+            raise SafetyError('Resource root IDs collide under case folding')
+        root_names.add(name.casefold())
         normalized[name] = Path(raw)
     if type(requests) not in (list, tuple) or not requests or len(requests) > MAX_FILES:
         raise SafetyError('Explicit resource file count is outside the fixed bounds')
-    seen, identities, names, files = set(), set(), set(), []
+    seen, identities, names, spellings, files = set(), set(), set(), {}, []
     total = path_total = 0
     for request in requests:
         if (type(request) is not ResourceRequest or type(request.root) is not str
@@ -207,6 +211,15 @@ def capture(roots, requests, *, allow_apple_asset_fonts=False):
         collision = (request.root, unicodedata.normalize('NFC', request.path).casefold())
         if key in seen or collision in names:
             raise SafetyError('Duplicate or colliding resource path')
+        parts = request.path.split('/')
+        for index in range(1, len(parts) + 1):
+            spelling = '/'.join(parts[:index])
+            folded = (request.root, unicodedata.normalize('NFC', spelling).casefold())
+            kind = 'file' if index == len(parts) else 'directory'
+            previous = spellings.get(folded)
+            if previous is not None and previous != (spelling, kind):
+                raise SafetyError('Resource path components collide under case or Unicode normalization')
+            spellings[folded] = spelling, kind
         seen.add(key)
         names.add(collision)
         target = normalized[request.root] / request.path

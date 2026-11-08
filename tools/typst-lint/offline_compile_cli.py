@@ -610,7 +610,8 @@ def executable_main(arguments=None):
     from typst_lint import main as lint_main
     arguments = list(sys.argv[1:] if arguments is None else arguments)
     previous = _active_signals
-    if offline._command(arguments) == 'compile' and offline.requested(arguments):
+    if ((offline._command(arguments) == 'compile' and offline.requested(arguments))
+            or arguments[:1] == ['preview-compile']):
         try:
             with _ExecutableSignals() as coordinator:
                 _active_signals = coordinator
