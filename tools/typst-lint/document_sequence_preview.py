@@ -164,7 +164,12 @@ def preview(tree, path, catalog, *, profile=_STANDARD, footnote_evidence=None, c
             if (item.path == path and not item.request and computed
                     and item.reason == 'Dynamic or escaped import is unsupported'):
                 continue
-            raise SafetyError('Unproven source has an unresolved transitive import')
+            # Give callers an actionable location without turning an unknown
+            # dependency into evidence that it is safe to stage. repr keeps
+            # control characters and line breaks from forging diagnostic rows.
+            raise SafetyError('Unproven source has an unresolved transitive import '
+                              f'(source={item.path[:512]!r}, request={item.request[:512]!r}, '
+                              f'reason={item.reason[:512]!r})')
         if computed:
             import document_cetz_draw_evidence
             parents = {child: index for index, node in enumerate(tree.nodes) for child in node.children}
@@ -655,8 +660,32 @@ def _replay_expected(tree, record, expected, *, profile=_STANDARD):
     return current
 
 
+def explicit_withheld_record(source):
+    """Describe a caller-selected whole source; this is not a rule finding."""
+    return dict(path=source.path, baseline_sha256=digest(source.source), candidate_sha256=None,
+                verification='withheld', steps=[], rule_id=None,
+                reason_code='caller-excluded-source',
+                reason='Caller excluded this entire source from all preview rule stages')
+
+
+def validate_explicit_withheld(context, paths, partial_unsupported):
+    """Validate the separately supplied, exact caller selection."""
+    if type(paths) is not tuple or (paths and not partial_unsupported):
+        raise SafetyError('Explicit source withholding requires partial preview')
+    if (len(paths) > len(context.sources) or any(type(path) is not str for path in paths)
+            or len(set(paths)) != len(paths)):
+        raise SafetyError('Invalid or duplicate explicitly withheld sources')
+    from typst_lint import relative
+    for path in paths:
+        relative(path)
+    if not set(paths).issubset({source.path for source in context.sources}):
+        raise SafetyError('Explicitly withheld source is not a captured document source')
+    return frozenset(paths)
+
+
 def replay_document(context, records, catalog, *, profile=_STANDARD, footnote_evidence=None,
-                    partial_unsupported=False, withheld_records=None, partial_unproven_binding=False):
+                    partial_unsupported=False, withheld_records=None, partial_unproven_binding=False,
+                    explicit_withheld_sources=()):
     """Derive an immutable in-memory source map from one issued include capture.
 
     Every captured source must have exactly its current sequence record or no
@@ -676,6 +705,7 @@ def replay_document(context, records, catalog, *, profile=_STANDARD, footnote_ev
             or (withheld_records and not partial_unsupported)):
         raise SafetyError('Invalid partial preview withheld records')
     include_context.assert_include_context(context)
+    explicit = validate_explicit_withheld(context, explicit_withheld_sources, partial_unsupported)
     if footnote_evidence is not None:
         import document_footnote_evidence
         if (type(footnote_evidence) is not document_footnote_evidence.PreviewFootnoteEvidence
@@ -699,11 +729,16 @@ def replay_document(context, records, catalog, *, profile=_STANDARD, footnote_ev
         raise SafetyError('Document sequence contains a foreign path')
     candidates = {}
     for source in context.sources:
+        record = indexed.get(source.path)
+        excluded = withheld.get(source.path)
+        if source.path in explicit:
+            if record is not None or not _same_data(explicit_withheld_record(source), excluded):
+                raise SafetyError('Explicitly withheld source record is stale, altered or missing')
+            candidates[source.path] = source.source
+            continue
         expected = preview(source.tree, source.path, catalog, profile=profile, footnote_evidence=footnote_evidence,
                            classify_deferred=partial_unsupported,
                            classify_unproven_binding=partial_unproven_binding)
-        record = indexed.get(source.path)
-        excluded = withheld.get(source.path)
         if excluded is not None:
             if (expected is None or expected.get('verification') != 'withheld'
                     or expected.get('reason_code') not in (('unsupported-deferred-footnote-binding',

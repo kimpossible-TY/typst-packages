@@ -128,6 +128,21 @@ record; omitting the new opt-in cannot replay it.
 For example, add `--partial-unproven-binding-preview` to the partial preview
 command above to request this additional, more limited source-only withholding.
 
+`--withhold-source PROJECT_RELATIVE_PATH` is a separate explicit choice that
+requires `--partial-unsupported-preview` and may be repeated. Each selected
+path must be a distinct canonical relative path in the captured include document.
+All rule stages skip that file; the report records its captured SHA-256 and all
+catalog rules as uninspected for that source. Replay separately checks the exact
+selection, original hash and withheld records and rejects overlapping edits.
+This is a file selection, not a recursive include selection: included sources may
+still have candidate edits. The source and its imports are still captured as
+required and can execute during both PDF compilations. This is for non-adversarial
+project inputs: the sandbox denies network and writes outside the temporary
+workspace, but it does not prevent every OS read or transient modification inside
+that workspace. It cannot establish package safety or unobserved dependencies.
+Status remains 2, coverage incomplete, and source application and publication
+are unavailable.
+
 This mode still compares two versions of the **whole** captured document. A
 withheld file's unchanged bytes can import another source that has a candidate
 edit, so unchanged bytes alone do not establish unchanged runtime behavior.

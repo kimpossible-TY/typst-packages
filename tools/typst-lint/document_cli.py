@@ -33,6 +33,8 @@ def report_document(root, entrypoint, *, rule_set='core', package_path=None,
                     preview_conditional_punctuation=False, preview_conditional_spacers=False,
                     preview_conditional_scoped_calls=False,
                     preview_conditional_continuations=False,
+                    preview_conditional_capitalization=False,
+                    preview_conditional_prose_spacers=False,
                     footnote_cache_path=None,
                     footnote_punctuation_evidence=False,
                     reference_package_path=None, reference_facade=None, reference_cache_path=None,
@@ -70,6 +72,12 @@ def report_document(root, entrypoint, *, rule_set='core', package_path=None,
     require(type(preview_conditional_continuations) is bool
             and (not preview_conditional_continuations or rule_set == 'pde'),
             'Conditional continuation previews require explicit --rule-set pde')
+    require(type(preview_conditional_capitalization) is bool
+            and (not preview_conditional_capitalization or rule_set == 'pde'),
+            'Conditional capitalization previews require explicit --rule-set pde')
+    require(type(preview_conditional_prose_spacers) is bool
+            and (not preview_conditional_prose_spacers or rule_set == 'pde'),
+            'Conditional prose spacer previews require explicit --rule-set pde')
     require(footnote_cache_path is None or (type(footnote_cache_path) is str
             and rule_set == 'pde' and package_path is not None),
             'Conditional footnote bindings require --rule-set pde, --package-path and --footnote-cache-path')
@@ -146,6 +154,8 @@ def report_document(root, entrypoint, *, rule_set='core', package_path=None,
     conditional_spacer_previews = []
     conditional_scoped_previews = []
     conditional_continuation_previews = []
+    conditional_capitalization_previews = []
+    conditional_prose_spacer_previews = []
     conditional_detached_annotations = []
     conditional_raw_overlays = []
     conditional_raw_annotations = []
@@ -403,6 +413,30 @@ def report_document(root, entrypoint, *, rule_set='core', package_path=None,
                           + int('reason' in continuation))
                 require(items <= MAX_REPORT_ITEMS, 'Document inspection report item limit exceeded')
                 conditional_continuation_previews.append(continuation)
+            if preview_conditional_capitalization:
+                from document_conditional_capitalization import CONDITIONS, preview as preview_capitalization
+                capitalization = preview_capitalization(item.tree, item.path, catalog=catalog['rules'])
+                if capitalization is None:
+                    capitalization = dict(path=item.path, baseline_sha256=digest(item.source),
+                        candidate_sha256=None, verification='no-candidate', conditions=CONDITIONS,
+                        execution_proved=False, runtime_binding_proved=False,
+                        render_equivalence_proved=False, edit_permission=False, compiler_permission=False, edits=[])
+                items += (1 + len(capitalization['edits']) + len(capitalization['conditions'])
+                          + int('reason' in capitalization))
+                require(items <= MAX_REPORT_ITEMS, 'Document inspection report item limit exceeded')
+                conditional_capitalization_previews.append(capitalization)
+            if preview_conditional_prose_spacers:
+                from document_conditional_prose_spacer import CONDITIONS, preview as preview_prose_spacer
+                prose_spacer = preview_prose_spacer(item.tree, item.path, catalog=catalog['rules'])
+                if prose_spacer is None:
+                    prose_spacer = dict(path=item.path, baseline_sha256=digest(item.source),
+                        candidate_sha256=None, verification='no-candidate', conditions=CONDITIONS,
+                        runtime_binding_proved=False, execution_proved=False,
+                        render_equivalence_proved=False, edit_permission=False, compiler_permission=False, edits=[])
+                items += (1 + len(prose_spacer['edits']) + len(prose_spacer['conditions'])
+                          + int('reason' in prose_spacer))
+                require(items <= MAX_REPORT_ITEMS, 'Document inspection report item limit exceeded')
+                conditional_prose_spacer_previews.append(prose_spacer)
         except (InputError, OSError, ValueError) as error:
             raise InputError(f'{item.path}: {error}') from error
         # Keep unsupported baseline operands diagnostic-only, then independently
@@ -609,6 +643,14 @@ def report_document(root, entrypoint, *, rule_set='core', package_path=None,
         report['conditional_continuation_previews'] = dict(by_file=conditional_continuation_previews,
             edit_permission=False, compiler_permission=False,
             scope='independent-source-pattern-not-composed-or-render-verified')
+    if preview_conditional_capitalization:
+        report['conditional_capitalization_previews'] = dict(by_file=conditional_capitalization_previews,
+            edit_permission=False, compiler_permission=False,
+            scope='independent-source-pattern-not-composed-or-render-verified')
+    if preview_conditional_prose_spacers:
+        report['conditional_prose_spacer_previews'] = dict(by_file=conditional_prose_spacer_previews,
+            edit_permission=False, compiler_permission=False,
+            scope='independent-source-pattern-not-composed-or-render-verified')
     if local_rule_hints:
         from document_local_rules import RULE_IDS as LOCAL_RULE_IDS
         report['local_rule_hints'] = dict(rule_ids=list(LOCAL_RULE_IDS),
@@ -659,6 +701,10 @@ def main(arguments=None):
                         help='Preview conditional scoped dictionary calls (requires --rule-set pde)')
     parser.add_argument('--preview-conditional-continuations', action='store_true',
                         help='Preview conditional prose continuation joins (requires --rule-set pde)')
+    parser.add_argument('--preview-conditional-capitalization', action='store_true',
+                        help='Preview conditional nested paragraph capitalization (requires --rule-set pde)')
+    parser.add_argument('--preview-conditional-prose-spacers', action='store_true',
+                        help='Preview conditional prose footnote spacer removal (requires --rule-set pde)')
     parser.add_argument('--reference-package-path',
                         help='Explicit canonical root containing the reviewed project-references package')
     parser.add_argument('--reference-facade',
@@ -687,6 +733,8 @@ def main(arguments=None):
                                  preview_conditional_spacers=args.preview_conditional_spacers,
                                  preview_conditional_scoped_calls=args.preview_conditional_scoped_calls,
                                  preview_conditional_continuations=args.preview_conditional_continuations,
+                                 preview_conditional_capitalization=args.preview_conditional_capitalization,
+                                 preview_conditional_prose_spacers=args.preview_conditional_prose_spacers,
                                  reference_package_path=args.reference_package_path,
                                  reference_facade=args.reference_facade,
                                  reference_cache_path=args.reference_cache_path,
@@ -807,6 +855,33 @@ def main(arguments=None):
                     print(f"    conditional edit bytes {entry['start']}..{entry['end']}: replace with one space")
             if continuations['by_file']:
                 for condition in continuations['by_file'][0]['conditions']:
+                    print(f"  condition: {condition}")
+        if 'conditional_capitalization_previews' in result:
+            capitalizations = result['conditional_capitalization_previews']
+            print('Conditional capitalization previews: source-only, no edit or compiler permission')
+            for row in capitalizations['by_file']:
+                print(f"  {row['path']}: {row['verification']}; {len(row['edits'])} proposed edits; "
+                      f"source sha256 {row['baseline_sha256']}; candidate sha256 {row['candidate_sha256']}")
+                if 'reason' in row:
+                    print(f"    unresolved: {row['reason']}")
+                for entry in row['edits']:
+                    print(f"    conditional edit bytes {entry['start']}..{entry['end']}: "
+                          f"replace with {entry['replacement']}")
+            if capitalizations['by_file']:
+                for condition in capitalizations['by_file'][0]['conditions']:
+                    print(f"  condition: {condition}")
+        if 'conditional_prose_spacer_previews' in result:
+            prose_spacers = result['conditional_prose_spacer_previews']
+            print('Conditional prose spacer previews: source-only, no edit or compiler permission')
+            for row in prose_spacers['by_file']:
+                print(f"  {row['path']}: {row['verification']}; {len(row['edits'])} proposed edits; "
+                      f"source sha256 {row['baseline_sha256']}; candidate sha256 {row['candidate_sha256']}")
+                if 'reason' in row:
+                    print(f"    unresolved: {row['reason']}")
+                for entry in row['edits']:
+                    print(f"    conditional edit bytes {entry['start']}..{entry['end']}: remove spacer and separator")
+            if prose_spacers['by_file']:
+                for condition in prose_spacers['by_file'][0]['conditions']:
                     print(f"  condition: {condition}")
         if 'conditional_detached_annotations' in result:
             detached = result['conditional_detached_annotations']

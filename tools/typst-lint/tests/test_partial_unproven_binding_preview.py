@@ -97,6 +97,12 @@ class PartialUnprovenBindingTests(unittest.TestCase):
                     self.assertEqual(staged['project', 'bad.typ'], self.f.bad)
                 else:
                     self.assertNotIn('reason_code', withheld[0])
+                    self.assertIn("source='other.typ'", withheld[0]['reason'])
+                    self.assertIn('reason=', withheld[0]['reason'])
+                    if b'@preview/unreviewed:1.0.0' in other:
+                        self.assertIn("request='@preview/unreviewed:1.0.0'", withheld[0]['reason'])
+                    elif b'unknown: *' in other:
+                        self.assertIn('Dynamic or escaped import is unsupported', withheld[0]['reason'])
                     with self.assertRaises(SafetyError):
                         self.stage(context, snapshot, evidence, records, withheld)
 
@@ -121,6 +127,23 @@ class PartialUnprovenBindingTests(unittest.TestCase):
             footnote_evidence=proof, classify_deferred=True, classify_unproven_binding=True)
         self.assertEqual(result['verification'], 'withheld')
         self.assertNotIn('reason_code', result)
+
+    def test_transitive_import_failure_is_actionable_in_json_without_source_content(self):
+        self.f.rows.append(('project', 'other.typ', 'source'))
+        (self.f.project / 'other.typ').write_bytes(
+            b'#import "@preview/unreviewed:1.0.0": unrelated\n#let secret = "private content"\n')
+        self.plan(b'#import "other.typ": unrelated\n#use(footnote => [' + self.note + b'])')
+        with patch.object(document_preview_cli.document_preview_compile, 'compile_preview') as compiler, \
+             contextlib.redirect_stdout(io.StringIO()) as output:
+            status = document_preview_cli.main(self.f.command('--partial-unsupported-preview',
+                '--partial-unproven-binding-preview', '--format', 'json'))
+        result = json.loads(output.getvalue())
+        self.assertEqual(status, 2)
+        compiler.assert_not_called()
+        self.assertFalse(result['pdf_generated'] or result['source_files_modified'])
+        self.assertIn("source='other.typ'", result['error'])
+        self.assertIn("request='@preview/unreviewed:1.0.0'", result['error'])
+        self.assertNotIn('private content', result['error'])
 
     def test_integrity_or_later_reanalysis_failure_is_never_a_skip(self):
         context, _, evidence, _, _ = self.plan(b'#use(footnote => [' + self.note + b'])')

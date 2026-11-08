@@ -52,6 +52,17 @@ def review_sources(context, records, withheld_records=None):
     return review
 
 
+def describe_withheld(records, catalog):
+    result = []
+    for row in records:
+        item = dict(path=row['path'], baseline_sha256=row['baseline_sha256'], rule_id=row['rule_id'],
+                    reason_code=row['reason_code'], reason=row['reason'])
+        if row['reason_code'] == 'caller-excluded-source':
+            item['uninspected_rule_ids'] = [rule['id'] for rule in catalog]
+        result.append(item)
+    return result
+
+
 def _object(pairs):
     result = {}
     for key, value in pairs:
@@ -120,6 +131,8 @@ def main(arguments=None, *, gate=False):
                         help='Keep recognized unsupported deferred-footnote files unchanged (requires --conditional-facade-footnotes)')
     parser.add_argument('--partial-unproven-binding-preview', action='store_true',
                         help='Also keep exact source-footnote binding refusals unchanged (requires --partial-unsupported-preview)')
+    parser.add_argument('--withhold-source', action='append', default=[], metavar='PROJECT_RELATIVE_PATH',
+                        help='Skip rule stages for this source, but it can still execute during PDF compilation; may be repeated (requires --partial-unsupported-preview)')
     args = parser.parse_args(sys.argv[1:] if arguments is None else arguments)
     if args.review_edits and args.format != 'json' and not args.pdf_stdout:
         parser.error('--review-edits requires --format json or --pdf-stdout')
@@ -135,6 +148,8 @@ def main(arguments=None, *, gate=False):
         parser.error('--partial-unsupported-preview requires --conditional-facade-footnotes')
     if args.partial_unproven_binding_preview and not args.partial_unsupported_preview:
         parser.error('--partial-unproven-binding-preview requires --partial-unsupported-preview')
+    if args.withhold_source and not args.partial_unsupported_preview:
+        parser.error('--withhold-source requires --partial-unsupported-preview')
     # The executable installs cooperative SIGINT/SIGTERM handling; imported
     # callers do not change process-wide signal handlers.
     import offline_compile_cli
@@ -159,11 +174,17 @@ def main(arguments=None, *, gate=False):
         phase = 'planning'
         context = include_context.load_include_context(root, ((args.entrypoint, source),), budget='book-v1')
         catalog, catalog_hash = load_rules()
+        explicit_paths = tuple(args.withhold_source)
+        explicit = document_sequence_preview.validate_explicit_withheld(context, explicit_paths,
+                                                                         args.partial_unsupported_preview)
         def plan_records(evidence):
             records, withheld = [], []
             for item in context.sources:
                 if cancel is not None and cancel.is_set():
                     raise runtime.CompilerFailure('cancelled', kind=runtime.CompilerFailureKind.CANCELLED)
+                if item.path in explicit:
+                    withheld.append(document_sequence_preview.explicit_withheld_record(item))
+                    continue
                 record = document_sequence_preview.preview(item.tree, item.path, catalog['rules'], profile=profile,
                                                            footnote_evidence=evidence,
                                                            classify_deferred=args.partial_unsupported_preview,
@@ -258,7 +279,8 @@ def main(arguments=None, *, gate=False):
                                                            footnote_evidence=footnote_evidence,
                                                            partial_unsupported=args.partial_unsupported_preview,
                                                            withheld_records=withheld if args.partial_unsupported_preview else None,
-                                                           partial_unproven_binding=args.partial_unproven_binding_preview)
+                                                           partial_unproven_binding=args.partial_unproven_binding_preview,
+                                                           explicit_withheld_sources=explicit_paths)
         result = dict(schema=1, tool_version=VERSION, mode='preview-compile', status=2, phase='preview',
                       compiler_invoked=True, pdf_generated=True, source_files_modified=False,
                       publication_authority=False, global_coverage_complete=False,
@@ -290,8 +312,7 @@ def main(arguments=None, *, gate=False):
             result['partial_unsupported_preview'] = True
             if args.partial_unproven_binding_preview:
                 result['partial_unproven_binding_preview'] = True
-            result['withheld_sources'] = [dict(path=row['path'], baseline_sha256=row['baseline_sha256'],
-                rule_id=row['rule_id'], reason_code=row['reason_code'], reason=row['reason']) for row in withheld]
+            result['withheld_sources'] = describe_withheld(withheld, catalog['rules'])
         if review is not None:
             result['source_review'] = review
         if cancel is not None and cancel.is_set():
@@ -309,8 +330,7 @@ def main(arguments=None, *, gate=False):
                 result['partial_unproven_binding_preview'] = True
             result['global_coverage_complete'] = False
             result['uninspected_rule_ids'] = list(error.uninspected_rule_ids)
-            result['withheld_sources'] = [dict(path=row['path'], baseline_sha256=row['baseline_sha256'],
-                rule_id=row['rule_id'], reason_code=row['reason_code'], reason=row['reason']) for row in error.withheld]
+            result['withheld_sources'] = describe_withheld(error.withheld, catalog['rules'])
             result['source_apply_gate'] = dict(eligible=False, blockers=['global_rule_coverage_incomplete',
                 'partial_preview_withheld_files', 'no_verified_candidate_edits'])
         if isinstance(error, runtime.CompilerFailure) and error.invocation is not None:

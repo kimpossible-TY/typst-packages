@@ -623,3 +623,11 @@ The design follow-up is reviewed and merged first. Groups 2–7 are authorized i
 - [x] 75.3 Add a separate opt-in for withholding whole files with unproven literal footnote bindings, retaining the strict mode and refusing missing, unknown or dynamic transitive imports. Replay rederives withheld records; source application and publication remain disabled.
 - [ ] 75.4 Resolve the 3.6 source's unreviewed transitive packages and dynamic imports before claiming a partial whole-PDE PDF comparison. File-only planning still refuses that source, so no baseline/candidate PDF comparison was performed in this step.
 - [x] 75.5 Confirm d98374f CI: all 10 checks passed in 15m29s. This does not establish the outcome for later commits.
+
+## 76. Explicit source withholding and independent conditional rules
+
+- [x] 76.1 Report the source path, request and reason for an unresolved transitive import without promoting it to trusted binding evidence. The isolated PDE 3.6 source reaches three unreviewed packages and a figure module with 39 `import draw: *` occurrences.
+- [x] 76.2 Add an explicit, nonrecursive whole-source withholding option for partial PDF previews. Validate the selection and rederive every retained source and withheld record against the captured resources. Withheld sources may still execute during compilation; global coverage, original-source application and publication remain unavailable.
+- [x] 76.3 Add independent conditional previews for nested paragraph capitalization and punctuation-adjacent prose footnote spacers. On 45 isolated PDE sources these yielded one and zero candidates respectively. An owned 8pt spacer fixture rendered differently after removal; no rendering-equivalence claim or original-source edit follows.
+- [x] 76.4 Compile the entire isolated PDE baseline and partial candidate with five sources explicitly withheld (2.11, 2.7, 3.3, 3.5 and 3.6). The other 23 files contained 9,307 planned edits; both compilations observed the same 177 dependencies, but the PDF byte hashes differed for an unestablished reason. All 45 copied Typst source hashes stayed unchanged; no live source application or full rule coverage follows.
+- [x] 76.5 Confirm 0d738d8 CI: all 10 checks passed in 14m56s. This does not establish the outcome for later commits.

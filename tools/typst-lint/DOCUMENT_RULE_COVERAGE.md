@@ -51,12 +51,12 @@
 | `pde.prose-footnote-punctuation` | 제안 | L | P | 제한된 직접 문장과 builtin 각주. 문서 검사는 조건부로 각주 앞 공백 제거와 각주 뒤 문장부호 이동을 각각 독립 미리보기로 제공한다. `--footnote-punctuation-evidence`는 일부 진단에 별도 출처 근거를 붙인다. P 결합 컴파일은 공백 제거만 포함한다. |
 | `pde.aligned-footnote-spacer` | 제안 | L | — | 정렬 수식과 확인된 spacer 바인딩만. |
 | `pde.unaligned-footnote-no-spacer` | 제안 | L | S | 기존 명세대로 제한된 비정렬 수식 각주 앞 spacer를 제거하는 조건부 후보. 실제 렌더는 달라질 수 있다. |
-| `pde.prose-footnote-no-spacer` | 제안 | L | — | 확인된 spacer와 문장·구두점의 안전한 인접 관계가 필요하다. |
+| `pde.prose-footnote-no-spacer` | 제안 | L, 독립 미리보기 | — | 독립 미리보기는 중첩 산문에서 기존 구두점에 밀착된 리터럴 spacer와 수평 공백만 제거한다. 실제 바인딩과 실행은 조건부이며 렌더가 달라질 수 있다. |
 | `pde.standalone-display` | 제안 | 기본 | 기본 | 파서가 확인한 display와 제한된 직접 문장·라벨. |
 | `pde.text-only-highlight` | 제안 | P | — | 알려진 highlight와 단순 리터럴 본문; 옵션·중첩 스타일 등은 보류. |
 | `pde.theme-cancelmark` | 진단 | L | — | 확인된 수학 취소 호출; 명세의 cancelmark 교체는 현재 제공하지 않는다. |
 | `pde.flowbox-colored-border` | 제안 | — | — | 검토된 전체 math-blocks 모듈의 정확한 형태와 이미 존재하는 theme binding이 필요하다. |
-| `pde.paragraph-capitalization` | 제안 | L | — | 알려진 마커 뒤 영어의 제한된 소문자 시작어; 언어·본문이 불명확하면 보류. |
+| `pde.paragraph-capitalization` | 제안 | L, 독립 미리보기 | — | 알려진 마커 뒤 영어의 제한된 소문자 시작어; 독립 조건부 후보는 중첩 본문의 첫 ASCII 문자만 바꾸며 마커 바인딩과 언어·실행은 조건부다. |
 
 ## 읽을 때 주의할 점
 

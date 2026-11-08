@@ -66,7 +66,23 @@ Comments, blank lines, ambiguous abbreviations and unsupported structure do
 not become proposals. Runtime prose context and rendering are not proved; the
 plans are not composed or applied and do not grant compiler authority or
 increase global coverage.
-The same option separately reports `conditional_detached_annotations` for
+The independent `--rule-set pde --preview-conditional-capitalization` option
+proposes capitalizing the first ASCII byte of a narrowly recognized nested
+paragraph starter. Per-file rows retain exact edits and source/candidate hashes;
+reasoned suppressions and other checked source findings are preserved. The marker
+binding, English prose context and execution remain conditions. The intended
+rendered text changes, and the source-only proposals are not composed or applied
+and do not grant compiler authority or increase global coverage.
+
+The independent `--rule-set pde --preview-conditional-prose-spacers` option
+proposes removing a literal `#dots_space` and horizontal separator immediately
+between existing prose punctuation and a direct footnote. Ambiguous punctuation,
+comments, line breaks and suppressed cases are withheld. Each proposal assumes
+both runtime bindings and prose execution; it can change rendering, grants no
+compiler or source-write authority, is not composed with other plans, and does
+not increase global coverage.
+
+The scoped-call option separately reports `conditional_detached_annotations` for
 direct scoped annotation calls outside a display in supported literal callback
 bodies. These are diagnostic-only hints with independent suppression and
 unresolved context; they do not produce edits or complete rule coverage.

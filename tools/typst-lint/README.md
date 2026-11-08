@@ -105,6 +105,8 @@ inspection route:
 /path/to/typst-packages/tools/typst-lint/typst-lint inspect-document --root /absolute/project --entrypoint main.typ --rule-set pde --preview-conditional-spacers --format json
 /path/to/typst-packages/tools/typst-lint/typst-lint inspect-document --root /absolute/project --entrypoint main.typ --rule-set pde --preview-conditional-scoped-calls --format json
 /path/to/typst-packages/tools/typst-lint/typst-lint inspect-document --root /absolute/project --entrypoint main.typ --rule-set pde --preview-conditional-continuations --format json
+/path/to/typst-packages/tools/typst-lint/typst-lint inspect-document --root /absolute/project --entrypoint main.typ --rule-set pde --preview-conditional-capitalization --format json
+/path/to/typst-packages/tools/typst-lint/typst-lint inspect-document --root /absolute/project --entrypoint main.typ --rule-set pde --preview-conditional-prose-spacers --format json
 /path/to/typst-packages/tools/typst-lint/typst-lint inspect-document --root /absolute/project --entrypoint main.typ --rule-set pde --package-path /absolute/captured-packages --format json
 /path/to/typst-packages/tools/typst-lint/typst-lint inspect-document --root /absolute/project --entrypoint main.typ --rule-set pde --package-path /absolute/captured-packages --reference-package-path /absolute/reference-packages --reference-facade Styles/styles.typ --format json
 /path/to/typst-packages/tools/typst-lint/typst-lint inspect-document --root /absolute/project --entrypoint main.typ --rule-set pde --package-path /absolute/captured-packages --reference-cache-path /absolute/captured-cache --reference-package-path /absolute/reference-packages --reference-facade Styles/styles.typ --format json
@@ -250,6 +252,12 @@ The further explicit `--partial-unproven-binding-preview` can also withhold an
 entire source with an unproven footnote binding. Unknown or dynamic transitive
 imports and other safety failures still block the preview. Both options retain
 the withheld source unchanged and do not authorize source application.
+The separately explicit, repeatable `--withhold-source PROJECT_RELATIVE_PATH`
+skips every preview rule stage for the selected captured source. The source and
+its dependencies still execute in the PDF preview; included sources are not
+automatically excluded. Use it only with non-adversarial inputs. The sandbox
+denies network and writes outside its workspace, but does not prevent every read
+or transient input modification within it. See the preview contract for limits.
 Without `--preview`, the ordinary compile gate remains blocked; the preview
 neither accepts compiler-tail arguments nor publishes a PDF. Optional
 `--discover-dependencies` derives current dependency paths from a sandboxed
