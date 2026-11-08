@@ -97,6 +97,55 @@ class DocumentResourceCaptureTests(unittest.TestCase):
         with patch.object(resources.runtime, '_same', side_effect=mutate), self.assertRaises(SafetyError):
             resources.capture(self.roots, [self.req('image.png')])
 
+    def test_capture_refusal_names_request_and_preserves_original_exception(self):
+        cause = OSError('underlying fixture refusal')
+        error = resources.runtime.CompileSafetyError('Unsafe/unavailable captured file')
+        error.__cause__ = cause
+        original_report = error.report
+        with patch.object(resources.runtime, '_capture', side_effect=error):
+            with self.assertRaises(resources.runtime.CompileSafetyError) as caught:
+                resources.capture(self.roots, [self.req('fonts/sample.otf', 'font')])
+        self.assertIs(caught.exception, error)
+        self.assertIs(caught.exception.__cause__, cause)
+        self.assertIs(caught.exception.report, original_report)
+        self.assertIn('Unsafe/unavailable captured file', str(error))
+        self.assertIn('resource root=project, path=fonts/sample.otf, phase=capture', str(error))
+        self.assertNotIn('font\\x80', str(error))
+
+    def test_recheck_refusal_names_request_and_preserves_original_exception(self):
+        cause = OSError('underlying fixture refusal')
+        error = resources.runtime.CompileSafetyError('Captured file identity or bytes changed')
+        error.__cause__ = cause
+        with patch.object(resources.runtime, '_same', side_effect=error):
+            with self.assertRaises(resources.runtime.CompileSafetyError) as caught:
+                resources.capture(self.roots, [self.req('image.png')])
+        self.assertIs(caught.exception, error)
+        self.assertIs(caught.exception.__cause__, cause)
+        self.assertIn('resource root=project, path=image.png, phase=recheck', str(error))
+
+    def test_apple_asset_refusals_name_request_in_both_phases(self):
+        relative = 'a' * 40 + '.asset/AssetData/fixture.ttf'
+        request = resources.ResourceRequest('apple', relative, 'font')
+        roots = {'apple': resources.APPLE_ASSET_ROOT}
+        initial = SafetyError('fixture apple capture refusal')
+        with patch.object(resources.sys, 'platform', 'darwin'), \
+             patch.object(resources, '_apple_asset_font', side_effect=initial):
+            with self.assertRaises(SafetyError) as caught:
+                resources.capture(roots, [request], allow_apple_asset_fonts=True)
+        self.assertIs(caught.exception, initial)
+        self.assertIn(f'resource root=apple, path={relative}, phase=capture', str(initial))
+
+        raw = b'fixture-font'
+        evidence = resources.runtime.FileEvidence(str(Path(resources.APPLE_ASSET_ROOT) / relative),
+                                                   (1, 2), digest(raw), len(raw), ())
+        recheck = SafetyError('fixture apple recheck refusal')
+        with patch.object(resources.sys, 'platform', 'darwin'), \
+             patch.object(resources, '_apple_asset_font', side_effect=[(raw, evidence), recheck]):
+            with self.assertRaises(SafetyError) as caught:
+                resources.capture(roots, [request], allow_apple_asset_fonts=True)
+        self.assertIs(caught.exception, recheck)
+        self.assertIn(f'resource root=apple, path={relative}, phase=recheck', str(recheck))
+
     def test_document_staging_binds_source_candidates_to_binary_resources(self):
         main = b'#include "child.typ"\n'
         child = b'Thus $ x^i $\n\nHence.\n'

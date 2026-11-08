@@ -3,10 +3,17 @@
 Exports and literal call sites are traced separately. Neither creates a
 static-resolver binding, evaluates a module, reads a catalog or grants edits.
 The reviewed project-references package may be in a separately supplied root.
+A Python caller must supply a trustworthy initial graph and namespace capture;
+the session detects later changes but cannot authenticate their original issuer.
 """
-from dataclasses import dataclass, field, replace
+from dataclasses import dataclass, field, fields, replace
 from bisect import bisect_right
 import os
+import weakref
+
+import package_artifacts
+import package_loader
+import static_resolver
 
 import conditional_highlight as conditional
 import import_graph as graph
@@ -227,6 +234,79 @@ class _ReferenceNamespace(conditional._Analyzer):
                        requests=tuple(sorted(set(result.requests) | {PROJECT_REFERENCES})))
 
 
+# Snapshot structured values rather than hashing all source bytes on every call.
+# Frozen dataclasses can still be changed via object.__setattr__, so retaining
+# only the objects themselves would not detect later field replacement.
+_CAPTURE_TYPES = frozenset((
+    graph.ImportGraph, graph.ImportSource, graph.ImportEdge, graph.ImportUnavailable,
+    namespace_packages.NamespacePackageCapture, namespace_packages.NamespacePackage,
+    namespace_packages.CollisionOnlyNamespace, namespace_multiroot.MultiRootCapture,
+    namespace_multiroot.RootSelection, package_loader.PackageLoadResult,
+    package_loader.PackageEvidence, package_loader.PackageUnavailable,
+    package_loader.ArtifactEvidence, static_resolver.PackageSource,
+    package_artifacts.PackageArtifact,
+))
+_SESSION_ISSUED = {}
+_MAX_SNAPSHOT_ITEMS = 100000
+
+
+def _freeze_capture(value, budget):
+    budget[0] -= 1
+    if budget[0] < 0:
+        raise ValueError('Session capture exceeds snapshot budget')
+    kind = type(value)
+    if kind in (str, bytes, int, bool, type(None)):
+        return (kind, value)
+    if kind is tuple:
+        if len(value) > budget[0]:
+            raise ValueError('Session capture exceeds snapshot budget')
+        return (kind, tuple(_freeze_capture(item, budget) for item in value))
+    if kind in _CAPTURE_TYPES:
+        return (kind, tuple(_freeze_capture(getattr(value, item.name), budget)
+                            for item in fields(kind)))
+    raise ValueError('Unsupported session capture value')
+
+
+def _session_signature(session):
+    engine = session._engine
+    if type(engine) is not _ReferenceNamespace or type(engine.packages) is not dict:
+        raise ValueError('Invalid session engine')
+    if len(engine.packages) > 64 or any(type(key) is not str for key in engine.packages):
+        raise ValueError('Invalid session package mapping')
+    if (type(engine.rule_ids) is not frozenset or len(engine.rule_ids) > 64
+            or any(type(item) is not str for item in engine.rule_ids)):
+        raise ValueError('Invalid session rule selection')
+    budget = [_MAX_SNAPSHOT_ITEMS]
+    return _freeze_capture((engine.graph, session._namespace_capture,
+        session._reference_capture, engine.multi_root, engine.reference_package,
+        engine.reference_evidence, engine.evidence, tuple(sorted(engine.packages.items())),
+        engine.reason, session._selection_reason, tuple(sorted(engine.rule_ids)),
+        engine.scoped_callbacks), budget)
+
+
+def _issue_session(session):
+    identity = id(session)
+    def release(reference):
+        found = _SESSION_ISSUED.get(identity)
+        if found is not None and found[0] is reference:
+            _SESSION_ISSUED.pop(identity, None)
+    try:
+        signature = _session_signature(session)
+    except (AttributeError, TypeError, ValueError, RecursionError):
+        signature = None
+    _SESSION_ISSUED[identity] = (weakref.ref(session, release), session._engine, signature)
+
+
+def _valid_session(session):
+    issued = _SESSION_ISSUED.get(id(session))
+    if issued is None or issued[0]() is not session or issued[2] is None:
+        return False
+    try:
+        return session._engine is issued[1] and _session_signature(session) == issued[2]
+    except (AttributeError, TypeError, ValueError, RecursionError):
+        return False
+
+
 class ConditionalReferenceProvenance:
     """Trace final facade exports from one graph and two explicit package roots."""
 
@@ -242,6 +322,7 @@ class ConditionalReferenceProvenance:
                 or captured.evidence[0].source_sha256 != PROJECT_REFERENCES_SOURCE_SHA256):
             raise PackageInputError('Exact reviewed project-references package is unavailable')
         self._reference_capture = captured
+        self._namespace_capture = namespace_capture
         self._engine = _ReferenceNamespace(import_graph, namespace_capture, captured)
         # A separately captured reference package cannot override the stated
         # package/cache precedence. Require it in the first root, where its
@@ -251,6 +332,7 @@ class ConditionalReferenceProvenance:
         if (self._engine.multi_root is not None
                 and str(root) != self._engine.multi_root.roots[0]):
             self._selection_reason = 'Reference package is not captured from the first namespace root'
+        _issue_session(self)
 
     @property
     def package_path(self):
@@ -263,6 +345,19 @@ class ConditionalReferenceProvenance:
         return self._reference_capture.evidence
 
     def export(self, path, name=NAME):
+        if not _valid_session(self):
+            return ReferenceExport(str(path), str(name), 'UNAVAILABLE', 'Session capture changed or is unissued')
+        try:
+            result = self._export_unchecked(path, name)
+        except Exception:
+            if not _valid_session(self):
+                return ReferenceExport(str(path), str(name), 'UNAVAILABLE', 'Session capture changed during inspection')
+            raise
+        if not _valid_session(self):
+            return ReferenceExport(str(path), str(name), 'UNAVAILABLE', 'Session capture changed during inspection')
+        return result
+
+    def _export_unchecked(self, path, name=NAME):
         engine = self._engine
         if type(path) is not str or type(name) is not str or not name:
             return ReferenceExport(str(path), str(name), 'UNAVAILABLE', 'Invalid source path or export name')
@@ -283,6 +378,19 @@ class ConditionalReferenceProvenance:
             package_requests=module.requests)
 
     def calls(self, path):
+        if not _valid_session(self):
+            return ReferenceCalls(unresolved=('Session capture changed or is unissued',), status='UNAVAILABLE')
+        try:
+            result = self._calls_unchecked(path)
+        except Exception:
+            if not _valid_session(self):
+                return ReferenceCalls(unresolved=('Session capture changed during inspection',), status='UNAVAILABLE')
+            raise
+        if not _valid_session(self):
+            return ReferenceCalls(unresolved=('Session capture changed during inspection',), status='UNAVAILABLE')
+        return result
+
+    def _calls_unchecked(self, path):
         """Trace direct identifier calls in one selected, captured source.
 
         This is lexical, conditional evidence only: arbitrary expression side

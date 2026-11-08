@@ -164,6 +164,11 @@ def _apple_asset_font(path, relative, bound):
         raise SafetyError(f'Apple font asset is unavailable or unsafe: {error}') from error
 
 
+def _annotate_request_error(error, request, phase):
+    """Retain the original exception and cause while naming its explicit request."""
+    error.args = (f'{error} (resource root={request.root}, path={request.path}, phase={phase})',)
+
+
 def capture(roots, requests, *, allow_apple_asset_fonts=False):
     """Capture explicit regular files with retained identity and second reads.
 
@@ -226,8 +231,12 @@ def capture(roots, requests, *, allow_apple_asset_fonts=False):
         apple_asset = allow_apple_asset_fonts and str(normalized[request.root]) == APPLE_ASSET_ROOT
         if apple_asset and request.role != 'font':
             raise SafetyError('Apple font asset policy admits only explicitly selected fonts')
-        raw, evidence = (_apple_asset_font(target, request.path, MAX_FILE_BYTES)
-                         if apple_asset else runtime._capture(target, MAX_FILE_BYTES))
+        try:
+            raw, evidence = (_apple_asset_font(target, request.path, MAX_FILE_BYTES)
+                             if apple_asset else runtime._capture(target, MAX_FILE_BYTES))
+        except SafetyError as error:
+            _annotate_request_error(error, request, 'capture')
+            raise
         identity = evidence.identity[:2]
         if identity in identities:
             raise SafetyError('Resource identity appears under multiple paths')
@@ -240,14 +249,18 @@ def capture(roots, requests, *, allow_apple_asset_fonts=False):
     # bounded sampled consistency check, not a live lock or atomic snapshot.
     for item in files:
         apple_asset = allow_apple_asset_fonts and str(normalized[item.request.root]) == APPLE_ASSET_ROOT
-        if apple_asset:
-            current, evidence = _apple_asset_font(Path(item.evidence.path), item.request.path, MAX_FILE_BYTES)
-            if evidence != item.evidence:
-                raise SafetyError('Apple font asset identity changed during capture')
-        else:
-            current = runtime._same(Path(item.evidence.path), item.evidence, MAX_FILE_BYTES)
-        if current != item.data:
-            raise SafetyError('Captured resource bytes changed during capture')
+        try:
+            if apple_asset:
+                current, evidence = _apple_asset_font(Path(item.evidence.path), item.request.path, MAX_FILE_BYTES)
+                if evidence != item.evidence:
+                    raise SafetyError('Apple font asset identity changed during capture')
+            else:
+                current = runtime._same(Path(item.evidence.path), item.evidence, MAX_FILE_BYTES)
+            if current != item.data:
+                raise SafetyError('Captured resource bytes changed during capture')
+        except SafetyError as error:
+            _annotate_request_error(error, item.request, 'recheck')
+            raise
     return _issue(ResourceCapture(tuple(sorted((name, str(path)) for name, path in normalized.items())),
                                   tuple(files), total, apple_asset_fonts=allow_apple_asset_fonts))
 

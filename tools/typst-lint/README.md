@@ -108,6 +108,7 @@ inspection route:
 /path/to/typst-packages/tools/typst-lint/typst-lint inspect-document --root /absolute/project --entrypoint main.typ --rule-set pde --package-path /absolute/captured-packages --reference-cache-path /absolute/captured-cache --reference-package-path /absolute/reference-packages --reference-facade Styles/styles.typ --format json
 /path/to/typst-packages/tools/typst-lint/typst-lint inspect-document --root /absolute/project --entrypoint main.typ --rule-set pde --package-path /absolute/captured-packages --reference-cache-path /absolute/captured-cache --reference-package-path /absolute/reference-packages --reference-facade Styles/styles.typ --reference-calls --format json
 /path/to/typst-packages/tools/typst-lint/typst-lint inspect-document --root /absolute/project --entrypoint main.typ --rule-set pde --package-path /absolute/captured-packages --reference-cache-path /absolute/captured-cache --reference-package-path /absolute/reference-packages --reference-facade Styles/styles.typ --reference-arguments --format json
+/path/to/typst-packages/tools/typst-lint/typst-lint inspect-document --root /absolute/project --entrypoint main.typ --rule-set pde --package-path /absolute/captured-packages --reference-cache-path /absolute/captured-cache --reference-package-path /absolute/reference-packages --reference-facade Styles/styles.typ --reference-catalog /absolute/catalog.json --format json
 ```
 
 This route captures literal relative includes with the fixed `book-v1` budget
@@ -197,7 +198,8 @@ With the additional explicit `--reference-package-path` and `--reference-facade`
 captured package hashes and namespace evidence. It reports either conditional
 provenance or an unavailable reason, even when the reference package itself was
 captured successfully. It does not prove a call's binding or runtime initialization,
-check a reference catalog, or propose edits.
+or propose edits. Catalog membership is checked only with an explicitly supplied
+`--reference-catalog` snapshot and remains conditional and incomplete.
 An optional `--reference-cache-path` supplies a second explicit namespace root:
 the package root takes precedence, even when its selected version is incomplete.
 For this route the reviewed reference package must be captured from that first

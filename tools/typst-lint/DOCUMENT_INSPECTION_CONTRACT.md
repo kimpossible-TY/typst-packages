@@ -104,6 +104,17 @@ JSON includes:
   unknown values stay unresolved; it neither checks catalog membership nor
   proposes edits. It requires the explicit reference provenance options and
   can be combined with `--reference-calls` without retracing each file.
+- `--reference-catalog /absolute/catalog.json` checks literal project/label
+  pairs from those conditional calls against an explicitly captured validated
+  catalog. Unknown values and unsupported contexts stay partial. The catalog
+  snapshot hash is reported; its freshness, PDF correspondence and runtime
+  selection are not established. Catalog, argument and call reports share one
+  trace per source when requested together. `catalog_checked` means at least
+  one conditional literal pair was compared; `catalog_check_complete` remains
+  false even if every observed pair matches.
+  Reference sessions reject changes to their captured graph and package evidence
+  after construction. Python callers remain responsible for the trustworthiness
+  of the initial graph they supply; the CLI constructs it through safe capture.
 - Optional `--reference-cache-path` adds a second explicit namespace root for
   this reference-export trace only. The first existing package version wins,
   including an incomplete or unreviewed one. For this multi-root route the

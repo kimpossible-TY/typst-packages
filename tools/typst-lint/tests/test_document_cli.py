@@ -201,6 +201,9 @@ class DocumentCliTests(unittest.TestCase):
                          or rows[0]['render_equivalence_proved'])
         self.assertEqual(target.read_bytes(), source)
         self.assertEqual(self.run_cli('--preview-conditional-spacers')['phase'], 'input')
+        text = self.run_cli('--rule-set', 'pde', '--preview-conditional-spacers', format='text')
+        self.assertIn('Conditional spacer previews: 1 edits', text)
+        self.assertIn('not render-verified and not applied', text)
 
     def test_explicit_reference_facade_provenance_is_conditional_and_reports_shadowing(self):
         main = self.write('main.typ', b'#import "Styles/styles.typ": *\n')
@@ -327,6 +330,94 @@ class DocumentCliTests(unittest.TestCase):
                 document_cli.report_document(str(self.root), 'main.typ', rule_set='pde',
                     package_path=str(packages), reference_package_path=str(references),
                     reference_facade='Styles/styles.typ', reference_arguments=True)
+
+    def test_reference_catalog_snapshot_checks_traced_calls_and_reuses_trace(self):
+        import conditional_reference_provenance as provenance
+        source = (b'#import "Styles/styles.typ": *\n'
+                  b'#project-ref("book", <ok>)\n#project-ref("book", <missing>)\n')
+        target = self.write('main.typ', source)
+        self.write('Styles/styles.typ', b'#import "@local/math-blocks:0.2.0": *\n')
+        packages = self.namespace_packages()
+        references = self.root / 'reference-packages'
+        shutil.copytree(TOOL / 'tests/fixtures/reviewed-packages/local/project-references',
+                        references / 'local/project-references')
+        catalog_path = self.write('catalog.json', json.dumps({'schema': 1, 'projects': {'book': {
+            'references': {'ok': {'page': 1, 'text': 'A'}}, 'ambiguous_labels': []}}}).encode())
+        original = provenance.ConditionalReferenceProvenance.calls
+        with patch.object(provenance.ConditionalReferenceProvenance, 'calls', autospec=True,
+                          side_effect=original) as trace:
+            report = document_cli.report_document(str(self.root), 'main.typ', rule_set='pde',
+                package_path=str(packages), reference_package_path=str(references),
+                reference_facade='Styles/styles.typ', reference_calls=True, reference_arguments=True,
+                reference_catalog=str(catalog_path))
+        self.assertEqual(trace.call_count, 1)
+        provenance_report = report['reference_provenance']
+        row = provenance_report['catalog_by_file'][0]
+        self.assertTrue(provenance_report['catalog_checked'])
+        self.assertFalse(provenance_report['catalog_check_complete'])
+        self.assertEqual(row['checked_calls'], 2)
+        self.assertEqual(len(row['diagnostics']), 1)
+        self.assertEqual(row['diagnostics'][0]['rule_id'], 'core.project-ref-catalog-target')
+        self.assertEqual(provenance_report['catalog_snapshot']['sha256'], digest(catalog_path.read_bytes()))
+        self.assertFalse(row['edit_permission'] or row['freshness_proved'] or row['runtime_selection_proved'])
+        self.assertEqual(target.read_bytes(), source)
+        only_catalog = document_cli.report_document(str(self.root), 'main.typ', rule_set='pde',
+            package_path=str(packages), reference_package_path=str(references),
+            reference_facade='Styles/styles.typ', reference_catalog=str(catalog_path))['reference_provenance']
+        self.assertEqual(len(only_catalog['catalog_by_file'][0]['diagnostics']), 1)
+        self.assertNotIn('calls_by_file', only_catalog)
+        self.assertNotIn('arguments_by_file', only_catalog)
+        text = self.run_cli('--rule-set', 'pde', '--package-path', str(packages),
+                            '--reference-package-path', str(references), '--reference-facade', 'Styles/styles.typ',
+                            '--reference-calls', '--reference-arguments', '--reference-catalog', str(catalog_path),
+                            format='text')
+        self.assertIn('Conditional reference calls: 2 traced', text)
+        self.assertIn('Reference arguments: 0 hints', text)
+        self.assertIn('Reference catalog: 1 hints; 2 pairs checked', text)
+        self.assertIn('conditional core.project-ref-catalog-target', text)
+        refused = self.run_cli('--rule-set', 'pde', '--reference-catalog', str(catalog_path))
+        self.assertEqual(refused['phase'], 'input')
+
+    def test_reference_catalog_cli_refuses_unsafe_or_malformed_paths(self):
+        self.write('main.typ', b'#import "Styles/styles.typ": *\n')
+        self.write('Styles/styles.typ', b'#import "@local/math-blocks:0.2.0": *\n')
+        packages = self.namespace_packages()
+        references = self.root / 'reference-packages'
+        shutil.copytree(TOOL / 'tests/fixtures/reviewed-packages/local/project-references',
+                        references / 'local/project-references')
+        malformed = self.write('malformed.json', b'{bad')
+        link = self.root / 'catalog-link.json'
+        link.symlink_to(malformed)
+        options = ('--rule-set', 'pde', '--package-path', str(packages),
+                   '--reference-package-path', str(references), '--reference-facade', 'Styles/styles.typ')
+        for path in ('relative.json', str(link), str(malformed), str(self.root / 'missing.json')):
+            with self.subTest(path=path):
+                report = self.run_cli(*options, '--reference-catalog', path)
+                self.assertEqual(report['phase'], 'input')
+                self.assertFalse(report['compiler_invoked'])
+
+    def test_reference_catalog_budget_refuses_before_finding_serialization(self):
+        import conditional_reference_catalog
+        source = (b'#import "Styles/styles.typ": *\n' + b'#project-ref("book", <missing>)\n' * 20)
+        self.write('main.typ', source)
+        self.write('Styles/styles.typ', b'#import "@local/math-blocks:0.2.0": *\n')
+        packages = self.namespace_packages()
+        references = self.root / 'reference-packages'
+        shutil.copytree(TOOL / 'tests/fixtures/reviewed-packages/local/project-references',
+                        references / 'local/project-references')
+        catalog_path = self.write('catalog.json', json.dumps({'schema': 1, 'projects': {'book': {
+            'references': {}, 'ambiguous_labels': []}}}).encode())
+        original = document_cli.asdict
+        def guarded(value):
+            if isinstance(value, conditional_reference_catalog.CatalogFinding):
+                raise AssertionError('Budget must be checked before serializing findings')
+            return original(value)
+        with patch.object(document_cli, 'MAX_REPORT_ITEMS', 100), \
+             patch.object(document_cli, 'asdict', side_effect=guarded):
+            with self.assertRaisesRegex(InputError, 'report item limit'):
+                document_cli.report_document(str(self.root), 'main.typ', rule_set='pde',
+                    package_path=str(packages), reference_package_path=str(references),
+                    reference_facade='Styles/styles.typ', reference_catalog=str(catalog_path))
 
     def namespace_packages(self):
         package_root = self.root / 'packages'

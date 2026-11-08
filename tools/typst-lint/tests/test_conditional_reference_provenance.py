@@ -377,6 +377,63 @@ class ConditionalReferenceProvenanceTests(unittest.TestCase):
         analyzer = reference.ConditionalReferenceProvenance(graph, namespaces, self.references)
         self.assertEqual(analyzer.export('not-captured.typ').status, 'UNAVAILABLE')
 
+    def test_session_refuses_graph_replacement_and_in_place_changes(self):
+        facade = b'#import "@local/project-references:0.1.0": *\n'
+        main = b'#import "Styles/styles.typ": *\n#project-ref(<ok>)\n'
+        for change in ('replacement', 'source', 'edge'):
+            with self.subTest(change=change):
+                analyzer = self.capture(facade, main)
+                captured = analyzer._engine.graph
+                if change == 'replacement':
+                    forged = replace(captured.sources[0], source=b'#project-ref(<missing>)')
+                    analyzer._engine.graph = replace(captured, sources=(forged,) + captured.sources[1:])
+                elif change == 'source':
+                    object.__setattr__(captured.sources[0], 'source', b'#project-ref(<missing>)')
+                else:
+                    object.__setattr__(captured.edges[0], 'target', 'different.typ')
+                self.assertEqual(analyzer.calls('main.typ').status, 'UNAVAILABLE')
+                result = analyzer.export('main.typ')
+                self.assertEqual(result.status, 'UNAVAILABLE')
+                self.assertFalse(result.route)
+
+    def test_session_refuses_package_and_selection_changes(self):
+        facade = b'#import "@local/math-blocks:0.2.0": *\n'
+        for change in ('namespace', 'reference', 'mapping', 'selection'):
+            with self.subTest(change=change):
+                analyzer = self.capture(facade)
+                if change == 'namespace':
+                    item = analyzer._namespace_capture.packages[0]
+                    object.__setattr__(item, 'source', item.source + b'changed')
+                elif change == 'reference':
+                    item = analyzer._reference_capture.sources[0]
+                    object.__setattr__(item, 'source', item.source + b'changed')
+                elif change == 'mapping':
+                    analyzer._engine.packages.clear()
+                else:
+                    analyzer._selection_reason = 'changed'
+                self.assertEqual(analyzer.calls('main.typ').status, 'UNAVAILABLE')
+                self.assertEqual(analyzer.export('main.typ').status, 'UNAVAILABLE')
+
+    def test_session_discards_results_if_capture_changes_during_call(self):
+        facade = b'#import "@local/project-references:0.1.0": *\n'
+        main = b'#import "Styles/styles.typ": *\n#project-ref(<ok>)\n'
+        analyzer = self.capture(facade, main)
+        original_parse = reference.conditional.parse
+        def mutate_after_parse(source):
+            tree = original_parse(source)
+            item = analyzer._engine.graph.sources[0]
+            object.__setattr__(item, 'source', item.source + b'changed')
+            return tree
+        with patch.object(reference.conditional, 'parse', side_effect=mutate_after_parse):
+            result = analyzer.calls('main.typ')
+        self.assertEqual(result.status, 'UNAVAILABLE')
+        self.assertFalse(result.calls)
+
+    def test_unissued_session_refuses_without_raising(self):
+        analyzer = object.__new__(reference.ConditionalReferenceProvenance)
+        self.assertEqual(analyzer.calls('main.typ').status, 'UNAVAILABLE')
+        self.assertEqual(analyzer.export('main.typ').status, 'UNAVAILABLE')
+
 
 if __name__ == '__main__':
     unittest.main()

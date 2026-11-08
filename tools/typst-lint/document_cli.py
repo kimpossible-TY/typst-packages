@@ -32,7 +32,7 @@ def report_document(root, entrypoint, *, rule_set='core', package_path=None,
                     preview_sequence=False, local_rule_hints=False, preview_conditional_gaps=False,
                     preview_conditional_punctuation=False, preview_conditional_spacers=False,
                     reference_package_path=None, reference_facade=None, reference_cache_path=None,
-                    reference_calls=False, reference_arguments=False):
+                    reference_calls=False, reference_arguments=False, reference_catalog=None):
     """Inspect retained source bytes without reading consumer configuration.
 
     Literal includes inside unknown containers are inventory entries, not proof
@@ -66,6 +66,8 @@ def report_document(root, entrypoint, *, rule_set='core', package_path=None,
             'Reference call tracing requires explicit reference provenance options')
     require(type(reference_arguments) is bool and (not reference_arguments or reference_requested),
             'Reference argument hints require explicit reference provenance options')
+    require(reference_catalog is None or (type(reference_catalog) is str and reference_requested),
+            'Reference catalog hints require explicit reference provenance options and a catalog path')
     require(not reference_requested or (rule_set == 'pde' and package_path is not None
             and reference_package_path is not None and type(reference_facade) is str),
             'Reference provenance requires --rule-set pde, --package-path, '
@@ -134,27 +136,46 @@ def report_document(root, entrypoint, *, rule_set='core', package_path=None,
             reference_namespaces = load_multiroot_capture(package_path, reference_cache_path)
         analyzer = ConditionalReferenceProvenance(imports, reference_namespaces, reference_package_path)
         export = analyzer.export(reference_facade)
+        catalog_capture = None
+        if reference_catalog is not None:
+            from conditional_reference_catalog import capture_catalog_path
+            catalog_capture = capture_catalog_path(reference_catalog)
         reference_report = dict(reference_package_path=analyzer.package_path,
             reference_package_evidence=[asdict(evidence) for evidence in analyzer.package_evidence],
             facade=reference_facade, export=asdict(export), call_binding_proved=False,
-            runtime_selection_proved=False, catalog_checked=False, edit_permission=False)
+            runtime_selection_proved=False, catalog_checked=False, catalog_check_complete=False,
+            edit_permission=False)
+        if catalog_capture is not None:
+            reference_report['catalog_snapshot'] = dict(
+                source_identity=catalog_capture.catalog.source_identity, sha256=catalog_capture.catalog.sha256,
+                freshness_proved=False, runtime_selection_proved=False, scope='conditional-captured-calls-only')
         if reference_cache_path is not None:
             reference_report['namespace_roots'] = list(reference_namespaces.roots)
             reference_report['namespace_selections'] = [asdict(item) for item in reference_namespaces.selections]
             reference_report['namespace_unavailable'] = [asdict(item) for item in reference_namespaces.unavailable]
         items += 1 + len(export.route) + len(export.source_hashes) + len(export.package_evidence)
-        if reference_calls or reference_arguments:
+        if reference_calls or reference_arguments or catalog_capture is not None:
             if reference_calls:
                 reference_report['calls_by_file'] = []
             if reference_arguments:
                 from conditional_reference_arguments import analyze as analyze_reference_arguments
                 reference_report['arguments_by_file'] = []
+            if catalog_capture is not None:
+                from conditional_reference_catalog import analyze as analyze_reference_catalog
+                reference_report['catalog_by_file'] = []
             for selected in captured.sources:
-                arguments = (analyze_reference_arguments(analyzer, selected.path, catalog=catalog['rules'])
+                membership = (analyze_reference_catalog(analyzer, selected.path, catalog_capture,
+                                                        catalog=catalog['rules'])
+                              if catalog_capture is not None else None)
+                arguments = (membership.argument_result if membership is not None else
+                             analyze_reference_arguments(analyzer, selected.path, catalog=catalog['rules'])
                              if reference_arguments else None)
-                traced = arguments.trace if arguments is not None else analyzer.calls(selected.path)
+                traced = (membership.trace if membership is not None else
+                          arguments.trace if arguments is not None else analyzer.calls(selected.path))
                 if reference_calls:
-                    items += 1 + (len(arguments.unresolved) if traced is None else len(traced.unresolved))
+                    unavailable_reasons = ((membership.unresolved if membership is not None else arguments.unresolved)
+                                           if traced is None else ())
+                    items += 1 + (len(unavailable_reasons) if traced is None else len(traced.unresolved))
                     if traced is not None:
                         for call in traced.calls:
                             items += (1 + len(call.route) + len(call.source_hashes) + len(call.package_evidence)
@@ -163,11 +184,11 @@ def report_document(root, entrypoint, *, rule_set='core', package_path=None,
                     require(items <= MAX_REPORT_ITEMS, 'Document inspection report item limit exceeded')
                     if traced is None:
                         row = dict(path=selected.path, status='UNAVAILABLE', calls=[],
-                                   unresolved=list(arguments.unresolved), edit_permission=False)
+                                   unresolved=list(unavailable_reasons), edit_permission=False)
                     else:
                         row = dict(path=selected.path, **asdict(traced))
                     reference_report['calls_by_file'].append(row)
-                if arguments is not None:
+                if reference_arguments and arguments is not None:
                     items += 1 + len(arguments.unresolved)
                     for group in (arguments.diagnostics, arguments.suppressed):
                         for finding in group:
@@ -182,6 +203,30 @@ def report_document(root, entrypoint, *, rule_set='core', package_path=None,
                                unresolved=list(arguments.unresolved), edit_permission=arguments.edit_permission,
                                catalog_checked=arguments.catalog_checked)
                     reference_report['arguments_by_file'].append(row)
+                elif reference_arguments:
+                    items += 1 + len(membership.unresolved)
+                    require(items <= MAX_REPORT_ITEMS, 'Document inspection report item limit exceeded')
+                    reference_report['arguments_by_file'].append(dict(
+                        path=selected.path, status='UNAVAILABLE', diagnostics=[], suppressed=[],
+                        unresolved=list(membership.unresolved), edit_permission=False, catalog_checked=False))
+                if membership is not None:
+                    if membership.checked_calls:
+                        reference_report['catalog_checked'] = True
+                    items += 1 + len(membership.unresolved)
+                    for group in (membership.diagnostics, membership.suppressed):
+                        for finding in group:
+                            items += (1 + len(finding.route) + len(finding.source_hashes)
+                                      + len(finding.package_evidence) + len(finding.package_requests)
+                                      + len(finding.conditions))
+                            require(items <= MAX_REPORT_ITEMS, 'Document inspection report item limit exceeded')
+                    require(items <= MAX_REPORT_ITEMS, 'Document inspection report item limit exceeded')
+                    reference_report['catalog_by_file'].append(dict(
+                        path=selected.path, status=membership.status,
+                        diagnostics=[asdict(item) for item in membership.diagnostics],
+                        suppressed=[asdict(item) for item in membership.suppressed],
+                        unresolved=list(membership.unresolved), checked_calls=membership.checked_calls,
+                        catalog_identity=membership.catalog_identity, catalog_sha256=membership.catalog_sha256,
+                        edit_permission=False, freshness_proved=False, runtime_selection_proved=False))
                 require(items <= MAX_REPORT_ITEMS, 'Document inspection report item limit exceeded')
         require(items <= MAX_REPORT_ITEMS, 'Document inspection report item limit exceeded')
     for item in captured.sources:
@@ -482,6 +527,8 @@ def main(arguments=None):
                         help='Trace direct project-reference calls in each captured file (requires reference provenance)')
     parser.add_argument('--reference-arguments', action='store_true',
                         help='Inspect arguments of conditionally traced project-reference calls')
+    parser.add_argument('--reference-catalog',
+                        help='Explicit absolute JSON catalog snapshot for conditional reference membership')
     parser.add_argument('--format', choices=('json', 'text'), default='text')
     args = parser.parse_args(sys.argv[1:] if arguments is None else arguments)
     try:
@@ -498,7 +545,8 @@ def main(arguments=None):
                                  reference_facade=args.reference_facade,
                                  reference_cache_path=args.reference_cache_path,
                                  reference_calls=args.reference_calls,
-                                 reference_arguments=args.reference_arguments)
+                                 reference_arguments=args.reference_arguments,
+                                 reference_catalog=args.reference_catalog)
     except (InputError, PackageInputError, OSError, ValueError) as error:
         result = dict(schema=1, tool_version=VERSION, mode='inspect-document', status=2,
                       phase='input', compiler_invoked=False, applied_fixes=[], error=str(error))
@@ -525,6 +573,25 @@ def main(arguments=None):
             reference = result['reference_provenance']
             detail = reference['export']['reason'] or 'runtime binding and initialization remain unproved'
             print(f"Reference export {reference['facade']}: {reference['export']['status']} ({detail})")
+            if 'calls_by_file' in reference:
+                rows = reference['calls_by_file']
+                print(f"Conditional reference calls: {sum(len(row['calls']) for row in rows)} traced; "
+                      f"{sum(row['status'] == 'PARTIAL' for row in rows)} partial and "
+                      f"{sum(row['status'] == 'UNAVAILABLE' for row in rows)} unavailable sources")
+            for name, label in (('arguments_by_file', 'Reference arguments'),
+                                ('catalog_by_file', 'Reference catalog')):
+                if name not in reference:
+                    continue
+                rows = reference[name]
+                for row in rows:
+                    for finding in row['diagnostics']:
+                        print(f"{finding['path']}:{finding['line']}:{finding['column']}: "
+                              f"conditional {finding['rule_id']}: {finding['explanation']}")
+                checked = (f"; {sum(row['checked_calls'] for row in rows)} pairs checked"
+                           if name == 'catalog_by_file' else '')
+                print(f"{label}: {sum(len(row['diagnostics']) for row in rows)} hints{checked}; "
+                      f"{sum(row['status'] == 'PARTIAL' for row in rows)} partial and "
+                      f"{sum(row['status'] == 'UNAVAILABLE' for row in rows)} unavailable sources; no edit permission")
         if result['namespace_evidence'] is not None:
             unresolved = sum(len(row['reasons']) + len(row['parse_errors'])
                              for row in result['conditional_coverage'])
@@ -546,6 +613,16 @@ def main(arguments=None):
             previews = result['sequence_previews']
             print(f"Sequence previews: {sum(len(row['steps']) for row in previews)} passes; "
                   f"{sum(row['verification'] == 'withheld' for row in previews)} sources withheld; not applied")
+        for flag, key, label in ((args.preview_conditional_gaps, 'conditional_gap_previews', 'Conditional gap'),
+                                 (args.preview_conditional_punctuation, 'conditional_punctuation_previews',
+                                  'Conditional punctuation'),
+                                 (args.preview_conditional_spacers, 'conditional_spacer_previews',
+                                  'Conditional spacer')):
+            if flag:
+                previews = result[key]
+                print(f"{label} previews: {sum(len(row['edits']) for row in previews)} edits; "
+                      f"{sum(row['verification'] == 'withheld' for row in previews)} sources withheld; "
+                      'partial, not composed, not render-verified and not applied')
         for blocker in result['blockers']:
             print(blocker)
         print('Global coverage incomplete (exit 2); compiler not invoked')
