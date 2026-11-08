@@ -1,0 +1,194 @@
+"""Bounded explicit binary resource capture for document preview work.
+
+No resource discovery, compiler execution, network, filesystem writes, or
+compiler/write authority is provided. Callers supply exact roots and relative
+paths; observed compiler dependencies and font choices remain separate facts.
+"""
+from dataclasses import dataclass, field
+from pathlib import Path
+from types import MappingProxyType
+import unicodedata
+import weakref
+
+import closed_core_compile as runtime
+from typst_lint import SafetyError, digest
+
+MAX_FILES = 512
+MAX_FILE_BYTES = 64 * 1024 * 1024
+MAX_TOTAL_BYTES = 192 * 1024 * 1024
+MAX_PATH_BYTES = 4096
+MAX_TOTAL_PATH_BYTES = 128 * 1024
+MAX_DEPTH = 64
+ROLES = frozenset(('source', 'package', 'resource', 'font'))
+
+
+@dataclass(frozen=True, slots=True)
+class ResourceRequest:
+    root: str
+    path: str
+    role: str
+
+
+@dataclass(frozen=True, slots=True)
+class ResourceBlob:
+    request: ResourceRequest
+    sha256: str
+    size: int
+    evidence: runtime.FileEvidence
+    data: bytes = field(repr=False)
+
+
+@dataclass(frozen=True, slots=True, weakref_slot=True)
+class ResourceCapture:
+    roots: tuple[tuple[str, str], ...]
+    files: tuple[ResourceBlob, ...]
+    total_bytes: int
+    complete_dependency_closure: bool = False
+    compiler_authority: bool = False
+
+
+_ISSUED = {}
+
+
+def _signature(snapshot):
+    if (type(snapshot) is not ResourceCapture or type(snapshot.roots) is not tuple
+            or type(snapshot.files) is not tuple or type(snapshot.total_bytes) is not int
+            or snapshot.complete_dependency_closure is not False or snapshot.compiler_authority is not False):
+        raise SafetyError('Invalid resource capture representation')
+    values = []
+    for item in snapshot.files:
+        if (type(item) is not ResourceBlob or type(item.request) is not ResourceRequest
+                or any(type(value) is not str for value in
+                       (item.request.root, item.request.path, item.request.role))
+                or type(item.data) is not bytes or type(item.size) is not int
+                or type(item.sha256) is not str or type(item.evidence) is not runtime.FileEvidence
+                or item.size != len(item.data) or item.sha256 != digest(item.data)):
+            raise SafetyError('Invalid captured resource bytes')
+        evidence = item.evidence
+        values.append((item.request.root, item.request.path, item.request.role, item.sha256,
+                       item.size, evidence.path, evidence.identity, evidence.sha256,
+                       evidence.size, evidence.parents, item.data))
+    return snapshot.roots, tuple(values), snapshot.total_bytes
+
+
+def _same_data(expected, supplied):
+    if type(expected) is not type(supplied):
+        return False
+    if type(expected) is tuple:
+        return len(expected) == len(supplied) and all(_same_data(a, b) for a, b in zip(expected, supplied))
+    return expected == supplied
+
+
+def assert_capture(snapshot):
+    """Check the identical issued in-memory record, without filesystem reads."""
+    retained = _ISSUED.get(id(snapshot))
+    if retained is None or retained[0]() is not snapshot or not _same_data(retained[1], _signature(snapshot)):
+        raise SafetyError('Resource capture is fabricated, expired or changed')
+    return snapshot
+
+
+def _issue(snapshot):
+    key = id(snapshot)
+    signature = _signature(snapshot)
+    def expired(reference):
+        current = _ISSUED.get(key)
+        if current is not None and current[0] is reference:
+            _ISSUED.pop(key, None)
+    _ISSUED[key] = weakref.ref(snapshot, expired), signature
+    return snapshot
+
+
+def _relative(path):
+    if (type(path) is not str or not path or path.startswith('/') or '\\' in path
+            or any(part in ('', '.', '..') for part in path.split('/'))
+            or any(ord(char) < 32 or ord(char) == 127 for char in path)):
+        raise SafetyError('Resource path must be canonical and relative')
+    try:
+        length = len(path.encode('utf-8'))
+    except UnicodeError as error:
+        raise SafetyError('Resource path must be UTF-8') from error
+    if length > MAX_PATH_BYTES or len(path.split('/')) > MAX_DEPTH:
+        raise SafetyError('Resource path limit exceeded')
+    return length
+
+
+def capture(roots, requests):
+    """Capture explicit regular files with retained identity and second reads.
+
+    Every root and request must be explicitly supplied. Source bytes, including
+    fonts, are held in memory and never serialized by this module. A failure or
+    changed file rejects the entire capture; omitted or later-selected resources
+    are not inferred and system/font discovery is not disabled or captured.
+    """
+    if type(roots) is not dict or not roots or len(roots) > 8:
+        raise SafetyError('Explicit resource roots are required')
+    normalized = {}
+    for name, raw in roots.items():
+        if (type(name) is not str or not name.isascii() or not name.isidentifier()
+                or type(raw) is not str or not raw.startswith('/') or '\x00' in raw
+                or str(Path(raw)) != raw or any(p in ('.', '..') for p in raw.split('/'))):
+            raise SafetyError('Resource roots must have canonical absolute paths and identifiers')
+        normalized[name] = Path(raw)
+    if type(requests) not in (list, tuple) or not requests or len(requests) > MAX_FILES:
+        raise SafetyError('Explicit resource file count is outside the fixed bounds')
+    seen, identities, names, files = set(), set(), set(), []
+    total = path_total = 0
+    for request in requests:
+        if (type(request) is not ResourceRequest or type(request.root) is not str
+                or request.root not in normalized or type(request.role) is not str
+                or request.role not in ROLES):
+            raise SafetyError('Invalid resource request')
+        path_total += _relative(request.path)
+        if path_total > MAX_TOTAL_PATH_BYTES:
+            raise SafetyError('Resource aggregate path limit exceeded')
+        key = (request.root, request.path)
+        collision = (request.root, unicodedata.normalize('NFC', request.path).casefold())
+        if key in seen or collision in names:
+            raise SafetyError('Duplicate or colliding resource path')
+        seen.add(key)
+        names.add(collision)
+        target = normalized[request.root] / request.path
+        raw, evidence = runtime._capture(target, MAX_FILE_BYTES)
+        identity = evidence.identity[:2]
+        if identity in identities:
+            raise SafetyError('Resource identity appears under multiple paths')
+        identities.add(identity)
+        total += len(raw)
+        if total > MAX_TOTAL_BYTES:
+            raise SafetyError('Resource aggregate byte limit exceeded')
+        files.append(ResourceBlob(request, digest(raw), len(raw), evidence, raw))
+    # Recheck the entire captured set after its final member is read. This is a
+    # bounded sampled consistency check, not a live lock or atomic snapshot.
+    for item in files:
+        current = runtime._same(Path(item.evidence.path), item.evidence, MAX_FILE_BYTES)
+        if current != item.data:
+            raise SafetyError('Captured resource bytes changed during capture')
+    return _issue(ResourceCapture(tuple(sorted((name, str(path)) for name, path in normalized.items())),
+                                  tuple(files), total))
+
+
+def stage_document(context, records, catalog, snapshot, *, project_root='project'):
+    """Bind verified source candidates to explicit captured resource bytes.
+
+    The mapping is for private staging experiments only. It neither establishes
+    complete dependencies nor rechecks live files, runs a compiler, writes files,
+    or grants publication authority.
+    """
+    import include_context
+    from document_sequence_preview import replay_document
+    assert_capture(snapshot)
+    include_context.assert_include_context(context)
+    roots = dict(snapshot.roots)
+    if type(project_root) is not str or roots.get(project_root) != context.project_root:
+        raise SafetyError('Captured project root does not match the include context')
+    resources = {(item.request.root, item.request.path): item for item in snapshot.files}
+    for source in context.sources:
+        resource = resources.get((project_root, source.path))
+        if resource is None or resource.data != source.source:
+            raise SafetyError('A captured document source is absent or differs from the resource snapshot')
+    candidates = replay_document(context, records, catalog)
+    staged = {(item.request.root, item.request.path):
+              candidates[item.request.path] if item.request.root == project_root and item.request.path in candidates
+              else item.data for item in snapshot.files}
+    assert_capture(snapshot)
+    return MappingProxyType(staged)

@@ -142,6 +142,10 @@ See [DOCUMENT_INSPECTION_CONTRACT.md](DOCUMENT_INSPECTION_CONTRACT.md) and the
 [local script characterization](audit/document-inspection-evidence.json) and
 [display-gap characterization](audit/document-display-evidence.json), plus the
 [combined source-layout characterization](audit/document-layout-evidence.json).
+An internal [explicit binary resource capture](DOCUMENT_RESOURCE_CAPTURE_CONTRACT.md)
+can bind a sequence's source candidates to caller-selected package, font and
+other resource bytes for private staging experiments. It neither proves complete
+compiler resources nor invokes the compiler or writes a consumer.
 
 The ordinary modes above remain read-only. Reports may include AST-backed proposed edits
 with baseline hashes, but label them `partial-not-applicable-transaction`.
