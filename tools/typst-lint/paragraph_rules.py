@@ -8,7 +8,7 @@ from collections.abc import Mapping
 from bisect import bisect_left
 import re
 
-from capitalization import BodyKind, Context, MarkerBinding, StartKind, evaluate
+from capitalization import BodyKind, Context, MarkerBinding, StartKind, WORDS, evaluate
 from edit_plan import Edit
 from suppression import resolve as resolve_suppressions
 from typst_lint import Diagnostic, InputError, digest, load_rules
@@ -108,6 +108,80 @@ def analyze_conditional_nested_gap(tree, path, *, catalog=None):
              else findings).append(finding)
     return ParagraphResult(tuple(findings), (),
         ('Nested source pattern only; marker binding, execution, prose ownership and rendering are unproved.',),
+        suppressed=tuple(suppressed))
+
+
+def analyze_conditional_nested_capitalization(tree, path, *, catalog=None):
+    """Report literal nested marker/starter patterns without proving language or binding.
+
+    A result is conditional on the actual marker, ordinary English prose and
+    execution. This route supplies no edit or source-write authority.
+    """
+    source, nodes = tree.source, tree.nodes
+    if nodes[0].errors:
+        errors = tuple((n.start, n.end) for n in nodes if n.kind == 'Error')
+        return ParagraphResult(skips=('Malformed Typst syntax; no source pattern diagnosis',),
+                               parse_errors=errors or ((0, len(source)),))
+    if tree.mode != 'markup' or nodes[0].kind != 'Markup':
+        return ParagraphResult(skips=('Only nested markup source patterns are supported',))
+    records = load_rules()[0]['rules'] if catalog is None else catalog
+    if (type(records) not in (list, tuple) or any(not isinstance(row, Mapping)
+            or type(row.get('id')) is not str or not row['id'] for row in records)):
+        raise InputError('Conditional capitalization analysis requires rule metadata records')
+    selected = [row for row in records if row['id'] == CAPITALIZATION]
+    if (len(selected) != 1 or any(type(selected[0].get(key)) is not str or not selected[0][key]
+                                   for key in ('grade', 'source'))):
+        raise InputError('Missing or invalid capitalization rule metadata')
+    scopes = resolve_suppressions(tree, {row['id'] for row in records})
+    parents = {child: index for index, node in enumerate(nodes) for child in node.children}
+    excluded = {}
+    for index, node in enumerate(nodes):
+        parent = parents.get(index)
+        excluded[index] = parent is not None and (excluded[parent]
+                                                   or nodes[parent].kind in _CONDITIONAL_EXCLUDED)
+    newlines = [index for index, byte in enumerate(source) if byte == 10]
+    findings, suppressed = [], []
+    for body_id, body in enumerate(nodes):
+        if body_id == 0 or body.kind != 'Markup' or excluded[body_id]:
+            continue
+        siblings = body.children
+        for position, index in enumerate(siblings):
+            marker = nodes[index]
+            if (position == 0 or marker.kind != 'Ident'
+                    or source[marker.start:marker.end] != b'paragraph_tab'):
+                continue
+            hash_node = nodes[siblings[position - 1]]
+            if hash_node.kind != 'Hash' or hash_node.end != marker.start:
+                continue
+            line_start = source.rfind(b'\n', 0, hash_node.start) + 1
+            if source[line_start:hash_node.start].strip(b' \t'):
+                continue
+            next_position = position + 1
+            if next_position < len(siblings) and nodes[siblings[next_position]].kind == 'Space':
+                next_position += 1
+            if next_position >= len(siblings):
+                continue
+            first = nodes[siblings[next_position]]
+            if first.kind != 'Text' or not re.fullmatch(rb'[ \t]*\r?\n[ \t]*', source[marker.end:first.start]):
+                continue
+            word = re.match(rb'[a-z]+', source[first.start:first.end])
+            if (word is None or len(word[0]) < 2 or word[0] not in WORDS
+                    or source[first.start + len(word[0]):first.start + len(word[0]) + 1] not in (b' ', b'\t', b'\r', b'\n')):
+                continue
+            line_index = bisect_left(newlines, first.start)
+            begin = 0 if line_index == 0 else newlines[line_index - 1] + 1
+            column = len(source[begin:first.start].decode('utf-8')) + 1
+            rule = selected[0]
+            finding = Diagnostic(CAPITALIZATION, rule['grade'], path, line_index + 1, column,
+                'Conditional source hint: if this is the paragraph marker and the paragraph is ordinary English prose, capitalize its first word.',
+                rule['source'])
+            if any(scope.covers(CAPITALIZATION, hash_node.start) or scope.covers(CAPITALIZATION, first.start)
+                   for scope in scopes):
+                suppressed.append(finding)
+            else:
+                findings.append(finding)
+    return ParagraphResult(tuple(findings), (),
+        ('Nested source pattern only; marker binding, English language, execution and prose rendering are unproved.',),
         suppressed=tuple(suppressed))
 
 

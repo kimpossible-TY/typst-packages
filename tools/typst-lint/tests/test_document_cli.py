@@ -110,6 +110,18 @@ class DocumentCliTests(unittest.TestCase):
         self.assertFalse(hints['edit_permission'] or report['applied_fixes'] or report['proposed_edits'])
         self.assertEqual(target.read_bytes(), source)
 
+    def test_nested_paragraph_capitalization_hint_is_conditional(self):
+        source = b'#block[\n#paragraph_tab\ntherefore this holds.\n]'
+        target = self.write('main.typ', source)
+        report = self.run_cli('--rule-set', 'pde', '--local-rule-hints')
+        hints = report['local_rule_hints']
+        findings = [item for item in hints['diagnostics']
+                    if item['rule_id'] == 'pde.paragraph-capitalization']
+        self.assertEqual(len(findings), 1)
+        self.assertIn('ordinary English prose', findings[0]['explanation'])
+        self.assertFalse(hints['edit_permission'] or report['applied_fixes'] or report['proposed_edits'])
+        self.assertEqual(target.read_bytes(), source)
+
     def test_merged_marker_hints_give_suppression_precedence(self):
         import document_local_rules
         import paragraph_rules
