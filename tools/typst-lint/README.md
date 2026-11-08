@@ -255,9 +255,10 @@ The separate `conditional_local_scope_raw_annotations` section counts raw
 `local-scope-annotations` callbacks and reports outside patterns as conditional
 hints. Runtime bindings, execution and display ownership are unproved. The
 separate original-compile `--lint-local-hints` summary includes these conditional
-hints and bounded samples, along with separate direct raw `annot` and
-`mannot-scope` sections. A successful compilation does not prove their runtime
-bindings, execution, or display ownership.
+hints and bounded samples, along with separate direct raw `annot`,
+`mannot-scope`, and raw `annot-cetz` sections. A successful compilation does
+not prove their runtime bindings, execution, or display ownership; calls in
+ambiguous equation-constructor contexts are reported as unresolved.
 The separate `conditional_hyphen_markers` section covers literal
 `#paragraph-tab`: root and nested gap hints and nested target/capitalization
 hints. It is diagnostic-only; marker binding and execution remain conditional.

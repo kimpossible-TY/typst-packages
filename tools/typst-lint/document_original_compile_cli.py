@@ -188,12 +188,13 @@ def _local_raw_shape_counts(tree, wrapper="local-scope-annotations"):
     return wrappers, calls
 
 
-def _direct_raw_positions(tree, *, max_work):
+def _direct_raw_positions(tree, *, max_work, overlay=False):
     """Independently verify direct raw calls and their lexical ownership."""
     from document_conditional_raw_annot import _arguments, _equation_constructor, _explicit_shadow
+    import document_conditional_raw_overlay as overlay_module
     from document_conditional_scoped_calls import _OUTER_BARRIERS, _parts, _text
     nodes = tree.nodes
-    if _explicit_shadow(tree):
+    if (overlay_module._explicit_shadow(tree) if overlay else _explicit_shadow(tree)):
         return {}, len(nodes)
     parents = {child: (index, position) for index, node in enumerate(nodes)
                for position, child in enumerate(node.children)}
@@ -204,8 +205,15 @@ def _direct_raw_positions(tree, *, max_work):
             continue
         parts = _parts(tree, index)
         if (len(parts) != 2 or nodes[parts[0]].kind != 'Ident'
-                or _text(tree, parts[0]) != 'annot' or nodes[parts[1]].kind != 'Args'
-                or not _arguments(tree, parts[1]) or index not in parents):
+                or _text(tree, parts[0]) != ('annot-cetz' if overlay else 'annot')
+                or nodes[parts[1]].kind != 'Args' or index not in parents):
+            continue
+        if overlay:
+            args = [child for child in _parts(tree, parts[1])
+                    if nodes[child].kind not in ('LeftParen', 'RightParen', 'Comma')]
+            if len(args) != 3 or any(nodes[child].kind in ('Named', 'Spread') for child in args):
+                continue
+        elif not _arguments(tree, parts[1]):
             continue
         parent, position = parents[index]
         if nodes[parent].kind != 'Markup' or not position:
@@ -230,12 +238,14 @@ def _direct_raw_positions(tree, *, max_work):
 def _conditional_raw_sections(context, catalog, metadata, cap, items):
     """Validate source-only analyzers against captured syntax before reporting."""
     import document_conditional_raw_annot as direct
+    import document_conditional_raw_overlay as raw_overlay
     import document_conditional_mannot_scope as scoped
     from suppression import resolve as resolve_suppressions
 
     sections = {}
     work = 0
     for name, module, wrapper in (('conditional_raw_annotations', direct, None),
+                                  ('conditional_raw_overlays', raw_overlay, None),
                                   ('conditional_mannot_scope_raw_annotations', scoped, 'mannot-scope')):
         findings, hidden, files = [], [], []
         seen = suppressed = wrappers = dynamic = display = 0
@@ -281,7 +291,8 @@ def _conditional_raw_sections(context, catalog, metadata, cap, items):
                     positions, charged = _local_raw_annotation_positions(
                         item.tree, max_work=_LOCAL_RAW_OWNER_WORK - work, wrapper=wrapper)
                 else:
-                    positions, charged = _direct_raw_positions(item.tree, max_work=_LOCAL_RAW_OWNER_WORK - work)
+                    positions, charged = _direct_raw_positions(
+                        item.tree, max_work=_LOCAL_RAW_OWNER_WORK - work, overlay=module is raw_overlay)
                 work += charged
                 line_starts = (0, *(n + 1 for n, byte in enumerate(item.source) if byte == 10))
                 scopes = resolve_suppressions(item.tree, {row['id'] for row in catalog['rules']})
@@ -295,6 +306,8 @@ def _conditional_raw_sections(context, catalog, metadata, cap, items):
                     if wrapper:
                         keys |= {'wrapper_start', 'outer_dynamic_context'}
                     explanation = (_LOCAL_RAW_EXPLANATION if wrapper else
+                        'This raw overlay is outside a display if the helper and source execute as expected.'
+                        if module is raw_overlay else
                         'This source call has no explicit display ancestor; wrapper and show-rule rendering remain conditional.')
                     require(type(row) is dict and set(row) == keys and row.get('rule_id') == module.RULE
                             and row.get('grade') == metadata['grade'] and row.get('source') == metadata['source']

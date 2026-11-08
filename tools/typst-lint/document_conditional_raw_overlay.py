@@ -8,6 +8,7 @@ from collections.abc import Mapping
 
 from conditional_highlight import _combined_import, _module_alias
 from document_conditional_scoped_calls import _OUTER_BARRIERS
+from document_conditional_raw_annot import _equation_constructor
 import import_graph
 from suppression import resolve as resolve_suppressions
 from syntax_client import AdapterError, parse
@@ -18,6 +19,7 @@ NAME = 'annot-cetz'
 CONDITIONS = (
     'This direct call resolves to the reviewed raw annot-cetz helper at runtime.',
     'The enclosing literal source content and this call actually execute and render as expected.',
+    'No enclosing wrapper or show rule places the call inside a display equation at runtime.',
     'Runtime imports, package selection and initialization match the intended source context.',
 )
 _ASSIGNMENTS = frozenset(('Eq', 'PlusEq', 'HyphEq', 'StarEq', 'SlashEq'))
@@ -86,6 +88,15 @@ def _explicit_shadow(tree):
 
 def analyze(source, path, *, catalog=None):
     """Inspect immutable bytes without evaluating their helpers or imports."""
+    return _analyze(source, path, catalog=catalog)
+
+
+def _analyze_captured_tree(tree, path, *, catalog=None):
+    """Inspect a validated captured tree without reparsing."""
+    return _analyze(tree.source, path, catalog=catalog, captured_tree=tree)
+
+
+def _analyze(source, path, *, catalog=None, captured_tree=None):
     if type(source) is not bytes or type(path) is not str or not path:
         raise InputError('Raw overlay hints require source bytes and a source path')
     records = load_rules()[0]['rules'] if catalog is None else catalog
@@ -100,7 +111,7 @@ def analyze(source, path, *, catalog=None):
                   suppressed=[], unresolved=[], conditions=CONDITIONS, runtime_binding_proved=False,
                   execution_proved=False, coverage_complete=False, edit_permission=False, compiler_permission=False)
     try:
-        tree = parse(source)
+        tree = parse(source) if captured_tree is None else captured_tree
     except (AdapterError, OSError, ValueError) as error:
         return dict(result, status='UNAVAILABLE', unresolved=[f'Source syntax unavailable: {error}'])
     if tree.mode != 'markup' or tree.nodes[0].errors:
@@ -133,7 +144,8 @@ def analyze(source, path, *, catalog=None):
             result['unresolved'].append(f'Overlay call is not directly escaped at byte {node.start}')
             continue
         ancestor = parent
-        while ancestor is not None and nodes[ancestor].kind not in barriers:
+        while (ancestor is not None and nodes[ancestor].kind not in barriers
+               and not _equation_constructor(tree, ancestor)):
             ancestor = parents.get(ancestor)
         if ancestor is not None:
             result['unresolved'].append(f'Overlay display ownership or execution is unsupported at byte {node.start}')
