@@ -31,6 +31,7 @@ def report_document(root, entrypoint, *, rule_set='core', package_path=None,
                     preview_display_gaps=False, preview_standalone_displays=False,
                     preview_sequence=False, local_rule_hints=False, preview_conditional_gaps=False,
                     preview_conditional_punctuation=False, preview_conditional_spacers=False,
+                    footnote_cache_path=None,
                     reference_package_path=None, reference_facade=None, reference_cache_path=None,
                     reference_calls=False, reference_arguments=False, reference_catalog=None):
     """Inspect retained source bytes without reading consumer configuration.
@@ -60,6 +61,9 @@ def report_document(root, entrypoint, *, rule_set='core', package_path=None,
     require(type(preview_conditional_spacers) is bool
             and (not preview_conditional_spacers or rule_set == 'pde'),
             'Conditional spacer previews require explicit --rule-set pde')
+    require(footnote_cache_path is None or (type(footnote_cache_path) is str
+            and rule_set == 'pde' and package_path is not None),
+            'Conditional footnote bindings require --rule-set pde, --package-path and --footnote-cache-path')
     reference_requested = (reference_package_path is not None or reference_facade is not None
                            or reference_cache_path is not None)
     require(type(reference_calls) is bool and (not reference_calls or reference_requested),
@@ -124,9 +128,30 @@ def report_document(root, entrypoint, *, rule_set='core', package_path=None,
     sequence_previews = []
     conditional_gap_previews = []
     conditional_punctuation_previews = []
+    conditional_punctuation_move_previews = []
     conditional_spacer_previews = []
     local_findings, local_suppressed, local_files, local_contexts = [], [], [], []
     items = len(captured.sources) + len(captured.edges) + len(captured.occurrences) + len(captured.unresolved)
+    footnote_report = None
+    if footnote_cache_path is not None:
+        from conditional_footnote_binding import ConditionalFootnoteBinding, _valid as valid_footnote_session
+        from namespace_multiroot import load_multiroot_capture
+        footnote_roots = load_multiroot_capture(package_path, footnote_cache_path)
+        footnote_session = ConditionalFootnoteBinding(captured, footnote_roots)
+        footnote_report = dict(package_path=footnote_roots.roots[0], cache_path=footnote_roots.roots[1],
+                               by_file=[], edit_permission=False, compiler_permission=False)
+        binding_batch = footnote_session.analyze_all(max_items=MAX_REPORT_ITEMS - items)
+        require(binding_batch.status != 'UNAVAILABLE', 'Conditional footnote capture changed during inspection')
+        for source_path, bindings in binding_batch.results:
+            items += 1 + len(bindings.unresolved)
+            for call in bindings.calls:
+                items += (1 + len(call.facade_sources) + len(call.package_evidence)
+                          + len(call.package_requests) + len(call.conditions))
+            require(items <= MAX_REPORT_ITEMS, 'Document inspection report item limit exceeded')
+            footnote_report['by_file'].append(dict(path=source_path, status=bindings.status,
+                calls=[asdict(call) for call in bindings.calls], unresolved=list(bindings.unresolved),
+                edit_permission=False, compiler_permission=False))
+        require(valid_footnote_session(footnote_session), 'Conditional footnote capture changed during inspection')
     reference_report = None
     if reference_requested:
         from conditional_reference_provenance import ConditionalReferenceProvenance
@@ -273,6 +298,7 @@ def report_document(root, entrypoint, *, rule_set='core', package_path=None,
                     conditional_gap_previews.append(preview)
             if preview_conditional_punctuation:
                 from footnote_rules import preview_conditional_prose_punctuation
+                from document_nested_footnote_punctuation import preview as preview_punctuation_move
                 from static_resolver import resolve
                 punctuation = preview_conditional_prose_punctuation(
                     item.tree, item.path, resolve(item.tree, packages=()), catalog=catalog['rules'])
@@ -280,6 +306,11 @@ def report_document(root, entrypoint, *, rule_set='core', package_path=None,
                     items += 1 + len(punctuation['edits'])
                     require(items <= MAX_REPORT_ITEMS, 'Document inspection report item limit exceeded')
                     conditional_punctuation_previews.append(punctuation)
+                punctuation_move = preview_punctuation_move(item.tree, item.path, catalog=catalog['rules'])
+                if punctuation_move is not None:
+                    items += 1 + len(punctuation_move['edits'])
+                    require(items <= MAX_REPORT_ITEMS, 'Document inspection report item limit exceeded')
+                    conditional_punctuation_move_previews.append(punctuation_move)
             if preview_conditional_spacers:
                 from footnote_rules import preview_conditional_unaligned_spacers
                 from static_resolver import resolve
@@ -473,6 +504,7 @@ def report_document(root, entrypoint, *, rule_set='core', package_path=None,
         report['conditional_gap_preview_status'] = 'independent-source-only-not-composed-or-render-verified'
     if preview_conditional_punctuation:
         report['conditional_punctuation_previews'] = conditional_punctuation_previews
+        report['conditional_punctuation_move_previews'] = conditional_punctuation_move_previews
         report['conditional_punctuation_preview_status'] = 'independent-source-only-not-composed-or-render-verified'
     if preview_conditional_spacers:
         report['conditional_spacer_previews'] = conditional_spacer_previews
@@ -488,6 +520,8 @@ def report_document(root, entrypoint, *, rule_set='core', package_path=None,
             source_contexts=local_contexts, coverage=local_files, edit_permission=False)
     if reference_report is not None:
         report['reference_provenance'] = reference_report
+    if footnote_report is not None:
+        report['conditional_footnote_bindings'] = footnote_report
     return report
 
 
@@ -503,6 +537,8 @@ def main(arguments=None):
                         help='Explicit source checks: core (scripts) or pde (also display layout); default core')
     parser.add_argument('--package-path',
                         help='Explicit canonical package root for conditional PDE helper namespace hints')
+    parser.add_argument('--footnote-cache-path',
+                        help='Explicit second namespace root for conditional footnote bindings (requires --rule-set pde and --package-path)')
     parser.add_argument('--preview-display-gaps', action='store_true',
                         help='Preview independently verified display-gap edits (requires --rule-set pde)')
     parser.add_argument('--preview-standalone-displays', action='store_true',
@@ -514,7 +550,7 @@ def main(arguments=None):
     parser.add_argument('--preview-conditional-gaps', action='store_true',
                         help='Preview independent proof and nested math-footnote gaps (requires --rule-set pde)')
     parser.add_argument('--preview-conditional-punctuation', action='store_true',
-                        help='Preview independent prose footnote punctuation spacing (requires --rule-set pde)')
+                        help='Preview independent prose footnote punctuation spacing and moves (requires --rule-set pde)')
     parser.add_argument('--preview-conditional-spacers', action='store_true',
                         help='Preview conditional unaligned footnote spacer removals (requires --rule-set pde)')
     parser.add_argument('--reference-package-path',
@@ -534,6 +570,7 @@ def main(arguments=None):
     try:
         result = report_document(args.root, args.entrypoint, rule_set=args.rule_set,
                                  package_path=args.package_path,
+                                 footnote_cache_path=args.footnote_cache_path,
                                  preview_display_gaps=args.preview_display_gaps,
                                  preview_standalone_displays=args.preview_standalone_displays,
                                  preview_sequence=args.preview_sequence,
@@ -592,6 +629,26 @@ def main(arguments=None):
                 print(f"{label}: {sum(len(row['diagnostics']) for row in rows)} hints{checked}; "
                       f"{sum(row['status'] == 'PARTIAL' for row in rows)} partial and "
                       f"{sum(row['status'] == 'UNAVAILABLE' for row in rows)} unavailable sources; no edit permission")
+        if 'conditional_footnote_bindings' in result:
+            footnotes = result['conditional_footnote_bindings']
+            print(f"Conditional footnote bindings: package root {footnotes['package_path']}; "
+                  f"cache root {footnotes['cache_path']}; no edit or compiler permission")
+            for row in footnotes['by_file']:
+                print(f"  {row['path']}: {row['status']}; {len(row['calls'])} calls")
+                for reason in row['unresolved']:
+                    print(f"    unresolved: {reason}")
+                for call in row['calls']:
+                    print(f"    conditional call bytes {call['start']}..{call['end']}; "
+                          f"source sha256 {call['source_sha256']}")
+                    for source in call['facade_sources']:
+                        print(f"      facade {source['path']}: {source['source_sha256']}")
+                    for package in call['package_evidence']:
+                        print(f"      package {package['import_path']}: {package['source_identity']} "
+                              f"sha256 {package['source_sha256']}")
+                    for request in call['package_requests']:
+                        print(f"      package request: {request}")
+                    for condition in call['conditions']:
+                        print(f"      condition: {condition}")
         if result['namespace_evidence'] is not None:
             unresolved = sum(len(row['reasons']) + len(row['parse_errors'])
                              for row in result['conditional_coverage'])
@@ -616,6 +673,8 @@ def main(arguments=None):
         for flag, key, label in ((args.preview_conditional_gaps, 'conditional_gap_previews', 'Conditional gap'),
                                  (args.preview_conditional_punctuation, 'conditional_punctuation_previews',
                                   'Conditional punctuation'),
+                                 (args.preview_conditional_punctuation, 'conditional_punctuation_move_previews',
+                                  'Conditional punctuation move'),
                                  (args.preview_conditional_spacers, 'conditional_spacer_previews',
                                   'Conditional spacer')):
             if flag:

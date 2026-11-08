@@ -197,6 +197,10 @@ Common resolver refusals are reported once per source. These rules remain in
 `coverage.uninspected` because the document context has not been established.
 See [document rule coverage](DOCUMENT_RULE_COVERAGE.md) for each rule's current
 single-source, document-hint and compile-preview scope.
+To inspect conditional builtin-footnote bindings through captured relative
+wildcard facades, add `--package-path /absolute/packages --footnote-cache-path
+/absolute/cache` with `--rule-set pde`. These source-bound hints use explicit
+package-before-cache evidence; they do not authorize compilation or edits.
 With the additional explicit `--reference-package-path` and `--reference-facade`,
 `reference_provenance` separately traces the facade's `project-ref` export using
 captured package hashes and namespace evidence. It reports either conditional

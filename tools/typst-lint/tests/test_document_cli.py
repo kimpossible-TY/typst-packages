@@ -45,6 +45,126 @@ class DocumentCliTests(unittest.TestCase):
         return [row for row in result['coverage']['files']
                 if row['rule_id'] == 'core.parenthesized-scripts']
 
+    def footnote_roots(self):
+        packages, cache = self.root / 'packages', self.root / 'cache'
+        packages.mkdir()
+        cache.mkdir()
+        fixture = TOOL / 'tests/fixtures/reviewed-packages/local'
+        for name, version in (('math-blocks', '0.2.0'), ('text-utils', '0.1.2')):
+            shutil.copytree(fixture / name / version, packages / 'local' / name / version)
+        return packages, cache
+
+    def test_conditional_footnote_binding_opt_in_reports_evidence_without_writes(self):
+        packages, cache = self.footnote_roots()
+        source = b'#import "styles.typ": *\n#block[$ x #footnote[Note] $]\n#include "child.typ"\n'
+        child = b'#import "styles.typ": *\n#footnote[Child]'
+        main = self.write('main.typ', source)
+        child_file = self.write('child.typ', child)
+        facade = self.write('styles.typ', b'#import "@local/text-utils:0.1.2": *\n')
+        baseline = self.run_cli('--rule-set', 'pde', '--package-path', str(packages))
+        self.assertNotIn('conditional_footnote_bindings', baseline)
+        options = ('--rule-set', 'pde', '--package-path', str(packages), '--footnote-cache-path', str(cache))
+        report = self.run_cli(*options)
+        evidence = report['conditional_footnote_bindings']
+        self.assertEqual(evidence['package_path'], str(packages))
+        self.assertEqual(evidence['cache_path'], str(cache))
+        self.assertFalse(evidence['edit_permission'] or evidence['compiler_permission']
+                         or report['compiler_invoked'] or report['applied_fixes'])
+        self.assertEqual(report['coverage']['uninspected'], baseline['coverage']['uninspected'])
+        rows = {item['path']: item for item in evidence['by_file']}
+        for path, content in (('main.typ', source), ('child.typ', child)):
+            self.assertEqual(rows[path]['status'], 'CONDITIONAL')
+            self.assertFalse(rows[path]['unresolved'] or rows[path]['compiler_permission'])
+            call, = rows[path]['calls']
+            self.assertTrue(content[call['start']:call['end']].startswith(b'#footnote['))
+            self.assertEqual(call['source_sha256'], digest(content))
+            self.assertEqual(call['facade_sources'][0]['path'], 'styles.typ')
+            self.assertEqual(call['facade_sources'][0]['source_sha256'], digest(facade.read_bytes()))
+            self.assertEqual(call['package_evidence'][0]['import_path'], '@local/text-utils:0.1.2')
+            self.assertTrue(call['conditions'] and call['package_requests'])
+            self.assertFalse(call['edit_permission'] or call['compiler_permission'])
+        text = self.run_cli(*options, format='text')
+        for part in ('Conditional footnote bindings:', 'conditional call bytes', 'facade styles.typ',
+                     'package @local/text-utils:0.1.2', 'condition:', 'no edit or compiler permission'):
+            self.assertIn(part, text)
+        self.assertEqual(main.read_bytes(), source)
+        self.assertEqual(child_file.read_bytes(), child)
+        self.assertEqual(facade.read_bytes(), b'#import "@local/text-utils:0.1.2": *\n')
+
+    def test_conditional_footnote_bindings_refuse_bad_options_and_report_unresolved(self):
+        packages, cache = self.footnote_roots()
+        source = b'#import "styles.typ": *\n#footnote[Note]'
+        self.write('main.typ', source)
+        self.write('styles.typ', b'#let footnote = none\n')
+        for options in (('--footnote-cache-path', str(cache)),
+                        ('--rule-set', 'pde', '--footnote-cache-path', str(cache)),
+                        ('--package-path', str(packages), '--footnote-cache-path', str(cache))):
+            with self.subTest(options=options):
+                report = self.run_cli(*options)
+                self.assertEqual(report['phase'], 'input')
+                self.assertFalse(report['compiler_invoked'] or report['applied_fixes'])
+        options = ('--rule-set', 'pde', '--package-path', str(packages), '--footnote-cache-path', str(cache))
+        row, = self.run_cli(*options)['conditional_footnote_bindings']['by_file']
+        self.assertEqual(row['status'], 'PARTIAL')
+        self.assertFalse(row['calls'])
+        self.assertIn('Wildcard facade exports footnote', row['unresolved'])
+        self.assertIn('Wildcard facade exports footnote', self.run_cli(*options, format='text'))
+        self.assertEqual((self.root / 'main.typ').read_bytes(), source)
+
+    def test_conditional_footnote_binding_budget_refuses_before_serialization(self):
+        import conditional_footnote_binding
+        packages, cache = self.footnote_roots()
+        self.write('main.typ', b'#import "styles.typ": *\n#footnote[Note]')
+        self.write('styles.typ', b'#import "@local/text-utils:0.1.2": *\n')
+        original = document_cli.asdict
+        def guard(value):
+            if isinstance(value, conditional_footnote_binding.FootnoteBinding):
+                self.fail('Over-budget call was serialized')
+            return original(value)
+        with patch.object(document_cli, 'MAX_REPORT_ITEMS', 5), patch.object(document_cli, 'asdict', side_effect=guard):
+            with self.assertRaisesRegex(InputError, 'report item limit'):
+                document_cli.report_document(str(self.root), 'main.typ', rule_set='pde',
+                    package_path=str(packages), footnote_cache_path=str(cache))
+
+    def test_conditional_footnote_cache_respects_first_root_precedence(self):
+        packages, cache = self.footnote_roots()
+        source = b'#import "styles.typ": *\n#footnote[Note]'
+        self.write('main.typ', source)
+        self.write('styles.typ', b'#import "@local/text-utils:0.1.2": *\n')
+        primary = packages / 'local/text-utils/0.1.2'
+        fallback = cache / 'local/text-utils/0.1.2'
+        fallback.parent.mkdir(parents=True)
+        shutil.copytree(primary, fallback)
+        shutil.rmtree(primary)
+        options = ('--rule-set', 'pde', '--package-path', str(packages), '--footnote-cache-path', str(cache))
+        row, = self.run_cli(*options)['conditional_footnote_bindings']['by_file']
+        call, = row['calls']
+        self.assertTrue(call['package_evidence'][0]['source_identity'].startswith(str(cache) + '/'))
+        primary.mkdir(parents=True)
+        (primary / 'typst.toml').write_bytes(b'invalid first-root package')
+        row, = self.run_cli(*options)['conditional_footnote_bindings']['by_file']
+        self.assertFalse(row['calls'])
+        self.assertTrue(row['unresolved'])
+        same_root = self.run_cli('--rule-set', 'pde', '--package-path', str(packages),
+                                 '--footnote-cache-path', str(packages))
+        self.assertEqual(same_root['phase'], 'input')
+        self.assertFalse(same_root['compiler_invoked'])
+
+    def test_conditional_footnote_report_refuses_capture_invalidated_after_a_file(self):
+        import conditional_footnote_binding
+        packages, cache = self.footnote_roots()
+        self.write('main.typ', b'#import "styles.typ": *\n#footnote[Note]')
+        self.write('styles.typ', b'#let other = none\n')
+        original = conditional_footnote_binding._valid
+        calls = []
+        def invalid_after_analyze(session):
+            calls.append(True)
+            return len(calls) < 3 and original(session)
+        with patch.object(conditional_footnote_binding, '_valid', side_effect=invalid_after_analyze):
+            with self.assertRaisesRegex(InputError, 'capture changed during inspection'):
+                document_cli.report_document(str(self.root), 'main.typ', rule_set='pde',
+                    package_path=str(packages), footnote_cache_path=str(cache))
+
     def test_source_local_rule_hints_cover_includes_without_granting_edits(self):
         self.write('main.typ', b'#book-part[\n#include "chapter.typ"\n]\n')
         source = (b'This statement holds.\nAnother statement follows.\n$cancel(x)$\n'
@@ -210,6 +330,21 @@ class DocumentCliTests(unittest.TestCase):
         self.assertEqual(target.read_bytes(), source)
         refused = self.run_cli('--preview-conditional-punctuation')
         self.assertEqual(refused['phase'], 'input')
+
+    def test_conditional_punctuation_move_is_an_independent_read_only_preview(self):
+        source = b'#block[Claim #footnote[Reason.].]'
+        target = self.write('main.typ', source)
+        self.assertNotIn('conditional_punctuation_move_previews', self.run_cli('--rule-set', 'pde'))
+        report = self.run_cli('--rule-set', 'pde', '--preview-conditional-punctuation')
+        rows = report['conditional_punctuation_move_previews']
+        self.assertEqual(len(rows), 1)
+        self.assertEqual(rows[0]['baseline_sha256'], digest(source))
+        edit = rows[0]['edits'][0]
+        self.assertEqual(source[:edit['start']] + edit['replacement'].encode() + source[edit['end']:],
+                         b'#block[Claim.#footnote[Reason.]]')
+        self.assertFalse(rows[0]['edit_permission'] or rows[0]['runtime_binding_proved']
+                         or rows[0]['render_equivalence_proved'] or report['applied_fixes'])
+        self.assertEqual(target.read_bytes(), source)
 
     def test_conditional_spacer_preview_is_opt_in_and_read_only(self):
         source = b'#block[$\n A = B #dots_space #footnote[Reason.]\n$]'

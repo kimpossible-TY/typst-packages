@@ -348,7 +348,11 @@ class ConditionalReferenceProvenance:
         if not _valid_session(self):
             return ReferenceExport(str(path), str(name), 'UNAVAILABLE', 'Session capture changed or is unissued')
         try:
-            result = self._export_unchecked(path, name)
+            # Never consume caches exposed through the retained session engine.
+            # Rebuild derived trees/modules/refusals from the sealed capture;
+            # this preserves intra-call memoization without trusting prior calls.
+            engine = _ReferenceNamespace(self._engine.graph, self._namespace_capture, self._reference_capture)
+            result = ConditionalReferenceProvenance._export_unchecked(self, path, name, engine=engine)
         except Exception:
             if not _valid_session(self):
                 return ReferenceExport(str(path), str(name), 'UNAVAILABLE', 'Session capture changed during inspection')
@@ -357,8 +361,7 @@ class ConditionalReferenceProvenance:
             return ReferenceExport(str(path), str(name), 'UNAVAILABLE', 'Session capture changed during inspection')
         return result
 
-    def _export_unchecked(self, path, name=NAME):
-        engine = self._engine
+    def _export_unchecked(self, path, name=NAME, *, engine):
         if type(path) is not str or type(name) is not str or not name:
             return ReferenceExport(str(path), str(name), 'UNAVAILABLE', 'Invalid source path or export name')
         if engine.reason or engine.exhausted:
@@ -381,7 +384,8 @@ class ConditionalReferenceProvenance:
         if not _valid_session(self):
             return ReferenceCalls(unresolved=('Session capture changed or is unissued',), status='UNAVAILABLE')
         try:
-            result = self._calls_unchecked(path)
+            engine = _ReferenceNamespace(self._engine.graph, self._namespace_capture, self._reference_capture)
+            result = ConditionalReferenceProvenance._calls_unchecked(self, path, engine=engine)
         except Exception:
             if not _valid_session(self):
                 return ReferenceCalls(unresolved=('Session capture changed during inspection',), status='UNAVAILABLE')
@@ -390,14 +394,13 @@ class ConditionalReferenceProvenance:
             return ReferenceCalls(unresolved=('Session capture changed during inspection',), status='UNAVAILABLE')
         return result
 
-    def _calls_unchecked(self, path):
+    def _calls_unchecked(self, path, *, engine):
         """Trace direct identifier calls in one selected, captured source.
 
         This is lexical, conditional evidence only: arbitrary expression side
         effects, module initialization and whether content executes are not
         evaluated. Unknown scopes and declarations discard the affected path.
         """
-        engine = self._engine
         if (type(path) is not str or engine.reason or engine.exhausted or self._selection_reason
                 or (engine.multi_root is not None
                     and not namespace_multiroot.verify_multiroot_capture(engine.multi_root))):

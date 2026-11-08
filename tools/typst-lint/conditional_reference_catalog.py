@@ -5,7 +5,7 @@ Typst nor proves catalog freshness, runtime execution, or permission to edit.
 """
 from __future__ import annotations
 
-from bisect import bisect_right
+from bisect import bisect_left, bisect_right
 from array import array
 from collections.abc import Mapping
 from dataclasses import dataclass, field
@@ -122,6 +122,28 @@ class CatalogResult:
 def analyze(analyzer, path, capture, *, catalog=None):
     """Check literal project/label arguments against the exact issued snapshot."""
     require(verify_catalog(capture), 'Conditional reference catalog requires an issued unchanged capture')
+    if type(analyzer) is not provenance.ConditionalReferenceProvenance:
+        raise InputError('Conditional reference arguments require a provenance session')
+    if type(path) is not str:
+        raise InputError('Conditional reference arguments require a source path')
+    if not provenance._valid_session(analyzer):
+        return CatalogResult('UNAVAILABLE', unresolved=('Session capture changed or is unissued',))
+    try:
+        result = _analyze_unchecked(analyzer, path, capture, catalog=catalog)
+    except Exception:
+        if not provenance._valid_session(analyzer):
+            return CatalogResult('UNAVAILABLE', unresolved=('Session capture changed during inspection',))
+        if not verify_catalog(capture):
+            return CatalogResult('UNAVAILABLE', unresolved=('Catalog capture changed during inspection',))
+        raise
+    if not provenance._valid_session(analyzer):
+        return CatalogResult('UNAVAILABLE', unresolved=('Session capture changed during inspection',))
+    if not verify_catalog(capture):
+        return CatalogResult('UNAVAILABLE', unresolved=('Catalog capture changed during inspection',))
+    return result
+
+
+def _analyze_unchecked(analyzer, path, capture, *, catalog=None):
     records = load_rules()[0]['rules'] if catalog is None else catalog
     require(type(records) in (tuple, list) and all(isinstance(row, Mapping) and type(row.get('id')) is str
             and row['id'] for row in records), 'Conditional reference catalog requires rule metadata')
@@ -160,6 +182,8 @@ def analyze(analyzer, path, capture, *, catalog=None):
     newlines = [i for i, byte in enumerate(source) if byte == 10]
     columns = {}
     findings, suppressed, unresolved, checked = [], [], list(trace.unresolved), 0
+    invalid_calls = {(finding.call_start, finding.call_end)
+                     for finding in (*inspected.diagnostics, *inspected.suppressed)}
 
     def add(call, start, explanation):
         line = bisect_right(newlines, start) + 1
@@ -199,6 +223,17 @@ def analyze(analyzer, path, capture, *, catalog=None):
         project = rules._string(tree, rules._ungroup(tree, project_id))
         label = rules._label(tree, rules._ungroup(tree, target_id))
         if project is None or label is None or label.startswith(PROJECT_REFERENCE_LOCAL_PREFIXES):
+            # A literal key's absence is independent of an unresolved target.
+            # Known invalid arguments are already reported by the argument
+            # checker; do not imply that those calls can reach catalog lookup.
+            target = rules._ungroup(tree, target_id)
+            if (project is not None and label is None and (call.start, call.end) not in invalid_calls
+                    and rules._KNOWN_TYPES.get(nodes[target].kind) is None):
+                project_index = bisect_left(evidence.projects, project, key=lambda p: p.alias)
+                if project_index == len(evidence.projects) or evidence.projects[project_index].alias != project:
+                    add(call, nodes[project_id].start,
+                        f'If this call binds project-ref and its target is a valid global label, '
+                        f'the captured catalog has no project {project!r}.')
             unresolved.append(f'Catalog membership requires a literal project and global label at byte {call.start}')
             continue
         checked += 1

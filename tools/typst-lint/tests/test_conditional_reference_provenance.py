@@ -173,20 +173,54 @@ class ConditionalReferenceProvenanceTests(unittest.TestCase):
         self.assertFalse(analyzer.calls('Styles/styles.typ').calls)
         self.assertIn('selected', analyzer.calls('Styles/styles.typ').unresolved[0])
 
+    def test_forged_module_cache_cannot_invent_reference_call_or_catalog_finding(self):
+        import json
+        import conditional_reference_catalog as catalog
+        (self.project / 'good.typ').write_bytes(
+            b'#import "@local/project-references:0.1.0": project-ref\n')
+        (self.project / 'bad.typ').write_bytes(b'#let project-ref(project, target) = [other]\n')
+        main = (b'#import "good.typ" as good\n#import "bad.typ": *\n'
+                b'#project-ref("missing", <target>)\n')
+        analyzer = self.capture(b'', main)
+        self.assertFalse(analyzer.calls('main.typ').calls)
+        good = analyzer._engine.module('good.typ', ())
+        analyzer._engine.modules['bad.typ'] = good
+        self.assertTrue(reference._valid_session(analyzer))
+        self.assertFalse(analyzer.calls('main.typ').calls)
+        raw = json.dumps({'schema': 1, 'projects': {'book': {'references': {},
+                                                               'ambiguous_labels': []}}}).encode()
+        snapshot = catalog.capture_catalog(raw, 'explicit-fixture.json')
+        checked = catalog.analyze(analyzer, 'main.typ', snapshot)
+        self.assertFalse(checked.diagnostics or checked.checked_calls)
+        self.assertFalse(analyzer.export('bad.typ').status == 'CONDITIONAL')
+
+    def test_forged_trees_refusals_and_instance_methods_are_not_trusted(self):
+        facade = b'#import "@local/math-blocks:0.2.0": *\n'
+        main = b'#import "Styles/styles.typ": *\n#project-ref("book", <x>)\n'
+        analyzer = self.capture(facade, main)
+        baseline = analyzer.calls('main.typ')
+        self.assertEqual(len(baseline.calls), 1)
+        analyzer._engine.trees['Styles/styles.typ'] = parse(b'#let project-ref = none\n')
+        analyzer._engine.refusals['Styles/styles.typ'] = reference.conditional._Module(reason='forged')
+        analyzer._engine.exhausted = 'forged'
+        analyzer._calls_unchecked = lambda *args, **kwargs: reference.ReferenceCalls(status='UNAVAILABLE')
+        for _ in range(2):
+            self.assertEqual(analyzer.calls('main.typ'), baseline)
+
     def test_calls_in_scoped_callback_and_shadowed_parameter(self):
         facade = b'#import "@local/math-blocks:0.2.0": *\n'
         for parameter, expected in (('scope', 1), ('project-ref', 0)):
             main = (b'#import "Styles/styles.typ": *\n'
                     + f'#local-scope-annotations({parameter} => [#project-ref("book", <x>)], parent: scope, name: "child")\n'.encode())
             analyzer = self.capture(facade, main)
-            original = analyzer._engine.incoming
-            def with_wrapper(*args, **kwargs):
-                result = original(*args, **kwargs)
+            original = reference._ReferenceNamespace.incoming
+            def with_wrapper(engine, *args, **kwargs):
+                result = original(engine, *args, **kwargs)
                 if result.reason is None:
                     wrapper = reference.conditional._Value((), 'local-scope-annotations')
                     return replace(result, exports=result.exports + (('local-scope-annotations', wrapper),))
                 return result
-            with patch.object(analyzer._engine, 'incoming', side_effect=with_wrapper):
+            with patch.object(reference._ReferenceNamespace, 'incoming', with_wrapper):
                 result = analyzer.calls('main.typ')
             self.assertEqual(len(result.calls), expected, result.unresolved)
 
@@ -195,14 +229,14 @@ class ConditionalReferenceProvenanceTests(unittest.TestCase):
         for tail in (b's => [#return\n#project-ref("book", <x>)]',
                      b's => [#project-ref("book", <x>)], parent: dangerous()'):
             analyzer = self.capture(facade, b'#import "Styles/styles.typ": *\n#local-tag-scope(' + tail + b')\n')
-            original = analyzer._engine.incoming
-            def with_wrapper(*args, **kwargs):
-                result = original(*args, **kwargs)
+            original = reference._ReferenceNamespace.incoming
+            def with_wrapper(engine, *args, **kwargs):
+                result = original(engine, *args, **kwargs)
                 if result.reason is None:
                     return replace(result, exports=result.exports +
                                    (('local-tag-scope', reference.conditional._Value((), 'local-tag-scope')),))
                 return result
-            with patch.object(analyzer._engine, 'incoming', side_effect=with_wrapper):
+            with patch.object(reference._ReferenceNamespace, 'incoming', with_wrapper):
                 result = analyzer.calls('main.typ')
             self.assertFalse(result.calls)
             self.assertTrue(result.unresolved)

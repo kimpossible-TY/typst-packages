@@ -27,6 +27,66 @@ MAX_DEPS_BYTES = document_dependencies.MAX_DEPENDENCY_BYTES
 SANDBOX = Path('/usr/bin/sandbox-exec')
 
 
+class PreviewCompilerDiagnostics(SafetyError):
+    """Successful private compile emitted diagnostics and was refused."""
+
+    def __init__(self, stage, invocation):
+        super().__init__('Preview compiler emitted warnings or diagnostics')
+        self.stage = stage
+        self.invocation = invocation
+
+
+_PURPOSE_STAGES = {'document-discovery-compile': 'discovery',
+                   'document-preview-baseline': 'baseline',
+                   'document-preview-candidate': 'candidate'}
+_VERSION_PURPOSES = frozenset(('document-discovery-version', 'document-preview-version'))
+
+
+class PreviewCompilerStarts:
+    """Historical process starts, separate from a version probe or authority."""
+    def __init__(self):
+        self._started = {purpose: [] for purpose in (*_PURPOSE_STAGES, *_VERSION_PURPOSES)}
+        self._unknown = []
+
+    def observe(self, invocation):
+        if type(invocation) is runtime.Invocation and invocation.purpose in self._started:
+            self._started[invocation.purpose].append(invocation.started)
+        elif type(invocation) is runtime.Invocation and invocation.started is not False:
+            self._unknown.append(None)
+
+    @staticmethod
+    def _combine(values):
+        if any(value is True for value in values):
+            return True
+        return None if any(value is None for value in values) else False
+
+    def stages(self):
+        return {stage: self._combine(self._started[purpose] + self._unknown)
+                for purpose, stage in _PURPOSE_STAGES.items()}
+
+    def compiler_invoked(self):
+        return self._combine([value for purpose in _PURPOSE_STAGES for value in self._started[purpose]] + self._unknown)
+
+    def version_probe_invoked(self):
+        return self._combine([value for purpose in _VERSION_PURPOSES for value in self._started[purpose]] + self._unknown)
+
+
+def _run_tracked(argv, *, starts, **kwargs):
+    # The shared runtime ledger is deliberately per invocation: its own
+    # two-attempt bound is for another compile protocol. Retain only started
+    # state here, including interrupted launches and failures before return.
+    if starts is None:
+        return runtime._run(argv, **kwargs)
+    if type(starts) is not PreviewCompilerStarts:
+        raise SafetyError('Invalid preview compiler start tracker')
+    ledger = runtime._AttemptLedger()
+    try:
+        return runtime._run(argv, _ledger=ledger, **kwargs)
+    finally:
+        for attempt in ledger.attempts:
+            starts.observe(attempt.snapshot())
+
+
 @dataclass(frozen=True, slots=True)
 class PreviewCompileResult:
     baseline_sha256: str
@@ -92,7 +152,7 @@ def _workspace_guard(base, allowed_files, allowed_dirs, output_limits):
 
 def compile_preview(context, records, catalog, snapshot, *, entrypoint, deadline_seconds=120.0,
                     cancel_event=None, expected_dependencies=None, expected_baseline_sha256=None,
-                    profile='standard'):
+                    profile='standard', starts=None):
     """Compile baseline and candidate from explicit captured bytes in private.
 
     macOS sandbox-exec denies networking and writes outside the temporary
@@ -219,7 +279,7 @@ def compile_preview(context, records, catalog, snapshot, *, entrypoint, deadline
                 _workspace_guard(base, allowed_files, allowed_dirs, output_limits)
                 last_check[0] = time.monotonic()
 
-        probe = runtime._run([str(SANDBOX), '-p', sandbox_profile, str(compiler), '--version'],
+        probe = _run_tracked([str(SANDBOX), '-p', sandbox_profile, str(compiler), '--version'], starts=starts,
                              purpose='document-preview-version', cwd=base, environment=environment,
                              deadline=time.monotonic() + min(float(deadline_seconds), 10.0),
                              cancel_event=cancel_event, check_workspace=check_workspace)
@@ -228,22 +288,32 @@ def compile_preview(context, records, catalog, snapshot, *, entrypoint, deadline
         outputs = {}
         for label in ('baseline', 'candidate'):
             workspace, staged, system_fonts, project_fonts, pdf, pdf_fd, pdf_id, deps, deps_fd, deps_id = workspaces[label]
+            def verify_outputs():
+                check_workspace(force=True)
+                for path, descriptor, identity in ((pdf, pdf_fd, pdf_id), (deps, deps_fd, deps_id)):
+                    if (runtime._output_identity(os.fstat(descriptor)) != identity
+                            or runtime._output_identity(path.lstat()) != identity):
+                        raise SafetyError('Private preview output identity changed')
             command = [str(SANDBOX), '-p', sandbox_profile, str(compiler), 'compile',
                        '--root', str(staged['project']), '--package-path', str(staged['packages']),
                        '--package-cache-path', str(staged['cache']), '--ignore-system-fonts',
                        '--font-path', str(system_fonts) + os.pathsep + str(project_fonts),
                        '--creation-timestamp', '1700000000', '--deps', str(deps),
                        '--deps-format', 'zero', '--', entrypoint, str(pdf)]
-            invocation = runtime._run(command, purpose=f'document-preview-{label}', cwd=staged['project'],
-                                      environment=environment, deadline=time.monotonic() + deadline_seconds,
-                                      cancel_event=cancel_event, check_workspace=check_workspace)
+            try:
+                invocation = _run_tracked(command, starts=starts, purpose=f'document-preview-{label}', cwd=staged['project'],
+                                          environment=environment, deadline=time.monotonic() + deadline_seconds,
+                                          cancel_event=cancel_event, check_workspace=check_workspace)
+            except runtime.CompilerFailure as error:
+                # _run cleans up before returning this failure. If launch was
+                # possible, refuse unsafe output before exposing its stderr.
+                # A proven prelaunch cancellation has not touched outputs.
+                if error.invocation is None or error.invocation.started is not False:
+                    verify_outputs()
+                raise
+            verify_outputs()
             if invocation.stderr:
-                raise SafetyError('Preview compiler emitted warnings or diagnostics')
-            check_workspace(force=True)
-            for path, descriptor, identity in ((pdf, pdf_fd, pdf_id), (deps, deps_fd, deps_id)):
-                if (runtime._output_identity(os.fstat(descriptor)) != identity
-                        or runtime._output_identity(path.lstat()) != identity):
-                    raise SafetyError('Private preview output identity changed')
+                raise PreviewCompilerDiagnostics(label, invocation)
             pdf_bytes, _ = runtime._capture(pdf, MAX_PDF_BYTES)
             dep_bytes, _ = runtime._capture(deps, MAX_DEPS_BYTES)
             runtime._pdf(pdf_bytes)

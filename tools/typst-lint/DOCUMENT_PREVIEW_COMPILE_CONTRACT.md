@@ -75,6 +75,26 @@ successful preview forms exit 2 because global lint coverage remains incomplete;
 `phase=preview` and `pdf_generated=true` distinguish a completed preview from
 an input or compiler refusal.
 
+Warnings or other compiler stderr still refuse the preview. For this refusal,
+the report includes `compiler_stage` (`discovery`, `baseline` or `candidate`), the observed
+`compiler_invoked` value and `compiler_diagnostics`: up to the first 8192 stderr
+bytes decoded as UTF-8 with replacement, like compiler failures. Diagnostics
+may contain source excerpts or private paths; they are report data, not proof of
+live source state. Text output prints them, while `--pdf-stdout` keeps all report
+data on stderr and emits no PDF for a refused preview. The workspace and output
+identities are forcibly rechecked before diagnostics can be reported. The same
+checks precede compiler failure diagnostics when a compile may have started;
+a confirmed prelaunch cancellation preserves its original failure. Cleanup
+and safety failures retain precedence over compiler diagnostics.
+
+`compiler_invoked` combines actual discovery, baseline and candidate compile
+starts, and `compiler_stages_started` gives those three states individually.
+`compiler_version_probe_invoked` separately reports version probes. These are
+tri-state values: null means that the available launch evidence cannot decide.
+On process failure, `compiler_stage` is set only for a recognized compile
+invocation purpose and is otherwise null. A started version probe alone does
+not mean that a document compile started.
+
 The caller supplies every resource explicitly. For example, the following is a
 minimal manifest for a dependency-free document; real projects must also list
 all included sources and compiler-observed imports, packages, images, data,

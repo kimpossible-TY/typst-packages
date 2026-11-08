@@ -1,10 +1,12 @@
 """Private preview compiler integration with owned sources and resources."""
 from pathlib import Path
+from dataclasses import replace
 import os
 import subprocess
 import sys
 import tempfile
 import threading
+import time
 import unittest
 from unittest.mock import patch
 
@@ -115,6 +117,21 @@ class DocumentPreviewCompileTests(unittest.TestCase):
             self.assertEqual(error.exception.kind, compiler.runtime.CompilerFailureKind.CANCELLED)
             capture.assert_not_called()
 
+    def test_start_tracker_distinguishes_real_probe_compile_and_prelaunch_cancel(self):
+        starts = compiler.PreviewCompilerStarts()
+        kwargs = dict(cwd=self.root, environment={}, deadline=time.monotonic() + 10,
+                      cancel_event=None, check_workspace=lambda: None, starts=starts)
+        for purpose in ('document-preview-version', 'document-preview-baseline'):
+            compiler._run_tracked([sys.executable, '-c', 'pass'], purpose=purpose, **kwargs)
+        cancelled = threading.Event()
+        cancelled.set()
+        kwargs['cancel_event'] = cancelled
+        with self.assertRaises(compiler.runtime.CompilerFailure) as error:
+            compiler._run_tracked([sys.executable, '-c', 'pass'], purpose='document-preview-candidate', **kwargs)
+        self.assertFalse(error.exception.invocation.started)
+        self.assertTrue(starts.compiler_invoked() and starts.version_probe_invoked())
+        self.assertEqual(starts.stages(), {'discovery': False, 'baseline': True, 'candidate': False})
+
     def test_workspace_budget_refuses_before_compiler_capture(self):
         with patch.object(compiler, 'MAX_PREVIEW_BYTES', 1), \
              patch.object(compiler.runtime, '_capture_compiler') as capture:
@@ -157,6 +174,147 @@ class DocumentPreviewCompileTests(unittest.TestCase):
         self.assertFalse(result.source_files_modified or result.dependency_closure_proved
                          or result.publication_authority)
         self.assertEqual((self.project / 'child.typ').read_bytes(), self.child)
+
+    @unittest.skipUnless(os.environ.get('TYPST_LINT_RENDER_TESTS') == '1'
+                         and sys.platform == 'darwin' and compiler.SANDBOX.is_file(),
+                         'Opt in on macOS with the reviewed Typst compiler')
+    def test_warning_in_either_real_compile_stage_is_refused_with_evidence(self):
+        real_run = compiler.runtime._run
+        for stage in ('baseline', 'candidate'):
+            def run(*args, **kwargs):
+                invocation = real_run(*args, **kwargs)
+                if invocation.purpose == f'document-preview-{stage}':
+                    return replace(invocation, stderr=b'warning: isolated fixture\n')
+                return invocation
+            with self.subTest(stage=stage), patch.object(compiler.runtime, '_run', side_effect=run):
+                with self.assertRaises(compiler.PreviewCompilerDiagnostics) as error:
+                    compiler.compile_preview(self.context, self.records, self.catalog, self.snapshot,
+                                             entrypoint='main.typ', deadline_seconds=30)
+                self.assertEqual(error.exception.stage, stage)
+                self.assertTrue(error.exception.invocation.started)
+                self.assertEqual(error.exception.invocation.stderr, b'warning: isolated fixture\n')
+                self.assertEqual((self.project / 'child.typ').read_bytes(), self.child)
+
+    @unittest.skipUnless(os.environ.get('TYPST_LINT_RENDER_TESTS') == '1'
+                         and sys.platform == 'darwin' and compiler.SANDBOX.is_file(),
+                         'Opt in on macOS with the reviewed Typst compiler')
+    def test_warning_does_not_override_workspace_or_output_identity_refusal(self):
+        real_run = compiler.runtime._run
+        for stage in ('baseline', 'candidate'):
+            for damage in ('unexpected-entry', 'replaced-output'):
+                with self.subTest(stage=stage, damage=damage):
+                    def run(*args, **kwargs):
+                        invocation = real_run(*args, **kwargs)
+                        if invocation.purpose == f'document-preview-{stage}':
+                            workspace = Path(kwargs['cwd']).parent
+                            if damage == 'unexpected-entry':
+                                rogue = workspace / 'unexpected'
+                                rogue.write_bytes(b'x')
+                                rogue.chmod(0o600)
+                            else:
+                                output = workspace / 'output.pdf'
+                                output.unlink()
+                                output.write_bytes(b'replaced')
+                                output.chmod(0o600)
+                            return replace(invocation, stderr=b'warning: must not escape\n')
+                        return invocation
+                    with patch.object(compiler.runtime, '_run', side_effect=run):
+                        with self.assertRaises(SafetyError) as error:
+                            compiler.compile_preview(self.context, self.records, self.catalog, self.snapshot,
+                                                     entrypoint='main.typ', deadline_seconds=30)
+                    self.assertNotIsInstance(error.exception, compiler.PreviewCompilerDiagnostics)
+                    self.assertIn('unexpected' if damage == 'unexpected-entry' else 'output identity',
+                                  str(error.exception).lower())
+
+    @unittest.skipUnless(os.environ.get('TYPST_LINT_RENDER_TESTS') == '1'
+                         and sys.platform == 'darwin' and compiler.SANDBOX.is_file(),
+                         'Opt in on macOS with the reviewed Typst compiler')
+    def test_process_failure_checks_outputs_before_exposing_stderr(self):
+        runtime = compiler.runtime
+        real_run = runtime._run
+        cases = ((runtime.CompilerFailureKind.PROCESS_EXIT, 'replaced-output', True),
+                 (runtime.CompilerFailureKind.CANCELLED, 'unexpected-entry', True),
+                 (runtime.CompilerFailureKind.TIMEOUT, 'none', True),
+                 (runtime.CompilerFailureKind.TIMEOUT, 'replaced-output', None))
+        for stage in ('baseline', 'candidate'):
+            for kind, damage, started in cases:
+                with self.subTest(stage=stage, kind=kind, started=started):
+                    failure = []
+                    def run(*args, **kwargs):
+                        invocation = real_run(*args, **kwargs)
+                        if invocation.purpose == f'document-preview-{stage}':
+                            workspace = Path(kwargs['cwd']).parent
+                            if damage == 'unexpected-entry':
+                                rogue = workspace / 'unexpected'
+                                rogue.write_bytes(b'x')
+                                rogue.chmod(0o600)
+                            elif damage == 'replaced-output':
+                                output = workspace / 'output.pdf'
+                                output.unlink()
+                                output.write_bytes(b'replaced')
+                                output.chmod(0o600)
+                            error = runtime.CompilerFailure('synthetic failure',
+                                replace(invocation, stderr=b'private compiler output', started=started), kind=kind)
+                            failure.append(error)
+                            raise error
+                        return invocation
+                    with patch.object(runtime, '_run', side_effect=run):
+                        if damage == 'none':
+                            with self.assertRaises(runtime.CompilerFailure) as error:
+                                compiler.compile_preview(self.context, self.records, self.catalog, self.snapshot,
+                                                         entrypoint='main.typ', deadline_seconds=30)
+                            self.assertIs(error.exception, failure[0])
+                        else:
+                            with self.assertRaises(SafetyError) as error:
+                                compiler.compile_preview(self.context, self.records, self.catalog, self.snapshot,
+                                                         entrypoint='main.typ', deadline_seconds=30)
+                            self.assertIn('unexpected' if damage == 'unexpected-entry' else 'output identity',
+                                          str(error.exception).lower())
+                            self.assertNotIn('private compiler output', str(error.exception))
+
+    @unittest.skipUnless(os.environ.get('TYPST_LINT_RENDER_TESTS') == '1'
+                         and sys.platform == 'darwin' and compiler.SANDBOX.is_file(),
+                         'Opt in on macOS with the reviewed Typst compiler')
+    def test_prelaunch_cancel_preserves_original_without_postlaunch_output_check(self):
+        runtime = compiler.runtime
+        real_run, real_guard = runtime._run, compiler._workspace_guard
+        prelaunch = [False]
+        invocation = runtime.Invocation('document-preview-baseline', (), '', (), None, b'', b'', started=False)
+        failure = runtime.CompilerFailure('cancelled', invocation, kind=runtime.CompilerFailureKind.CANCELLED)
+        def run(*args, **kwargs):
+            if kwargs['purpose'] == 'document-preview-baseline':
+                prelaunch[0] = True
+                raise failure
+            return real_run(*args, **kwargs)
+        def guard(*args, **kwargs):
+            if prelaunch[0]:
+                raise AssertionError('postlaunch check on prelaunch cancellation')
+            return real_guard(*args, **kwargs)
+        with patch.object(runtime, '_run', side_effect=run), patch.object(compiler, '_workspace_guard', side_effect=guard):
+            with self.assertRaises(runtime.CompilerFailure) as error:
+                compiler.compile_preview(self.context, self.records, self.catalog, self.snapshot,
+                                         entrypoint='main.typ', deadline_seconds=30)
+        self.assertIs(error.exception, failure)
+
+    @unittest.skipUnless(os.environ.get('TYPST_LINT_RENDER_TESTS') == '1'
+                         and sys.platform == 'darwin' and compiler.SANDBOX.is_file(),
+                         'Opt in on macOS with the reviewed Typst compiler')
+    def test_cleanup_safety_failure_is_never_replaced(self):
+        runtime = compiler.runtime
+        real_run = runtime._run
+        def run(*args, **kwargs):
+            if kwargs['purpose'] == 'document-preview-baseline':
+                command = list(args[0])
+                command.insert(command.index('compile') + 1, '--invalid-preview-test-option')
+                return real_run(command, **kwargs)
+            return real_run(*args, **kwargs)
+        with patch.object(runtime, '_run', side_effect=run), \
+             patch.object(runtime, '_kill', side_effect=OSError('synthetic cleanup failure')):
+            with self.assertRaises(runtime.CompileSafetyError) as error:
+                compiler.compile_preview(self.context, self.records, self.catalog, self.snapshot,
+                                         entrypoint='main.typ', deadline_seconds=30)
+        self.assertIn('cleanup did not complete', str(error.exception))
+        self.assertIsInstance(error.exception.__cause__, OSError)
 
     @unittest.skipUnless(os.environ.get('TYPST_LINT_RENDER_TESTS') == '1'
                          and sys.platform == 'darwin' and compiler.SANDBOX.is_file(),

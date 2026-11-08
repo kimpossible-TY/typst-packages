@@ -117,6 +117,7 @@ def main(arguments=None, *, gate=False):
     phase = 'input'
     result = None
     discovery_completed = False
+    starts = document_preview_compile.PreviewCompilerStarts()
     profile = ('conditional-gaps-punctuation-and-spacers' if args.conditional_punctuation and args.conditional_spacers else
                'conditional-gaps-and-spacers' if args.conditional_spacers else
                'conditional-gaps-and-punctuation' if args.conditional_punctuation else
@@ -148,7 +149,7 @@ def main(arguments=None, *, gate=False):
             phase = 'discovery'
             raw_dependencies, observed, font_hashes, discovery_baseline_sha256 = document_preview_discover.discover(
                 context, roots, requests, entrypoint=args.entrypoint,
-                allow_apple_asset_fonts=allow, cancel_event=cancel)
+                allow_apple_asset_fonts=allow, cancel_event=cancel, starts=starts)
             discovery_completed = True
             selected = {(item.root, item.path): item for item in requests}
             for root_id, path in observed:
@@ -173,7 +174,7 @@ def main(arguments=None, *, gate=False):
                                                            entrypoint=args.entrypoint, cancel_event=cancel,
                                                            expected_dependencies=observed,
                                                            expected_baseline_sha256=discovery_baseline_sha256,
-                                                           profile=profile)
+                                                           profile=profile, starts=starts)
         result = dict(schema=1, tool_version=VERSION, mode='preview-compile', status=2, phase='preview',
                       compiler_invoked=True, pdf_generated=True, source_files_modified=False,
                       publication_authority=False, global_coverage_complete=False,
@@ -208,19 +209,35 @@ def main(arguments=None, *, gate=False):
             sys.stdout.buffer.flush()
     except (InputError, SafetyError, PackageInputError, OSError, ValueError, runtime.CompilerFailure) as error:
         result = dict(schema=1, tool_version=VERSION, mode='preview-compile', status=2, phase=phase,
-                      compiler_invoked=(True if discovery_completed else
-                                        None if phase in ('discovery', 'compile') else False), pdf_generated=False,
+                      compiler_stage=None, pdf_generated=False,
                       source_files_modified=False, publication_authority=False, error=str(error))
         if isinstance(error, runtime.CompilerFailure) and error.invocation is not None:
-            if type(error.invocation.started) is bool and not discovery_completed:
-                result['compiler_invoked'] = error.invocation.started
+            starts.observe(error.invocation)
+            result['compiler_stage'] = document_preview_compile._PURPOSE_STAGES.get(error.invocation.purpose)
             if error.invocation.stderr:
                 result['compiler_diagnostics'] = error.invocation.stderr[:8192].decode('utf-8', errors='replace')
+        elif isinstance(error, document_preview_compile.PreviewCompilerDiagnostics):
+            starts.observe(error.invocation)
+            stage = document_preview_compile._PURPOSE_STAGES.get(error.invocation.purpose)
+            result['compiler_stage'] = stage if stage == error.stage else None
+            if error.invocation.stderr:
+                result['compiler_diagnostics'] = error.invocation.stderr[:8192].decode('utf-8', errors='replace')
+    stage_starts = starts.stages()
+    if discovery_completed:
+        stage_starts['discovery'] = True
+    if result.get('pdf_generated'):
+        stage_starts['baseline'] = stage_starts['candidate'] = True
+    result['compiler_stages_started'] = stage_starts
+    result['compiler_invoked'] = document_preview_compile.PreviewCompilerStarts._combine(stage_starts.values())
+    result['compiler_version_probe_invoked'] = starts.version_probe_invoked()
     stream = sys.stderr if args.pdf_stdout else sys.stdout
     if args.format == 'json' or args.pdf_stdout:
         print(json.dumps(result, ensure_ascii=False, sort_keys=True, indent=2), file=stream)
     elif result.get('error'):
-        print(f"typst-lint preview-compile: blocked: {result['error']}", file=stream)
+        stage = f" during {result['compiler_stage']}" if result.get('compiler_stage') else ''
+        print(f"typst-lint preview-compile: blocked{stage}: {result['error']}", file=stream)
+        if result.get('compiler_stage'):
+            print(f"Compiler invoked: {result['compiler_invoked']}", file=stream)
         if result.get('compiler_diagnostics'):
             print(result['compiler_diagnostics'], file=stream)
     else:

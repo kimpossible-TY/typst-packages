@@ -76,14 +76,26 @@ JSON includes:
   preview is reported as such. These previews use the original bytes separately;
   they are not composed with each other or the ordinary preview sequence, and
   do not prove binding, execution, PDF equivalence or source-write permission.
-- `--preview-conditional-punctuation` independently previews only horizontal
+- `--preview-conditional-punctuation` independently previews horizontal
   whitespace removal between an existing period/comma and a nested prose
-  footnote. It does not add or move punctuation, or compose with other plans.
+  footnote. A separate `conditional_punctuation_move_previews` list proposes
+  moving one immediately following period/comma before a simple nested prose
+  footnote with a locally proven builtin binding. Neither candidate is composed
+  with the other or with other plans; actual include bindings, execution,
+  render equivalence and source-write permission remain unproved.
 - `--preview-conditional-spacers` independently previews exact `#dots_space`
   token removal before a footnote in an unaligned nested display. The token's
   binding and effects are unproved: removing it can change the rendered PDF.
   An empty preview does not establish complete inspection or absence of other
   violations. This preview is never automatically applied or composed.
+- With `--rule-set pde --package-path /absolute/packages --footnote-cache-path
+  /absolute/cache`, `conditional_footnote_bindings` reports source-bound builtin
+  footnote hints through complete captured relative wildcard-facade exports.
+  Its two explicit roots use package-before-cache selection. Calls include
+  captured facade and package evidence and outstanding runtime conditions;
+  unresolved imports, shadows and unsupported contexts are not proven. These
+  hints are independent of preview edits and grant neither compiler nor write
+  permission. Source bytes and package selection at runtime remain conditional.
 - With `--rule-set pde`, `--package-path`, `--reference-package-path` and
   `--reference-facade`, the separately captured reference package and graph
   namespace evidence trace a selected facade's `project-ref` export. A
@@ -109,7 +121,9 @@ JSON includes:
   catalog. Unknown values and unsupported contexts stay partial. The catalog
   snapshot hash is reported; its freshness, PDF correspondence and runtime
   selection are not established. Catalog, argument and call reports share one
-  trace per source when requested together. `catalog_checked` means at least
+  trace per source when requested together. A literal missing project key can
+  also be diagnosed conditionally when its target is unresolved; it does not
+  count as a checked literal pair. `catalog_checked` means at least
   one conditional literal pair was compared; `catalog_check_complete` remains
   false even if every observed pair matches.
   Reference sessions reject changes to their captured graph and package evidence

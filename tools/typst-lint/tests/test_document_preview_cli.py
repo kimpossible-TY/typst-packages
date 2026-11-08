@@ -138,6 +138,129 @@ class DocumentPreviewCliTests(unittest.TestCase):
         self.assertIn('review size limit', json.loads(output.getvalue())['error'])
         compiler.assert_not_called()
 
+    def test_preview_compiler_warnings_keep_bounded_diagnostics_and_stage(self):
+        runtime = document_preview_cli.runtime
+        for stage in ('discovery', 'baseline', 'candidate'):
+            purpose = 'document-discovery-compile' if stage == 'discovery' else f'document-preview-{stage}'
+            invocation = runtime.Invocation(purpose, (), '', (), 0, b'',
+                b'warning: fixture\n' + b'x' * 9000, launch_attempted=True, started=True, lifecycle='exited')
+            warning = document_preview_cli.document_preview_compile.PreviewCompilerDiagnostics(stage, invocation)
+            for output_format in ('json', 'text', 'pdf'):
+                with self.subTest(stage=stage, output_format=output_format):
+                    stdout, stderr = io.StringIO(), io.StringIO()
+                    args = (['--pdf-stdout'] if output_format == 'pdf' else ['--format', output_format])
+                    module = (document_preview_cli.document_preview_discover if stage == 'discovery'
+                              else document_preview_cli.document_preview_compile)
+                    function = 'discover' if stage == 'discovery' else 'compile_preview'
+                    if stage == 'discovery':
+                        args += ['--discover-dependencies']
+                    with patch.object(module, function, side_effect=warning), contextlib.redirect_stdout(stdout), \
+                         contextlib.redirect_stderr(stderr):
+                        status = document_preview_cli.main(self.command()[3:] + args)
+                    self.assertEqual(status, 2)
+                    if output_format == 'text':
+                        self.assertIn('warning: fixture', stdout.getvalue())
+                        self.assertIn(f'blocked during {stage}', stdout.getvalue())
+                        self.assertIn('Compiler invoked: True', stdout.getvalue())
+                        self.assertEqual(stderr.getvalue(), '')
+                        continue
+                    if output_format == 'pdf':
+                        self.assertEqual(stdout.getvalue(), '')
+                    report = json.loads(stderr.getvalue() if output_format == 'pdf' else stdout.getvalue())
+                    self.assertTrue(report['compiler_invoked'])
+                    self.assertEqual(report['compiler_stage'], stage)
+                    self.assertTrue(report['compiler_stages_started'][stage])
+                    self.assertEqual(report['compiler_diagnostics'], invocation.stderr[:8192].decode())
+                    self.assertFalse(report['pdf_generated'] or report['source_files_modified']
+                                     or report['publication_authority'])
+                    self.assertEqual((self.project / 'main.typ').read_bytes(), self.source)
+
+    def test_later_safety_error_does_not_expose_prior_warning(self):
+        runtime = document_preview_cli.runtime
+        invocation = runtime.Invocation('document-preview-baseline', (), '', (), 0, b'', b'private warning',
+                                        launch_attempted=True, started=True, lifecycle='exited')
+        warning = document_preview_cli.document_preview_compile.PreviewCompilerDiagnostics('baseline', invocation)
+        def refuse(*args, **kwargs):
+            try:
+                raise warning
+            finally:
+                raise SafetyError('cleanup refused')
+        output = io.StringIO()
+        with patch.object(document_preview_cli.document_preview_compile, 'compile_preview', side_effect=refuse), \
+             contextlib.redirect_stdout(output):
+            status = document_preview_cli.main(self.command()[3:] + ['--format', 'json'])
+        report = json.loads(output.getvalue())
+        self.assertEqual(status, 2)
+        self.assertEqual(report['error'], 'cleanup refused')
+        self.assertNotIn('compiler_diagnostics', report)
+        self.assertIsNone(report['compiler_stage'])
+
+    def test_process_failure_reports_accumulated_starts_and_proven_stage(self):
+        runtime = document_preview_cli.runtime
+        baseline = runtime.Invocation('document-preview-baseline', (), '', (), 0, b'', b'', started=True)
+        version = runtime.Invocation('document-preview-version', (), '', (), 0, b'', b'', started=True)
+        failed = runtime.Invocation('document-preview-candidate', (), '', (), None, b'', b'', started=False)
+
+        def fail(*args, starts, **kwargs):
+            starts.observe(version)
+            starts.observe(baseline)
+            raise runtime.CompilerFailure('cancelled', failed, kind=runtime.CompilerFailureKind.CANCELLED)
+
+        output = io.StringIO()
+        with patch.object(document_preview_cli.document_preview_compile, 'compile_preview', side_effect=fail), \
+             contextlib.redirect_stdout(output):
+            document_preview_cli.main(self.command()[3:] + ['--format', 'json'])
+        report = json.loads(output.getvalue())
+        self.assertTrue(report['compiler_invoked'] and report['compiler_version_probe_invoked'])
+        self.assertEqual(report['compiler_stages_started'], {'discovery': False, 'baseline': True, 'candidate': False})
+        self.assertEqual(report['compiler_stage'], 'candidate')
+
+    def test_process_failure_retains_diagnostics_and_separates_pdf_stdout(self):
+        runtime = document_preview_cli.runtime
+        invocation = runtime.Invocation('document-preview-baseline', (), '', (), 1, b'',
+                                        b'error: fixture\n' + b'x' * 9000, started=True)
+        failure = runtime.CompilerFailure('nonzero exit', invocation,
+                                          kind=runtime.CompilerFailureKind.PROCESS_EXIT)
+        for output_format in ('json', 'text', 'pdf'):
+            with self.subTest(output_format=output_format):
+                output, errors = io.StringIO(), io.StringIO()
+                args = ['--pdf-stdout'] if output_format == 'pdf' else ['--format', output_format]
+                with patch.object(document_preview_cli.document_preview_compile, 'compile_preview',
+                                  side_effect=failure), contextlib.redirect_stdout(output), \
+                     contextlib.redirect_stderr(errors):
+                    self.assertEqual(document_preview_cli.main(self.command()[3:] + args), 2)
+                if output_format == 'text':
+                    self.assertIn('blocked during baseline', output.getvalue())
+                    self.assertIn('error: fixture', output.getvalue())
+                    self.assertFalse(errors.getvalue())
+                else:
+                    if output_format == 'pdf':
+                        self.assertFalse(output.getvalue())
+                    report = json.loads(errors.getvalue() if output_format == 'pdf' else output.getvalue())
+                    self.assertTrue(report['compiler_invoked'])
+                    self.assertEqual(report['compiler_stage'], 'baseline')
+                    self.assertEqual(report['compiler_diagnostics'], invocation.stderr[:8192].decode())
+                    self.assertFalse(report['pdf_generated'])
+
+    def test_version_only_and_unknown_launch_are_distinct(self):
+        runtime = document_preview_cli.runtime
+        for purpose, started, stage, expected in (
+                ('document-preview-version', True, None, False),
+                ('document-preview-candidate', None, 'candidate', None),
+                ('unrecognized-purpose', True, None, None)):
+            with self.subTest(purpose=purpose):
+                invocation = runtime.Invocation(purpose, (), '', (), None, b'', b'', started=started)
+                failure = runtime.CompilerFailure('timeout', invocation)
+                output = io.StringIO()
+                with patch.object(document_preview_cli.document_preview_compile, 'compile_preview',
+                                  side_effect=failure), contextlib.redirect_stdout(output):
+                    document_preview_cli.main(self.command()[3:] + ['--format', 'json'])
+                report = json.loads(output.getvalue())
+                self.assertEqual(report['compiler_invoked'], expected)
+                self.assertEqual(report['compiler_stage'], stage)
+                self.assertEqual(report['compiler_version_probe_invoked'],
+                                 None if purpose == 'unrecognized-purpose' else purpose == 'document-preview-version')
+
     def test_unequal_preview_cannot_be_an_apply_gate(self):
         fake = SimpleNamespace(baseline_sha256='a' * 64, candidate_sha256='b' * 64,
             pdfs_identical=False, dependency_count=1, unobserved_capture_count=0,

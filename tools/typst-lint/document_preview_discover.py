@@ -21,7 +21,7 @@ from typst_lint import SafetyError, digest
 
 
 def discover(context, roots, requests, *, entrypoint, allow_apple_asset_fonts=False,
-             cancel_event=None, deadline_seconds=120.0):
+             cancel_event=None, deadline_seconds=120.0, starts=None):
     """Probe baseline dependencies and retain explicit font identities."""
     include_context.assert_include_context(context)
     if (type(roots) is not dict or not roots or len(roots) > 8
@@ -131,7 +131,7 @@ def discover(context, roots, requests, *, entrypoint, allow_apple_asset_fonts=Fa
                 for verify in checks:
                     verify()
                 last_check[0] = time.monotonic()
-        probe = runtime._run([str(preview.SANDBOX), '-p', profile, str(executable), '--version'],
+        probe = preview._run_tracked([str(preview.SANDBOX), '-p', profile, str(executable), '--version'], starts=starts,
                              purpose='document-discovery-version', cwd=base, environment=environment,
                              deadline=time.monotonic() + min(float(deadline_seconds), 10.0),
                              cancel_event=cancel_event, check_workspace=check)
@@ -143,16 +143,23 @@ def discover(context, roots, requests, *, entrypoint, allow_apple_asset_fonts=Fa
                    '--font-path', str(external) + os.pathsep + str(project_fonts),
                    '--creation-timestamp', '1700000000', '--deps', str(deps), '--deps-format', 'zero',
                    '--', entrypoint, str(pdf)]
-        invocation = runtime._run(command, purpose='document-discovery-compile', cwd=Path(roots['project']),
-                                  environment=environment, deadline=time.monotonic() + deadline_seconds,
-                                  cancel_event=cancel_event, check_workspace=check)
+        def verify_outputs():
+            check(force=True)
+            for path, descriptor, identity in ((pdf, pdf_fd, pdf_id), (deps, deps_fd, deps_id)):
+                if (runtime._output_identity(os.fstat(descriptor)) != identity
+                        or runtime._output_identity(path.lstat()) != identity):
+                    raise SafetyError('Dependency discovery output identity changed')
+        try:
+            invocation = preview._run_tracked(command, starts=starts, purpose='document-discovery-compile', cwd=Path(roots['project']),
+                                              environment=environment, deadline=time.monotonic() + deadline_seconds,
+                                              cancel_event=cancel_event, check_workspace=check)
+        except runtime.CompilerFailure as error:
+            if error.invocation is None or error.invocation.started is not False:
+                verify_outputs()
+            raise
+        verify_outputs()
         if invocation.stderr:
-            raise SafetyError('Dependency discovery compiler emitted warnings or diagnostics')
-        check(force=True)
-        for path, descriptor, identity in ((pdf, pdf_fd, pdf_id), (deps, deps_fd, deps_id)):
-            if (runtime._output_identity(os.fstat(descriptor)) != identity
-                    or runtime._output_identity(path.lstat()) != identity):
-                raise SafetyError('Dependency discovery output identity changed')
+            raise preview.PreviewCompilerDiagnostics('discovery', invocation)
         pdf_bytes, _ = runtime._capture(pdf, preview.MAX_PDF_BYTES)
         raw, _ = runtime._capture(deps, preview.MAX_DEPS_BYTES)
         runtime._pdf(pdf_bytes)
