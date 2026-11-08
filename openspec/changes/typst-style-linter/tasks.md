@@ -615,3 +615,11 @@ The design follow-up is reviewed and merged first. Groups 2–7 are authorized i
 - [ ] 74.3 Prove bounded facade-origin theme helpers, palette field access and local function declarations before admitting their containing callbacks to the partial-preview classifier. Unknown initializers, shadows and mutations remain fatal.
 - [x] 74.4 Add independent conditional source previews for nested prose footnotes before existing paragraph markers and separate raw overlay diagnostics. The isolated PDE copy yielded three gap candidates and two raw overlay hints; runtime bindings, rendering equivalence and source-write authority remain unproved.
 - [x] 74.5 Confirm 8ae04d0 CI: all 10 checks passed in 13m55s, 56s faster than the previous head in one run each. This is not a causal timing estimate.
+
+## 75. Extend conditional source hints and partial withholding
+
+- [x] 75.1 Recognize the captured theme selector and bounded scalar palette fields for conditional deferred-footnote withholding. On the isolated PDE copy, the 3.3 and 3.5 source plans were withheld in full and their bytes retained; this does not prove runtime binding or authorize edits. Local function declarations remain unproved.
+- [x] 75.2 Add independent conditional continuation previews and raw annotation hints, with suppression and unresolved contexts retained. The isolated PDE copy produced five continuation candidates and 20 raw annotation source patterns; these are conditional observations, not established violations or source-write authority.
+- [x] 75.3 Add a separate opt-in for withholding whole files with unproven literal footnote bindings, retaining the strict mode and refusing missing, unknown or dynamic transitive imports. Replay rederives withheld records; source application and publication remain disabled.
+- [ ] 75.4 Resolve the 3.6 source's unreviewed transitive packages and dynamic imports before claiming a partial whole-PDE PDF comparison. File-only planning still refuses that source, so no baseline/candidate PDF comparison was performed in this step.
+- [x] 75.5 Confirm d98374f CI: all 10 checks passed in 15m29s. This does not establish the outcome for later commits.

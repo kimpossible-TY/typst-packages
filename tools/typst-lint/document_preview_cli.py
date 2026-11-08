@@ -118,6 +118,8 @@ def main(arguments=None, *, gate=False):
                         help='Use captured facade namespaces for spacer footnotes (requires --conditional-spacers)')
     parser.add_argument('--partial-unsupported-preview', action='store_true',
                         help='Keep recognized unsupported deferred-footnote files unchanged (requires --conditional-facade-footnotes)')
+    parser.add_argument('--partial-unproven-binding-preview', action='store_true',
+                        help='Also keep exact source-footnote binding refusals unchanged (requires --partial-unsupported-preview)')
     args = parser.parse_args(sys.argv[1:] if arguments is None else arguments)
     if args.review_edits and args.format != 'json' and not args.pdf_stdout:
         parser.error('--review-edits requires --format json or --pdf-stdout')
@@ -131,6 +133,8 @@ def main(arguments=None, *, gate=False):
         parser.error('--partial-unsupported-preview requires --conditional-spacers')
     if args.partial_unsupported_preview and not args.conditional_facade_footnotes:
         parser.error('--partial-unsupported-preview requires --conditional-facade-footnotes')
+    if args.partial_unproven_binding_preview and not args.partial_unsupported_preview:
+        parser.error('--partial-unproven-binding-preview requires --partial-unsupported-preview')
     # The executable installs cooperative SIGINT/SIGTERM handling; imported
     # callers do not change process-wide signal handlers.
     import offline_compile_cli
@@ -162,11 +166,14 @@ def main(arguments=None, *, gate=False):
                     raise runtime.CompilerFailure('cancelled', kind=runtime.CompilerFailureKind.CANCELLED)
                 record = document_sequence_preview.preview(item.tree, item.path, catalog['rules'], profile=profile,
                                                            footnote_evidence=evidence,
-                                                           classify_deferred=args.partial_unsupported_preview)
+                                                           classify_deferred=args.partial_unsupported_preview,
+                                                           classify_unproven_binding=args.partial_unproven_binding_preview)
                 if record is not None:
                     if record['verification'] == 'withheld':
-                        if (args.partial_unsupported_preview
-                                and record.get('reason_code') == 'unsupported-deferred-footnote-binding'):
+                        if (args.partial_unsupported_preview and
+                                (record.get('reason_code') == 'unsupported-deferred-footnote-binding'
+                                 or (args.partial_unproven_binding_preview and record.get('reason_code')
+                                     == 'unproven-source-footnote-binding'))):
                             withheld.append(record)
                         else:
                             raise SafetyError(f"{item.path}: {record['reason']}")
@@ -250,7 +257,8 @@ def main(arguments=None, *, gate=False):
                                                            profile=profile, starts=starts,
                                                            footnote_evidence=footnote_evidence,
                                                            partial_unsupported=args.partial_unsupported_preview,
-                                                           withheld_records=withheld if args.partial_unsupported_preview else None)
+                                                           withheld_records=withheld if args.partial_unsupported_preview else None,
+                                                           partial_unproven_binding=args.partial_unproven_binding_preview)
         result = dict(schema=1, tool_version=VERSION, mode='preview-compile', status=2, phase='preview',
                       compiler_invoked=True, pdf_generated=True, source_files_modified=False,
                       publication_authority=False, global_coverage_complete=False,
@@ -280,6 +288,8 @@ def main(arguments=None, *, gate=False):
                                    + (['partial_preview_withheld_files'] if withheld else [])))
         if args.partial_unsupported_preview:
             result['partial_unsupported_preview'] = True
+            if args.partial_unproven_binding_preview:
+                result['partial_unproven_binding_preview'] = True
             result['withheld_sources'] = [dict(path=row['path'], baseline_sha256=row['baseline_sha256'],
                 rule_id=row['rule_id'], reason_code=row['reason_code'], reason=row['reason']) for row in withheld]
         if review is not None:
@@ -295,6 +305,8 @@ def main(arguments=None, *, gate=False):
                       source_files_modified=False, publication_authority=False, error=str(error))
         if isinstance(error, NoPartialPreview):
             result['partial_unsupported_preview'] = True
+            if args.partial_unproven_binding_preview:
+                result['partial_unproven_binding_preview'] = True
             result['global_coverage_complete'] = False
             result['uninspected_rule_ids'] = list(error.uninspected_rule_ids)
             result['withheld_sources'] = [dict(path=row['path'], baseline_sha256=row['baseline_sha256'],

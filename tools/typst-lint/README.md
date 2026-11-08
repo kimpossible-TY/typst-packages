@@ -104,6 +104,7 @@ inspection route:
 /path/to/typst-packages/tools/typst-lint/typst-lint inspect-document --root /absolute/project --entrypoint main.typ --rule-set pde --preview-conditional-punctuation --format json
 /path/to/typst-packages/tools/typst-lint/typst-lint inspect-document --root /absolute/project --entrypoint main.typ --rule-set pde --preview-conditional-spacers --format json
 /path/to/typst-packages/tools/typst-lint/typst-lint inspect-document --root /absolute/project --entrypoint main.typ --rule-set pde --preview-conditional-scoped-calls --format json
+/path/to/typst-packages/tools/typst-lint/typst-lint inspect-document --root /absolute/project --entrypoint main.typ --rule-set pde --preview-conditional-continuations --format json
 /path/to/typst-packages/tools/typst-lint/typst-lint inspect-document --root /absolute/project --entrypoint main.typ --rule-set pde --package-path /absolute/captured-packages --format json
 /path/to/typst-packages/tools/typst-lint/typst-lint inspect-document --root /absolute/project --entrypoint main.typ --rule-set pde --package-path /absolute/captured-packages --reference-package-path /absolute/reference-packages --reference-facade Styles/styles.typ --format json
 /path/to/typst-packages/tools/typst-lint/typst-lint inspect-document --root /absolute/project --entrypoint main.typ --rule-set pde --package-path /absolute/captured-packages --reference-cache-path /absolute/captured-cache --reference-package-path /absolute/reference-packages --reference-facade Styles/styles.typ --format json
@@ -245,6 +246,10 @@ For the separately opted-in spacer and facade profile,
 `--partial-unsupported-preview` can retain recognized unsupported files in
 their captured original form and compare a partial whole-document candidate.
 Other safety refusals still block the preview; source application remains disabled.
+The further explicit `--partial-unproven-binding-preview` can also withhold an
+entire source with an unproven footnote binding. Unknown or dynamic transitive
+imports and other safety failures still block the preview. Both options retain
+the withheld source unchanged and do not authorize source application.
 Without `--preview`, the ordinary compile gate remains blocked; the preview
 neither accepts compiler-tail arguments nor publishes a PDF. Optional
 `--discover-dependencies` derives current dependency paths from a sandboxed

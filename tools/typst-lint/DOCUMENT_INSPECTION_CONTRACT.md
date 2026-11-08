@@ -57,6 +57,15 @@ unresolved contexts. It does not inspect package bindings or prove callback
 execution, rendering or authority to write or compile. Complex calls, mutation,
 deferred scopes and unsupported options are conservatively skipped. Its edits
 are independent of all other previews, and the global rule remains uninspected.
+
+The independent `--rule-set pde --preview-conditional-continuations` option
+proposes replacing the single newline and indentation between narrowly
+recognized adjacent prose sentences with one space. Per-file rows retain the
+baseline and candidate hashes, exact edits, withheld reasons and conditions.
+Comments, blank lines, ambiguous abbreviations and unsupported structure do
+not become proposals. Runtime prose context and rendering are not proved; the
+plans are not composed or applied and do not grant compiler authority or
+increase global coverage.
 The same option separately reports `conditional_detached_annotations` for
 direct scoped annotation calls outside a display in supported literal callback
 bodies. These are diagnostic-only hints with independent suppression and

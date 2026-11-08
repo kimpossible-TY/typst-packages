@@ -93,15 +93,98 @@ def _same_findings(before_tree, before, after_tree, after, edits):
             and _keys(before_tree.source, before.suppressed, edits) == _keys(after_tree.source, after.suppressed))
 
 
-def preview(tree, path, catalog, *, profile=_STANDARD, footnote_evidence=None, classify_deferred=False):
+def preview(tree, path, catalog, *, profile=_STANDARD, footnote_evidence=None, classify_deferred=False,
+            classify_unproven_binding=False):
     """Return hash-chained edits or a withheld result for this source."""
     _profile(profile)
     if type(classify_deferred) is not bool:
         raise InputError('Deferred classification must be an explicit Boolean')
+    if type(classify_unproven_binding) is not bool or (classify_unproven_binding and not classify_deferred):
+        raise InputError('Unproven binding classification requires explicit partial preview')
     baseline = tree.source
     current = tree
     steps = []
     deferred_unproved = False
+    source_binding_unproved = False
+    checked_import_tree = None
+
+    def eligible_source_binding(tree, call_id, evidence):
+        """Only exact calls in files whose literal imports have captured origins."""
+        nonlocal checked_import_tree
+        if call_id is None:
+            return False
+        import import_graph
+        node = tree.nodes[call_id]
+        parts = import_graph.significant(tree, call_id)
+        if (node.kind != 'FuncCall' or node.start == 0 or tree.source[node.start - 1:node.start] != b'#'
+                or len(parts) != 2 or tree.nodes[parts[0]].kind != 'Ident'
+                or import_graph.raw(tree, parts[0]) != b'footnote' or tree.nodes[parts[1]].kind != 'Args'):
+            return False
+        arguments = tuple(tree.nodes[i].kind for i in import_graph.significant(tree, parts[1]))
+        if arguments not in (('ContentBlock',), ('LeftParen', 'ContentBlock', 'RightParen')):
+            return False
+        if checked_import_tree is tree:
+            return True
+        session = evidence._session
+        available = {item.evidence.import_path for item in session._namespaces.packages}
+        computed = []
+        for index, item in enumerate(tree.nodes):
+            if item.kind != 'ModuleImport':
+                continue
+            request = import_graph.import_request(tree, index)
+            if request is None:
+                parts = import_graph.significant(tree, index)
+                if (tuple(tree.nodes[i].kind for i in parts) != ('Import', 'FieldAccess', 'Colon', 'Star')):
+                    raise SafetyError('Unproven source contains an unsupported computed import')
+                fields = import_graph.significant(tree, parts[1])
+                if (tuple(tree.nodes[i].kind for i in fields) != ('Ident', 'Dot', 'Ident')
+                        or tuple(import_graph.raw(tree, i) for i in fields) != (b'cetz', b'.', b'draw')):
+                    raise SafetyError('Unproven source contains an unsupported computed import')
+                computed.append(index)
+                continue
+            if request.startswith('@'):
+                if request not in available:
+                    raise SafetyError('Unproven source imports an unavailable package')
+            elif session._graph.target_for(path, request) is None:
+                raise SafetyError('Unproven source imports an unavailable relative source')
+        reachable = {path}
+        while True:
+            extra = {edge.target for edge in session._graph.edges if edge.importer in reachable} - reachable
+            if not extra:
+                break
+            reachable.update(extra)
+        for item in session._graph.unavailable:
+            if item.path not in reachable:
+                continue
+            if (item.request.startswith('@') and item.request in available
+                    and item.reason == 'Package evaluation and package-relative dependency graphs are unsupported'):
+                continue
+            # Every computed import in this candidate is checked below. Do
+            # not extend this exception to uninspected transitive sources.
+            if (item.path == path and not item.request and computed
+                    and item.reason == 'Dynamic or escaped import is unsupported'):
+                continue
+            raise SafetyError('Unproven source has an unresolved transitive import')
+        if computed:
+            import document_cetz_draw_evidence
+            parents = {child: index for index, node in enumerate(tree.nodes) for child in node.children}
+            groups = {}
+            for index in computed:
+                current, closures = index, []
+                while current in parents:
+                    current = parents[current]
+                    if tree.nodes[current].kind == 'Closure':
+                        closures.append(current)
+                if not closures:
+                    raise SafetyError('Unproven source has a computed import outside a reviewed closure')
+                groups.setdefault(closures[-1], []).append((tree.nodes[index].start, tree.nodes[index].end))
+            for closure_id, spans in groups.items():
+                closure = tree.nodes[closure_id]
+                if not document_cetz_draw_evidence.supports_imports(
+                        evidence, path, tree.source, closure.start, closure.end, tuple(spans)):
+                    raise SafetyError('Unproven source computed import is not proven')
+        checked_import_tree = tree
+        return True
 
     def deferred_closure(tree, resolution, call_id, evidence):
         if call_id is None or not resolution.facts[call_id].deferred:
@@ -126,21 +209,23 @@ def preview(tree, path, catalog, *, profile=_STANDARD, footnote_evidence=None, c
             return True
         if not safe_params(closure):
             return False
-        # Do not classify any closure with local declarations, imports, or
-        # mutations as this narrow unsupported case. Such a shadow is a real
-        # safety refusal, not a reason to silently keep this file unchanged.
+        # Only exact reviewed declaration/import forms may later be certified;
+        # all other local mutations stay safety refusals.
         pending = list(closure.children)
         assignments = {'Eq', 'PlusEq', 'HyphEq', 'StarEq', 'SlashEq'}
         cetz_imports = []
+        selector_lets = []
         while pending:
             index = pending.pop()
             node = tree.nodes[index]
             if node.kind == 'Closure' and not safe_params(node):
                 return False
-            if node.kind in ('LetBinding', 'ModuleInclude', 'DestructAssignment'):
+            if node.kind in ('ModuleInclude', 'DestructAssignment'):
                 return False
             if node.kind == 'ModuleImport':
                 cetz_imports.append((node.start, node.end))
+            if node.kind == 'LetBinding':
+                selector_lets.append((node.start, node.end))
             if node.kind == 'Binary' and any(tree.nodes[i].kind in assignments for i in node.children):
                 return False
             pending.extend(node.children)
@@ -149,6 +234,11 @@ def preview(tree, path, catalog, *, profile=_STANDARD, footnote_evidence=None, c
             import document_cetz_draw_evidence
             if not document_cetz_draw_evidence.supports_imports(
                     evidence, path, tree.source, closure.start, closure.end, tuple(cetz_imports)):
+                return False
+        if selector_lets:
+            import document_theme_selector_evidence
+            if not document_theme_selector_evidence.supports_theme_lets(
+                    evidence, path, tree.source, closure.start, closure.end, tuple(selector_lets)):
                 return False
 
         # Re-evaluate the lexical namespace at closure declaration using the
@@ -447,7 +537,12 @@ def preview(tree, path, catalog, *, profile=_STANDARD, footnote_evidence=None, c
                                                 'Conditional spacer footnote binding is not proven by captured facade')
                                         proved = any(call.start == call_start for call in conditional_proof.calls)
                                     if not proved:
-                                        if (classify_deferred and conditional_proof is not None
+                                        if classify_unproven_binding:
+                                            if (conditional_proof is None or conditional_proof.unresolved
+                                                    or not eligible_source_binding(before_tree, call_id, footnote_evidence)):
+                                                raise SafetyError('Source footnote binding or import cannot be classified')
+                                            source_binding_unproved = True
+                                        elif (classify_deferred and conditional_proof is not None
                                                 and not conditional_proof.unresolved
                                                 and deferred_closure(before_tree, before_resolution, call_id,
                                                                      footnote_evidence)):
@@ -489,6 +584,12 @@ def preview(tree, path, catalog, *, profile=_STANDARD, footnote_evidence=None, c
             raise SafetyError('Final candidate failed the three selected source checks')
         if classify_deferred:
             document_footnote_evidence._valid(footnote_evidence)
+        if source_binding_unproved:
+            return dict(path=path, baseline_sha256=digest(baseline), candidate_sha256=None,
+                        verification='withheld', steps=[],
+                        reason='A source-level footnote binding is not proven; the entire file is unchanged',
+                        reason_code='unproven-source-footnote-binding',
+                        rule_id=footnote_rules.UNALIGNED)
         if deferred_unproved:
             return dict(path=path, baseline_sha256=digest(baseline), candidate_sha256=None,
                         verification='withheld', steps=[],
@@ -555,7 +656,7 @@ def _replay_expected(tree, record, expected, *, profile=_STANDARD):
 
 
 def replay_document(context, records, catalog, *, profile=_STANDARD, footnote_evidence=None,
-                    partial_unsupported=False, withheld_records=None):
+                    partial_unsupported=False, withheld_records=None, partial_unproven_binding=False):
     """Derive an immutable in-memory source map from one issued include capture.
 
     Every captured source must have exactly its current sequence record or no
@@ -566,6 +667,9 @@ def replay_document(context, records, catalog, *, profile=_STANDARD, footnote_ev
     _profile(profile)
     if type(partial_unsupported) is not bool:
         raise SafetyError('Partial preview selection must be an explicit Boolean')
+    if (type(partial_unproven_binding) is not bool
+            or (partial_unproven_binding and not partial_unsupported)):
+        raise SafetyError('Unproven binding selection requires explicit partial preview')
     if withheld_records is None:
         withheld_records = []
     if (type(withheld_records) is not list or len(withheld_records) > len(context.sources)
@@ -596,12 +700,15 @@ def replay_document(context, records, catalog, *, profile=_STANDARD, footnote_ev
     candidates = {}
     for source in context.sources:
         expected = preview(source.tree, source.path, catalog, profile=profile, footnote_evidence=footnote_evidence,
-                           classify_deferred=partial_unsupported)
+                           classify_deferred=partial_unsupported,
+                           classify_unproven_binding=partial_unproven_binding)
         record = indexed.get(source.path)
         excluded = withheld.get(source.path)
         if excluded is not None:
             if (expected is None or expected.get('verification') != 'withheld'
-                    or expected.get('reason_code') != 'unsupported-deferred-footnote-binding'
+                    or expected.get('reason_code') not in (('unsupported-deferred-footnote-binding',
+                        'unproven-source-footnote-binding') if partial_unproven_binding else
+                        ('unsupported-deferred-footnote-binding',))
                     or not _same_data(expected, excluded)):
                 raise SafetyError('Partial preview withheld record is stale, altered or unsupported')
             candidates[source.path] = source.source

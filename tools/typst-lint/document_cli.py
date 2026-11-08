@@ -32,6 +32,7 @@ def report_document(root, entrypoint, *, rule_set='core', package_path=None,
                     preview_sequence=False, local_rule_hints=False, preview_conditional_gaps=False,
                     preview_conditional_punctuation=False, preview_conditional_spacers=False,
                     preview_conditional_scoped_calls=False,
+                    preview_conditional_continuations=False,
                     footnote_cache_path=None,
                     footnote_punctuation_evidence=False,
                     reference_package_path=None, reference_facade=None, reference_cache_path=None,
@@ -66,6 +67,9 @@ def report_document(root, entrypoint, *, rule_set='core', package_path=None,
     require(type(preview_conditional_scoped_calls) is bool
             and (not preview_conditional_scoped_calls or rule_set == 'pde'),
             'Conditional scoped-call previews require explicit --rule-set pde')
+    require(type(preview_conditional_continuations) is bool
+            and (not preview_conditional_continuations or rule_set == 'pde'),
+            'Conditional continuation previews require explicit --rule-set pde')
     require(footnote_cache_path is None or (type(footnote_cache_path) is str
             and rule_set == 'pde' and package_path is not None),
             'Conditional footnote bindings require --rule-set pde, --package-path and --footnote-cache-path')
@@ -141,8 +145,10 @@ def report_document(root, entrypoint, *, rule_set='core', package_path=None,
     conditional_punctuation_details = []
     conditional_spacer_previews = []
     conditional_scoped_previews = []
+    conditional_continuation_previews = []
     conditional_detached_annotations = []
     conditional_raw_overlays = []
+    conditional_raw_annotations = []
     local_findings, local_suppressed, local_files, local_contexts = [], [], [], []
     items = len(captured.sources) + len(captured.edges) + len(captured.occurrences) + len(captured.unresolved)
     footnote_report = None
@@ -363,6 +369,7 @@ def report_document(root, entrypoint, *, rule_set='core', package_path=None,
                 from document_conditional_scoped_calls import analyze as analyze_scoped_calls
                 from document_conditional_detached_annotations import analyze as analyze_detached_annotations
                 from document_conditional_raw_overlay import analyze as analyze_raw_overlay
+                from document_conditional_raw_annot import analyze as analyze_raw_annot
                 scoped_preview = analyze_scoped_calls(item.tree, item.path, catalog=catalog['rules'])
                 items += (1 + len(scoped_preview['diagnostics']) + len(scoped_preview['suppressed'])
                           + len(scoped_preview['edits']) + len(scoped_preview['conditions'])
@@ -379,6 +386,23 @@ def report_document(root, entrypoint, *, rule_set='core', package_path=None,
                           + len(raw_overlay['conditions']) + len(raw_overlay['unresolved']))
                 require(items <= MAX_REPORT_ITEMS, 'Document inspection report item limit exceeded')
                 conditional_raw_overlays.append(raw_overlay)
+                raw_annot = analyze_raw_annot(item.source, item.path, catalog=catalog['rules'])
+                items += (1 + len(raw_annot['diagnostics']) + len(raw_annot['suppressed'])
+                          + len(raw_annot['conditions']) + len(raw_annot['unresolved']))
+                require(items <= MAX_REPORT_ITEMS, 'Document inspection report item limit exceeded')
+                conditional_raw_annotations.append(raw_annot)
+            if preview_conditional_continuations:
+                from document_conditional_continuation import CONDITIONS, preview as preview_continuation
+                continuation = preview_continuation(item.tree, item.path, catalog=catalog['rules'])
+                if continuation is None:
+                    continuation = dict(path=item.path, baseline_sha256=digest(item.source),
+                        candidate_sha256=None, verification='no-candidate', conditions=CONDITIONS,
+                        execution_proved=False, render_equivalence_proved=False,
+                        edit_permission=False, compiler_permission=False, edits=[])
+                items += (1 + len(continuation['edits']) + len(continuation['conditions'])
+                          + int('reason' in continuation))
+                require(items <= MAX_REPORT_ITEMS, 'Document inspection report item limit exceeded')
+                conditional_continuation_previews.append(continuation)
         except (InputError, OSError, ValueError) as error:
             raise InputError(f'{item.path}: {error}') from error
         # Keep unsupported baseline operands diagnostic-only, then independently
@@ -579,6 +603,12 @@ def report_document(root, entrypoint, *, rule_set='core', package_path=None,
             edit_permission=False, compiler_permission=False, coverage_complete=False)
         report['conditional_raw_overlays'] = dict(by_file=conditional_raw_overlays,
             edit_permission=False, compiler_permission=False, coverage_complete=False)
+        report['conditional_raw_annotations'] = dict(by_file=conditional_raw_annotations,
+            edit_permission=False, compiler_permission=False, coverage_complete=False)
+    if preview_conditional_continuations:
+        report['conditional_continuation_previews'] = dict(by_file=conditional_continuation_previews,
+            edit_permission=False, compiler_permission=False,
+            scope='independent-source-pattern-not-composed-or-render-verified')
     if local_rule_hints:
         from document_local_rules import RULE_IDS as LOCAL_RULE_IDS
         report['local_rule_hints'] = dict(rule_ids=list(LOCAL_RULE_IDS),
@@ -627,6 +657,8 @@ def main(arguments=None):
                         help='Preview conditional unaligned footnote spacer removals (requires --rule-set pde)')
     parser.add_argument('--preview-conditional-scoped-calls', action='store_true',
                         help='Preview conditional scoped dictionary calls (requires --rule-set pde)')
+    parser.add_argument('--preview-conditional-continuations', action='store_true',
+                        help='Preview conditional prose continuation joins (requires --rule-set pde)')
     parser.add_argument('--reference-package-path',
                         help='Explicit canonical root containing the reviewed project-references package')
     parser.add_argument('--reference-facade',
@@ -654,6 +686,7 @@ def main(arguments=None):
                                  preview_conditional_punctuation=args.preview_conditional_punctuation,
                                  preview_conditional_spacers=args.preview_conditional_spacers,
                                  preview_conditional_scoped_calls=args.preview_conditional_scoped_calls,
+                                 preview_conditional_continuations=args.preview_conditional_continuations,
                                  reference_package_path=args.reference_package_path,
                                  reference_facade=args.reference_facade,
                                  reference_cache_path=args.reference_cache_path,
@@ -762,6 +795,19 @@ def main(arguments=None):
             if scoped_calls['by_file']:
                 for condition in scoped_calls['by_file'][0]['conditions']:
                     print(f"  condition: {condition}")
+        if 'conditional_continuation_previews' in result:
+            continuations = result['conditional_continuation_previews']
+            print('Conditional continuation previews: source-only, no edit or compiler permission')
+            for row in continuations['by_file']:
+                print(f"  {row['path']}: {row['verification']}; {len(row['edits'])} proposed edits; "
+                      f"source sha256 {row['baseline_sha256']}; candidate sha256 {row['candidate_sha256']}")
+                if 'reason' in row:
+                    print(f"    unresolved: {row['reason']}")
+                for entry in row['edits']:
+                    print(f"    conditional edit bytes {entry['start']}..{entry['end']}: replace with one space")
+            if continuations['by_file']:
+                for condition in continuations['by_file'][0]['conditions']:
+                    print(f"  condition: {condition}")
         if 'conditional_detached_annotations' in result:
             detached = result['conditional_detached_annotations']
             print('Conditional detached annotations: diagnostic-only, no edit or compiler permission')
@@ -791,6 +837,21 @@ def main(arguments=None):
                     print(f"    unresolved: {reason}")
             if raw_overlays['by_file']:
                 for condition in raw_overlays['by_file'][0]['conditions']:
+                    print(f"  condition: {condition}")
+        if 'conditional_raw_annotations' in result:
+            raw_annotations = result['conditional_raw_annotations']
+            print('Conditional raw annotations: diagnostic-only, no edit or compiler permission')
+            for row in raw_annotations['by_file']:
+                print(f"  {row['path']}: {row['status']}; {len(row['diagnostics'])} hints; "
+                      f"{len(row['suppressed'])} suppressed; source sha256 {row['source_sha256']}")
+                for label, entries in (('hint', row['diagnostics']), ('suppressed', row['suppressed'])):
+                    for entry in entries:
+                        print(f"    {label} {entry['path']}:{entry['line']}:{entry['column']}: "
+                              f"{entry['rule_id']}: {entry['explanation']}")
+                for reason in row['unresolved']:
+                    print(f"    unresolved: {reason}")
+            if raw_annotations['by_file']:
+                for condition in raw_annotations['by_file'][0]['conditions']:
                     print(f"  condition: {condition}")
         if 'conditional_punctuation_details' in result:
             details = result['conditional_punctuation_details']

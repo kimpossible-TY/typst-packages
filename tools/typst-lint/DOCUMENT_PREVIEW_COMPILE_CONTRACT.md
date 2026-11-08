@@ -110,6 +110,30 @@ sources and `no_verified_candidate_edits`. `--review-edits` marks withheld
 sources distinctly from unchanged sources. With `--pdf-stdout`, report metadata
 continues to go to stderr, and the PDF is only a private preview.
 
+`--partial-unproven-binding-preview` is a further, separately explicit opt-in
+and requires `--partial-unsupported-preview`. It also withholds the entire
+source when an exact literal-form footnote candidate has no proven binding,
+including an explicitly shadowed `footnote`. The report uses
+`unproven-source-footnote-binding` and never describes this as a verified
+violation or a safe edit. The selected file's complete captured source is used;
+no earlier stage from that file is retained. Every literal import in such a
+source must resolve to the issued graph or a verified captured package. The
+reachable transitive graph must not contain missing, unknown, or dynamically
+resolved imports; a computed import in the candidate source itself requires
+the separately reviewed CeTZ draw proof. Unknown imports, missing or changed
+evidence, parser/reanalysis failures and other safety errors remain fatal.
+Replay independently rederives this reason and checks the complete withheld
+record; omitting the new opt-in cannot replay it.
+
+For example, add `--partial-unproven-binding-preview` to the partial preview
+command above to request this additional, more limited source-only withholding.
+
+This mode still compares two versions of the **whole** captured document. A
+withheld file's unchanged bytes can import another source that has a candidate
+edit, so unchanged bytes alone do not establish unchanged runtime behavior.
+Global coverage, dependency closure, source application and publication remain
+unproved, and the status and source-apply blockers remain unchanged.
+
 `--review-edits` includes each captured source's baseline and candidate hashes
 and the same ordered edit stages independently replayed for the compiler. Each
 stage's byte offsets apply to its own baseline hash, not the original file after
