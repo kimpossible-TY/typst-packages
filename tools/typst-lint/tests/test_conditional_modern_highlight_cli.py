@@ -16,7 +16,7 @@ from syntax_client import EXECUTABLE
 from typst_lint import InputError
 
 MODERN = TOOL / 'tests/fixtures/reviewed-text-utils-main/local/text-utils/0.1.2'
-OLD = TOOL.parents[1] / 'local/text-utils/0.1.2'
+OLD = TOOL / 'tests/fixtures/reviewed-packages/local/text-utils/0.1.2'
 
 
 @unittest.skipUnless(EXECUTABLE.is_file(), 'Requires the pinned syntax adapter')
@@ -70,6 +70,10 @@ class ConditionalModernHighlightCliTests(unittest.TestCase):
         cached.parent.mkdir(parents=True)
         shutil.copytree(self.target, cached)
         shutil.rmtree(self.target)
+        cache_only = self.command('--modern-highlight-evidence')['conditional_modern_highlight']
+        self.assertEqual(cache_only['status'], 'CONDITIONAL')
+        self.assertTrue(cache_only['by_file'][0]['package_evidence']['source_identity'].startswith(
+            str(self.cache) + '/'))
         shutil.copytree(OLD, self.target)
         report = self.command('--modern-highlight-evidence')
         self.assertEqual(report['conditional_modern_highlight']['status'], 'UNAVAILABLE')

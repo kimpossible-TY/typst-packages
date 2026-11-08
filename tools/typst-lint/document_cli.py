@@ -176,6 +176,7 @@ def report_document(root, entrypoint, *, rule_set='core', package_path=None,
     conditional_continuation_previews = []
     conditional_capitalization_previews = []
     conditional_paragraph_gap_previews = []
+    conditional_hyphen_marker_gap_previews = []
     conditional_prose_spacer_previews = []
     conditional_aligned_spacer_previews = []
     conditional_prose_marker_previews = []
@@ -185,6 +186,7 @@ def report_document(root, entrypoint, *, rule_set='core', package_path=None,
     conditional_mannot_scope = []
     conditional_marker_tags = []
     local_findings, local_suppressed, local_files, local_contexts = [], [], [], []
+    conditional_hyphen_markers = []
     items = len(captured.sources) + len(captured.edges) + len(captured.occurrences) + len(captured.unresolved)
     footnote_report = None
     modern_highlight_report = None
@@ -347,6 +349,12 @@ def report_document(root, entrypoint, *, rule_set='core', package_path=None,
             if local_rule_hints:
                 from document_local_rules import analyze as analyze_local
                 local_reasons, local_results = analyze_local(item.tree, item.path, catalog['rules'])
+                from document_conditional_hyphen_marker import analyze as analyze_hyphen_marker
+                hyphen_markers = analyze_hyphen_marker(item.source, item.path, catalog=catalog['rules'])
+                items += (1 + len(hyphen_markers['diagnostics']) + len(hyphen_markers['suppressed'])
+                          + len(hyphen_markers['unresolved']) + len(hyphen_markers['conditions']))
+                require(items <= MAX_REPORT_ITEMS, 'Document inspection report item limit exceeded')
+                conditional_hyphen_markers.append(hyphen_markers)
             else:
                 local_results = None
             if preview_conditional_gaps:
@@ -510,6 +518,18 @@ def report_document(root, entrypoint, *, rule_set='core', package_path=None,
                           + int('reason' in paragraph_gap))
                 require(items <= MAX_REPORT_ITEMS, 'Document inspection report item limit exceeded')
                 conditional_paragraph_gap_previews.append(paragraph_gap)
+                from document_conditional_hyphen_marker_gap import CONDITIONS, preview as preview_hyphen_marker_gap
+                hyphen_gap = preview_hyphen_marker_gap(item.tree, item.path, catalog=catalog['rules'])
+                if hyphen_gap is None:
+                    hyphen_gap = dict(path=item.path, baseline_sha256=digest(item.source),
+                        candidate_sha256=None, verification='no-candidate', conditions=CONDITIONS,
+                        execution_proved=False, runtime_binding_proved=False,
+                        render_equivalence_proved=False, edit_permission=False, compiler_permission=False,
+                        unresolved=[], edits=[])
+                items += (1 + len(hyphen_gap['edits']) + len(hyphen_gap['conditions'])
+                          + len(hyphen_gap['unresolved']) + int('reason' in hyphen_gap))
+                require(items <= MAX_REPORT_ITEMS, 'Document inspection report item limit exceeded')
+                conditional_hyphen_marker_gap_previews.append(hyphen_gap)
             if preview_conditional_prose_spacers:
                 from document_conditional_prose_spacer import CONDITIONS, preview as preview_prose_spacer
                 prose_spacer = preview_prose_spacer(item.tree, item.path, catalog=catalog['rules'])
@@ -783,6 +803,9 @@ def report_document(root, entrypoint, *, rule_set='core', package_path=None,
         report['conditional_paragraph_gap_previews'] = dict(by_file=conditional_paragraph_gap_previews,
             edit_permission=False, compiler_permission=False,
             scope='independent-source-pattern-not-composed-or-render-verified')
+        report['conditional_hyphen_marker_gap_previews'] = dict(by_file=conditional_hyphen_marker_gap_previews,
+            edit_permission=False, compiler_permission=False,
+            scope='independent-source-pattern-not-composed-or-render-verified')
     if preview_conditional_prose_spacers:
         report['conditional_prose_spacer_previews'] = dict(by_file=conditional_prose_spacer_previews,
             edit_permission=False, compiler_permission=False,
@@ -804,6 +827,8 @@ def report_document(root, entrypoint, *, rule_set='core', package_path=None,
             diagnostics=sorted(local_findings, key=lambda row: (row['path'], row['line'], row['column'], row['rule_id'])),
             suppressed=sorted(local_suppressed, key=lambda row: (row['path'], row['line'], row['column'], row['rule_id'])),
             source_contexts=local_contexts, coverage=local_files, edit_permission=False)
+        report['conditional_hyphen_markers'] = dict(by_file=conditional_hyphen_markers,
+            edit_permission=False, compiler_permission=False, coverage_complete=False)
     if reference_report is not None:
         report['reference_provenance'] = reference_report
     if footnote_report is not None:
@@ -925,6 +950,23 @@ def main(arguments=None):
             for finding in result['local_rule_hints']['diagnostics']:
                 print(f"{finding['path']}:{finding['line']}:{finding['column']}: "
                       f"source-local conditional {finding['rule_id']}: {finding['explanation']}")
+        if 'conditional_hyphen_markers' in result:
+            markers = result['conditional_hyphen_markers']
+            print('Conditional hyphenated paragraph markers: diagnostic-only, no edit or compiler permission')
+            for row in markers['by_file']:
+                if not (row['diagnostics'] or row['suppressed'] or row['unresolved']):
+                    continue
+                print(f"  {row['path']}: {row['status']}; {len(row['diagnostics'])} hints; "
+                      f"{len(row['suppressed'])} suppressed; source sha256 {row['source_sha256']}")
+                for label, entries in (('hint', row['diagnostics']), ('suppressed', row['suppressed'])):
+                    for entry in entries:
+                        print(f"    {label} {entry['path']}:{entry['line']}:{entry['column']}: "
+                              f"{entry['rule_id']}: {entry['explanation']}")
+                for reason in row['unresolved']:
+                    print(f"    unresolved: {reason}")
+            if markers['by_file']:
+                for condition in markers['by_file'][0]['conditions']:
+                    print(f"  condition: {condition}")
         if 'reference_provenance' in result:
             reference = result['reference_provenance']
             detail = reference['export']['reason'] or 'runtime binding and initialization remain unproved'
@@ -1062,6 +1104,21 @@ def main(arguments=None):
                     print(f"    conditional edit bytes {entry['start']}..{entry['end']}: insert blank {newline} line")
             if paragraph_gaps['by_file']:
                 for condition in paragraph_gaps['by_file'][0]['conditions']:
+                    print(f"  condition: {condition}")
+        if 'conditional_hyphen_marker_gap_previews' in result:
+            hyphen_gaps = result['conditional_hyphen_marker_gap_previews']
+            print('Conditional hyphen marker gap previews: source-only, no edit or compiler permission')
+            for row in hyphen_gaps['by_file']:
+                print(f"  {row['path']}: {row['verification']}; {len(row['edits'])} proposed edits; "
+                      f"source sha256 {row['baseline_sha256']}; candidate sha256 {row['candidate_sha256']}")
+                if 'reason' in row:
+                    print(f"    unresolved: {row['reason']}")
+                for entry in row['unresolved']:
+                    print(f"    unresolved marker at byte {entry['marker_start']}: {entry['reason']}")
+                for entry in row['edits']:
+                    print(f"    conditional edit bytes {entry['start']}..{entry['end']}: insert blank line")
+            if hyphen_gaps['by_file']:
+                for condition in hyphen_gaps['by_file'][0]['conditions']:
                     print(f"  condition: {condition}")
         if 'conditional_prose_spacer_previews' in result:
             prose_spacers = result['conditional_prose_spacer_previews']

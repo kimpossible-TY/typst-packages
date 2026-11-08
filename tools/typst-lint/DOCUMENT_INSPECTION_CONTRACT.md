@@ -93,6 +93,13 @@ other supported source findings are rechecked; marker binding and prose executio
 remain conditional. Adding a blank line can change rendered output: an isolated
 owned Typst fixture produced different PDFs. The proposal is not applied or
 composed and does not authorize compilation or establish whole-document coverage.
+The independent `conditional_hyphen_marker_gap_previews` section covers root and
+nested literal `#paragraph-tab` source hints under the same option. It preserves
+the corresponding suppressed and other conditional findings. A preceding
+function call, identifier, comment or other unclassified expression is reported
+unresolved: it could be a footnote or output requiring a different repair.
+The source-only plan remains separate from the underscore marker plan and can
+change rendering; marker binding and execution are not established.
 
 The independent `--rule-set pde --preview-conditional-prose-spacers` option
 proposes removing a literal `#dots_space` and horizontal separator immediately
@@ -165,6 +172,12 @@ JSON includes:
   include-site bindings, execution, styles and rendering remain unproved.
   The report retains these rules in `coverage.uninspected` because their document
   context is not established. Shared resolver refusals appear once per source.
+  A separate `conditional_hyphen_markers` section reports root and nested gaps,
+  and nested target/capitalization source patterns for literal `#paragraph-tab`.
+  The equivalent-length virtual marker spelling is parsed separately and its
+  syntax and suppression ownership checked against the original. Binding,
+  execution and paragraph styles remain conditions; no edits or coverage
+  authority follow, and root target/capitalization remain uninspected.
 - With explicit `--rule-set pde --preview-conditional-gaps`, report independent
   source-only previews for proof boundaries and nested display-math footnote
   gaps. Each candidate is freshly parsed, checked for non-whitespace syntax and

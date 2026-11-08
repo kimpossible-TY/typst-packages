@@ -20,7 +20,7 @@ from syntax_client import EXECUTABLE
 from typst_lint import InputError, digest
 
 MODERN = TOOL / 'tests/fixtures/reviewed-text-utils-main/local/text-utils/0.1.2'
-OLD = TOOL.parents[1] / 'local/text-utils/0.1.2'
+OLD = TOOL / 'tests/fixtures/reviewed-packages/local/text-utils/0.1.2'
 IMPORT = b'#import "@local/text-utils:0.1.2": *\n'
 
 

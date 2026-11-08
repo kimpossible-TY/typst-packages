@@ -13,6 +13,7 @@ from pathlib import Path
 import select
 import stat
 import sys
+import unicodedata
 
 import closed_core_compile as runtime
 import document_dependencies
@@ -57,12 +58,148 @@ def _finish_sample(heap):
             sorted(heap, key=lambda item: (item[0].key, -item[1]))]
 
 
-def lint_captured_document(context, snapshot, *, rule_set, details=False, cancel_event=None):
+def _retain_mapping_sample(heap, finding, sequence, limit):
+    key = (finding['path'], finding['line'], finding['column'], finding['rule_id'])
+    entry = (_DescendingKey(key), -sequence, finding)
+    if len(heap) < limit:
+        heapq.heappush(heap, entry)
+    elif key < heap[0][0].key:
+        heapq.heapreplace(heap, entry)
+
+
+def _finish_mapping_sample(heap):
+    return [dict(row) for key, sequence, row in
+            sorted(heap, key=lambda item: (item[0].key, -item[1]))]
+
+
+def _hyphen_marker_positions(tree):
+    """Recover exact marker and following text positions from the issued tree."""
+    nodes, source, markers, following_text = tree.nodes, tree.source, set(), {}
+    for body in nodes:
+        if body.kind != 'Markup':
+            continue
+        siblings = body.children
+        for position in range(1, len(siblings)):
+            ident, mark = nodes[siblings[position]], nodes[siblings[position - 1]]
+            if (ident.kind != 'Ident' or source[ident.start:ident.end] != b'paragraph-tab'
+                    or mark.kind != 'Hash' or mark.end != ident.start):
+                continue
+            markers.add(mark.start)
+            following = position + 1
+            if following < len(siblings) and nodes[siblings[following]].kind == 'Space':
+                following += 1
+            if following < len(siblings) and nodes[siblings[following]].kind == 'Text':
+                following_text[nodes[siblings[following]].start] = mark.start
+    return markers, following_text
+
+
+def _include_forwarding(context, snapshot, cap):
+    """Check conditional forwarding evidence against the issued compile inputs."""
+    import include_forwarding_evidence as forwarding
+    from static_resolver import MATH_BOOK, MATH_BOOK_SOURCE_SHA256
+    include_context.assert_include_context(context)
+    document_resources.assert_capture(snapshot)
+    roots = dict(snapshot.roots)
+    resources = {(item.request.root, item.request.path): item for item in snapshot.files}
+    prefix = 'local/math-book/0.2.0'
+    folded = unicodedata.normalize('NFC', prefix).casefold()
+    def has_prefix(root):
+        for name, path in resources:
+            normalized = unicodedata.normalize('NFC', path).casefold()
+            if name == root and (normalized == folded or normalized.startswith(folded + '/')
+                                 or folded.startswith(normalized + '/')):
+                return True
+        return False
+    selected = 'packages' if has_prefix('packages') or not has_prefix('cache') else 'cache'
+    value = forwarding.analyze(context, roots.get(selected, ''), snapshot=snapshot)
+    include_context.assert_include_context(context)
+    document_resources.assert_capture(snapshot)
+    require(type(value) is dict and value.get('status') in ('CONDITIONAL', 'UNAVAILABLE')
+            and value.get('original_unresolved_retained') is True
+            and all(type(value.get(key)) is int for key in ('unresolved_sites_before',
+                'unresolved_occurrences_before', 'recognized_site_count', 'conditionally_explained_occurrences'))
+            and value.get('unresolved_sites_before') == len(context.unresolved)
+            and value.get('unresolved_occurrences_before') == sum(bool(item.unresolved_codes) for item in context.occurrences)
+            and all(value.get(key) is False for key in ('runtime_execution_proved', 'runtime_package_selection_proved',
+                'live_package_freshness_proved', 'coverage_complete', 'edit_permission', 'compiler_permission',
+                'publication_authority')) and type(value.get('sites')) is list,
+            'Include forwarding result does not match the captured context')
+    sites = value['sites']
+    if value['status'] == 'UNAVAILABLE':
+        require(not sites and value.get('resource_capture_bound') is False
+                and value.get('recognized_site_count') == 0 and value.get('conditionally_explained_occurrences') == 0
+                and type(value.get('reason')) is str and bool(value['reason'].strip()),
+                'Unavailable include forwarding result contains evidence')
+    else:
+        require(len(sites) <= forwarding.MAX_EVIDENCE_ITEMS, 'Include forwarding evidence limit exceeded')
+        manifest, source = (resources.get((selected, prefix + suffix)) for suffix in ('/typst.toml', '/lib.typ'))
+        require(manifest is not None and source is not None and value.get('resource_capture_bound') is True
+                and manifest.request.role == source.request.role == 'package'
+                and manifest.sha256 == forwarding.MATH_BOOK_MANIFEST_SHA256
+                and source.sha256 == MATH_BOOK_SOURCE_SHA256
+                and value.get('package_evidence') == dict(import_path=MATH_BOOK, root_id=selected,
+                    manifest_identity=manifest.evidence.path, manifest_sha256=manifest.sha256,
+                    source_identity=source.evidence.path, source_sha256=source.sha256),
+                'Include forwarding package evidence does not match the capture')
+        calls = {item.path: forwarding._book_calls(item.tree) for item in context.sources}
+        expected = {}
+        for edge in context.edges:
+            if edge.target is None or edge.literal is None:
+                continue
+            item = context.source_for(edge.node.source.path)
+            match = forwarding._matches(edge, item, calls[item.path])
+            if match is not None:
+                kind, conditions, owner = match
+                key = (item.path, edge.node.start, edge.node.end)
+                require(key not in expected, 'Ambiguous include forwarding site')
+                expected[key] = (edge, item, kind, conditions, owner)
+        recognized = set()
+        for row in sites:
+            require(type(row) is dict and all(type(row.get(key)) is int
+                    for key in ('line', 'start', 'end', 'owner_start', 'owner_end')),
+                    'Invalid include forwarding site')
+            key = (row.get('path'), row.get('start'), row.get('end'))
+            require(key in expected and key not in recognized, 'Unexpected or duplicate include forwarding site')
+            recognized.add(key)
+            edge, item, kind, conditions, owner = expected[key]
+            require(row.get('source_sha256') == item.identity.source_sha256
+                    and row.get('line') == item.source.count(b'\n', 0, edge.node.start) + 1
+                    and row.get('target') == edge.target.path and row.get('target_sha256') == edge.target.source_sha256
+                    and row.get('owner_start') == item.tree.nodes[owner].start
+                    and row.get('owner_end') == item.tree.nodes[owner].end
+                    and row.get('evidence_kind') == kind and row.get('conditions') == conditions
+                    and row.get('retained_unresolved_codes') == list(edge.unresolved_codes),
+                    'Include forwarding site does not match captured source facts')
+        require(recognized == set(expected) and value.get('recognized_site_count') == len(sites),
+                'Include forwarding site set is incomplete')
+        identified = {(expected[key][0].node.source.path, expected[key][0].node.node_id) for key in recognized}
+        edges_by_node = {(edge.node.source.path, edge.node.node_id): edge for edge in context.edges}
+        explained = 0
+        for occurrence in context.occurrences:
+            if not occurrence.unresolved_codes or 'include-cycle' in occurrence.unresolved_codes:
+                continue
+            unresolved = [node for node in occurrence.edge_chain
+                          if edges_by_node[(node.source.path, node.node_id)].unresolved_codes]
+            if unresolved and all((node.source.path, node.node_id) in identified for node in unresolved):
+                explained += 1
+        require(value.get('conditionally_explained_occurrences') == explained,
+                'Include forwarding occurrence count does not match the capture')
+    include_context.assert_include_context(context)
+    document_resources.assert_capture(snapshot)
+    result = dict(value)
+    result['sites'] = sites[:cap]
+    result['sites_omitted'] = len(sites) - len(result['sites'])
+    result['sample_limit'] = cap
+    return result, 1 + len(sites) + sum(len(row['conditions']) for row in sites)
+
+
+def lint_captured_document(context, snapshot, *, rule_set, details=False, local_hints=False, cancel_event=None):
     """Run existing document source diagnostics against the issued compile capture."""
     import document_display
     import script_rule
     import syntax_client
-    require(rule_set in ('core', 'pde') and type(details) is bool, 'Invalid document lint selection')
+    require(rule_set in ('core', 'pde') and type(details) is bool and type(local_hints) is bool
+            and (not local_hints or rule_set == 'pde'), 'Invalid document lint selection')
     document_resources.stage_original(context, snapshot)
     catalog, catalog_hash = load_rules()
     enabled = [rule['id'] for rule in catalog['rules']
@@ -77,6 +214,22 @@ def lint_captured_document(context, snapshot, *, rule_set, details=False, cancel
     suppressed_counts = {rid: 0 for rid in backends}
     skipped_counts = {rid: 0 for rid in backends}
     parse_error_counts = {rid: 0 for rid in backends}
+    if local_hints:
+        import document_local_rules
+        import document_conditional_hyphen_marker
+        local_rules = tuple(document_local_rules.RULE_IDS)
+        local_counts = {rid: 0 for rid in local_rules}
+        local_hidden_counts = {rid: 0 for rid in local_rules}
+        local_diagnostics, local_suppressed, local_files, local_contexts = [], [], [], []
+        local_seen_diagnostics = local_seen_suppressed = 0
+        hyphen_rules = tuple(document_conditional_hyphen_marker.RULE_IDS)
+        hyphen_metadata = {row['id']: row for row in catalog['rules'] if row['id'] in hyphen_rules}
+        require(len(hyphen_metadata) == len(hyphen_rules) and set(hyphen_rules).issubset(set(enabled)),
+                'Hyphenated marker metadata is unavailable')
+        hyphen_counts = {rid: 0 for rid in hyphen_rules}
+        hyphen_hidden_counts = {rid: 0 for rid in hyphen_rules}
+        hyphen_diagnostics, hyphen_suppressed, hyphen_files = [], [], []
+        hyphen_seen_diagnostics = hyphen_seen_suppressed = 0
     items = len(context.sources) + len(context.edges) + len(context.occurrences) + len(context.unresolved)
     for item in context.sources:
         if cancel_event is not None and cancel_event.is_set():
@@ -111,6 +264,93 @@ def lint_captured_document(context, snapshot, *, rule_set, details=False, cancel
                 skip_reasons_omitted=max(0, len(reasons) - 20),
                 parse_error_count=len(errors), parse_errors=[list(span) for span in errors[:20]],
                 parse_errors_omitted=max(0, len(errors) - 20)))
+        if local_hints:
+            shared_reasons, local_results = document_local_rules.analyze(item.tree, item.path, catalog['rules'])
+            shared = set(shared_reasons)
+            items += 1 + len(shared_reasons)
+            require(items <= _LINT_ITEM_LIMIT, 'Document lint item limit exceeded')
+            local_contexts.append(dict(path=item.path, source_sha256=item.identity.source_sha256,
+                shared_reason_count=len(shared_reasons), shared_resolution_reasons=list(shared_reasons[:20]),
+                shared_reasons_omitted=max(0, len(shared_reasons) - 20)))
+            for rid in local_rules:
+                value = local_results[rid]
+                reasons = tuple(reason for reason in value.skips if reason not in shared)
+                errors = tuple(value.parse_errors)
+                items += 1 + len(value.diagnostics) + len(value.suppressed) + len(reasons) + len(errors)
+                require(items <= _LINT_ITEM_LIMIT, 'Document lint item limit exceeded')
+                local_counts[rid] += len(value.diagnostics)
+                local_hidden_counts[rid] += len(value.suppressed)
+                for row in value.diagnostics:
+                    _retain_sample(local_diagnostics, row, local_seen_diagnostics, cap)
+                    local_seen_diagnostics += 1
+                for row in value.suppressed:
+                    _retain_sample(local_suppressed, row, local_seen_suppressed, cap)
+                    local_seen_suppressed += 1
+                local_files.append(dict(path=item.path, source_sha256=item.identity.source_sha256,
+                    rule_id=rid, status='conditional', diagnostics=len(value.diagnostics),
+                    suppressed=len(value.suppressed), skip_count=len(reasons), skip_reasons=list(reasons[:20]),
+                    skip_reasons_omitted=max(0, len(reasons) - 20), parse_error_count=len(errors),
+                    parse_errors=[list(span) for span in errors[:20]],
+                    parse_errors_omitted=max(0, len(errors) - 20), edit_permission=False))
+            hyphen = document_conditional_hyphen_marker.analyze(item.source, item.path, catalog=catalog['rules'])
+            require(type(hyphen) is dict and hyphen.get('path') == item.path
+                    and hyphen.get('source_sha256') == item.identity.source_sha256
+                    and hyphen.get('status') in ('PARTIAL', 'UNAVAILABLE')
+                    and all(hyphen.get(key) is False for key in ('runtime_binding_proved', 'execution_proved',
+                        'coverage_complete', 'edit_permission', 'compiler_permission', 'render_equivalence_proved'))
+                    and hyphen.get('conditions') == document_conditional_hyphen_marker.CONDITIONS
+                    and all(type(hyphen.get(key)) is list for key in ('diagnostics', 'suppressed', 'unresolved'))
+                    and all(type(reason) is str and bool(reason.strip()) for reason in hyphen['unresolved']),
+                    'Hyphenated marker result does not match the captured source')
+            if hyphen['status'] == 'UNAVAILABLE':
+                require(not hyphen['diagnostics'] and not hyphen['suppressed'] and bool(hyphen['unresolved']),
+                        'Unavailable hyphenated marker result contains partial findings')
+            items += 1 + sum(len(hyphen[key]) for key in ('diagnostics', 'suppressed', 'unresolved')) + len(hyphen['conditions'])
+            require(items <= _LINT_ITEM_LIMIT, 'Document lint item limit exceeded')
+            marker_positions, marker_text = _hyphen_marker_positions(item.tree)
+            for key, heap, counts_by_rule in (('diagnostics', hyphen_diagnostics, hyphen_counts),
+                                               ('suppressed', hyphen_suppressed, hyphen_hidden_counts)):
+                for row in hyphen[key]:
+                    require(type(row) is dict and row.get('rule_id') in hyphen_metadata
+                            and row.get('path') == item.path and type(row.get('line')) is int and row['line'] > 0
+                            and type(row.get('column')) is int and row['column'] > 0
+                            and type(row.get('start')) is int and type(row.get('end')) is int
+                            and 0 <= row['start'] <= row['end'] <= len(item.source)
+                            and type(row.get('marker_start')) is int and row['marker_start'] >= 0
+                            and row['marker_start'] in marker_positions
+                            and row.get('marker_spelling') == 'paragraph-tab'
+                            and type(row.get('explanation')) is str and bool(row['explanation'].strip())
+                            and row.get('grade') == hyphen_metadata[row['rule_id']]['grade']
+                            and row.get('source') == hyphen_metadata[row['rule_id']]['source'],
+                            'Hyphenated marker finding does not match the captured rule or source')
+                    line_start = item.source.rfind(b'\n', 0, row['start']) + 1
+                    require(row['line'] == item.source.count(b'\n', 0, row['start']) + 1
+                            and row['column'] == len(item.source[line_start:row['start']].decode('utf-8')) + 1,
+                            'Hyphenated marker finding position does not match captured bytes')
+                    if row['rule_id'] == 'pde.paragraph-capitalization':
+                        require(row['end'] == row['start'] + 1
+                                and b'a' <= item.source[row['start']:row['end']] <= b'z'
+                                and marker_text.get(row['start']) == row['marker_start'],
+                                'Hyphenated capitalization finding does not match marker ownership')
+                    else:
+                        require(row['start'] == row['marker_start']
+                                and row['end'] == row['start'] + len(b'#paragraph-tab'),
+                                'Hyphenated marker finding span does not match its token')
+                    counts_by_rule[row['rule_id']] += 1
+                    if key == 'diagnostics':
+                        _retain_mapping_sample(heap, row, hyphen_seen_diagnostics, cap)
+                        hyphen_seen_diagnostics += 1
+                    else:
+                        _retain_mapping_sample(heap, row, hyphen_seen_suppressed, cap)
+                        hyphen_seen_suppressed += 1
+            hyphen_files.append(dict(path=item.path, source_sha256=item.identity.source_sha256,
+                status=hyphen['status'], diagnostics=len(hyphen['diagnostics']),
+                suppressed=len(hyphen['suppressed']), unresolved_count=len(hyphen['unresolved']),
+                unresolved=list(hyphen['unresolved'][:20]), unresolved_omitted=max(0, len(hyphen['unresolved']) - 20)))
+    if local_hints:
+        include_forwarding, forwarding_items = _include_forwarding(context, snapshot, cap)
+        items += forwarding_items
+        require(items <= _LINT_ITEM_LIMIT, 'Document lint item limit exceeded')
     document_resources.stage_original(context, snapshot)
     total, hidden = sum(counts.values()), sum(suppressed_counts.values())
     diagnostics = _finish_sample(diagnostics)
@@ -124,10 +364,38 @@ def lint_captured_document(context, snapshot, *, rule_set, details=False, cancel
                     aggregate_items_used=items, report_bytes=_LINT_REPORT_BYTES),
         coverage=dict(global_complete=False, enabled=enabled, inspected_backends=backends,
             uninspected=[rid for rid in enabled if rid not in backends], files=files,
+            uninspected_scope=('Not inspected by the primary backends; separately requested conditional '
+                               'sections may inspect source patterns without proving full rule coverage'),
             skips_by_rule=skipped_counts, parse_errors_by_rule=parse_error_counts,
             unresolved_includes=[asdict(row) for row in context.unresolved],
             runtime_execution_proved=False, package_bindings_proved=False,
             consumer_config_loaded=False, fixes_applied=False))
+    if local_hints:
+        local_diagnostics = _finish_sample(local_diagnostics)
+        local_suppressed = _finish_sample(local_suppressed)
+        local_total, local_hidden = sum(local_counts.values()), sum(local_hidden_counts.values())
+        report['conditional_local_hints'] = dict(rule_ids=list(local_rules),
+            diagnostics_present=bool(local_total), diagnostics_count=local_total, diagnostics_by_rule=local_counts,
+            diagnostics=local_diagnostics, diagnostics_omitted=local_total - len(local_diagnostics),
+            suppressed_count=local_hidden, suppressed_by_rule=local_hidden_counts,
+            suppressed=local_suppressed, suppressed_omitted=local_hidden - len(local_suppressed),
+            sample_limit=cap, source_contexts=local_contexts, coverage=local_files,
+            runtime_binding_proved=False, execution_proved=False, coverage_complete=False,
+            edit_permission=False, compiler_permission=False)
+        hyphen_diagnostics = _finish_mapping_sample(hyphen_diagnostics)
+        hyphen_suppressed = _finish_mapping_sample(hyphen_suppressed)
+        hyphen_total, hyphen_hidden = sum(hyphen_counts.values()), sum(hyphen_hidden_counts.values())
+        report['conditional_hyphen_markers'] = dict(rule_ids=list(hyphen_rules),
+            diagnostics_count=hyphen_total, diagnostics_by_rule=hyphen_counts,
+            diagnostics=hyphen_diagnostics, diagnostics_omitted=hyphen_total - len(hyphen_diagnostics),
+            suppressed_count=hyphen_hidden, suppressed_by_rule=hyphen_hidden_counts,
+            suppressed=hyphen_suppressed, suppressed_omitted=hyphen_hidden - len(hyphen_suppressed),
+            sample_limit=cap, by_file=hyphen_files,
+            unavailable_files=sum(row['status'] == 'UNAVAILABLE' for row in hyphen_files),
+            conditions=list(document_conditional_hyphen_marker.CONDITIONS),
+            runtime_binding_proved=False, execution_proved=False, coverage_complete=False,
+            render_equivalence_proved=False, edit_permission=False, compiler_permission=False)
+        report['conditional_include_forwarding'] = include_forwarding
     # Use the actual encoding and indentation of the nested stderr section.
     require(len(json.dumps({'lint': report}, ensure_ascii=False, sort_keys=True, indent=2).encode('utf-8'))
             <= _LINT_REPORT_BYTES,
@@ -231,6 +499,8 @@ def main(arguments=None):
                         help='Explicit document lint rule set (requires --lint-document)')
     parser.add_argument('--lint-details', action='store_true',
                         help='Include up to 10,000 diagnostics and suppressed entries instead of 50')
+    parser.add_argument('--lint-local-hints', action='store_true',
+                        help='Include separate conditional source-local PDE hints (requires --lint-document --rule-set pde)')
     parser.add_argument('--pdf-stdout', action='store_true', required=True,
                         help='Emit the verified original PDF bytes on stdout; report JSON on stderr')
     words = list(sys.argv[1:] if arguments is None else arguments)
@@ -244,6 +514,8 @@ def main(arguments=None):
     args = parser.parse_args(words)
     if (args.rule_set is not None or args.lint_details) and not args.lint_document:
         parser.error('--rule-set and --lint-details require --lint-document')
+    if args.lint_local_hints and (not args.lint_document or args.rule_set != 'pde'):
+        parser.error('--lint-local-hints requires --lint-document --rule-set pde')
     output_identity = _stream_identity(getattr(sys.stdout, 'buffer', sys.stdout))
     if output_identity is not None and output_identity[2] not in (stat.S_IFIFO, stat.S_IFSOCK):
         print(json.dumps(dict(schema=1, mode='original-compile', status=2,
@@ -326,7 +598,8 @@ def main(arguments=None):
             phase = 'lint'
             result['lint_attempted'] = True
             result['lint'] = lint_captured_document(context, snapshot, rule_set=args.rule_set or 'core',
-                                                    details=args.lint_details, cancel_event=cancel)
+                                                    details=args.lint_details, local_hints=args.lint_local_hints,
+                                                    cancel_event=cancel)
             result['lint_completed'] = result['lint_performed'] = True
         phase = 'compile'
         compiled = document_preview_compile.compile_original(context, snapshot, entrypoint=args.entrypoint,

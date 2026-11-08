@@ -233,6 +233,12 @@ marker-target hints cover directly following headings or display math. These hin
 retain exclusions for unrelated math, code, raw text, headings and list structures.
 Common resolver refusals are reported once per source. These rules remain in
 `coverage.uninspected` because the document context has not been established.
+The separate `conditional_hyphen_markers` section covers literal
+`#paragraph-tab`: root and nested gap hints and nested target/capitalization
+hints. It is diagnostic-only; marker binding and execution remain conditional.
+The paragraph-gap preview option separately reports eligible root and nested
+`#paragraph-tab` edits, withholding ambiguous preceding calls. The candidates
+are independent of underscore-marker previews and may change rendering.
 See [document rule coverage](DOCUMENT_RULE_COVERAGE.md) for each rule's current
 single-source, document-hint and compile-preview scope.
 To inspect conditional builtin-footnote bindings through captured relative
@@ -297,7 +303,11 @@ accepts compiler-tail arguments nor publishes a PDF. The separate explicit
 [`--compile-original --pdf-stdout` route](DOCUMENT_ORIGINAL_COMPILE_CONTRACT.md)
 compiles captured original bytes without applying source edits. Add the explicit
 `--lint-document --rule-set pde` option to report the same three partial source
-checks on that capture before compiling; the default performs no lint. It returns
+checks on that capture before compiling; the default performs no lint. Add
+`--lint-local-hints` for separate conditional local-rule, hyphenated-marker and
+include-ownership evidence; unresolved includes and incomplete coverage remain
+explicit. See the [captured lint contract](ORIGINAL_COMPILE_LINT_CONTRACT.md).
+The command returns
 PDF bytes through a pipe and reports on stderr. Compilation success does not
 mean lint coverage is complete. Shell redirection is caller-managed and can
 truncate files before the process starts. Optional
