@@ -71,3 +71,56 @@ def analyze(tree, path, resolution):
                 f'fix_unavailable at byte {node.start}: content result, mutation/early-return freedom and all accepting call sites are not proven')
     return {r: ThemeResult(diagnostics=tuple(findings[r]), suppressed=tuple(suppressed[r]),
                            skips=tuple(dict.fromkeys(skips[r]))) for r in RULE_IDS}
+
+
+def analyze_conditional(tree, path, resolution, *, catalog=None):
+    """Report unresolved literal selector calls as conditional source hints.
+
+    The spelling alone does not establish the API: each hint explicitly depends
+    on binding and execution evidence. This route grants no edit authority and
+    deliberately leaves the existing provenance-backed analyzer unchanged.
+    """
+    source, nodes = tree.source, tree.nodes
+    if nodes[0].errors:
+        errors = tuple((n.start, n.end) for n in nodes if n.kind == 'Error') or ((0, len(source)),)
+        return ThemeResult(skips=('Malformed Typst syntax; no conditional theme hints',), parse_errors=errors)
+    if resolution.source_sha256 != digest(source) or len(resolution.facts) != len(nodes):
+        return ThemeResult(skips=('Stale or mismatched static resolution',))
+    rules = {r['id']: r for r in (load_rules()[0]['rules'] if catalog is None else catalog)}
+    scopes = resolve_suppressions(tree, set(rules))
+    parents = {child: i for i, node in enumerate(nodes) for child in node.children}
+    findings, suppressed = [], []
+    for i, node in enumerate(nodes):
+        fact = resolution.facts[i]
+        if node.kind != 'FuncCall' or fact.in_context or fact.binding is not None:
+            continue
+        children = [nodes[j] for j in node.children if nodes[j].kind not in ('Space', 'BlockComment', 'LineComment')]
+        if len(children) != 2 or children[0].kind != 'Ident' or children[1].kind != 'Args':
+            continue
+        if source[children[0].start:children[0].end] != b'theme-from-text-fill':
+            continue
+        args = [nodes[j].kind for j in children[1].children
+                if nodes[j].kind not in ('Space', 'BlockComment', 'LineComment')]
+        if args != ['LeftParen', 'RightParen']:
+            continue
+        ancestor = i
+        reusable = False
+        while ancestor in parents:
+            ancestor = parents[ancestor]
+            if nodes[ancestor].kind == 'Params':
+                break
+            if nodes[ancestor].kind == 'Closure':
+                reusable = True
+                break
+        if not reusable:
+            continue
+        start = node.start
+        line = source[:start].count(b'\n') + 1
+        column = len(source[source.rfind(b'\n', 0, start) + 1:start].decode('utf-8')) + 1
+        rule = rules[CONTEXT]
+        finding = Diagnostic(CONTEXT, rule['grade'], path, line, column,
+            'Conditional source hint: if this unresolved name binds the reviewed theme selector and the helper executes, resolve the palette in lexical context.',
+            rule['source'])
+        (suppressed if any(s.covers(CONTEXT, start) for s in scopes) else findings).append(finding)
+    return ThemeResult(diagnostics=tuple(findings), suppressed=tuple(suppressed),
+        skips=('Conditional source patterns only: selector binding, execution and helper return type are unproved; no edits are proposed',))

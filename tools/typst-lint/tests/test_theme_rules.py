@@ -9,7 +9,7 @@ sys.path.insert(0, str(TOOL))
 from syntax_client import EXECUTABLE, parse
 from static_resolver import MATH_BLOCKS, PackageSource, resolve
 from package_loader import load_packages
-from theme_rules import analyze, NO_SET, CONTEXT
+from theme_rules import analyze, analyze_conditional, NO_SET, CONTEXT
 
 PACKAGE = TOOL.parents[1] / 'local/math-blocks/0.2.0/lib.typ'
 IMPORT = '#import "@local/math-blocks:0.2.0": theme-from-text-fill, light-theme, dark-theme\n'
@@ -125,6 +125,45 @@ class ThemeTests(unittest.TestCase):
         tree = parse((IMPORT + '#set light-theme(fill: red)').encode())
         resolution = replace(resolve(tree), source_sha256='stale')
         self.assertFalse(analyze(tree, 'stale.typ', resolution)[NO_SET].diagnostics)
+
+    def test_conditional_unresolved_facade_call_and_context_boundary(self):
+        source = ('#import "styles.typ": theme-from-text-fill\n'
+                  '#let first() = { theme-from-text-fill() }\n'
+                  '#let second() = context { theme-from-text-fill() }\n'
+                  '#let third(v: theme-from-text-fill()) = [ok]\n'
+                  '#let fourth() = { theme-from-text-fill(1) }\n'
+                  '#let fifth() = { theme-from-text-fill.with() }\n'
+                  '#let value = theme-from-text-fill()\n')
+        tree = parse(source.encode())
+        self.assertFalse(tree.nodes[0].errors)
+        result = analyze_conditional(tree, 'fixture.typ', resolve(tree))
+        self.assertEqual(len(result.diagnostics), 1)
+        self.assertEqual(result.diagnostics[0].line, 2)
+        self.assertIn('if this unresolved name binds', result.diagnostics[0].explanation)
+        self.assertFalse(result.edits)
+
+    def test_conditional_excludes_proven_selector_to_avoid_duplicate(self):
+        tree = parse((IMPORT + '#let f() = { theme-from-text-fill() }').encode())
+        packages = (PackageSource(MATH_BLOCKS, str(PACKAGE), PACKAGE.read_bytes()),)
+        result = analyze_conditional(tree, 'fixture.typ', resolve(tree, packages=packages))
+        self.assertFalse(result.diagnostics)
+
+    def test_conditional_shadow_is_explicitly_unproved_and_suppression_applies(self):
+        source = ('#let theme-from-text-fill() = none\n'
+                  '// typst-lint: ignore-next core.theme-in-context -- unrelated helper\n'
+                  '#let f() = { theme-from-text-fill() }\n')
+        tree = parse(source.encode())
+        result = analyze_conditional(tree, 'fixture.typ', resolve(tree))
+        self.assertFalse(result.diagnostics)
+        self.assertEqual(len(result.suppressed), 1)
+        self.assertIn('binding', result.skips[0])
+
+    def test_conditional_parse_and_resolution_refusals(self):
+        tree = parse(b'#let f( = {')
+        self.assertTrue(analyze_conditional(tree, 'bad.typ', resolve(tree)).parse_errors)
+        tree = parse(b'#let f() = { theme-from-text-fill() }')
+        resolution = replace(resolve(tree), source_sha256='stale')
+        self.assertFalse(analyze_conditional(tree, 'fixture.typ', resolution).diagnostics)
 
 
 if __name__ == '__main__':

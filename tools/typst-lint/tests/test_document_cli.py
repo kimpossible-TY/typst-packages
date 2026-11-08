@@ -53,7 +53,7 @@ class DocumentCliTests(unittest.TestCase):
         result = self.run_cli('--rule-set', 'pde', '--local-rule-hints')
         hints = result['local_rule_hints']
         self.assertFalse(hints['edit_permission'])
-        self.assertEqual(len(hints['rule_ids']), 11)
+        self.assertEqual(len(hints['rule_ids']), 13)
         found = {(row['path'], row['rule_id']) for row in hints['diagnostics']}
         self.assertIn(('chapter.typ', 'pde.continuation-line'), found)
         self.assertIn(('chapter.typ', 'pde.theme-cancelmark'), found)
@@ -95,6 +95,19 @@ class DocumentCliTests(unittest.TestCase):
         report = self.run_cli('--rule-set', 'pde', '--local-rule-hints')
         hints = report['local_rule_hints']
         self.assertTrue(any(item['rule_id'] == 'pde.proof-trailing-gap' for item in hints['diagnostics']))
+        self.assertFalse(hints['edit_permission'] or report['applied_fixes'] or report['proposed_edits'])
+        self.assertEqual(target.read_bytes(), source)
+
+    def test_prose_and_theme_hints_in_included_source_are_conditional(self):
+        self.write('main.typ', b'#include "chapter.typ"\n')
+        source = (b'First ordinary paragraph.\n\nSecond ordinary paragraph.\n\n'
+                  b'#let reusable() = [#theme-from-text-fill()]\n')
+        target = self.write('chapter.typ', source)
+        report = self.run_cli('--rule-set', 'pde', '--local-rule-hints')
+        hints = report['local_rule_hints']
+        ids = {item['rule_id'] for item in hints['diagnostics'] if item['path'] == 'chapter.typ'}
+        self.assertIn('pde.prose-paragraph-marker', ids)
+        self.assertIn('core.theme-in-context', ids)
         self.assertFalse(hints['edit_permission'] or report['applied_fixes'] or report['proposed_edits'])
         self.assertEqual(target.read_bytes(), source)
 
@@ -143,9 +156,36 @@ class DocumentCliTests(unittest.TestCase):
         self.assertEqual(report['phase'], 'input')
         self.assertIn('--reference-package-path', report['error'])
 
+    def test_reference_calls_report_per_file_and_remain_conditional(self):
+        source = (b'#import "Styles/styles.typ": *\n'
+                  b'#project-ref("book", <x>)\n'
+                  b'#let deferred() = [#project-ref("book", <y>)]\n')
+        target = self.write('main.typ', source)
+        self.write('Styles/styles.typ', b'#import "@local/math-blocks:0.2.0": *\n')
+        packages = self.namespace_packages()
+        references = self.root / 'reference-packages'
+        shutil.copytree(TOOL / 'tests/fixtures/reviewed-packages/local/project-references',
+                        references / 'local/project-references')
+        report = self.run_cli('--rule-set', 'pde', '--package-path', str(packages),
+                              '--reference-package-path', str(references),
+                              '--reference-facade', 'Styles/styles.typ', '--reference-calls')
+        provenance = report['reference_provenance']
+        row = next(item for item in provenance['calls_by_file'] if item['path'] == 'main.typ')
+        self.assertEqual(len(row['calls']), 1)
+        self.assertEqual(row['status'], 'PARTIAL')
+        self.assertTrue(row['unresolved'])
+        self.assertFalse(row['edit_permission'] or provenance['call_binding_proved'])
+        self.assertEqual(target.read_bytes(), source)
+
+    def test_reference_calls_require_reference_options(self):
+        self.write('main.typ', b'Hello.\n')
+        report = self.run_cli('--rule-set', 'pde', '--reference-calls')
+        self.assertEqual(report['phase'], 'input')
+        self.assertIn('requires explicit reference provenance', report['error'])
+
     def namespace_packages(self):
         package_root = self.root / 'packages'
-        roots = [('local', name, version, 'lib.typ', TOOL.parents[1])
+        roots = [('local', name, version, 'lib.typ', TOOL / 'tests/fixtures/reviewed-packages')
                  for name, version in (('text-utils', '0.1.2'), ('math-blocks', '0.2.0'),
                                        ('scoped-annotations', '0.3.0'), ('cetz-helpers', '0.2.0'))]
         roots.extend((('preview', 'mannot', '0.4.0', 'src/lib.typ',

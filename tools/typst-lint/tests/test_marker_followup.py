@@ -40,7 +40,7 @@ KNOWN = {rule['id'] for rule in load_rules()[0]['rules']}
 class MarkerFollowupTests(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
-        cls.loaded = load_packages(REPO, (TEXT_UTILS,))
+        cls.loaded = load_packages((TOOL / 'tests/fixtures/reviewed-packages'), (TEXT_UTILS,))
         cls.packages = cls.loaded.sources
         assert len(cls.packages) == 1
         assert digest(cls.packages[0].source) == TEXT_UTILS_SOURCE_SHA256
@@ -304,7 +304,7 @@ class MarkerFollowupTests(unittest.TestCase):
             for mode in ('check', 'dry-run', 'fix', 'compile'):
                 launcher = TOOL / ('typst-style' if mode == 'compile' else 'typst-lint')
                 command = [sys.executable, str(launcher), 'fix' if mode == 'dry-run' else mode,
-                           '--root', str(root), '--package-path', str(REPO), '--format', 'json']
+                           '--root', str(root), '--package-path', str((TOOL / 'tests/fixtures/reviewed-packages')), '--format', 'json']
                 if mode == 'dry-run':
                     command.append('--dry-run')
                 if mode == 'compile':
@@ -326,7 +326,7 @@ class MarkerFollowupTests(unittest.TestCase):
                                   (CAPITALIZATION, source.replace(b'this', b'#paragraph_tab\nthis'))):
                 config.write_text('rule-set="pde"\n[[ignore]]\npaths=["main.typ"]\n'
                                   f'rules=["{rid}"]\nreason="intentional"\n')
-                value = report(root, 'dry-run', package_path=REPO)
+                value = report(root, 'dry-run', package_path=(TOOL / 'tests/fixtures/reviewed-packages'))
                 edits = [Edit(e['start'], e['end'], e['replacement'].encode()) for e in value['proposed_edits']]
                 self.assertEqual(plan(source, edits).candidate(), expected)
                 self.assertNotIn(rid, {owner for e in value['proposed_edits']

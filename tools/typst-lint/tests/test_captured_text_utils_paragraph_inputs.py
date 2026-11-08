@@ -47,7 +47,7 @@ class CapturedTextUtilsParagraphInputTests(unittest.TestCase):
         self.leaf.mkdir(parents=True)
         self.manifest = self.leaf / 'typst.toml'
         self.package = self.leaf / 'lib.typ'
-        original = TOOL.parents[1] / 'local/text-utils/0.1.2'
+        original = (TOOL / 'tests/fixtures/reviewed-packages') / 'local/text-utils/0.1.2'
         shutil.copyfile(original / 'typst.toml', self.manifest)
         shutil.copyfile(original / 'lib.typ', self.package)
         self.patch = mock.patch.object(inputs, 'CATALOG', self.catalog)
@@ -506,7 +506,7 @@ class CapturedTextUtilsParagraphInputTests(unittest.TestCase):
         with self.assertRaises(TransactionError):
             with self.context():
                 pass
-        self.manifest.write_bytes((TOOL.parents[1] / 'local/text-utils/0.1.2/typst.toml').read_bytes())
+        self.manifest.write_bytes(((TOOL / 'tests/fixtures/reviewed-packages') / 'local/text-utils/0.1.2/typst.toml').read_bytes())
         self.config.write_bytes(CONFIG + b' ' * (64 * 1024 + 1 - len(CONFIG)))
         with self.assertRaises((InputError, TransactionError)):
             with self.context():

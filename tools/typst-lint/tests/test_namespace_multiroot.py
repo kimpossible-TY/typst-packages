@@ -18,7 +18,7 @@ from package_loader import PackageInputError, _Snapshot
 REPOSITORY = TOOL.parents[1]
 FIXTURES = TOOL / 'tests/fixtures'
 ARTIFACTS = (
-    ('local', 'text-utils', '0.1.2', 'lib.typ', REPOSITORY),
+    ('local', 'text-utils', '0.1.2', 'lib.typ', (TOOL / 'tests/fixtures/reviewed-packages')),
     ('local', 'math-blocks', '0.2.0', 'lib.typ', REPOSITORY),
     ('local', 'scoped-annotations', '0.3.0', 'lib.typ', REPOSITORY),
     ('local', 'cetz-helpers', '0.2.0', 'lib.typ', REPOSITORY),

@@ -14,7 +14,7 @@ sys.path.insert(0, str(TOOL))
 import package_loader as loader
 from static_resolver import PackageSource, TEXT_UTILS, TEXT_UTILS_SOURCE_SHA256
 
-FIXTURE = TOOL.parents[1] / 'local/text-utils/0.1.2'
+FIXTURE = (TOOL / 'tests/fixtures/reviewed-packages') / 'local/text-utils/0.1.2'
 
 
 class PackageLoaderTests(unittest.TestCase):

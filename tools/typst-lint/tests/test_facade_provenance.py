@@ -27,7 +27,7 @@ MAIN = (b'#import "styles.typ": saved-marker as paragraph_tab, tabs as apply-par
 class FacadeProvenanceTests(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
-        cls.loaded = load_packages(TOOL.parents[1], (TEXT_UTILS, PROJECT_REFERENCES))
+        cls.loaded = load_packages((TOOL / 'tests/fixtures/reviewed-packages'), (TEXT_UTILS, PROJECT_REFERENCES))
         cls.package = next(p for p in cls.loaded.sources if p.import_path == TEXT_UTILS)
 
     def setUp(self):

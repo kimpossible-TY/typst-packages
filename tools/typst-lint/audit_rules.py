@@ -103,8 +103,8 @@ def run_cli(fixture, mode='dry-run', source_files=None, *, _analysis_contexts=No
                 # Facade inventory fixtures select their local text-utils
                 # imports too. These exact copies supply only requested
                 # source evidence, never an evaluated dependency graph.
-                (REPO, 'local/text-utils/0.1.2/typst.toml'),
-                (REPO, 'local/text-utils/0.1.2/lib.typ'),
+                ((TOOL / 'tests/fixtures/reviewed-packages'), 'local/text-utils/0.1.2/typst.toml'),
+                ((TOOL / 'tests/fixtures/reviewed-packages'), 'local/text-utils/0.1.2/lib.typ'),
                 (fixtures, 'preview/mannot/0.4.0/typst.toml'),
                 (fixtures, 'preview/mannot/0.4.0/src/lib.typ'),
             ]

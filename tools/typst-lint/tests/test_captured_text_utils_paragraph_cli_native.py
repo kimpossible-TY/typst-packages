@@ -56,8 +56,8 @@ class NativeCapturedTextUtilsParagraphCliTests(unittest.TestCase):
         self.resources = {}
         for path, expected, size in (
                 (PINNED, PINNED_SHA256, 44694736),
-                (REPO / 'local/text-utils/0.1.2/typst.toml', MANIFEST_SHA256, 173),
-                (REPO / 'local/text-utils/0.1.2/lib.typ', PACKAGE_SHA256, 5583),
+                ((TOOL / 'tests/fixtures/reviewed-packages') / 'local/text-utils/0.1.2/typst.toml', MANIFEST_SHA256, 173),
+                ((TOOL / 'tests/fixtures/reviewed-packages') / 'local/text-utils/0.1.2/lib.typ', PACKAGE_SHA256, 5583),
                 (TOOL / 'rules/catalog.json', CATALOG_SHA256, None),
                 (EXECUTABLE, None, None), (LAUNCHER, None, None)):
             before = file_state(path)

@@ -29,7 +29,7 @@ NOTE = b'First idea.#footnote[Reason.]'
 class FootnoteCompositionTests(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
-        cls.packages = load_packages(REPO, (TEXT_UTILS,)).sources
+        cls.packages = load_packages((TOOL / 'tests/fixtures/reviewed-packages'), (TEXT_UTILS,)).sources
 
     def direct(self, source, *, packages=None, language=None):
         tree = parse(source)

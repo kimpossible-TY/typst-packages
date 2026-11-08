@@ -51,7 +51,7 @@ class FootnoteCompositionRenderTests(unittest.TestCase):
         self.destination.mkdir(parents=True)
         self.originals = {}
         for filename in ('lib.typ', 'typst.toml'):
-            original = (REPO / 'local/text-utils/0.1.2' / filename).read_bytes()
+            original = ((TOOL / 'tests/fixtures/reviewed-packages') / 'local/text-utils/0.1.2' / filename).read_bytes()
             self.originals[filename] = original
             (self.destination / filename).write_bytes(original)
         self.assertEqual(digest(self.originals['lib.typ']), TEXT_UTILS_SOURCE_SHA256)
@@ -65,7 +65,7 @@ class FootnoteCompositionRenderTests(unittest.TestCase):
         self.assertFalse(list(self.cache.rglob('*')))
         for filename, original in self.originals.items():
             self.assertEqual((self.destination / filename).read_bytes(), original)
-            self.assertEqual((REPO / 'local/text-utils/0.1.2' / filename).read_bytes(), original)
+            self.assertEqual(((TOOL / 'tests/fixtures/reviewed-packages') / 'local/text-utils/0.1.2' / filename).read_bytes(), original)
 
     def verified(self, source):
         # The default _verify=True performs actual parse/resolution and bounded

@@ -92,7 +92,7 @@ class FlowboxRenderTests(unittest.TestCase):
             self.assertEqual((REPO / 'local/math-blocks/0.2.0/lib.typ').read_bytes(), original)
             for relative, raw in originals.items():
                 self.assertEqual((packages / relative).read_bytes(), raw)
-                self.assertEqual((REPO / relative).read_bytes(), raw)
+                self.assertEqual(((TOOL / 'tests/fixtures/reviewed-packages') / relative).read_bytes(), raw)
 
 
 if __name__ == '__main__':

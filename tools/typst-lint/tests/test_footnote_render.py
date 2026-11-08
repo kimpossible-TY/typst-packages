@@ -57,7 +57,7 @@ class FootnoteRenderTests(unittest.TestCase):
                 destination.mkdir(parents=True)
                 for filename in ('lib.typ', 'typst.toml'):
                     relative = Path('local') / name / version / filename
-                    contents = (REPO / relative).read_bytes()
+                    contents = ((TOOL / 'tests/fixtures/reviewed-packages') / relative).read_bytes()
                     (packages / relative).write_bytes(contents)
                     originals[relative] = contents
             self.assertEqual(digest(originals[Path('local/math-blocks/0.2.0/lib.typ')]),
@@ -115,7 +115,7 @@ class FootnoteRenderTests(unittest.TestCase):
             self.assertFalse(list(cache.rglob('*')))
             for relative, contents in originals.items():
                 self.assertEqual((packages / relative).read_bytes(), contents)
-                self.assertEqual((REPO / relative).read_bytes(), contents)
+                self.assertEqual(((TOOL / 'tests/fixtures/reviewed-packages') / relative).read_bytes(), contents)
 
 
 if __name__ == '__main__':

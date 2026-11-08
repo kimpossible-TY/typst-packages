@@ -30,7 +30,7 @@ def fake_proof(proof, name, value):
 class ParagraphCoreTests(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
-        lib=ROOT/'local/text-utils/0.1.2/lib.typ'
+        lib=(Path(__file__).resolve().parents[1] / 'tests/fixtures/reviewed-packages')/'local/text-utils/0.1.2/lib.typ'
         cls.authority=dict(config_bytes=CONFIG,
             catalog_bytes=(ROOT/'tools/typst-lint/rules/catalog.json').read_bytes(),
             package_source=PackageSource(core.IMPORT_PATH,str(lib),lib.read_bytes()),

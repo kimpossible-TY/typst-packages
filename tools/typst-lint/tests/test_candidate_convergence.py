@@ -167,7 +167,7 @@ class CandidateConvergenceTests(unittest.TestCase):
         source = (b'#import "@local/project-references:0.1.0": project-ref\n'
                   b'Thus #highlight[$ X=Y $] and more.\n#project-ref("pde", <missing>)\n')
         tree = parse(source)
-        packages = load_packages(REPO, imported_paths(tree)).sources
+        packages = load_packages((TOOL / 'tests/fixtures/reviewed-packages'), imported_paths(tree)).sources
         catalog = parse_reference_catalog(b'{"schema":1,"projects":{"pde":{"references":{}}}}', 'owned-test')
         entrypoint = EntrypointSnapshot('main.typ', source)
         with tempfile.TemporaryDirectory() as directory:

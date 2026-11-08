@@ -27,7 +27,7 @@ from typst_lint import load_rules
 class DisplayRuleTests(unittest.TestCase):
     def run_source(self, source, *, packages=False):
         tree = parse(source)
-        loaded = load_packages(REPO, imported_paths(tree)).sources if packages else ()
+        loaded = load_packages((TOOL / 'tests/fixtures/reviewed-packages'), imported_paths(tree)).sources if packages else ()
         return analyze(tree, 'fixture.typ', resolve(tree, packages=loaded))
 
     def candidate(self, source, **kwargs):

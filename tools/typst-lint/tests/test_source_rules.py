@@ -30,7 +30,7 @@ MARKER = b'#paragraph_tab\n'
 class SourceRuleTests(unittest.TestCase):
     def run_source(self, source, *, fallback=None, packages=True, ignored=frozenset()):
         tree = parse(source)
-        sources = load_packages(REPO, imported_paths(tree)).sources if packages else ()
+        sources = load_packages((TOOL / 'tests/fixtures/reviewed-packages'), imported_paths(tree)).sources if packages else ()
         return analyze(tree, 'main.typ', pack='pde', packages=sources,
                        fallback_language=fallback, ignored=ignored)
 
@@ -176,7 +176,7 @@ class SourceRuleTests(unittest.TestCase):
     def test_stale_resolution_fails_closed(self):
         source = IMPORT + LANG + b'\n' + MARKER + b'therefore holds.\n'
         tree = parse(source)
-        resolution = resolve(tree, packages=load_packages(REPO, imported_paths(tree)).sources)
+        resolution = resolve(tree, packages=load_packages((TOOL / 'tests/fixtures/reviewed-packages'), imported_paths(tree)).sources)
         for altered in (replace(resolution, source_sha256='stale'), replace(resolution, facts=())):
             result = paragraphs(tree, 'main.typ', altered)
             self.assertFalse(any(r.edits or r.diagnostics for r in result.values()))
@@ -215,7 +215,7 @@ class SourceRuleTests(unittest.TestCase):
             self.assertFalse(any(r.edits for r in result.values()))
         source = IMPORT + LANG + b'\n' + MARKER + b'therefore holds.'
         tree = parse(source)
-        packages = load_packages(REPO, imported_paths(tree)).sources
+        packages = load_packages((TOOL / 'tests/fixtures/reviewed-packages'), imported_paths(tree)).sources
         altered = tuple(replace(package, source=package.source + b'\n// changed') for package in packages)
         result = analyze(tree, 'main.typ', pack='pde', packages=altered)
         self.assertFalse(result[CAP].edits or result[GAP].edits)
@@ -252,19 +252,19 @@ class SourceRuleTests(unittest.TestCase):
             for command, extra in (('check', []), ('fix', ['--dry-run']), ('fix', []), ('compile', [])):
                 launcher = 'typst-style' if command == 'compile' else 'typst-lint'
                 process = subprocess.run([sys.executable, str(TOOL / launcher), command, *extra,
-                    '--root', str(root), '--package-path', str(REPO), '--format', 'json'], capture_output=True, text=True)
+                    '--root', str(root), '--package-path', str((TOOL / 'tests/fixtures/reviewed-packages')), '--format', 'json'], capture_output=True, text=True)
                 self.assertEqual(process.returncode, 2, process.stderr)
                 value = json.loads(process.stdout)
-                self.assertEqual(value['package_evidence'][0]['source_sha256'], digest((REPO / 'local/text-utils/0.1.2/lib.typ').read_bytes()))
+                self.assertEqual(value['package_evidence'][0]['source_sha256'], digest(((TOOL / 'tests/fixtures/reviewed-packages') / 'local/text-utils/0.1.2/lib.typ').read_bytes()))
                 self.assertEqual({e['rule_id'] for e in value['proposed_edits']}, {CAP, GAP, SCRIPT})
                 self.assertFalse(value['compiler_invoked'] or value['applied_fixes'] or value['coverage']['complete'])
                 self.assertEqual(target.read_bytes(), source)
             (root / '.typst-lint.toml').write_text('rule-set="pde"\n[[ignore]]\npaths=["main.typ"]\nrules=["pde.paragraph-capitalization","pde.paragraph-marker-gap"]\nreason="intentional"\n')
-            value = report(root, 'dry-run', package_path=REPO)
+            value = report(root, 'dry-run', package_path=(TOOL / 'tests/fixtures/reviewed-packages'))
             self.assertEqual({e['rule_id'] for e in value['proposed_edits']}, {SCRIPT})
             self.assertEqual(value['suppressed_by_rule'], {CAP: 1, GAP: 1})
             target.write_bytes(b'// typst-lint: ignore-next invalid -- reason\n' + source)
-            value = report(root, 'dry-run', package_path=REPO)
+            value = report(root, 'dry-run', package_path=(TOOL / 'tests/fixtures/reviewed-packages'))
             self.assertTrue(value['configuration_failures'])
             self.assertFalse(value['proposed_edits'])
 

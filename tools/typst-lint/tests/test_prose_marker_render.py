@@ -41,7 +41,7 @@ class ProseMarkerRenderTests(unittest.TestCase):
             destination.mkdir(parents=True)
             originals = {}
             for filename in ('lib.typ', 'typst.toml'):
-                original = (REPO / 'local/text-utils/0.1.2' / filename).read_bytes()
+                original = ((TOOL / 'tests/fixtures/reviewed-packages') / 'local/text-utils/0.1.2' / filename).read_bytes()
                 (destination / filename).write_bytes(original)
                 originals[filename] = original
             self.assertEqual(digest(originals['lib.typ']), TEXT_UTILS_SOURCE_SHA256)
@@ -82,7 +82,7 @@ class ProseMarkerRenderTests(unittest.TestCase):
             self.assertFalse(list(cache.rglob('*')))
             for filename, original in originals.items():
                 self.assertEqual((destination / filename).read_bytes(), original)
-                self.assertEqual((REPO / 'local/text-utils/0.1.2' / filename).read_bytes(), original)
+                self.assertEqual(((TOOL / 'tests/fixtures/reviewed-packages') / 'local/text-utils/0.1.2' / filename).read_bytes(), original)
 
 
 if __name__ == '__main__':

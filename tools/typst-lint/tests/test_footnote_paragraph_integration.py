@@ -63,7 +63,7 @@ class FootnoteParagraphIntegrationTests(unittest.TestCase):
         cls.package_bytes = {}
         for name in ('typst.toml', 'lib.typ'):
             relative = Path('local/text-utils/0.1.2') / name
-            raw = (REPO / relative).read_bytes()
+            raw = ((TOOL / 'tests/fixtures/reviewed-packages') / relative).read_bytes()
             target = cls.package_root / relative
             target.parent.mkdir(parents=True, exist_ok=True)
             target.write_bytes(raw)
@@ -84,7 +84,7 @@ class FootnoteParagraphIntegrationTests(unittest.TestCase):
     def tearDown(self):
         for relative, raw in self.package_bytes.items():
             self.assertEqual((self.package_root / relative).read_bytes(), raw)
-            self.assertEqual((REPO / relative).read_bytes(), raw)
+            self.assertEqual(((TOOL / 'tests/fixtures/reviewed-packages') / relative).read_bytes(), raw)
 
     def results(self, source, *, packages=None, ignored=frozenset(), language=None, pack='pde'):
         return analyze(parse(source), 'main.typ', pack=pack,

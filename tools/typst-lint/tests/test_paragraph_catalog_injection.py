@@ -23,7 +23,7 @@ class ParagraphCatalogInjectionTests(unittest.TestCase):
         self.source = (b'#import "@local/text-utils:0.1.2": paragraph_tab\n'
                        b'\n#paragraph_tab\nthis holds.\n')
         self.tree = parse(self.source)
-        packages = load_packages(REPO, imported_paths(self.tree)).sources
+        packages = load_packages((TOOL / 'tests/fixtures/reviewed-packages'), imported_paths(self.tree)).sources
         self.resolution = resolve(self.tree, packages=packages, fallback_language='en')
         start = self.source.index(b'this')
         marker = self.source.index(b'#paragraph_tab')

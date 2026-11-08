@@ -11,9 +11,11 @@ from footnote_rules import (RULE_IDS as FOOTNOTES, analyze as footnotes,
                             analyze_conditional_nested as nested_footnotes)
 from paragraph_rules import RULE_IDS as PARAGRAPHS, analyze as paragraphs
 from proof_rules import RULE_ID as PROOF, analyze_conditional as proof
+from prose_marker_rules import RULE_ID as PROSE_MARKER, analyze_conditional as prose_marker
 from static_resolver import resolve
+from theme_rules import CONTEXT as THEME_CONTEXT, analyze_conditional as theme_context
 
-RULE_IDS = (*PARAGRAPHS, CONTINUATION, *FOOTNOTES, CANCEL, PROOF)
+RULE_IDS = (*PARAGRAPHS, CONTINUATION, *FOOTNOTES, CANCEL, PROOF, PROSE_MARKER, THEME_CONTEXT)
 
 
 def analyze(tree, path, catalog):
@@ -30,4 +32,6 @@ def analyze(tree, path, catalog):
                                parse_errors=tuple(dict.fromkeys(first.parse_errors + second.parse_errors)))
     results[CANCEL] = cancel(tree, path, resolution)
     results[PROOF] = proof(tree, path, resolution, catalog=catalog)
+    results[PROSE_MARKER] = prose_marker(tree, path, catalog=catalog)
+    results[THEME_CONTEXT] = theme_context(tree, path, resolution, catalog=catalog)
     return resolution.skips, results

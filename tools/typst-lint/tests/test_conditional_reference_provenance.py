@@ -34,7 +34,7 @@ class ConditionalReferenceProvenanceTests(unittest.TestCase):
         for package, version, root in (('text-utils', '0.1.2', self.namespaces),
                                        ('math-blocks', '0.2.0', self.namespaces),
                                        ('project-references', '0.1.0', self.references)):
-            source = REPOSITORY / 'local' / package / version
+            source = TOOL / 'tests/fixtures/reviewed-packages' / 'local' / package / version
             destination = root / 'local' / package / version
             destination.mkdir(parents=True)
             for filename in ('typst.toml', 'lib.typ'):
@@ -138,6 +138,116 @@ class ConditionalReferenceProvenanceTests(unittest.TestCase):
                 result = self.capture(facade).export('main.typ', 'cite')
                 self.assertEqual(result.status, 'CONDITIONAL', result.reason)
                 self.assertEqual(result.route[0].path, reference.PROJECT_REFERENCES)
+
+    def test_calls_trace_each_direct_call_and_nested_content(self):
+        main = (b'#import "Styles/styles.typ": *\n'
+                b'See #project-ref("book", <x>) and '
+                b'#footnote[See #project-ref("book", <y>).]\n')
+        result = self.capture(b'#import "@local/math-blocks:0.2.0": *\n', main).calls('main.typ')
+        self.assertEqual(len(result.calls), 2, result.unresolved)
+        self.assertEqual([call.line for call in result.calls], [2, 2])
+        self.assertTrue(all(not call.edit_permission and call.status == 'CONDITIONAL' for call in result.calls))
+        self.assertTrue(any('mutates' in condition for condition in result.calls[0].conditions))
+
+    def test_calls_refuse_shadow_unknown_wildcard_and_mutation(self):
+        facade = b'#import "@local/math-blocks:0.2.0": *\n'
+        for middle in (b'#let project-ref = none\n', b'#import "@preview/unknown:1.0.0": *\n',
+                       b'#{ project-ref = none }\n'):
+            main = b'#import "Styles/styles.typ": *\n' + middle + b'#project-ref("book", <x>)\n'
+            with self.subTest(middle=middle):
+                result = self.capture(facade, main).calls('main.typ')
+                self.assertEqual(result.calls, ())
+
+    def test_calls_honor_independent_content_scope_and_parameter_shadow(self):
+        facade = b'#import "@local/math-blocks:0.2.0": *\n'
+        main = (b'#import "Styles/styles.typ": *\n'
+                b'#footnote[#let project-ref = none\n#project-ref("book", <x>)]\n'
+                b'#project-ref("book", <y>)\n'
+                b'#let f(project-ref) = [#project-ref("book", <z>)]\n')
+        result = self.capture(facade, main).calls('main.typ')
+        self.assertEqual(len(result.calls), 1, result.unresolved)
+        self.assertEqual(result.calls[0].line, 4)
+
+    def test_calls_refuse_unselected_sources_and_forged_capture(self):
+        analyzer = self.capture(b'#import "@local/math-blocks:0.2.0": *\n')
+        self.assertFalse(analyzer.calls('Styles/styles.typ').calls)
+        self.assertIn('selected', analyzer.calls('Styles/styles.typ').unresolved[0])
+
+    def test_calls_in_scoped_callback_and_shadowed_parameter(self):
+        facade = b'#import "@local/math-blocks:0.2.0": *\n'
+        for parameter, expected in (('scope', 1), ('project-ref', 0)):
+            main = (b'#import "Styles/styles.typ": *\n'
+                    + f'#local-scope-annotations({parameter} => [#project-ref("book", <x>)], parent: scope, name: "child")\n'.encode())
+            analyzer = self.capture(facade, main)
+            original = analyzer._engine.incoming
+            def with_wrapper(*args, **kwargs):
+                result = original(*args, **kwargs)
+                if result.reason is None:
+                    wrapper = reference.conditional._Value((), 'local-scope-annotations')
+                    return replace(result, exports=result.exports + (('local-scope-annotations', wrapper),))
+                return result
+            with patch.object(analyzer._engine, 'incoming', side_effect=with_wrapper):
+                result = analyzer.calls('main.typ')
+            self.assertEqual(len(result.calls), expected, result.unresolved)
+
+    def test_calls_discard_callback_with_return_and_effectful_options(self):
+        facade = b'#import "@local/math-blocks:0.2.0": *\n'
+        for tail in (b's => [#return\n#project-ref("book", <x>)]',
+                     b's => [#project-ref("book", <x>)], parent: dangerous()'):
+            analyzer = self.capture(facade, b'#import "Styles/styles.typ": *\n#local-tag-scope(' + tail + b')\n')
+            original = analyzer._engine.incoming
+            def with_wrapper(*args, **kwargs):
+                result = original(*args, **kwargs)
+                if result.reason is None:
+                    return replace(result, exports=result.exports +
+                                   (('local-tag-scope', reference.conditional._Value((), 'local-tag-scope')),))
+                return result
+            with patch.object(analyzer._engine, 'incoming', side_effect=with_wrapper):
+                result = analyzer.calls('main.typ')
+            self.assertFalse(result.calls)
+            self.assertTrue(result.unresolved)
+
+    def test_calls_report_refusal_without_partial_results_on_budget_exhaustion(self):
+        facade = b'#import "@local/math-blocks:0.2.0": *\n'
+        main = b'#import "Styles/styles.typ": *\n#project-ref("book", <x>)\n'
+        analyzer = self.capture(facade, main)
+        with patch.object(reference, 'MAX_CALL_IMPORT_HASH_BYTES', 1):
+            result = analyzer.calls('main.typ')
+        self.assertEqual(result.status, 'UNAVAILABLE')
+        self.assertFalse(result.calls)
+        self.assertIn('limit', result.unresolved[0])
+
+    def test_calls_limit_namespace_bindings(self):
+        facade = b'#import "@local/math-blocks:0.2.0": *\n'
+        main = b'#import "Styles/styles.typ": *\n#project-ref("book", <x>)\n'
+        analyzer = self.capture(facade, main)
+        with patch.object(reference.conditional, 'MAX_BINDINGS', 2):
+            result = analyzer.calls('main.typ')
+        self.assertEqual(result.status, 'UNAVAILABLE')
+        self.assertFalse(result.calls)
+
+    def test_calls_refusal_status_differs_from_empty_source(self):
+        analyzer = self.capture(b'#import "@local/math-blocks:0.2.0": *\n')
+        self.assertEqual(analyzer.calls('not-captured.typ').status, 'UNAVAILABLE')
+        result = analyzer.calls('main.typ')
+        self.assertEqual(result.status, 'CONDITIONAL')
+        self.assertEqual(result.calls, ())
+
+    def test_calls_report_equations_deferred_and_dynamic_calls_as_partial(self):
+        facade = b'#import "@local/math-blocks:0.2.0": *\n'
+        for snippet in (b'$#project-ref("book", <x>)$\n',
+                        b'#let f() = [#project-ref("book", <x>)]\n',
+                        b'#helper(() => [#project-ref("book", <x>)])\n',
+                        b'#helper({ project-ref("book", <x>) })\n',
+                        b'#helper(if true { project-ref("book", <x>) })\n',
+                        b'#helper(context { project-ref("book", <x>) })\n',
+                        b'#helper(for x in (1,) { project-ref("book", <x>) })\n',
+                        b'#(project-ref)("book", <x>)\n'):
+            with self.subTest(snippet=snippet):
+                analyzer = self.capture(facade, b'#import "Styles/styles.typ": *\n' + snippet)
+                result = analyzer.calls('main.typ')
+                self.assertEqual(result.status, 'PARTIAL', result.unresolved)
+                self.assertTrue(result.unresolved)
 
     def test_reference_named_import_binding_budget_refuses(self):
         names = ', '.join(f'project-ref as p{i}' for i in range(1025)).encode()

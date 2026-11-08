@@ -14,7 +14,7 @@ from syntax_client import EXECUTABLE, parse
 class PlainHighlightResolutionTests(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
-        cls.packages = load_packages(TOOL.parents[1], (TEXT_UTILS,)).sources
+        cls.packages = load_packages((TOOL / 'tests/fixtures/reviewed-packages'), (TEXT_UTILS,)).sources
 
     def after(self, source, packages=None):
         tree = parse(source + b'\nFollowing prose.')

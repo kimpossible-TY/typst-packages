@@ -48,7 +48,7 @@ class HighlightRenderTests(unittest.TestCase):
                     package = packages / 'local/text-utils/0.1.2'
                     package.mkdir(parents=True)
                     for filename in ('lib.typ', 'typst.toml'):
-                        raw = (REPO / 'local/text-utils/0.1.2' / filename).read_bytes()
+                        raw = ((TOOL / 'tests/fixtures/reviewed-packages') / 'local/text-utils/0.1.2' / filename).read_bytes()
                         (package / filename).write_bytes(raw)
                         original_package[filename] = raw
                     imported = b'#import "@local/text-utils:0.1.2": highlighted\n'

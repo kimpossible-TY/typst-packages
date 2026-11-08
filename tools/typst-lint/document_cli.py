@@ -30,7 +30,8 @@ CONDITIONAL_RULES = ('pde.text-only-highlight', 'pde.paragraph-marker-gap')
 def report_document(root, entrypoint, *, rule_set='core', package_path=None,
                     preview_display_gaps=False, preview_standalone_displays=False,
                     preview_sequence=False, local_rule_hints=False,
-                    reference_package_path=None, reference_facade=None, reference_cache_path=None):
+                    reference_package_path=None, reference_facade=None, reference_cache_path=None,
+                    reference_calls=False):
     """Inspect retained source bytes without reading consumer configuration.
 
     Literal includes inside unknown containers are inventory entries, not proof
@@ -52,6 +53,8 @@ def report_document(root, entrypoint, *, rule_set='core', package_path=None,
             'Source-local rule hints require explicit --rule-set pde')
     reference_requested = (reference_package_path is not None or reference_facade is not None
                            or reference_cache_path is not None)
+    require(type(reference_calls) is bool and (not reference_calls or reference_requested),
+            'Reference call tracing requires explicit reference provenance options')
     require(not reference_requested or (rule_set == 'pde' and package_path is not None
             and reference_package_path is not None and type(reference_facade) is str),
             'Reference provenance requires --rule-set pde, --package-path, '
@@ -126,6 +129,17 @@ def report_document(root, entrypoint, *, rule_set='core', package_path=None,
             reference_report['namespace_selections'] = [asdict(item) for item in reference_namespaces.selections]
             reference_report['namespace_unavailable'] = [asdict(item) for item in reference_namespaces.unavailable]
         items += 1 + len(export.route) + len(export.source_hashes) + len(export.package_evidence)
+        if reference_calls:
+            reference_report['calls_by_file'] = []
+            for selected in captured.sources:
+                traced = analyzer.calls(selected.path)
+                row = dict(path=selected.path, **asdict(traced))
+                items += 1 + len(traced.unresolved)
+                for call in traced.calls:
+                    items += (1 + len(call.route) + len(call.source_hashes) + len(call.package_evidence)
+                              + len(call.package_requests) + len(call.conditions))
+                require(items <= MAX_REPORT_ITEMS, 'Document inspection report item limit exceeded')
+                reference_report['calls_by_file'].append(row)
         require(items <= MAX_REPORT_ITEMS, 'Document inspection report item limit exceeded')
     for item in captured.sources:
         gap_preview = None
@@ -361,6 +375,8 @@ def main(arguments=None):
                         help='Graph-captured project-relative .typ file whose project-ref export is traced')
     parser.add_argument('--reference-cache-path',
                         help='Explicit second namespace root, consulted after --package-path for reference tracing')
+    parser.add_argument('--reference-calls', action='store_true',
+                        help='Trace direct project-reference calls in each captured file (requires reference provenance)')
     parser.add_argument('--format', choices=('json', 'text'), default='text')
     args = parser.parse_args(sys.argv[1:] if arguments is None else arguments)
     try:
@@ -372,7 +388,8 @@ def main(arguments=None):
                                  local_rule_hints=args.local_rule_hints,
                                  reference_package_path=args.reference_package_path,
                                  reference_facade=args.reference_facade,
-                                 reference_cache_path=args.reference_cache_path)
+                                 reference_cache_path=args.reference_cache_path,
+                                 reference_calls=args.reference_calls)
     except (InputError, PackageInputError, OSError, ValueError) as error:
         result = dict(schema=1, tool_version=VERSION, mode='inspect-document', status=2,
                       phase='input', compiler_invoked=False, applied_fixes=[], error=str(error))

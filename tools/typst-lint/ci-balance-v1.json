@@ -208,7 +208,7 @@
   "profile": "measured-v1",
   "schema": 1,
   "source_pins": {
-    "paragraph_fix_test_support.py": "98e020637ccf897c16a9f3f58b116283746ae4ae0a114ad4bab8be41691f6007",
+    "paragraph_fix_test_support.py": "b044b853edd5e330124af3341dedaff7043bd43e460e59db938eccf3f2e21b0a",
     "test_captured_text_utils_paragraph_boundary_fix.py": "a830f2e013ef3ea542c90fcb8c054c4f9f6a032631f922ac9b39eccc2089086a"
   }
 }

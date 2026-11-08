@@ -55,7 +55,7 @@ class ConditionalHighlightTests(unittest.TestCase):
         root = Path(cls.package_tmp.name).resolve()
         for name, version in (('text-utils', '0.1.2'), ('math-blocks', '0.2.0'),
                               ('scoped-annotations', '0.3.0'), ('cetz-helpers', '0.2.0')):
-            source = TOOL.parents[1] / 'local' / name / version
+            source = (TOOL / 'tests/fixtures/reviewed-packages') / 'local' / name / version
             target = root / 'local' / name / version
             target.mkdir(parents=True)
             for filename in ('typst.toml', 'lib.typ'):

@@ -21,6 +21,8 @@ RULE_ID = 'pde.prose-paragraph-marker'
 _MARKER = b'#paragraph_tab'
 _PARBREAK = b'#parbreak()'
 _GAP = re.compile(rb'(?:[ \t]*\r?\n){2,}[ \t]*\Z')
+_CONDITIONAL_EXCLUDED = frozenset(('Equation', 'Math', 'Code', 'CodeBlock',
+                                   'Heading', 'ListItem', 'EnumItem', 'TermItem', 'Raw', 'Str'))
 
 
 @dataclass(frozen=True)
@@ -151,6 +153,76 @@ def _catalog_records(catalog):
                        for name in ('grade', 'source'))):
             raise InputError('Missing or invalid prose marker rule metadata')
     return catalog
+
+
+def analyze_conditional(tree, path, *, catalog=None):
+    """Report literal adjacent prose blocks without binding or edit authority.
+
+    Each pair must comprise text/space and inline math segments within one
+    markup body, separated by a whitespace-only paragraph break. Runtime execution,
+    ordinary prose rendering and the availability of paragraph_tab are not
+    established. Calls, display math, comments and other constructs are never
+    crossed to infer ownership.
+    """
+    source, nodes = tree.source, tree.nodes
+    if nodes[0].errors:
+        errors = tuple((node.start, node.end) for node in nodes if node.kind == 'Error')
+        return ProseMarkerResult(skips=('Malformed Typst syntax; no source pattern diagnosis',),
+                                 parse_errors=errors or ((0, len(source)),))
+    if tree.mode != 'markup' or nodes[0].kind != 'Markup':
+        return ProseMarkerResult(skips=('Only markup source patterns are supported',))
+    records = _catalog_records(catalog)
+    rule = next(record for record in records if record['id'] == RULE_ID)
+    scopes = resolve_suppressions(tree, {record['id'] for record in records})
+    parents = {child: index for index, node in enumerate(nodes) for child in node.children}
+    excluded = {}
+    for index, node in enumerate(nodes):
+        parent = parents.get(index)
+        excluded[index] = parent is not None and (excluded[parent] or nodes[parent].kind in _CONDITIONAL_EXCLUDED)
+    newlines = [index for index, byte in enumerate(source) if byte == 10]
+    findings, suppressed = [], []
+
+    def literal(segment):
+        return (bool(segment) and any(nodes[index].kind == 'Text'
+                                      and source[nodes[index].start:nodes[index].end].strip()
+                                      for index in segment)
+                and all(nodes[index].kind in ('Text', 'Space')
+                        or (nodes[index].kind == 'Equation' and not nodes[index].display)
+                        for index in segment))
+
+    for body_id, body in enumerate(nodes):
+        if body.kind != 'Markup' or excluded[body_id]:
+            continue
+        siblings = body.children
+        segments, breaks, start = [], [], 0
+        for position, index in enumerate(siblings):
+            if nodes[index].kind == 'Parbreak':
+                segments.append(siblings[start:position])
+                breaks.append(index)
+                start = position + 1
+        segments.append(siblings[start:])
+        for position, gap_id in enumerate(breaks):
+            gap = nodes[gap_id]
+            if (not _GAP.fullmatch(source[gap.start:gap.end])
+                    or not literal(segments[position]) or not literal(segments[position + 1])):
+                continue
+            target = next(nodes[index] for index in segments[position + 1]
+                          if nodes[index].kind == 'Equation' or (nodes[index].kind == 'Text'
+                          and source[nodes[index].start:nodes[index].end].strip()))
+            anchor = target.start
+            line_index = bisect_left(newlines, anchor)
+            line_start = 0 if line_index == 0 else newlines[line_index - 1] + 1
+            column = len(source[line_start:anchor].decode('utf-8')) + 1
+            finding = Diagnostic(RULE_ID, rule['grade'], path, line_index + 1, column,
+                                 'Begin this paragraph with a marker if both source segments render as ordinary prose.',
+                                 rule['source'])
+            if any(scope.covers(RULE_ID, anchor) for scope in scopes):
+                suppressed.append(finding)
+            else:
+                findings.append(finding)
+    return ProseMarkerResult(tuple(findings), (),
+        ('Source-local text and inline-math pattern only; execution, prose rendering and marker binding are unproved.',),
+        suppressed=tuple(suppressed))
 
 
 def analyze(tree, path, resolution, *, allow_followup_casing=False, catalog=None):

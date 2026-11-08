@@ -39,7 +39,7 @@ class DisplayIntegrationTests(unittest.TestCase):
                     ('typst-lint', ['check']), ('typst-lint', ['fix', '--dry-run']),
                     ('typst-lint', ['fix']), ('typst-style', ['compile'])):
                 command = [sys.executable, str(TOOL/launcher), *arguments, '--root', str(root),
-                           '--package-path', str(REPO), '--format', 'json']
+                           '--package-path', str((TOOL / 'tests/fixtures/reviewed-packages')), '--format', 'json']
                 if launcher == 'typst-style':
                     command += ['--', 'main.typ', 'main.pdf']
                 process = subprocess.run(command, capture_output=True, text=True, timeout=30)
@@ -66,7 +66,7 @@ class DisplayIntegrationTests(unittest.TestCase):
             self.assertIn(b'#project-ref("pde", <energy>)', candidate)
             self.assertIn(b'#project-ref("pde", <missing>)', candidate)
             path.write_bytes(candidate)  # Test-owned temporary fixture only.
-            second = report(root, 'dry-run', package_path=REPO)
+            second = report(root, 'dry-run', package_path=(TOOL / 'tests/fixtures/reviewed-packages'))
             self.assertFalse(second['proposed_edits'])
             self.assertEqual([item['rule_id'] for item in second['diagnostics']],
                              ['core.project-ref-catalog-target'])

@@ -79,7 +79,7 @@ class FacadeIntegrationTests(unittest.TestCase):
     def copy_package(self, name, version):
         for filename in ('typst.toml', 'lib.typ'):
             relative = Path('local') / name / version / filename
-            raw = (REPO / relative).read_bytes()
+            raw = ((TOOL / 'tests/fixtures/reviewed-packages') / relative).read_bytes()
             target = self.package_root / relative
             target.parent.mkdir(parents=True, exist_ok=True)
             target.write_bytes(raw)
@@ -535,7 +535,7 @@ class FacadeIntegrationTests(unittest.TestCase):
                 self.assertFalse(marker.exists() or list(self.cache.rglob('*')))
                 for relative, raw in self.package_bytes.items():
                     self.assertEqual((self.package_root / relative).read_bytes(), raw)
-                    self.assertEqual((REPO / relative).read_bytes(), raw)
+                    self.assertEqual(((TOOL / 'tests/fixtures/reviewed-packages') / relative).read_bytes(), raw)
 
 
 if __name__ == '__main__':

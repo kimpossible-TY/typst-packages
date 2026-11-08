@@ -17,7 +17,7 @@ from package_loader import PackageInputError, PackageUnavailable, _Snapshot
 REPOSITORY = TOOL.parents[1]
 # This is synthetic test input, not a copy of an installed/user package.
 SOURCE = b'#let highlighted(body) = body\n#let paragraph_tab = "synthetic"\n'
-MANIFEST = (REPOSITORY / 'local/text-utils/0.1.2/typst.toml').read_bytes()
+MANIFEST = ((TOOL / 'tests/fixtures/reviewed-packages') / 'local/text-utils/0.1.2/typst.toml').read_bytes()
 
 
 class TextUtilsCollisionNamespaceTests(unittest.TestCase):
@@ -130,3 +130,28 @@ class TextUtilsCollisionNamespaceTests(unittest.TestCase):
         with patch.object(_Snapshot, 'verify', side_effect=PackageInputError('changed during capture')):
             with self.assertRaisesRegex(PackageInputError, 'changed during capture'):
                 self.load()
+
+
+class PublicBaseVariantTests(unittest.TestCase):
+    def test_new_base_source_is_collision_only_not_reviewed_helper(self):
+        # The merge base changed highlighted's behavior without a version bump.
+        # This public commit fixture is deliberately not substituted for the
+        # stronger reviewed helper contract or for an installed package.
+        variant = (TOOL / 'tests/fixtures/reviewed-packages/variants/text-utils-670599.typ').read_bytes()
+        self.assertEqual(hashlib.sha256(variant).hexdigest(),
+                         '670599f5fca254fdb93487021099678f13ecb6357877e93ebdcf6cc3e17992ed')
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory).resolve()
+            leaf = root / 'local/text-utils/0.1.2'
+            leaf.mkdir(parents=True)
+            (leaf / 'typst.toml').write_bytes(MANIFEST)
+            (leaf / 'lib.typ').write_bytes(variant)
+            collision = namespace.load_text_utils_collision_only(root)
+            self.assertTrue(namespace.verify_text_utils_collision_capture(collision))
+            self.assertIs(type(collision.package), namespace.CollisionOnlyNamespace)
+            ordinary = namespace.load_namespace_packages(root)
+            self.assertEqual(next(item for item in ordinary.unavailable
+                                  if item.import_path == namespace.TEXT_UTILS).code,
+                             'unreviewed-namespace-source')
+            self.assertFalse(any(item.evidence.import_path == namespace.TEXT_UTILS
+                                 for item in ordinary.packages))

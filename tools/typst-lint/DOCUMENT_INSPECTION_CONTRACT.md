@@ -62,8 +62,8 @@ JSON includes:
   `coverage.uninspected` or add it to `coverage.available_backends`.
 - `proposed_edits`: source-bound byte offsets, replacement strings and baseline
   hashes. These are in-memory math-script proposals only.
-- With `--rule-set pde --local-rule-hints`, eleven paragraph, continuation,
-  footnote, proof and cancellation backends inspect each captured file independently.
+- With `--rule-set pde --local-rule-hints`, thirteen paragraph, continuation,
+  footnote, proof, theme and cancellation rule subsets inspect each captured file independently.
   Continuation and footnotes additionally inspect nested literal markup as source patterns.
   Findings and refusals are separate conditional hints, without edits; actual
   include-site bindings, execution, styles and rendering remain unproved.
@@ -76,6 +76,13 @@ JSON includes:
   an UNAVAILABLE result retains the separately captured package evidence and
   explains the refusal. Runtime selection, catalog membership and editing remain
   unproved. No package roots are inferred from ambient caches.
+- With the same explicit reference options, `--reference-calls` separately
+  traces supported direct calls in each captured source. Each file reports
+  `CONDITIONAL`, `PARTIAL`, or `UNAVAILABLE` and includes outstanding refusal
+  reasons; a partial result is never a complete call inventory. Equations,
+  deferred functions and unsupported execution contexts remain uninspected.
+  Trace evidence does not prove runtime execution, catalog membership or edit
+  safety, and analysis budget exhaustion discards that file's partial calls.
 - Optional `--reference-cache-path` adds a second explicit namespace root for
   this reference-export trace only. The first existing package version wins,
   including an incomplete or unreviewed one. For this multi-root route the

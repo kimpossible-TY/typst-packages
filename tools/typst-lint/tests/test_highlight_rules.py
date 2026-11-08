@@ -68,7 +68,7 @@ class HighlightRules(unittest.TestCase):
         self.assertFalse(result.edits)
 
     def test_reviewed_package_alias(self):
-        package = PackageSource(TEXT_UTILS, 'reviewed-test', (TOOL.parents[1]/'local/text-utils/0.1.2/lib.typ').read_bytes())
+        package = PackageSource(TEXT_UTILS, 'reviewed-test', ((TOOL / 'tests/fixtures/reviewed-packages')/'local/text-utils/0.1.2/lib.typ').read_bytes())
         source = b'#import "@local/text-utils:0.1.2": highlighted as hi\n#hi[A $x$ B]'
         result = self.run_source(source, (package,))
         self.assertTrue(result.edits, result.skips)

@@ -54,7 +54,7 @@ class BookRenderTests(unittest.TestCase):
                 for filename in (('lib.typ', 'typst.toml', 'cover.typ') if name == 'math-book'
                                  else ('lib.typ', 'typst.toml')):
                     relative = Path('local') / name / version / filename
-                    raw = (REPO / relative).read_bytes()
+                    raw = (((TOOL / 'tests/fixtures/reviewed-packages') if relative.parts[1] == "text-utils" else REPO) / relative).read_bytes()
                     destination = packages / relative
                     destination.parent.mkdir(parents=True, exist_ok=True)
                     destination.write_bytes(raw)
@@ -105,7 +105,7 @@ class BookRenderTests(unittest.TestCase):
             self.assertFalse(list(cache.rglob('*')))
             for relative, raw in originals.items():
                 self.assertEqual((packages / relative).read_bytes(), raw)
-                self.assertEqual((REPO / relative).read_bytes(), raw)
+                self.assertEqual((((TOOL / 'tests/fixtures/reviewed-packages') if relative.parts[1] == "text-utils" else REPO) / relative).read_bytes(), raw)
 
 
 if __name__ == '__main__':

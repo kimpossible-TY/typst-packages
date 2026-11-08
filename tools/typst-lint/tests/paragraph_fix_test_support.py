@@ -43,7 +43,7 @@ def fixture(base, sequence, *, source=ROOT, target='main.typ', config=None):
     leaf = package_path / 'local/text-utils/0.1.2'
     leaf.mkdir(parents=True)
     for name in ('typst.toml', 'lib.typ'):
-        (leaf / name).write_bytes((REPO / 'local/text-utils/0.1.2' / name).read_bytes())
+        (leaf / name).write_bytes(((TOOL / 'tests/fixtures/reviewed-packages') / 'local/text-utils/0.1.2' / name).read_bytes())
         (leaf / name).chmod(0o444)
     unrelated = root / 'unselected.typ'
     unrelated.write_bytes(b'\xff #read("unselected-never")\n')

@@ -25,7 +25,7 @@ MARKER = b'#paragraph_tab'
 class ParagraphTargetTests(unittest.TestCase):
     def check(self, source, *, packages=True, ignored=frozenset()):
         tree = parse(source)
-        evidence = load_packages(REPO, imported_paths(tree)).sources if packages else ()
+        evidence = load_packages((TOOL / 'tests/fixtures/reviewed-packages'), imported_paths(tree)).sources if packages else ()
         results = analyze(tree, 'main.typ', pack='pde', packages=evidence, ignored=ignored)
         candidate = plan(source, [e for r in results.values() for e in r.edits]).candidate()
         return results, candidate
@@ -111,7 +111,7 @@ class ParagraphTargetTests(unittest.TestCase):
     def test_stale_resolution_and_parse_errors_fail_closed(self):
         source = IMPORT + b'\n#paragraph_tab\n= Heading\n'
         tree = parse(source)
-        resolution = resolve(tree, packages=load_packages(REPO, imported_paths(tree)).sources)
+        resolution = resolve(tree, packages=load_packages((TOOL / 'tests/fixtures/reviewed-packages'), imported_paths(tree)).sources)
         result = paragraphs(tree, 'main.typ', replace(resolution, source_sha256='wrong'))[TARGET]
         self.assertTrue(result.skips)
         self.assertFalse(result.diagnostics or result.edits)
@@ -128,7 +128,7 @@ class ParagraphTargetTests(unittest.TestCase):
             (root / 'output.pdf').write_bytes(b'keep')
             for launcher, arguments in (('typst-lint', ['fix']), ('typst-style', ['compile'])):
                 command = [sys.executable, str(TOOL / launcher), *arguments, '--root', str(root),
-                           '--package-path', str(REPO), '--format', 'json']
+                           '--package-path', str((TOOL / 'tests/fixtures/reviewed-packages')), '--format', 'json']
                 if launcher == 'typst-style': command += ['--', 'main.typ', 'output.pdf']
                 p = subprocess.run(command, capture_output=True, text=True, timeout=30)
                 self.assertEqual(p.returncode, 2, p.stderr)

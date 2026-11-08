@@ -24,7 +24,7 @@ def copy_dependencies(destination):
     for name, version in (('text-utils', '0.1.2'), ('project-references', '0.1.0')):
         for filename in ('lib.typ', 'typst.toml'):
             relative = Path('local') / name / version / filename
-            source = (REPO / relative).read_bytes()
+            source = ((TOOL / 'tests/fixtures/reviewed-packages') / relative).read_bytes()
             target = destination / relative
             target.parent.mkdir(parents=True, exist_ok=True)
             target.write_bytes(source)
@@ -93,7 +93,7 @@ class FlowboxIntegrationTests(unittest.TestCase):
             self.assertEqual(PACKAGE.read_bytes(), original)
             for relative, raw in dependency_bytes.items():
                 self.assertEqual((packages / relative).read_bytes(), raw)
-                self.assertEqual((REPO / relative).read_bytes(), raw)
+                self.assertEqual(((TOOL / 'tests/fixtures/reviewed-packages') / relative).read_bytes(), raw)
 
     def test_core_exclusion_configuration_ignore_inline_suppression_and_fragments(self):
         source = PACKAGE.read_bytes().replace(b'stroke: 1pt + theme.rule,', b'stroke: 1pt,')

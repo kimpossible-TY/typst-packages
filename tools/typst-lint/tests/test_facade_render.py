@@ -61,7 +61,7 @@ class FacadeRenderTests(unittest.TestCase):
         self.package_bytes = {}
         for filename in ('lib.typ', 'typst.toml'):
             relative = Path('local/text-utils/0.1.2') / filename
-            original = (REPO / relative).read_bytes()
+            original = ((TOOL / 'tests/fixtures/reviewed-packages') / relative).read_bytes()
             target = self.packages / relative
             target.parent.mkdir(parents=True, exist_ok=True)
             target.write_bytes(original)
@@ -85,7 +85,7 @@ class FacadeRenderTests(unittest.TestCase):
                          set(self.package_bytes))
         for relative, original in self.package_bytes.items():
             self.assertEqual((self.packages / relative).read_bytes(), original)
-            self.assertEqual((REPO / relative).read_bytes(), original)
+            self.assertEqual(((TOOL / 'tests/fixtures/reviewed-packages') / relative).read_bytes(), original)
 
     def consumer(self, name, source, dependencies):
         root = self.base / name

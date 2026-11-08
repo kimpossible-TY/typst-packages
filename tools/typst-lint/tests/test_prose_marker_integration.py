@@ -25,7 +25,7 @@ PREFIX = (b'#import "@local/text-utils:0.1.2": paragraph_tab, apply-paragraph-ta
 class ProseMarkerIntegrationTests(unittest.TestCase):
     def result(self, source, *, ignored=frozenset()):
         tree = parse(source)
-        packages = load_packages(REPO, imported_paths(tree)).sources
+        packages = load_packages((TOOL / 'tests/fixtures/reviewed-packages'), imported_paths(tree)).sources
         return analyze(tree, 'main.typ', pack='pde', packages=packages, ignored=ignored)
 
     def test_shared_script_composition_preserves_prose_indent_and_is_idempotent(self):
@@ -91,7 +91,7 @@ class ProseMarkerIntegrationTests(unittest.TestCase):
             for mode in ('check', 'dry-run', 'fix', 'compile'):
                 launcher = 'typst-style' if mode == 'compile' else 'typst-lint'
                 command = [sys.executable, str(TOOL / launcher), 'fix' if mode == 'dry-run' else mode,
-                           '--root', str(root), '--package-path', str(REPO), '--format', 'json']
+                           '--root', str(root), '--package-path', str((TOOL / 'tests/fixtures/reviewed-packages')), '--format', 'json']
                 if mode == 'dry-run':
                     command.append('--dry-run')
                 if mode == 'compile':
@@ -113,7 +113,7 @@ class ProseMarkerIntegrationTests(unittest.TestCase):
             candidate = plan(source, proposals).candidate()
             self.assertEqual(candidate, source.replace(b'\tThis', b'#paragraph_tab\r\n\tThis'))
             fixture.write_bytes(candidate)  # Test-owned fixture only.
-            final = report(root, 'check', package_path=REPO)
+            final = report(root, 'check', package_path=(TOOL / 'tests/fixtures/reviewed-packages'))
             self.assertFalse(final['proposed_edits'])
             self.assertFalse(any(finding['rule_id'] == RULE_ID for finding in final['diagnostics']))
 

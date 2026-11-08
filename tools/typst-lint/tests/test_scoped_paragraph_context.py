@@ -51,7 +51,7 @@ class ScopedParagraphContextTests(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
         namespace = TOOL / 'tests/fixtures/scoped-reference-packages/preview/mannot/0.4.0/src/lib.typ'
-        paths = ((TEXT_UTILS, REPO / 'local/text-utils/0.1.2/lib.typ'),
+        paths = ((TEXT_UTILS, (TOOL / 'tests/fixtures/reviewed-packages') / 'local/text-utils/0.1.2/lib.typ'),
                  (SCOPED_ANNOTATIONS, REPO / 'local/scoped-annotations/0.3.0/lib.typ'),
                  (MANNOT_NAMESPACE, namespace))
         cls.packages = tuple(scoped.PackageTreeEvidence(name, str(path), parse(path.read_bytes()))

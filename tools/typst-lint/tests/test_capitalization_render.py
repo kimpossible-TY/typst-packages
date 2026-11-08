@@ -54,7 +54,7 @@ class CapitalizationRenderTests(unittest.TestCase):
             root = Path(directory)
             input_file, pdf, xml = root/'fixture.typ', root/'fixture.pdf', root/'fixture.xml'
             input_file.write_bytes(transformed)
-            subprocess.run([shutil.which('typst'), 'compile', '--package-path', str(TOOL.parents[1]),
+            subprocess.run([shutil.which('typst'), 'compile', '--package-path', str((TOOL / 'tests/fixtures/reviewed-packages')),
                             str(input_file), str(pdf)], check=True, capture_output=True, timeout=60)
             subprocess.run([shutil.which('pdftotext'), '-bbox', str(pdf), str(xml)],
                            check=True, capture_output=True, timeout=30)
@@ -65,7 +65,7 @@ class CapitalizationRenderTests(unittest.TestCase):
             self.assertAlmostEqual(float(capitalized.attrib['xMin']) - float(first.attrib['xMin']),
                                    18.0, delta=0.05)  # 1.5em * 12pt.
             input_file.write_bytes(protected_candidate)
-            subprocess.run([shutil.which('typst'), 'compile', '--package-path', str(TOOL.parents[1]),
+            subprocess.run([shutil.which('typst'), 'compile', '--package-path', str((TOOL / 'tests/fixtures/reviewed-packages')),
                             str(input_file), str(pdf)], check=True, capture_output=True, timeout=60)
             subprocess.run([shutil.which('pdftotext'), '-bbox', str(pdf), str(xml)],
                            check=True, capture_output=True, timeout=30)

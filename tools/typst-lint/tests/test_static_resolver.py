@@ -15,7 +15,7 @@ from syntax_client import EXECUTABLE, parse
 from static_resolver import PackageSource, TEXT_UTILS, imported_paths, resolve
 from typst_lint import InputError
 
-PACKAGE_FILE = TOOL.parents[1] / 'local/text-utils/0.1.2/lib.typ'
+PACKAGE_FILE = (TOOL / 'tests/fixtures/reviewed-packages') / 'local/text-utils/0.1.2/lib.typ'
 IMPORT = '#import "@local/text-utils:0.1.2": paragraph_tab, apply-paragraph-tabs, highlighted\n'
 
 

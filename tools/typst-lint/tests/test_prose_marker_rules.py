@@ -11,7 +11,7 @@ sys.path.insert(0, str(TOOL))
 from capitalization import WORDS
 from edit_plan import Edit, plan
 from package_loader import load_packages
-from prose_marker_rules import RULE_ID, analyze
+from prose_marker_rules import RULE_ID, analyze, analyze_conditional
 from static_resolver import (PackageSource, ParagraphInsertionProof, TEXT_UTILS,
                              TEXT_UTILS_SOURCE_SHA256, resolve)
 from suppression import resolve as suppressions
@@ -29,7 +29,7 @@ BODY = b'First idea.\n\nThis consequence follows.\n'
 class ProseMarkerRuleTests(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
-        cls.packages = load_packages(REPO, (TEXT_UTILS,)).sources
+        cls.packages = load_packages((TOOL / 'tests/fixtures/reviewed-packages'), (TEXT_UTILS,)).sources
         assert len(cls.packages) == 1
 
     def run_source(self, source, *, packages=None, language=None, mode='markup'):
@@ -293,6 +293,53 @@ class ProseMarkerRuleTests(unittest.TestCase):
         self.assertFalse(result.edits)
         result = self.run_source(b'1 + 2', mode='code')[2]
         self.assertFalse(result.diagnostics or result.edits)
+
+
+@unittest.skipUnless(EXECUTABLE.is_file(), 'Build pinned syntax adapter first')
+class ConditionalProseMarkerTests(unittest.TestCase):
+    def inspect(self, source, mode='markup'):
+        return analyze_conditional(parse(source, mode), 'fixture.typ')
+
+    def test_adjacent_root_and_nested_literal_paragraphs(self):
+        for source, positions in (
+            (b'First idea.\n\nSecond idea.\n\nThird idea.', [(3, 1), (5, 1)]),
+            (b'#theorem[First idea.\n\nSecond idea.]', [(3, 1)]),
+            (b'#theorem[First $x$ idea.\n\nSecond $y$ idea.]', [(3, 1)]),
+            (b'First idea.\n\n$x$ is positive.', [(3, 1)]),
+            ('#theorem[한글.\r\n\r\n  다음 문단.]'.encode(), [(3, 3)]),
+        ):
+            with self.subTest(source=source):
+                result = self.inspect(source)
+                self.assertEqual([(d.line, d.column) for d in result.diagnostics], positions)
+                self.assertEqual(result.edits, ())
+                self.assertTrue(any('unproved' in skip for skip in result.skips))
+
+    def test_structural_and_nonliteral_boundaries_are_not_guessed(self):
+        cases = (b'First idea.\n\n#paragraph_tab\nSecond idea.',
+                 b'First $ x $ idea.\n\nSecond idea.',
+                 b'First idea.\n\nSecond $ x $ idea.',
+                 b'First idea.\n\n// comment\nSecond idea.',
+                 b'First idea.\n\n= Heading',
+                 b'First idea.\n\n$ A = B $',
+                 b'First idea.\nSecond idea.',
+                 b'#let f() = { [First idea.\n\nSecond idea.] }',
+                 b'$ #box[First idea.\n\nSecond idea.] $',
+                 b'`First idea.\n\nSecond idea.`')
+        for source in cases:
+            with self.subTest(source=source):
+                self.assertFalse(self.inspect(source).diagnostics)
+
+    def test_suppression_does_not_report_or_edit(self):
+        # The target directive is part of the second segment, so the strict
+        # literal-boundary recognizer never crosses it.
+        source = (b'First idea.\n\n// typst-lint: ignore-next pde.prose-paragraph-marker -- intentional\n'
+                  b'Second idea.')
+        result = self.inspect(source)
+        self.assertFalse(result.diagnostics or result.edits)
+
+    def test_invalid_syntax_and_code_mode_refused(self):
+        self.assertTrue(self.inspect(b'#let =').parse_errors)
+        self.assertFalse(self.inspect(b'1 + 2', 'code').diagnostics)
 
 
 if __name__ == '__main__':

@@ -19,7 +19,7 @@ FIXTURES = TOOL / 'tests/fixtures'
 # Pin test input locations independently from the implementation's contracts.
 # These existing public fixture roots retain their original package provenance.
 ROOTS = (
-    ('local', 'text-utils', '0.1.2', 'lib.typ', REPOSITORY),
+    ('local', 'text-utils', '0.1.2', 'lib.typ', FIXTURES / 'reviewed-packages'),
     ('local', 'math-blocks', '0.2.0', 'lib.typ', REPOSITORY),
     ('local', 'scoped-annotations', '0.3.0', 'lib.typ', REPOSITORY),
     ('local', 'cetz-helpers', '0.2.0', 'lib.typ', REPOSITORY),

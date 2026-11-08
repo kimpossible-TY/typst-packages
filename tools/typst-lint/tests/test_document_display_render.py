@@ -117,7 +117,7 @@ class DocumentDisplayRenderTests(unittest.TestCase):
         self.destination.mkdir(parents=True)
         self.originals = {}
         for filename in ('typst.toml', 'lib.typ'):
-            original = (REPO / 'local/text-utils/0.1.2' / filename).read_bytes()
+            original = ((TOOL / 'tests/fixtures/reviewed-packages') / 'local/text-utils/0.1.2' / filename).read_bytes()
             self.originals[filename] = original
             (self.destination / filename).write_bytes(original)
         self.assertEqual(digest(self.originals['lib.typ']), TEXT_UTILS_SOURCE_SHA256)
@@ -129,7 +129,7 @@ class DocumentDisplayRenderTests(unittest.TestCase):
                          ['lib.typ', 'typst.toml'])
         for filename, original in self.originals.items():
             self.assertEqual((self.destination / filename).read_bytes(), original)
-            self.assertEqual((REPO / 'local/text-utils/0.1.2' / filename).read_bytes(), original)
+            self.assertEqual(((TOOL / 'tests/fixtures/reviewed-packages') / 'local/text-utils/0.1.2' / filename).read_bytes(), original)
 
     def render(self, name, theme, main, child):
         entrypoint = self.consumer / 'main.typ'
