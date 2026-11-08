@@ -124,18 +124,24 @@ class _FootnoteResolver(_Resolver):
         before = state.lookup('footnote')
         # Let the existing resolver handle *all* other names and import effects.
         super().import_node(index, state)
-        if shape is None or shape.items is not None or shape.request.startswith('@'):
+        if shape is None or shape.items is not None:
             return
-        target = self.engine.graph.target_for(self.path, shape.request)
-        if target is None:
-            self.unresolved.append('Relative wildcard source unavailable')
-            return
-        module = self.engine.module(target, (self.path,))
+        if shape.request.startswith('@'):
+            if shape.request not in self.engine.packages:
+                self.unresolved.append('Wildcard package namespace unavailable')
+                return
+            module = self.engine.incoming(self.tree, index, self.path, (self.path,))
+        else:
+            target = self.engine.graph.target_for(self.path, shape.request)
+            if target is None:
+                self.unresolved.append('Relative wildcard source unavailable')
+                return
+            module = self.engine.module(target, (self.path,))
         if module.reason or self.engine.exhausted:
             self.unresolved.append(module.reason or self.engine.exhausted)
             return
         if 'footnote' in dict(module.exports):
-            self.unresolved.append('Wildcard facade exports footnote')
+            self.unresolved.append('Wildcard namespace exports footnote')
             return
         # A wildcard lacking the name cannot restore an earlier shadow.
         state.bind('footnote', before)

@@ -102,6 +102,8 @@ def main(arguments=None, *, gate=False):
                         help='Also preview conditional prose-footnote spacing (requires --conditional-gaps)')
     parser.add_argument('--conditional-spacers', action='store_true',
                         help='Also preview conditional unaligned footnote spacer removal (requires --conditional-gaps)')
+    parser.add_argument('--conditional-facade-footnotes', action='store_true',
+                        help='Use captured facade namespaces for spacer footnotes (requires --conditional-spacers)')
     args = parser.parse_args(sys.argv[1:] if arguments is None else arguments)
     if args.review_edits and args.format != 'json' and not args.pdf_stdout:
         parser.error('--review-edits requires --format json or --pdf-stdout')
@@ -109,6 +111,8 @@ def main(arguments=None, *, gate=False):
         parser.error('--conditional-punctuation requires --conditional-gaps')
     if args.conditional_spacers and not args.conditional_gaps:
         parser.error('--conditional-spacers requires --conditional-gaps')
+    if args.conditional_facade_footnotes and not args.conditional_spacers:
+        parser.error('--conditional-facade-footnotes requires --conditional-spacers')
     # The executable installs cooperative SIGINT/SIGTERM handling; imported
     # callers do not change process-wide signal handlers.
     import offline_compile_cli
@@ -133,15 +137,29 @@ def main(arguments=None, *, gate=False):
         phase = 'planning'
         context = include_context.load_include_context(root, ((args.entrypoint, source),), budget='book-v1')
         catalog, catalog_hash = load_rules()
-        records = []
-        for item in context.sources:
-            if cancel is not None and cancel.is_set():
-                raise runtime.CompilerFailure('cancelled', kind=runtime.CompilerFailureKind.CANCELLED)
-            record = document_sequence_preview.preview(item.tree, item.path, catalog['rules'], profile=profile)
-            if record is not None:
-                if record['verification'] == 'withheld':
-                    raise SafetyError(f"{item.path}: {record['reason']}")
-                records.append(record)
+        def plan_records(evidence):
+            records = []
+            for item in context.sources:
+                if cancel is not None and cancel.is_set():
+                    raise runtime.CompilerFailure('cancelled', kind=runtime.CompilerFailureKind.CANCELLED)
+                record = document_sequence_preview.preview(item.tree, item.path, catalog['rules'], profile=profile,
+                                                           footnote_evidence=evidence)
+                if record is not None:
+                    if record['verification'] == 'withheld':
+                        raise SafetyError(f"{item.path}: {record['reason']}")
+                    records.append(record)
+            return records
+
+        # Preserve the existing fail-before-discovery behavior unless this
+        # profile needs a resource-bound facade proof for planning.
+        records = None if args.conditional_facade_footnotes else plan_records(None)
+        footnote_session = None
+        if args.conditional_facade_footnotes:
+            import conditional_footnote_binding
+            import namespace_multiroot
+            require('packages' in roots and 'cache' in roots, 'Facade footnotes require package and cache roots')
+            namespaces = namespace_multiroot.load_multiroot_capture(roots['packages'], roots['cache'])
+            footnote_session = conditional_footnote_binding.ConditionalFootnoteBinding(context, namespaces)
         observed = None
         discovery_baseline_sha256 = None
         font_hashes = {}
@@ -160,6 +178,26 @@ def main(arguments=None, *, gate=False):
                 selected.setdefault(('project', item.path),
                                     document_resources.ResourceRequest('project', item.path, 'source'))
             requests = list(selected.values())
+        if footnote_session is not None:
+            selected = {(item.root, item.path): item for item in requests}
+            for item in footnote_session._graph.sources:
+                selected.setdefault(('project', item.path),
+                                    document_resources.ResourceRequest('project', item.path, 'source'))
+            choices = {item.import_path: item.root_index for item in footnote_session._namespaces.selections}
+            for item in footnote_session._namespaces.packages:
+                index = choices[item.evidence.import_path]
+                require(index in (0, 1), 'Invalid namespace package selection')
+                root_id = ('packages', 'cache')[index]
+                root_path = Path(footnote_session._namespaces.roots[index])
+                for identity in (item.evidence.manifest_identity, item.evidence.source_identity):
+                    require(type(identity) is str, 'Namespace evidence lacks a captured package path')
+                    try:
+                        relative_path = Path(identity).relative_to(root_path).as_posix()
+                    except ValueError as error:
+                        raise SafetyError('Namespace evidence is outside its selected root') from error
+                    selected.setdefault((root_id, relative_path),
+                                        document_resources.ResourceRequest(root_id, relative_path, 'package'))
+            requests = list(selected.values())
         phase = 'capture'
         snapshot = document_resources.capture(roots, requests, allow_apple_asset_fonts=allow)
         if observed is not None:
@@ -168,13 +206,21 @@ def main(arguments=None, *, gate=False):
             require(captured_fonts == font_hashes, 'Selected fonts changed after dependency discovery')
             comparison = document_dependencies.compare(snapshot, raw_dependencies, cwd=str(root), roots=roots)
             require(not comparison.missing, 'A discovered dependency is absent from the resource capture')
+        footnote_evidence = None
+        if footnote_session is not None:
+            import document_footnote_evidence
+            footnote_evidence = document_footnote_evidence.PreviewFootnoteEvidence(footnote_session, snapshot)
+        if records is None:
+            phase = 'planning'
+            records = plan_records(footnote_evidence)
         review = review_sources(context, records) if args.review_edits else None
         phase = 'compile'
         preview = document_preview_compile.compile_preview(context, records, catalog['rules'], snapshot,
                                                            entrypoint=args.entrypoint, cancel_event=cancel,
                                                            expected_dependencies=observed,
                                                            expected_baseline_sha256=discovery_baseline_sha256,
-                                                           profile=profile, starts=starts)
+                                                           profile=profile, starts=starts,
+                                                           footnote_evidence=footnote_evidence)
         result = dict(schema=1, tool_version=VERSION, mode='preview-compile', status=2, phase='preview',
                       compiler_invoked=True, pdf_generated=True, source_files_modified=False,
                       publication_authority=False, global_coverage_complete=False,
@@ -189,6 +235,7 @@ def main(arguments=None, *, gate=False):
                       discovery_observed_dependencies=len(observed) if observed is not None else None,
                       dependency_closure_proved=False, compiler_sha256=preview.compiler_sha256,
                       sequence_profile=profile,
+                      conditional_facade_footnotes=args.conditional_facade_footnotes,
                       conditionally_previewed_rule_ids=(
                           (['pde.proof-trailing-gap', 'pde.footnote-trailing-gap'] if args.conditional_gaps else [])
                           + (['pde.prose-footnote-punctuation'] if args.conditional_punctuation else [])

@@ -17,6 +17,8 @@ typst-lint preview-compile --root /absolute/project --entrypoint main.typ \
   --manifest /absolute/font-seed.json --discover-dependencies --conditional-gaps --conditional-punctuation --format json
 typst-lint preview-compile --root /absolute/project --entrypoint main.typ \
   --manifest /absolute/font-seed.json --discover-dependencies --conditional-gaps --conditional-spacers --format json
+typst-lint preview-compile --root /absolute/project --entrypoint main.typ \
+  --manifest /absolute/font-seed.json --discover-dependencies --conditional-gaps --conditional-spacers --conditional-facade-footnotes --format json
 typst-style compile --preview --root /absolute/project --entrypoint main.typ \
   --manifest /absolute/font-seed.json --discover-dependencies --format json
 typst-style compile --preview --root /absolute/project --entrypoint main.typ \
@@ -44,6 +46,14 @@ include-site execution and rendered context remain unproved. The candidate is
 compiled privately; PDF differences are reported and may be intentional under
 the selected style policy. They do not authorize applying edits. This stage does
 not claim complete inspection, and the rule remains in `uninspected_rule_ids`.
+
+Adding `--conditional-facade-footnotes` explicitly admits a source-bound
+conditional builtin-footnote hint through reviewed direct or relative wildcard
+namespaces. The captured import graph and selected packages, including reviewed
+transitive dependencies, must match the staged resource bytes. Candidate calls
+are reparsed for each edit stage and checked again at final staging. Missing or
+ambiguous evidence and deferred closure contexts withhold the source plan. This
+does not prove runtime selection or execution, and it does not authorize writes.
 
 The `typst-style compile --preview` form explicitly selects the same preview
 engine and cancellation handling. It does not accept an ordinary compiler tail

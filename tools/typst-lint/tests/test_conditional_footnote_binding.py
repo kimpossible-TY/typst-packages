@@ -126,6 +126,51 @@ class ConditionalFootnoteBindingTests(unittest.TestCase):
             self.assertEqual(len(result.calls), 1, result.unresolved)
             self.assertFalse(result.calls[0].edit_permission or result.calls[0].compiler_permission)
 
+    def test_direct_reviewed_package_wildcard_retains_only_existing_builtin(self):
+        wildcard = b'#import "@local/text-utils:0.1.2": *\n'
+        call = b'#block[$ x #footnote[Note] $]'
+        result = self.session(wildcard + call).analyze('main.typ')
+        self.assertEqual(len(result.calls), 1, result.unresolved)
+        self.assertEqual([x.import_path for x in result.calls[0].package_evidence],
+                         ['@local/text-utils:0.1.2'])
+        for prefix, suffix in ((b'#let footnote = none\n', b''),
+                               (b'', b'#let footnote = none\n'),
+                               (b'#import "@preview/unknown:1.0.0": *\n', b''),
+                               (b'', b'#import "@preview/unknown:1.0.0": *\n')):
+            with self.subTest(prefix=prefix, suffix=suffix):
+                self.assertFalse(self.session(prefix + wildcard + suffix + call).analyze('main.typ').calls)
+        alias = b'#import "@local/text-utils:0.1.2" as footnote: *\n' + call
+        self.assertFalse(self.session(alias).analyze('main.typ').calls)
+
+    def test_direct_uncaptured_or_changed_package_is_unresolved(self):
+        call = b'#import "@local/text-utils:0.1.2": *\n#block[$ x #footnote[Note] $]'
+        source = self.packages / 'local/text-utils/0.1.2/lib.typ'
+        source.write_bytes(source.read_bytes() + b'\n#let footnote = none\n')
+        result = self.session(call).analyze('main.typ')
+        self.assertFalse(result.calls)
+        self.assertTrue(result.unresolved)
+
+    def test_direct_captured_namespace_exporting_footnote_is_not_builtin(self):
+        source = b'#let footnote(body) = body\n'
+        (self.packages / 'local/text-utils/0.1.2/lib.typ').write_bytes(source)
+        contract = replace(namespace_packages._TEXT_COLLISION_CONTRACT,
+                           source_sha256=hashlib.sha256(source).hexdigest(), exports=('footnote',))
+        with patch.object(namespace_packages, '_TEXT_COLLISION_CONTRACT', contract):
+            body = b'#import "@local/text-utils:0.1.2": *\n#block[$ x #footnote[Note] $]'
+            result = self.session(body).analyze('main.typ')
+            self.assertFalse(result.calls)
+            self.assertTrue(result.unresolved)
+
+    def test_deferred_closures_do_not_inherit_a_lexical_proof(self):
+        wildcard = b'#import "@local/text-utils:0.1.2": *\n'
+        bodies = (b'#let show-note() = [#footnote[Note]]',
+                  b'#use(x => [#footnote[Note]])',
+                  b'#use(footnote => [#footnote[Note]])',
+                  b'#use(x => [#let footnote = x\n#footnote[Note]])')
+        for body in bodies:
+            with self.subTest(body=body):
+                self.assertFalse(self.session(wildcard + body).analyze('main.typ').calls)
+
     def test_batch_matches_single_results_and_checks_capture_only_twice(self):
         chapter = b'#import "styles.typ": *\n#block[$ x #footnote[Note] $]'
         (self.project / 'chapter.typ').write_bytes(chapter)

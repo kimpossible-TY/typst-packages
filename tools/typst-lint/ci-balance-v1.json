@@ -36,6 +36,49 @@
     "test_captured_text_utils_paragraph_boundary_fix.CapturedTextUtilsParagraphBoundaryFixTests.test_uppercase_insertion_and_existing_marker_gap_need_only_one_pass": 24980
   },
   "default_weight_ms": 1000,
+  "fix_method_weights_ms": {
+    "test_captured_text_utils_paragraph_fix.CapturedTextUtilsParagraphFixTests.test_all_five_actual_rule_results_and_full_coverage_are_required": 9270,
+    "test_captured_text_utils_paragraph_fix.CapturedTextUtilsParagraphFixTests.test_callback_requires_exact_membership_root_and_evidence_byte_objects": 727,
+    "test_captured_text_utils_paragraph_fix.CapturedTextUtilsParagraphFixTests.test_copied_bridge_cannot_close_original_session_or_acquire_its_authority": 5653,
+    "test_captured_text_utils_paragraph_fix.CapturedTextUtilsParagraphFixTests.test_deleted_bridge_selection_and_session_fields_are_typed_refusals": 5889,
+    "test_captured_text_utils_paragraph_fix.CapturedTextUtilsParagraphFixTests.test_deleted_proof_source_and_candidate_fields_are_typed_refusals": 21184,
+    "test_captured_text_utils_paragraph_fix.CapturedTextUtilsParagraphFixTests.test_direct_transaction_apply_never_creates_successful_bridge_summary": 4922,
+    "test_captured_text_utils_paragraph_fix.CapturedTextUtilsParagraphFixTests.test_drift_during_staging_and_before_replace_preserves_readonly_evidence": 47877,
+    "test_captured_text_utils_paragraph_fix.CapturedTextUtilsParagraphFixTests.test_every_allowlisted_starter_gets_only_its_first_ascii_byte_uppercase": 147662,
+    "test_captured_text_utils_paragraph_fix.CapturedTextUtilsParagraphFixTests.test_exact_config_package_and_catalog_required_not_matching_names": 42,
+    "test_captured_text_utils_paragraph_fix.CapturedTextUtilsParagraphFixTests.test_existing_failure_phase_recovery_changes_only_root": 42039,
+    "test_captured_text_utils_paragraph_fix.CapturedTextUtilsParagraphFixTests.test_genuine_same_transaction_revalidation_and_token_substitution_grant_no_bridge_authority": 8830,
+    "test_captured_text_utils_paragraph_fix.CapturedTextUtilsParagraphFixTests.test_incomplete_graph_coverage_findings_evidence_and_foreign_edits_refuse": 3895,
+    "test_captured_text_utils_paragraph_fix.CapturedTextUtilsParagraphFixTests.test_independent_replay_bytes_pass_results_and_attribution_must_agree": 25572,
+    "test_captured_text_utils_paragraph_fix.CapturedTextUtilsParagraphFixTests.test_initial_proof_authority_failure_is_safety_not_unsupported_input": 5871,
+    "test_captured_text_utils_paragraph_fix.CapturedTextUtilsParagraphFixTests.test_input_symlink_hardlink_and_storage_aliases_refuse": 33,
+    "test_captured_text_utils_paragraph_fix.CapturedTextUtilsParagraphFixTests.test_invalid_lease_or_widened_read_limits_refuses_before_capture": 2,
+    "test_captured_text_utils_paragraph_fix.CapturedTextUtilsParagraphFixTests.test_keyboard_interrupt_after_rename_needs_existing_recovery_and_no_success_summary": 4960,
+    "test_captured_text_utils_paragraph_fix.CapturedTextUtilsParagraphFixTests.test_lf_crlf_bom_and_horizontal_space_are_preserved_byte_for_byte": 22941,
+    "test_captured_text_utils_paragraph_fix.CapturedTextUtilsParagraphFixTests.test_mid_apply_summary_mutation_preserves_true_commit_even_if_later_guard_refuses": 9703,
+    "test_captured_text_utils_paragraph_fix.CapturedTextUtilsParagraphFixTests.test_missing_initial_inputs_refuse_without_creation": 12,
+    "test_captured_text_utils_paragraph_fix.CapturedTextUtilsParagraphFixTests.test_multiple_marked_paragraphs_initial_unmarked_prose_and_clean_inline_math": 5908,
+    "test_captured_text_utils_paragraph_fix.CapturedTextUtilsParagraphFixTests.test_mutated_private_token_during_apply_cannot_change_journal_or_postimage": 14576,
+    "test_captured_text_utils_paragraph_fix.CapturedTextUtilsParagraphFixTests.test_nested_candidate_and_capture_proof_mutation_refuse_before_write": 6083,
+    "test_captured_text_utils_paragraph_fix.CapturedTextUtilsParagraphFixTests.test_no_capture_transaction_or_report_injection_constructor_parameters": 2,
+    "test_captured_text_utils_paragraph_fix.CapturedTextUtilsParagraphFixTests.test_opaque_candidate_copy_foreign_expiry_token_and_double_use_refuse": 9872,
+    "test_captured_text_utils_paragraph_fix.CapturedTextUtilsParagraphFixTests.test_ordinary_report_remains_partial_readonly_before_and_after_internal_repair": 5692,
+    "test_captured_text_utils_paragraph_fix.CapturedTextUtilsParagraphFixTests.test_paragraph_offline_profile_stays_out_of_single_source_registry": 4304,
+    "test_captured_text_utils_paragraph_fix.CapturedTextUtilsParagraphFixTests.test_post_apply_filesystem_drift_does_not_hide_true_source_commit": 5423,
+    "test_captured_text_utils_paragraph_fix.CapturedTextUtilsParagraphFixTests.test_preissuance_cycle_growth_and_history_record_substitution_are_bounded_refusals": 21956,
+    "test_captured_text_utils_paragraph_fix.CapturedTextUtilsParagraphFixTests.test_real_backend_one_byte_diff_one_owned_transaction_and_four_evidence_files": 5580,
+    "test_captured_text_utils_paragraph_fix.CapturedTextUtilsParagraphFixTests.test_repeat_and_initial_clean_noop_keep_inode_and_do_not_create_journal": 23998,
+    "test_captured_text_utils_paragraph_fix.CapturedTextUtilsParagraphFixTests.test_retained_catalog_never_reads_live_paragraph_or_capitalization_metadata": 4300,
+    "test_captured_text_utils_paragraph_fix.CapturedTextUtilsParagraphFixTests.test_same_bytes_new_inode_mode_bytes_and_xattr_drift_before_validate_and_apply": 105110,
+    "test_captured_text_utils_paragraph_fix.CapturedTextUtilsParagraphFixTests.test_sigkill_after_rename_and_restore_recovery_does_not_need_live_package": 6139,
+    "test_captured_text_utils_paragraph_fix.CapturedTextUtilsParagraphFixTests.test_sigkill_before_rename_recovery_apply_then_noop_restart": 15057,
+    "test_captured_text_utils_paragraph_fix.CapturedTextUtilsParagraphFixTests.test_sigkill_postimage_same_bytes_new_inode_requires_exact_conflict_ack": 5811,
+    "test_captured_text_utils_paragraph_fix.CapturedTextUtilsParagraphFixTests.test_sigkill_recovery_preserves_later_user_edits_and_stale_acknowledgment": 6138,
+    "test_captured_text_utils_paragraph_fix.CapturedTextUtilsParagraphFixTests.test_success_summary_remains_truthful_after_report_mutation_and_context_close": 5735,
+    "test_captured_text_utils_paragraph_fix.CapturedTextUtilsParagraphFixTests.test_transient_ancestor_replacement_with_unchanged_immediate_parent_refuses": 15709,
+    "test_captured_text_utils_paragraph_fix.CapturedTextUtilsParagraphFixTests.test_unsupported_grammar_and_other_required_repairs_never_write": 4850,
+    "test_captured_text_utils_paragraph_fix.CapturedTextUtilsParagraphFixTests.test_wrong_missing_extra_overlapping_and_second_pass_actual_edits_refuse": 4533
+  },
   "metadata": {
     "caveats": [
       "Timestamp deltas include preceding teardown/current setup and log buffering; first completed case charged0",
@@ -50,11 +93,32 @@
       "url": "https://github.com/kimpossible-TY/typst-packages/actions/runs/42426813337"
     },
     "description": "Estimated relative scheduling costs; never test selection/coverage authority",
-    "exact_reviewed_method_count": 34,
+    "exact_reviewed_method_count": 75,
+    "fix_method_split_measurement": {
+      "method_count": 41,
+      "runs": [
+        {
+          "head": "b0e0949b3c900d39970397cc06220d9b26ecfde6",
+          "id": 42473976112,
+          "job": 128711048935,
+          "python": "3.15"
+        },
+        {
+          "head": "c1a89a2e859d2136ee473bc5fac3a5fad0c91488",
+          "id": 42475379713,
+          "job": 128715413934,
+          "python": "3.15"
+        }
+      ],
+      "seconds_sum": 643.86,
+      "source": "maximum timestamp delta per completed method; approximate, includes setup and teardown"
+    },
+    "historical_estimates_note": "The original baf1ae6 replay and its predicted timings describe the previous boundary-only split, not this updated assignment.",
     "measured_source": "max observed per unit across baf1ae6 Python 3.11/3.15, rounded up to positive integer milliseconds",
     "measured_whole_module_lpt_floor_seconds": 1005.69089,
     "note": "Unknown/future modules or methods must remain selected with positive default weight; do not reject or omit absent timing keys",
     "original_baf_test_phase_max_seconds": 1322.003,
+    "original_boundary_reviewed_method_count": 34,
     "primary_run": {
       "head": "baf1ae666606c3d075bc2fbc4e7d0a50173e6d54",
       "id": 42430203586,
@@ -69,7 +133,11 @@
       "3.15": 642.233
     },
     "shared_max_weight_method_split_lpt_worst_seconds": 701.693,
-    "split_class": "test_captured_text_utils_paragraph_boundary_fix.CapturedTextUtilsParagraphBoundaryFixTests"
+    "split_class": "test_captured_text_utils_paragraph_boundary_fix.CapturedTextUtilsParagraphBoundaryFixTests",
+    "split_classes": [
+      "test_captured_text_utils_paragraph_boundary_fix.CapturedTextUtilsParagraphBoundaryFixTests",
+      "test_captured_text_utils_paragraph_fix.CapturedTextUtilsParagraphFixTests"
+    ]
   },
   "module_weights_ms": {
     "test_adapter_artifact": 1,
@@ -208,7 +276,9 @@
   "profile": "measured-v1",
   "schema": 1,
   "source_pins": {
+    "captured_text_utils_paragraph_process_worker.py": "42ccaa4aab73d9fce60d88c081218d73e68d7bbf8ce999cdd1884d5b9d2b6365",
     "paragraph_fix_test_support.py": "b044b853edd5e330124af3341dedaff7043bd43e460e59db938eccf3f2e21b0a",
-    "test_captured_text_utils_paragraph_boundary_fix.py": "a830f2e013ef3ea542c90fcb8c054c4f9f6a032631f922ac9b39eccc2089086a"
+    "test_captured_text_utils_paragraph_boundary_fix.py": "a830f2e013ef3ea542c90fcb8c054c4f9f6a032631f922ac9b39eccc2089086a",
+    "test_captured_text_utils_paragraph_fix.py": "ffeecb44f971bf5a31b32fc69cc5211a45b8fd2ae96e292e7c0e0c9a7e38e6ed"
   }
 }

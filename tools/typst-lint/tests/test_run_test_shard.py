@@ -353,6 +353,12 @@ class MeasuredShardTests(unittest.TestCase):
         cls = getattr(module, runner.SPLIT_CLASS)
         return module, cls, [cls(name) for name in unittest.defaultTestLoader.getTestCaseNames(cls)]
 
+    def reviewed_fix_cases(self):
+        with mock.patch.object(sys, 'path', [str(TOOL / 'tests'), *sys.path]):
+            module = importlib.import_module(runner.FIX_MODULE)
+        cls = getattr(module, runner.FIX_CLASS)
+        return module, cls, [cls(name) for name in unittest.defaultTestLoader.getTestCaseNames(cls)]
+
     def test_lpt_is_deterministic_and_retains_original_order_and_objects(self):
         cases = [make_case(module, str(number)) for number, module in enumerate(
             ('test_z', 'test_a', 'test_m', 'test_b', 'test_z'))]
@@ -384,6 +390,86 @@ class MeasuredShardTests(unittest.TestCase):
             self.assertEqual(shard.tests, tuple(case for case in cases if case in shard.tests))
         self.assertLess(max(s.estimated_ms for s in shards),
                         self.profile['module_weights_ms'][runner.SPLIT_MODULE] // 2)
+
+    def test_both_reviewed_classes_partition_without_duplicate_or_missing_cases(self):
+        _, _, boundary = self.reviewed_cases()
+        _, _, fixes = self.reviewed_fix_cases()
+        cases = [*boundary, *fixes, make_case('test_other', 'Other')]
+        shards = self.shards(cases)
+        selected = [case for shard in shards for case in shard.tests]
+        self.assertEqual(sorted(map(id, selected)), sorted(map(id, cases)))
+        self.assertGreater(len({i for i, shard in enumerate(shards)
+                                if any(type(case).__module__ == runner.FIX_MODULE for case in shard.tests)}), 1)
+        for shard in shards:
+            self.assertEqual(shard.tests, tuple(case for case in cases if case in shard.tests))
+
+    def test_additional_split_refuses_unreviewed_hooks_classes_and_missing_pin(self):
+        module, cls, cases = self.reviewed_fix_cases()
+        for target, name in ((module, 'load_tests'), (module, 'setUpModule'),
+                             (cls, 'setUpClass'), (cls, 'run')):
+            with self.subTest(name=name), mock.patch.object(target, name, lambda *args: None, create=True):
+                with self.assertRaisesRegex(runner.ShardError, 'fixtures|hooks|load_tests'):
+                    self.shards(cases)
+        with self.assertRaisesRegex(runner.ShardError, 'Unreviewed class'):
+            self.shards([*cases, make_case(runner.FIX_MODULE, 'Unexpected')])
+        self.profile['source_pins'][runner.FIX_MODULE + '.py'] = '0' * 64
+        self.save()
+        with self.assertRaisesRegex(runner.ShardError, 'source changed'):
+            self.shards(cases)
+
+    def test_additional_split_retains_unknown_weights_and_duplicate_cases(self):
+        _, cls, cases = self.reviewed_fix_cases()
+        self.profile['fix_method_weights_ms'].pop(cases[0].id())
+        self.save()
+        cases += [cases[0], cls(cases[0]._testMethodName), make_case('test_future', 'Future')]
+        shards = self.shards(cases)
+        from collections import Counter
+        self.assertEqual(Counter(map(id, cases)),
+                         Counter(id(case) for shard in shards for case in shard.tests))
+        owners = [i for i, shard in enumerate(shards)
+                  if any(case.id() == cases[0].id() for case in shard.tests)]
+        self.assertEqual(len(owners), 1)
+
+    def test_pre_registered_class_cleanup_refuses_each_split_before_execution(self):
+        for label, get_cases in (('boundary', self.reviewed_cases), ('fix', self.reviewed_fix_cases)):
+            _, cls, cases = get_cases()
+            calls = []
+            with self.subTest(reviewed_class=label), mock.patch.object(cls, '_class_cleanups', []):
+                cls.addClassCleanup(lambda: calls.append('cleanup'))
+                for index in range(1, 5):
+                    suite = unittest.TestSuite(cases)
+                    with mock.patch.object(runner, 'discover_suite', return_value=suite), \
+                         contextlib.redirect_stderr(io.StringIO()) as output:
+                        status = runner.main(['--shard-index', str(index), '--shard-count', '4',
+                                              '--balance-profile', 'measured-v1'])
+                    self.assertEqual(status, 2, output.getvalue())
+                    self.assertIn('pre-registered or invalid class cleanups', output.getvalue())
+                    self.assertNotIn('Ran ', output.getvalue())
+                    self.assertFalse(calls)
+
+    def test_invalid_class_cleanup_container_refuses_selection(self):
+        _, cls, cases = self.reviewed_fix_cases()
+        for value in (None, (), 'invalid'):
+            with self.subTest(value=value), mock.patch.object(cls, '_class_cleanups', value):
+                with self.assertRaisesRegex(runner.ShardError, 'class cleanups'):
+                    self.shards(cases)
+
+    def test_additional_split_preserves_failure_and_skip_results(self):
+        _, cls, cases = self.reviewed_fix_cases()
+        chosen = cases[:2]
+        def failure(self):
+            self.fail('reviewed split failure')
+        def skipped(self):
+            raise unittest.SkipTest('reviewed split skip')
+        with mock.patch.object(cls, chosen[0]._testMethodName, failure), \
+             mock.patch.object(cls, chosen[1]._testMethodName, skipped):
+            shards = self.shards(chosen, 2)
+            results = [unittest.TextTestRunner(stream=io.StringIO()).run(unittest.TestSuite(shard.tests))
+                       for shard in shards]
+        self.assertEqual(sum(result.testsRun for result in results), 2)
+        self.assertEqual(sum(len(result.failures) for result in results), 1)
+        self.assertEqual(sum(len(result.skipped) for result in results), 1)
+        self.assertEqual(sum(not result.wasSuccessful() for result in results), 1)
 
     def test_missing_timing_and_duplicate_case_ids_never_drop_cases(self):
         _, cls, cases = self.reviewed_cases()

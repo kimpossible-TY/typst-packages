@@ -107,8 +107,8 @@ class DocumentCliTests(unittest.TestCase):
         row, = self.run_cli(*options)['conditional_footnote_bindings']['by_file']
         self.assertEqual(row['status'], 'PARTIAL')
         self.assertFalse(row['calls'])
-        self.assertIn('Wildcard facade exports footnote', row['unresolved'])
-        self.assertIn('Wildcard facade exports footnote', self.run_cli(*options, format='text'))
+        self.assertIn('Wildcard namespace exports footnote', row['unresolved'])
+        self.assertIn('Wildcard namespace exports footnote', self.run_cli(*options, format='text'))
         self.assertEqual((self.root / 'main.typ').read_bytes(), source)
 
     def test_conditional_footnote_binding_budget_refuses_before_serialization(self):
@@ -125,6 +125,119 @@ class DocumentCliTests(unittest.TestCase):
             with self.assertRaisesRegex(InputError, 'report item limit'):
                 document_cli.report_document(str(self.root), 'main.typ', rule_set='pde',
                     package_path=str(packages), footnote_cache_path=str(cache))
+
+    def test_conditional_footnote_punctuation_opt_in_json_text_and_suppression(self):
+        packages, cache = self.footnote_roots()
+        source = (b'#import "styles.typ": *\n#block[Sentence. #footnote[Note.]]\n'
+                  b'#include "child.typ"\n')
+        child = (b'#import "styles.typ": *\n'
+                 b'// typst-lint: ignore-next pde.prose-footnote-punctuation -- fixture\n'
+                 b'#block[Other. #footnote[Note.]]\n')
+        main = self.write('main.typ', source)
+        child_file = self.write('child.typ', child)
+        facade = self.write('styles.typ', b'#import "@local/text-utils:0.1.2": *\n')
+        options = ('--rule-set', 'pde', '--package-path', str(packages), '--footnote-cache-path', str(cache),
+                   '--local-rule-hints')
+        baseline = self.run_cli(*options)
+        self.assertNotIn('punctuation_by_file', baseline['conditional_footnote_bindings'])
+        report = self.run_cli(*options, '--footnote-punctuation-evidence')
+        self.assertEqual(report['coverage'], baseline['coverage'])
+        self.assertEqual(report['local_rule_hints'], baseline['local_rule_hints'])
+        self.assertEqual(report['diagnostics'], baseline['diagnostics'])
+        self.assertEqual(report['conditional_diagnostics'], baseline['conditional_diagnostics'])
+        section = report['conditional_footnote_bindings']
+        rows = {row['path']: row for row in section['punctuation_by_file']}
+        finding, = rows['main.typ']['diagnostics']
+        suppressed, = rows['child.typ']['suppressed']
+        for row, entry, expected in ((rows['main.typ'], finding, source), (rows['child.typ'], suppressed, child)):
+            self.assertEqual(row['source_sha256'], digest(expected))
+            self.assertEqual(entry['diagnostic']['rule_id'], 'pde.prose-footnote-punctuation')
+            self.assertEqual(entry['call']['source_sha256'], digest(expected))
+            self.assertEqual(entry['call']['facade_sources'][0]['path'], 'styles.typ')
+            self.assertEqual(entry['call']['package_evidence'][0]['import_path'], '@local/text-utils:0.1.2')
+            self.assertTrue(entry['conditions'] and entry['call']['package_requests'])
+            self.assertFalse(entry['runtime_binding_proved'] or entry['edit_permission'] or entry['compiler_permission'])
+        self.assertFalse(section['edit_permission'] or section['compiler_permission'] or report['compiler_invoked'])
+        text = self.run_cli(*options, '--footnote-punctuation-evidence', format='text')
+        for term in ('Conditional footnote punctuation evidence:', 'hint main.typ:', 'suppressed child.typ:',
+                     'facade styles.typ', 'package @local/text-utils:0.1.2', 'condition:',
+                     'no edit or compiler permission'):
+            self.assertIn(term, text)
+        self.assertEqual(main.read_bytes(), source)
+        self.assertEqual(child_file.read_bytes(), child)
+        self.assertEqual(facade.read_bytes(), b'#import "@local/text-utils:0.1.2": *\n')
+
+    def test_footnote_punctuation_requires_opt_in_cache_and_does_not_run_by_default(self):
+        import conditional_footnote_punctuation
+        packages, cache = self.footnote_roots()
+        self.write('main.typ', b'#import "styles.typ": *\n#block[Sentence. #footnote[Note.]]')
+        self.write('styles.typ', b'#import "@local/text-utils:0.1.2": *\n')
+        report = self.run_cli('--rule-set', 'pde', '--package-path', str(packages),
+                              '--footnote-punctuation-evidence')
+        self.assertEqual(report['phase'], 'input')
+        self.assertIn('--footnote-cache-path', report['error'])
+        with patch.object(conditional_footnote_punctuation, 'analyze_all',
+                          side_effect=AssertionError('opt-in batch ran by default')):
+            report = document_cli.report_document(str(self.root), 'main.typ', rule_set='pde',
+                                                  package_path=str(packages), footnote_cache_path=str(cache))
+        self.assertNotIn('punctuation_by_file', report['conditional_footnote_bindings'])
+
+    def test_footnote_punctuation_reports_unresolved_without_guessing(self):
+        packages, cache = self.footnote_roots()
+        self.write('main.typ', b'#import "styles.typ": *\n#block[Sentence. #footnote[Note.]]')
+        self.write('styles.typ', b'#import "missing.typ": *\n')
+        options = ('--rule-set', 'pde', '--package-path', str(packages), '--footnote-cache-path', str(cache),
+                   '--footnote-punctuation-evidence')
+        result = self.run_cli(*options)
+        row, = result['conditional_footnote_bindings']['punctuation_by_file']
+        self.assertEqual(row['status'], 'PARTIAL')
+        self.assertFalse(row['diagnostics'] or row['suppressed'])
+        self.assertTrue(row['unresolved'])
+        self.assertIn('unresolved:', self.run_cli(*options, format='text'))
+
+    def test_footnote_punctuation_budget_and_forged_session_refuse(self):
+        import conditional_footnote_binding
+        import conditional_footnote_punctuation
+        packages, cache = self.footnote_roots()
+        source = b'#import "styles.typ": *\n#block[Sentence. #footnote[Note.]]'
+        self.write('main.typ', source)
+        self.write('styles.typ', b'#import "@local/text-utils:0.1.2": *\n')
+        original = document_cli.asdict
+        def guard(value):
+            if isinstance(value, conditional_footnote_punctuation.PunctuationResult):
+                self.fail('Over-budget punctuation result was serialized')
+            return original(value)
+        with patch.object(document_cli, 'MAX_REPORT_ITEMS', 15), \
+             patch.object(document_cli, 'asdict', side_effect=guard), \
+             patch.object(conditional_footnote_punctuation, 'analyze_all',
+                          wraps=conditional_footnote_punctuation.analyze_all) as batch:
+            with self.assertRaisesRegex(InputError, 'report item limit'):
+                document_cli.report_document(str(self.root), 'main.typ', rule_set='pde',
+                    package_path=str(packages), footnote_cache_path=str(cache), footnote_punctuation_evidence=True)
+            batch.assert_called_once()
+        forged = object.__new__(conditional_footnote_binding.ConditionalFootnoteBinding)
+        with patch.object(conditional_footnote_binding, 'ConditionalFootnoteBinding', return_value=forged):
+            with self.assertRaisesRegex(InputError, 'capture changed during inspection'):
+                document_cli.report_document(str(self.root), 'main.typ', rule_set='pde',
+                    package_path=str(packages), footnote_cache_path=str(cache), footnote_punctuation_evidence=True)
+        self.assertEqual((self.root / 'main.typ').read_bytes(), source)
+
+    def test_footnote_punctuation_discards_result_if_session_changes_after_batch(self):
+        import conditional_footnote_punctuation
+        packages, cache = self.footnote_roots()
+        source = b'#import "styles.typ": *\n#block[Sentence. #footnote[Note.]]'
+        self.write('main.typ', source)
+        self.write('styles.typ', b'#import "@local/text-utils:0.1.2": *\n')
+        original = conditional_footnote_punctuation.analyze_all
+        def mutate(session, **kwargs):
+            batch = original(session, **kwargs)
+            object.__setattr__(session._graph.sources[0], 'source', b'changed')
+            return batch
+        with patch.object(conditional_footnote_punctuation, 'analyze_all', side_effect=mutate):
+            with self.assertRaisesRegex(InputError, 'capture changed during inspection'):
+                document_cli.report_document(str(self.root), 'main.typ', rule_set='pde',
+                    package_path=str(packages), footnote_cache_path=str(cache), footnote_punctuation_evidence=True)
+        self.assertEqual((self.root / 'main.typ').read_bytes(), source)
 
     def test_conditional_footnote_cache_respects_first_root_precedence(self):
         packages, cache = self.footnote_roots()

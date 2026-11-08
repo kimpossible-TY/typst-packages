@@ -103,6 +103,7 @@ inspection route:
 /path/to/typst-packages/tools/typst-lint/typst-lint inspect-document --root /absolute/project --entrypoint main.typ --rule-set pde --preview-conditional-gaps --format json
 /path/to/typst-packages/tools/typst-lint/typst-lint inspect-document --root /absolute/project --entrypoint main.typ --rule-set pde --preview-conditional-punctuation --format json
 /path/to/typst-packages/tools/typst-lint/typst-lint inspect-document --root /absolute/project --entrypoint main.typ --rule-set pde --preview-conditional-spacers --format json
+/path/to/typst-packages/tools/typst-lint/typst-lint inspect-document --root /absolute/project --entrypoint main.typ --rule-set pde --preview-conditional-scoped-calls --format json
 /path/to/typst-packages/tools/typst-lint/typst-lint inspect-document --root /absolute/project --entrypoint main.typ --rule-set pde --package-path /absolute/captured-packages --format json
 /path/to/typst-packages/tools/typst-lint/typst-lint inspect-document --root /absolute/project --entrypoint main.typ --rule-set pde --package-path /absolute/captured-packages --reference-package-path /absolute/reference-packages --reference-facade Styles/styles.typ --format json
 /path/to/typst-packages/tools/typst-lint/typst-lint inspect-document --root /absolute/project --entrypoint main.typ --rule-set pde --package-path /absolute/captured-packages --reference-cache-path /absolute/captured-cache --reference-package-path /absolute/reference-packages --reference-facade Styles/styles.typ --format json
@@ -201,6 +202,9 @@ To inspect conditional builtin-footnote bindings through captured relative
 wildcard facades, add `--package-path /absolute/packages --footnote-cache-path
 /absolute/cache` with `--rule-set pde`. These source-bound hints use explicit
 package-before-cache evidence; they do not authorize compilation or edits.
+Add `--footnote-punctuation-evidence` to separately connect eligible nested
+prose-footnote punctuation hints to those captured calls. This performs another
+analysis pass and remains diagnostic-only.
 With the additional explicit `--reference-package-path` and `--reference-facade`,
 `reference_provenance` separately traces the facade's `project-ref` export using
 captured package hashes and namespace evidence. It reports either conditional
@@ -1273,8 +1277,9 @@ publishes/deploys anything. Renderer-dependent characterization is separate.
 CI uses four workers per interpreter with the explicit `measured-v1` balance
 profile in [ci-balance-v1.json](ci-balance-v1.json). It assigns estimated longer work first using
 versioned GitHub log timings. Modules stay together except the reviewed
-`CapturedTextUtilsParagraphBoundaryFixTests` methods, which use independent
-temporary consumers. Those methods run in separate worker processes, retaining
+`CapturedTextUtilsParagraphBoundaryFixTests` and `CapturedTextUtilsParagraphFixTests`
+methods, which use independent temporary consumers. Those methods can run in
+separate worker processes, retaining
 their original TestCase objects, per-method setup/cleanup and indivisible
 subtests. Exact source/helper pins and fixture/hook checks reject unreviewed
 changes to that exception. All discovered cases remain selected exactly once;
@@ -1292,7 +1297,12 @@ runner variance limit predictions for later runs. The following marker-gap
 run passed in 18m14s, with the same shard still longest. Job counts, test and
 compiler deadlines, adapter checks and both aggregate gates retain their
 existing settings. The [partition evidence](audit/ci-balance-evidence.json)
-records complete discovery, per-worker counts and source/profile hashes.
+records the earlier partition, not a fresh result for the current profile.
+After the second reviewed class was split, replaying completed Python 3.15
+[CI run 42475379713](https://github.com/kimpossible-TY/typst-packages/actions/runs/42475379713)
+timestamps against the new assignment yields an approximate longest interval
+of 768s versus 897s before splitting. This is an estimate, not a new CI run:
+later added tests are not included, and buffering and runner variance apply.
 
 Next work: extend only provable directive scopes and Markdown extraction contexts; expand
 verified package/local-facade graphs and paragraph ownership; implement

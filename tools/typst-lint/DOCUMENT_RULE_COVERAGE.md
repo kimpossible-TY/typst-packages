@@ -10,6 +10,7 @@
 | 문서: L | `--rule-set pde --local-rule-hints`의 파일별 조건부 힌트. include 지점의 바인딩·실행 문맥은 증명하지 못하고 수정 권한은 없다. |
 | 문서: P | `--rule-set pde --package-path`로 선택한 패키지에 의존하는 조건부 힌트. 실제 런타임 바인딩을 보장하지 않는다. |
 | 문서: R | 명시적인 패키지·facade 추적을 설정하고 `--reference-arguments` 또는 `--reference-catalog`를 선택한 조건부 검사. 후자는 별도로 제공한 catalog 스냅샷만 확인한다. |
+| 문서: C | `--rule-set pde --preview-conditional-scoped-calls`의 독립적인 제한된 scoped 호출 소스 후보. wrapper 및 실행은 조건부이며 컴파일이나 쓰기 권한은 없다. |
 | 미리보기: 기본 | 별도 `preview-compile` 또는 `typst-style compile --preview`의 세 단계 결합 후보에 포함된다. 일반 컴파일 게이트 완성이나 전체 규칙 검사를 뜻하지 않는다. |
 | 미리보기: G / P / S | 각각 `--conditional-gaps`, `--conditional-punctuation`, `--conditional-spacers`의 조건부 후보. P와 S는 G도 필요하다. S는 제한된 비정렬 수식 각주 패턴에 적용되며 런타임 바인딩이나 렌더 동일성을 증명하지 않는다. |
 | — | 해당 문서 검사 또는 미리보기 경로에서 확인된 지원이 없다. |
@@ -19,7 +20,7 @@
 | 규칙 | 단일 소스 | 문서 검사 | 컴파일 미리보기 | 대표적인 범위와 한계 |
 | --- | --- | --- | --- | --- |
 | `core.parenthesized-scripts` | 제안 | 기본 | 기본 | 파서로 범위가 확인된 스크립트 피연산자; 불명확한 구문은 보류. |
-| `core.scoped-function-call` | 제안 | — | — | 검토된 scoped wrapper와 제한된 콜백·호출 형태. |
+| `core.scoped-function-call` | 제안 | C | — | 제한된 문자 그대로의 scoped wrapper 콜백·호출 형태. 복잡하거나 지연된 callback은 보류한다. |
 | `core.scoped-marker-tags` | 진단 | — | — | 확인된 scoped 콜백의 태그만; 외부 참조를 임의로 바꾸지 않는다. |
 | `core.scoped-anchor-access` | 제안 | — | — | 검토된 CeTZ 증거와 유일한 마커·방향이 확인된 경우. |
 | `core.scoped-reference-access` | 제안 | — | — | 동일 scope와 단일 리터럴 대상이 확인된 경우. |
@@ -47,7 +48,7 @@
 | `pde.display-continuation-gap` | 제안 | 기본 | 기본 | 확인된 display와 직접 이어지는 문장; 주석·불명확한 wrapper는 보류. |
 | `pde.proof-trailing-gap` | 제안 | L | G | 알려진 proof helper와 제한된 경계; G는 조건부 후보다. |
 | `pde.footnote-trailing-gap` | 제안 | L | G | 확인된 각주와 제한된 경계; G는 조건부 중첩 수식 각주 후보다. |
-| `pde.prose-footnote-punctuation` | 제안 | L | P | 제한된 직접 문장과 builtin 각주. 문서 검사는 조건부로 각주 앞 공백 제거와 각주 뒤 문장부호 이동을 각각 독립 미리보기로 제공한다. P 결합 컴파일은 공백 제거만 포함한다. |
+| `pde.prose-footnote-punctuation` | 제안 | L | P | 제한된 직접 문장과 builtin 각주. 문서 검사는 조건부로 각주 앞 공백 제거와 각주 뒤 문장부호 이동을 각각 독립 미리보기로 제공한다. `--footnote-punctuation-evidence`는 일부 진단에 별도 출처 근거를 붙인다. P 결합 컴파일은 공백 제거만 포함한다. |
 | `pde.aligned-footnote-spacer` | 제안 | L | — | 정렬 수식과 확인된 spacer 바인딩만. |
 | `pde.unaligned-footnote-no-spacer` | 제안 | L | S | 기존 명세대로 제한된 비정렬 수식 각주 앞 spacer를 제거하는 조건부 후보. 실제 렌더는 달라질 수 있다. |
 | `pde.prose-footnote-no-spacer` | 제안 | L | — | 확인된 spacer와 문장·구두점의 안전한 인접 관계가 필요하다. |
@@ -62,7 +63,7 @@
 - 단일 소스 수정안의 상세 전제와 사용자 문서에 쓰기를 허용하는 별도 경로는 [README](README.md)와 [수정 정책](../../openspec/changes/typst-style-linter/fix-policy.md)을 확인한다. 수정 정책은 목표이므로 구현의 `진단`을 `제안`으로 해석하지 않는다.
 - 문서 분석의 기본 세 규칙도 일부 문법과 문맥만 검사한다. L/P/R 힌트 및 독립 소스 미리보기는 원본에 적용할 권한이 없다. `inspect-document --preview-conditional-spacers`는 렌더 검증이 없는 별도 소스 후보이고, S 결합 컴파일은 별도로 선택한다. 격리된 0pt·8pt 사례와 단위 시험은 통과했으나 런타임 바인딩이나 렌더 동일성을 보장하지 않는다.
 - 컴파일 미리보기는 캡처한 소스와 리소스로 기준 PDF와 후보 PDF를 만들 수 있지만, 전체 규칙 검사나 실행 가능한 모든 의존성의 완전성을 증명하지 않는다. 표시가 없는 규칙에 대한 렌더 검증을 의미하지 않는다.
-- `--footnote-cache-path`로 보는 wildcard facade 뒤의 조건부 builtin 각주 바인딩은 별도 근거 보고다. 아직 S 결합 컴파일에 전달되지 않으며 include 실행, runtime 선택 또는 원본 수정 권한을 증명하지 않는다.
+- `--footnote-cache-path`의 wildcard 뒤 조건부 builtin 각주 바인딩은 별도 근거 보고다. 명시적 `--conditional-facade-footnotes` preview는 같은 종류의 근거를 캡처된 컴파일 리소스와 다시 대조해 S에 연결하지만, 지연 closure 등 미증명 문맥은 보류한다. 어느 경로도 include 실행, runtime 선택 또는 원본 수정 권한을 증명하지 않는다.
 - [기존 audit 표](coverage-matrix.md)는 파일에 적힌 과거 커밋에서 생성된 기록이다. 이 문서는 그 기록을 새 검사 결과로 갱신하지 않는다. 최신 구현과 최종 검증 범위는 각각의 코드와 테스트 결과를 다시 확인해야 한다.
 
 구현 근거: [단일 소스 연결](source_analysis.py), [문서 검사](document_cli.py), [조건부 로컬 힌트](document_local_rules.py), [조건부 패키지 힌트](conditional_highlight.py), [조건부 참조 인자](conditional_reference_arguments.py), [컴파일 미리보기](document_preview_cli.py).

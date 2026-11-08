@@ -49,6 +49,15 @@ Callback findings add call/body byte spans and opaque parameter names in
 routes. Empty callback metadata is omitted to preserve previous root/literal
 records. Its variable entries are included in report item accounting.
 
+The independent `--rule-set pde --preview-conditional-scoped-calls` option
+inspects direct scope-field calls in narrowly supported literal
+`local-tag-scope` and `local-scope-annotations` callbacks. Its per-file report
+contains source hashes, conditional diagnostics, suppressions, byte edits and
+unresolved contexts. It does not inspect package bindings or prove callback
+execution, rendering or authority to write or compile. Complex calls, mutation,
+deferred scopes and unsupported options are conservatively skipped. Its edits
+are independent of all other previews, and the global rule remains uninspected.
+
 JSON includes:
 
 - `include_context`: selected budget, source hashes/counts, edges, occurrences
@@ -96,6 +105,10 @@ JSON includes:
   unresolved imports, shadows and unsupported contexts are not proven. These
   hints are independent of preview edits and grant neither compiler nor write
   permission. Source bytes and package selection at runtime remain conditional.
+- `--footnote-punctuation-evidence` additionally joins nested prose punctuation
+  hints to these exact captured calls in a separate `punctuation_by_file` report.
+  It requires `--footnote-cache-path`, performs an additional analysis pass, and
+  neither promotes the hints to complete coverage nor proposes edits.
 - With `--rule-set pde`, `--package-path`, `--reference-package-path` and
   `--reference-facade`, the separately captured reference package and graph
   namespace evidence trace a selected facade's `project-ref` export. A

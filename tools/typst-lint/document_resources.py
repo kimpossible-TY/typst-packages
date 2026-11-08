@@ -265,7 +265,8 @@ def capture(roots, requests, *, allow_apple_asset_fonts=False):
                                   tuple(files), total, apple_asset_fonts=allow_apple_asset_fonts))
 
 
-def stage_document(context, records, catalog, snapshot, *, project_root='project', profile='standard'):
+def stage_document(context, records, catalog, snapshot, *, project_root='project', profile='standard',
+                   footnote_evidence=None):
     """Bind verified source candidates to explicit captured resource bytes.
 
     The mapping is for private staging experiments only. It neither establishes
@@ -277,6 +278,12 @@ def stage_document(context, records, catalog, snapshot, *, project_root='project
     assert_capture(snapshot)
     include_context.assert_include_context(context)
     roots = dict(snapshot.roots)
+    if footnote_evidence is not None:
+        import document_footnote_evidence
+        if (type(footnote_evidence) is not document_footnote_evidence.PreviewFootnoteEvidence
+                or footnote_evidence._snapshot is not snapshot):
+            raise SafetyError('Conditional footnote evidence does not match the resource capture')
+        document_footnote_evidence._valid(footnote_evidence)
     if type(project_root) is not str or roots.get(project_root) != context.project_root:
         raise SafetyError('Captured project root does not match the include context')
     resources = {(item.request.root, item.request.path): item for item in snapshot.files}
@@ -284,7 +291,7 @@ def stage_document(context, records, catalog, snapshot, *, project_root='project
         resource = resources.get((project_root, source.path))
         if resource is None or resource.data != source.source:
             raise SafetyError('A captured document source is absent or differs from the resource snapshot')
-    candidates = replay_document(context, records, catalog, profile=profile)
+    candidates = replay_document(context, records, catalog, profile=profile, footnote_evidence=footnote_evidence)
     staged = {(item.request.root, item.request.path):
               candidates[item.request.path] if item.request.root == project_root and item.request.path in candidates
               else item.data for item in snapshot.files}

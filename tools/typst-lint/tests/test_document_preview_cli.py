@@ -7,6 +7,7 @@ import os
 from pathlib import Path
 import subprocess
 import signal
+import shutil
 import sys
 import tempfile
 import threading
@@ -336,6 +337,53 @@ class DocumentPreviewCliTests(unittest.TestCase):
                 self.assertEqual((self.project / 'main.typ').read_bytes(), self.source)
         with contextlib.redirect_stderr(io.StringIO()), self.assertRaises(SystemExit):
             document_preview_cli.main(self.command()[3:] + ['--conditional-spacers'])
+
+    def test_facade_footnote_opt_in_replays_snapshot_bound_candidate(self):
+        import document_resources
+        self.source = b'#import "styles.typ": *\n#block[$ x #dots_space #footnote[Note] $]'
+        (self.project / 'main.typ').write_bytes(self.source)
+        (self.project / 'styles.typ').write_bytes(b'#import "@local/text-utils:0.1.2": *\n')
+        shutil.copytree(TOOL / 'tests/fixtures/reviewed-packages/local/text-utils/0.1.2',
+                        self.packages / 'local/text-utils/0.1.2')
+        fake = SimpleNamespace(baseline_sha256='a' * 64, candidate_sha256='b' * 64,
+            pdfs_identical=False, dependency_count=1, unobserved_capture_count=0,
+            system_font_files=0, compiler_sha256='c' * 64)
+        def check(context, records, catalog, snapshot, **kwargs):
+            staged = document_resources.stage_document(context, records, catalog, snapshot,
+                profile=kwargs['profile'], footnote_evidence=kwargs['footnote_evidence'])
+            self.assertNotIn(b'#dots_space', staged['project', 'main.typ'])
+            return fake
+        output = io.StringIO()
+        flags = ['--conditional-gaps', '--conditional-spacers', '--conditional-facade-footnotes',
+                 '--format', 'json', '--review-edits']
+        with patch.object(document_preview_cli.document_preview_compile, 'compile_preview', side_effect=check), \
+             contextlib.redirect_stdout(output):
+            self.assertEqual(document_preview_cli.main(self.command()[3:] + flags), 2)
+        report = json.loads(output.getvalue())
+        self.assertTrue(report['conditional_facade_footnotes'])
+        self.assertFalse(report['source_apply_gate']['eligible'] or report['source_files_modified'])
+        self.assertEqual((self.project / 'main.typ').read_bytes(), self.source)
+        with contextlib.redirect_stderr(io.StringIO()), self.assertRaises(SystemExit):
+            document_preview_cli.main(self.command()[3:] + ['--conditional-facade-footnotes'])
+
+    def test_planning_order_preserves_existing_profile_and_reports_probe(self):
+        self.source = b'#let footnote(x) = x\n#block[$\n A #dots_space #footnote[X]\n$]'
+        (self.project / 'main.typ').write_bytes(self.source)
+        flags = ['--discover-dependencies', '--conditional-gaps', '--conditional-spacers', '--format', 'json']
+        discovered = (b'main.typ\0', (('project', 'main.typ'),), {}, '1' * 64)
+        for facade in (False, True):
+            with self.subTest(facade=facade):
+                output = io.StringIO()
+                extra = flags + (['--conditional-facade-footnotes'] if facade else [])
+                with patch.object(document_preview_cli.document_preview_discover, 'discover', return_value=discovered) as probe, \
+                     patch.object(document_preview_cli.document_preview_compile, 'compile_preview') as compiler, \
+                     contextlib.redirect_stdout(output):
+                    self.assertEqual(document_preview_cli.main(self.command()[3:] + extra), 2)
+                report = json.loads(output.getvalue())
+                self.assertEqual(report['phase'], 'planning', report)
+                self.assertEqual(report['compiler_invoked'], facade)
+                self.assertEqual(probe.called, facade)
+                compiler.assert_not_called()
 
     @unittest.skipUnless(os.environ.get('TYPST_LINT_RENDER_TESTS') == '1'
                          and sys.platform == 'darwin', 'Opt in on macOS with the reviewed Typst compiler')

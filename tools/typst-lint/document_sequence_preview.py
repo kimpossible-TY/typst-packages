@@ -93,7 +93,7 @@ def _same_findings(before_tree, before, after_tree, after, edits):
             and _keys(before_tree.source, before.suppressed, edits) == _keys(after_tree.source, after.suppressed))
 
 
-def preview(tree, path, catalog, *, profile=_STANDARD):
+def preview(tree, path, catalog, *, profile=_STANDARD, footnote_evidence=None):
     """Return hash-chained edits or a withheld result for this source."""
     _profile(profile)
     baseline = tree.source
@@ -324,6 +324,8 @@ def preview(tree, path, catalog, *, profile=_STANDARD):
                         raise SafetyError('Conditional spacer stage changed proof findings or suppressions')
                     mapper = _FindingMapper(before_tree.source)
                     target_mapper = _FindingMapper(before_tree.source, edits)
+                    conditional_calls = []
+                    conditional_proof = None
                     for rid in footnote_rules.RULE_IDS:
                         first, last = notes_before[rid], notes_after[rid]
                         expected = _keys(before_tree.source, first.diagnostics, edits)
@@ -344,7 +346,20 @@ def preview(tree, path, catalog, *, profile=_STANDARD):
                                 call_id = calls.get(call_start)
                                 binding = before_resolution.facts[call_id].binding if call_id is not None else None
                                 if not (binding and binding.kind == 'builtin' and binding.name == 'footnote'):
-                                    raise SafetyError('Conditional spacer footnote binding is not locally proven')
+                                    if footnote_evidence is None:
+                                        raise SafetyError('Conditional spacer footnote binding is not locally proven')
+                                    import document_footnote_evidence
+                                    if type(footnote_evidence) is not document_footnote_evidence.PreviewFootnoteEvidence:
+                                        raise SafetyError('Invalid conditional footnote evidence')
+                                    if conditional_proof is None:
+                                        conditional_proof = document_footnote_evidence.PreviewFootnoteEvidence.candidate_calls(
+                                            footnote_evidence, path, before_tree.source)
+                                    if (conditional_proof.source_sha256 != digest(before_tree.source)
+                                            or not any(call.start == call_start for call in conditional_proof.calls)):
+                                        raise SafetyError('Conditional spacer footnote binding is not proven by captured facade')
+                                    conditional_calls.append(call_start + sum(
+                                        len(item.replacement) - (item.end - item.start)
+                                        for item in edits if item.end <= call_start))
                                 finding = matching[0]
                                 expected[(finding.rule_id, finding.grade, finding.path,
                                           target_mapper.mapped(finding), finding.explanation, finding.source)] -= 1
@@ -361,8 +376,11 @@ def preview(tree, path, catalog, *, profile=_STANDARD):
                                 and footnote_rules.preview_conditional_prose_punctuation(
                                     current, path, current_resolution, catalog=catalog) is not None)):
                         raise SafetyError('Conditional spacer stage did not converge or introduced edits')
-                    steps.append(dict(rule_id=footnote_rules.UNALIGNED, baseline_sha256=digest(before_tree.source),
-                                      candidate_sha256=digest(candidate), edits=spacer['edits']))
+                    step = dict(rule_id=footnote_rules.UNALIGNED, baseline_sha256=digest(before_tree.source),
+                                candidate_sha256=digest(candidate), edits=spacer['edits'])
+                    if conditional_calls:
+                        step['conditional_footnote_calls'] = sorted(conditional_calls)
+                    steps.append(step)
         final_displays = analyze_all(current, path, catalog=catalog)
         final_scripts = analyze_script(current, path, catalog=catalog, _verify=False, _allow_code_call=True)
         if (current.nodes[0].errors or final_scripts.parse_errors or final_scripts.skips
@@ -395,14 +413,14 @@ def _same_data(expected, supplied):
     return expected == supplied
 
 
-def replay(tree, path, catalog, record, *, profile=_STANDARD):
+def replay(tree, path, catalog, record, *, profile=_STANDARD, footnote_evidence=None):
     """Recompute and replay a sequence in memory for a downstream consumer.
 
     Serialized plans are data, not authority: reject stale or altered records and
     check the hash chain again as edits are applied. The returned bytes are not a
     protected write receipt or a compiler resource snapshot.
     """
-    expected = preview(tree, path, catalog, profile=profile)
+    expected = preview(tree, path, catalog, profile=profile, footnote_evidence=footnote_evidence)
     return _replay_expected(tree, record, expected, profile=profile)
 
 
@@ -428,7 +446,7 @@ def _replay_expected(tree, record, expected, *, profile=_STANDARD):
     return current
 
 
-def replay_document(context, records, catalog, *, profile=_STANDARD):
+def replay_document(context, records, catalog, *, profile=_STANDARD, footnote_evidence=None):
     """Derive an immutable in-memory source map from one issued include capture.
 
     Every captured source must have exactly its current sequence record or no
@@ -438,6 +456,12 @@ def replay_document(context, records, catalog, *, profile=_STANDARD):
     """
     _profile(profile)
     include_context.assert_include_context(context)
+    if footnote_evidence is not None:
+        import document_footnote_evidence
+        if (type(footnote_evidence) is not document_footnote_evidence.PreviewFootnoteEvidence
+                or footnote_evidence._session._context is not context):
+            raise SafetyError('Conditional footnote evidence does not match the include capture')
+        document_footnote_evidence._valid(footnote_evidence)
     if type(records) is not list or len(records) > len(context.sources):
         raise SafetyError('Invalid document sequence record set')
     indexed = {}
@@ -449,11 +473,20 @@ def replay_document(context, records, catalog, *, profile=_STANDARD):
         raise SafetyError('Document sequence contains a foreign path')
     candidates = {}
     for source in context.sources:
-        expected = preview(source.tree, source.path, catalog, profile=profile)
+        expected = preview(source.tree, source.path, catalog, profile=profile, footnote_evidence=footnote_evidence)
         record = indexed.get(source.path)
         if expected is None and record is None:
             candidates[source.path] = source.source
         else:
             candidates[source.path] = _replay_expected(source.tree, record, expected, profile=profile)
+    conditional_calls = {record['path']: tuple(offset for step in record['steps']
+                         for offset in step.get('conditional_footnote_calls', ())) for record in records}
+    conditional_calls = {path: offsets for path, offsets in conditional_calls.items() if offsets}
+    if conditional_calls:
+        if footnote_evidence is None:
+            raise SafetyError('Conditional footnote evidence is missing at replay')
+        import document_footnote_evidence
+        document_footnote_evidence.PreviewFootnoteEvidence.validate_staged_facades(
+            footnote_evidence, candidates, conditional_calls)
     include_context.assert_include_context(context)
     return MappingProxyType(candidates)

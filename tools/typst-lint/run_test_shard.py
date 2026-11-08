@@ -7,9 +7,9 @@ skips, subtests and failure handling still run normally. No test is executed
 during discovery or partitioning. All shards reject discovery errors, including
 errors in modules that would otherwise belong to a different shard.
 
-Explicit measured-v1 selection balances observed costs. Only the reviewed,
-source-pinned paragraph-boundary class is divided into method groups; other
-modules retain their class/module fixtures together in one worker process.
+Explicit measured-v1 selection balances observed costs. Two reviewed,
+source-pinned paragraph classes are divided into method groups; other modules
+retain their class/module fixtures together in one worker process.
 """
 
 import argparse
@@ -23,7 +23,11 @@ import unittest
 BALANCE_PROFILE = Path(__file__).with_name('ci-balance-v1.json')
 SPLIT_MODULE = 'test_captured_text_utils_paragraph_boundary_fix'
 SPLIT_CLASS = 'CapturedTextUtilsParagraphBoundaryFixTests'
-SPLIT_SOURCES = (SPLIT_MODULE + '.py', 'paragraph_fix_test_support.py')
+FIX_MODULE = 'test_captured_text_utils_paragraph_fix'
+FIX_CLASS = 'CapturedTextUtilsParagraphFixTests'
+SPLIT_CLASSES = {SPLIT_MODULE: SPLIT_CLASS, FIX_MODULE: FIX_CLASS}
+SPLIT_SOURCES = (SPLIT_MODULE + '.py', FIX_MODULE + '.py', 'paragraph_fix_test_support.py',
+                 'captured_text_utils_paragraph_process_worker.py')
 MAX_PROFILE_BYTES = 128 * 1024
 MAX_REVIEWED_SOURCE_BYTES = 256 * 1024
 
@@ -86,7 +90,7 @@ def load_balance_profile(name):
     except (OSError, ValueError, RecursionError) as error:
         raise ShardError(f'Cannot read balance profile: {error}') from error
     fields = {'schema', 'profile', 'default_weight_ms', 'source_pins',
-              'module_weights_ms', 'boundary_method_weights_ms', 'metadata'}
+              'module_weights_ms', 'boundary_method_weights_ms', 'fix_method_weights_ms', 'metadata'}
     if (type(profile) is not dict or set(profile) != fields
             or type(profile['schema']) is not int or profile['schema'] != 1
             or profile['profile'] != name or type(profile['metadata']) is not dict):
@@ -95,7 +99,7 @@ def load_balance_profile(name):
         return type(value) is int and 0 < value <= 3_600_000
     if not valid_weight(profile['default_weight_ms']):
         raise ShardError('Invalid default balance weight')
-    for field in ('module_weights_ms', 'boundary_method_weights_ms'):
+    for field in ('module_weights_ms', 'boundary_method_weights_ms', 'fix_method_weights_ms'):
         values = profile[field]
         if (type(values) is not dict or len(values) > 4096
                 or any(type(key) is not str or not key or len(key) > 512
@@ -123,10 +127,10 @@ def _verify_reviewed_sources(pins):
             raise ShardError(f'Method-split source changed; review and update its pin: {filename}')
 
 
-def _verify_split_module(cases):
-    module = sys.modules.get(SPLIT_MODULE)
-    cls = getattr(module, SPLIT_CLASS, None)
-    expected = Path(__file__).with_name('tests') / SPLIT_SOURCES[0]
+def _verify_split_module(cases, module_name, class_name):
+    module = sys.modules.get(module_name)
+    cls = getattr(module, class_name, None)
+    expected = Path(__file__).with_name('tests') / (module_name + '.py')
     if (module is None or getattr(module, '__file__', None) is None
             or Path(module.__file__).resolve() != expected.resolve()
             or type(cls) is not type or cls.__bases__ != (unittest.TestCase,)
@@ -138,22 +142,28 @@ def _verify_split_module(cases):
              'id', 'doClassCleanups')
     if any(name in vars(cls) for name in hooks):
         raise ShardError('Method splitting refuses class fixtures or execution hooks')
+    cleanups = vars(cls).get('_class_cleanups')
+    if type(cleanups) is not list or cleanups:
+        raise ShardError('Method splitting refuses pre-registered or invalid class cleanups')
 
 
 def _balanced_selection(cases, modules, shard_index, shard_count, profile):
     grouped = {module: [] for module in modules}
     for case in cases:
         grouped[type(case).__module__].append(case)
-    if SPLIT_MODULE in grouped or SPLIT_MODULE in sys.modules:
-        _verify_split_module(grouped.get(SPLIT_MODULE, ()))
+    for module, class_name in SPLIT_CLASSES.items():
+        if module in grouped or module in sys.modules:
+            _verify_split_module(grouped.get(module, ()), module, class_name)
     units = []
     for module, members in grouped.items():
-        if module == SPLIT_MODULE:
+        if module in SPLIT_CLASSES:
             methods = {}
             for case in members:
                 methods.setdefault(case.id(), []).append(case)
+            weights = profile['boundary_method_weights_ms' if module == SPLIT_MODULE
+                              else 'fix_method_weights_ms']
             for identity, method_cases in methods.items():
-                weight = profile['boundary_method_weights_ms'].get(identity, profile['default_weight_ms'])
+                weight = weights.get(identity, profile['default_weight_ms'])
                 units.append((('case', identity), weight * len(method_cases), method_cases))
         else:
             weight = profile['module_weights_ms'].get(module,
@@ -199,7 +209,7 @@ def main(argv=None):
     parser.add_argument('--start-directory', type=Path,
                         default=Path(__file__).resolve().with_name('tests'))
     parser.add_argument('--balance-profile', choices=('measured-v1',),
-                        help='Explicit measured scheduling with one reviewed method-split class')
+                        help='Explicit measured scheduling with two reviewed method-split classes')
     args = parser.parse_args(argv)
     if args.shard_count < 1 or not 1 <= args.shard_index <= args.shard_count:
         parser.error('Require shard-count >= 1 and 1 <= shard-index <= shard-count')
