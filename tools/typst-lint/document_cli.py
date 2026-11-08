@@ -29,7 +29,7 @@ CONDITIONAL_RULES = ('pde.text-only-highlight', 'pde.paragraph-marker-gap')
 
 def report_document(root, entrypoint, *, rule_set='core', package_path=None,
                     preview_display_gaps=False, preview_standalone_displays=False,
-                    preview_sequence=False):
+                    preview_sequence=False, local_rule_hints=False):
     """Inspect retained source bytes without reading consumer configuration.
 
     Literal includes inside unknown containers are inventory entries, not proof
@@ -47,6 +47,8 @@ def report_document(root, entrypoint, *, rule_set='core', package_path=None,
             'Standalone display previews require explicit --rule-set pde')
     require(type(preview_sequence) is bool and (not preview_sequence or rule_set == 'pde'),
             'Sequence previews require explicit --rule-set pde')
+    require(type(local_rule_hints) is bool and (not local_rule_hints or rule_set == 'pde'),
+            'Source-local rule hints require explicit --rule-set pde')
     raw_root = os.fspath(root)
     require(type(raw_root) is str and len(raw_root) <= include_context.MAX_ROOT_BYTES,
             'Document root must be a bounded canonical absolute path')
@@ -91,6 +93,7 @@ def report_document(root, entrypoint, *, rule_set='core', package_path=None,
     gap_previews = []
     standalone_previews = []
     sequence_previews = []
+    local_findings, local_suppressed, local_files, local_contexts = [], [], [], []
     items = len(captured.sources) + len(captured.edges) + len(captured.occurrences) + len(captured.unresolved)
     for item in captured.sources:
         gap_preview = None
@@ -102,6 +105,11 @@ def report_document(root, entrypoint, *, rule_set='core', package_path=None,
                         if rule_set == 'pde' else None)
             conditional = (conditional_session.analyze(item.tree, item.path)
                            if conditional_session is not None else None)
+            if local_rule_hints:
+                from document_local_rules import analyze as analyze_local
+                local_reasons, local_results = analyze_local(item.tree, item.path, catalog['rules'])
+            else:
+                local_results = None
         except (InputError, OSError, ValueError) as error:
             raise InputError(f'{item.path}: {error}') from error
         # Keep unsupported baseline operands diagnostic-only, then independently
@@ -141,7 +149,24 @@ def report_document(root, entrypoint, *, rule_set='core', package_path=None,
                           + len(finding.package_requests) + len(finding.route) + len(finding.conditions)
                           + sum(1 + len(route) for route in finding.content_context)
                           + sum(1 + len(context.parameters) for context in finding.callback_context))
+        if local_results is not None:
+            shared = set(local_reasons)
+            items += 1 + len(local_reasons)
+            items += sum(1 + len(value.diagnostics) + len(value.suppressed) + len(value.skips)
+                         - sum(reason in shared for reason in value.skips)
+                         + len(value.parse_errors) for value in local_results.values())
         require(items <= MAX_REPORT_ITEMS, 'Document inspection report item limit exceeded')
+        if local_results is not None:
+            local_contexts.append(dict(path=item.path, source_sha256=item.identity.source_sha256,
+                                       shared_resolution_reasons=list(local_reasons)))
+            for rid, value in local_results.items():
+                local_findings.extend(asdict(finding) for finding in value.diagnostics)
+                local_suppressed.extend(asdict(finding) for finding in value.suppressed)
+                local_files.append(dict(path=item.path, source_sha256=item.identity.source_sha256,
+                    rule_id=rid, status='conditional', diagnostics=len(value.diagnostics),
+                    suppressed=len(value.suppressed),
+                    reasons=[reason for reason in value.skips if reason not in shared],
+                    parse_errors=[list(span) for span in value.parse_errors], edit_permission=False))
         if conditional is not None:
             metadata = {rule['id']: rule for rule in catalog['rules']}
             def conditional_record(finding):
@@ -264,6 +289,15 @@ def report_document(root, entrypoint, *, rule_set='core', package_path=None,
     if preview_sequence:
         report['sequence_previews'] = sequence_previews
         report['sequence_preview_status'] = 'hash-chained-read-only-not-a-write-transaction'
+    if local_rule_hints:
+        from document_local_rules import RULE_IDS as LOCAL_RULE_IDS
+        report['local_rule_hints'] = dict(rule_ids=list(LOCAL_RULE_IDS),
+            conditions=['Each file is analyzed in a standalone lexical environment; actual include-site bindings, '
+                        'styles and execution are not established',
+                        'This hint analysis uses no package resolution, imported namespace or consumer configuration'],
+            diagnostics=sorted(local_findings, key=lambda row: (row['path'], row['line'], row['column'], row['rule_id'])),
+            suppressed=sorted(local_suppressed, key=lambda row: (row['path'], row['line'], row['column'], row['rule_id'])),
+            source_contexts=local_contexts, coverage=local_files, edit_permission=False)
     return report
 
 
@@ -285,6 +319,8 @@ def main(arguments=None):
                         help='Preview standalone display edits (requires --rule-set pde)')
     parser.add_argument('--preview-sequence', action='store_true',
                         help='Preview hash-chained standalone, script and gap passes (requires --rule-set pde)')
+    parser.add_argument('--local-rule-hints', action='store_true',
+                        help='Inspect included files independently for additional conditional PDE hints')
     parser.add_argument('--format', choices=('json', 'text'), default='text')
     args = parser.parse_args(sys.argv[1:] if arguments is None else arguments)
     try:
@@ -292,7 +328,8 @@ def main(arguments=None):
                                  package_path=args.package_path,
                                  preview_display_gaps=args.preview_display_gaps,
                                  preview_standalone_displays=args.preview_standalone_displays,
-                                 preview_sequence=args.preview_sequence)
+                                 preview_sequence=args.preview_sequence,
+                                 local_rule_hints=args.local_rule_hints)
     except (InputError, PackageInputError, OSError, ValueError) as error:
         result = dict(schema=1, tool_version=VERSION, mode='inspect-document', status=2,
                       phase='input', compiler_invoked=False, applied_fixes=[], error=str(error))
@@ -311,6 +348,10 @@ def main(arguments=None):
         for finding in result['conditional_diagnostics']:
             print(f"{finding['path']}:{finding['line']}:{finding['column']}: "
                   f"conditional {finding['rule_id']}: {finding['message']}")
+        if 'local_rule_hints' in result:
+            for finding in result['local_rule_hints']['diagnostics']:
+                print(f"{finding['path']}:{finding['line']}:{finding['column']}: "
+                      f"source-local conditional {finding['rule_id']}: {finding['explanation']}")
         if result['namespace_evidence'] is not None:
             unresolved = sum(len(row['reasons']) + len(row['parse_errors'])
                              for row in result['conditional_coverage'])

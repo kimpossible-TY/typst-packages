@@ -63,6 +63,7 @@ inspection route:
 /path/to/typst-packages/tools/typst-lint/typst-lint inspect-document --root /absolute/project --entrypoint main.typ --rule-set pde --preview-display-gaps --format json
 /path/to/typst-packages/tools/typst-lint/typst-lint inspect-document --root /absolute/project --entrypoint main.typ --rule-set pde --preview-standalone-displays --format json
 /path/to/typst-packages/tools/typst-lint/typst-lint inspect-document --root /absolute/project --entrypoint main.typ --rule-set pde --preview-sequence --format json
+/path/to/typst-packages/tools/typst-lint/typst-lint inspect-document --root /absolute/project --entrypoint main.typ --rule-set pde --local-rule-hints --format json
 /path/to/typst-packages/tools/typst-lint/typst-lint inspect-document --root /absolute/project --entrypoint main.typ --rule-set pde --package-path /absolute/captured-packages --format json
 ```
 
@@ -71,7 +72,9 @@ This route captures literal relative includes with the fixed `book-v1` budget
 occurrences, and checks math scripts once per captured source. This document route
 also recognizes a directly embedded code call such as `x^#footnote[...]` and
 proposes `x^(#footnote[...])`, including the hash in the grouped operand.
-Commented operands and non-call code escapes remain unresolved. The ordinary
+Direct code identifiers and static field chains, such as `x^#value` and
+`x_#record.field`, are also grouped with their leading hash. Commented operands,
+computed field receivers and other code escapes remain unresolved. The ordinary
 single-source and protected-write profiles keep their previous script behavior.
 The explicit
 `--rule-set pde` selection also checks standalone display lines and source
@@ -135,6 +138,15 @@ selection and rendering conditions. These hints have no edits, stay separate
 from source findings and leave that rule in `coverage.uninspected`. Only an
 explicit package root is read; installed caches are not searched. See
 [CONDITIONAL_HIGHLIGHT_CONTRACT.md](CONDITIONAL_HIGHLIGHT_CONTRACT.md).
+The separate `--local-rule-hints` option analyzes each included file as a
+standalone lexical environment for ten additional paragraph, continuation,
+footnote and cancellation rules. Its findings and per-file refusals are grouped
+under `local_rule_hints` and remain conditional on the actual include-site
+bindings, styles and execution; it does not propose or apply these rules' edits.
+Continuation-line hints also inspect literal nested Markup bodies while excluding
+math, code, raw text, headings and list structures.
+Common resolver refusals are reported once per source. These rules remain in
+`coverage.uninspected` because the document context has not been established.
 The report keeps global coverage incomplete and exits 2; it never applies the
 proposals or invokes Typst compilation. Unsafe paths, malformed sources and
 exhausted budgets return an input error rather than a truncated document report.
@@ -964,8 +976,10 @@ Package/consumer source and installed copies are not changed by the tests.
 
 ## Bounded reference and display rules
 
-The two `core.project-ref-*` backends inspect proven direct root calls, including
-verified callee aliases, and literal argument types. Extra/named arguments and
+The two `core.project-ref-*` backends inspect proven direct root calls and
+direct literal bodies of proven builtin footnotes, including verified callee
+aliases and parenthesized literal argument types. Footnote-body calls are
+diagnostic-only. Extra/named arguments and
 known nonlabel targets are diagnosed. Configured catalog lookups distinguish
 unknown projects, missing labels and ambiguous labels without guessing another
 target or fetching a URL. Dynamic/captured values and general document graphs

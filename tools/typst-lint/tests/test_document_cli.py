@@ -45,6 +45,39 @@ class DocumentCliTests(unittest.TestCase):
         return [row for row in result['coverage']['files']
                 if row['rule_id'] == 'core.parenthesized-scripts']
 
+    def test_source_local_rule_hints_cover_includes_without_granting_edits(self):
+        self.write('main.typ', b'#book-part[\n#include "chapter.typ"\n]\n')
+        source = (b'This statement holds.\nAnother statement follows.\n$cancel(x)$\n'
+                  b'#block[This is the definition.\nIt follows.\n]\n')
+        chapter = self.write('chapter.typ', source)
+        result = self.run_cli('--rule-set', 'pde', '--local-rule-hints')
+        hints = result['local_rule_hints']
+        self.assertFalse(hints['edit_permission'])
+        self.assertEqual(len(hints['rule_ids']), 10)
+        found = {(row['path'], row['rule_id']) for row in hints['diagnostics']}
+        self.assertIn(('chapter.typ', 'pde.continuation-line'), found)
+        self.assertIn(('chapter.typ', 'pde.theme-cancelmark'), found)
+        self.assertEqual(sum(row['rule_id'] == 'pde.continuation-line' and row['path'] == 'chapter.typ'
+                             for row in hints['diagnostics']), 2)
+        self.assertIn('pde.continuation-line', result['coverage']['uninspected'])
+        self.assertFalse(result['applied_fixes'] or result['proposed_edits'])
+        self.assertEqual(chapter.read_bytes(), source)
+        self.assertTrue(all(row['status'] == 'conditional' and not row['edit_permission']
+                            for row in hints['coverage']))
+
+    def test_source_local_rule_hints_are_opt_in_and_preserve_suppressions(self):
+        self.write('main.typ', b'// typst-lint: ignore-next pde.continuation-line -- intentional\n'
+                               b'This statement holds.\nAnother statement follows.\n')
+        ordinary = self.run_cli('--rule-set', 'pde')
+        self.assertNotIn('local_rule_hints', ordinary)
+        result = self.run_cli('--rule-set', 'pde', '--local-rule-hints')
+        hints = result['local_rule_hints']
+        self.assertTrue(any(row['rule_id'] == 'pde.continuation-line' for row in hints['suppressed']))
+        self.assertFalse(any(row['rule_id'] == 'pde.continuation-line' for row in hints['diagnostics']))
+        invalid = self.run_cli('--local-rule-hints')
+        self.assertEqual(invalid['phase'], 'input')
+        self.assertIn('require explicit --rule-set pde', invalid['error'])
+
     def namespace_packages(self):
         package_root = self.root / 'packages'
         roots = [('local', name, version, 'lib.typ', TOOL.parents[1])

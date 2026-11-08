@@ -1,7 +1,8 @@
 """Bounded project-reference checks over official AST and package proofs.
 
-Only direct root calls with proven callee identity are supported. No package
-function, dynamic argument, catalog URL or scope-label generator is evaluated.
+Direct root calls and diagnostic-only literal footnote-body calls with proven
+callee identities are supported. No package function, dynamic argument, catalog
+URL or scope-label generator is evaluated.
 Proposals are in-memory only; source_analysis owns composed-candidate validation.
 """
 from bisect import bisect_left
@@ -45,6 +46,17 @@ def _sig(tree, index):
     return [i for i in tree.nodes[index].children if tree.nodes[i].kind not in _TRIVIA]
 
 
+def _ungroup(tree, index):
+    """Follow only actual grouping expressions, not tuples or computed values."""
+    while tree.nodes[index].kind == 'Parenthesized':
+        children = _sig(tree, index)
+        if (len(children) != 3 or tree.nodes[children[0]].kind != 'LeftParen'
+                or tree.nodes[children[2]].kind != 'RightParen'):
+            break
+        index = children[1]
+    return index
+
+
 def _string(tree, index):
     # A real Str proves its type even when its escaped value is unsupported.
     # Decode only unescaped literal UTF-8, never Python/JSON string semantics.
@@ -80,6 +92,19 @@ def _plain_ref(tree, index):
     return marker[1:].decode('utf-8') if marker.startswith(b'@') and len(marker) > 1 else None
 
 
+def _direct_footnote_body(tree, index, parents, resolution):
+    """Recognize a direct markup call in the body of a proven builtin footnote."""
+    current = index
+    for kind in ('Markup', 'ContentBlock', 'Args', 'FuncCall'):
+        current = parents.get(current)
+        if current is None or tree.nodes[current].kind != kind:
+            return False
+    binding = resolution.binding_for(current)
+    fact = resolution.facts[current]
+    return bool(binding and binding.kind == 'builtin' and binding.name == 'footnote'
+                and not fact.deferred and not fact.in_context)
+
+
 def analyze(tree, path, resolution, reference_catalog=None):
     source, nodes = tree.source, tree.nodes
     require(reference_catalog is None or type(reference_catalog) is ReferenceCatalog,
@@ -99,7 +124,7 @@ def analyze(tree, path, resolution, reference_catalog=None):
     # Absence of findings in this subset must not claim complete graph/type
     # coverage. In particular, deferred aliases and generated labels are absent.
     for rid in RULE_IDS:
-        skips[rid].append('Only verified direct-package root calls and literal arguments are supported')
+        skips[rid].append('Only verified direct-package root calls and direct literal footnote-body calls are supported')
     if reference_catalog is None:
         skips[CATALOG_TARGET].append('No catalog configured; catalog membership skipped')
 
@@ -119,6 +144,7 @@ def analyze(tree, path, resolution, reference_catalog=None):
                 edits[rid].append(edit)
 
     root_calls = frozenset(nodes[0].children) if tree.mode == 'markup' else frozenset()
+    parents = {child: parent for parent, node in enumerate(nodes) for child in node.children}
     comment_starts = sorted(n.start for n in nodes if n.kind in ('LineComment', 'BlockComment'))
     for index, call in enumerate(nodes):
         if call.kind != 'FuncCall':
@@ -133,7 +159,10 @@ def analyze(tree, path, resolution, reference_catalog=None):
                 for rid in RULE_IDS:
                     skip(rid, call.start, 'Unresolved or unrelated project-ref callee')
             continue
-        if index not in root_calls or resolution.facts[index].deferred:
+        root_call = index in root_calls and not resolution.facts[index].deferred
+        footnote_call = (not resolution.facts[index].deferred and not resolution.facts[index].in_context
+                         and _direct_footnote_body(tree, index, parents, resolution))
+        if not root_call and not footnote_call:
             for rid in RULE_IDS:
                 skip(rid, call.start, 'Nested or captured project-ref call is unsupported')
             continue
@@ -152,10 +181,12 @@ def analyze(tree, path, resolution, reference_catalog=None):
                 skip(rid, call.start, 'Spread arguments have unresolved arity and values')
             continue
         project_id, target_id = positional
-        project_type = _KNOWN_TYPES.get(nodes[project_id].kind)
-        target_type = _KNOWN_TYPES.get(nodes[target_id].kind)
-        project = _string(tree, project_id)
-        label = _label(tree, target_id)
+        project_value = _ungroup(tree, project_id)
+        target_value = _ungroup(tree, target_id)
+        project_type = _KNOWN_TYPES.get(nodes[project_value].kind)
+        target_type = _KNOWN_TYPES.get(nodes[target_value].kind)
+        project = _string(tree, project_value)
+        label = _label(tree, target_value)
         if project_type is None:
             skip(ARGUMENTS, nodes[project_id].start, 'Project argument type is unresolved')
         elif project_type != 'string':
@@ -169,7 +200,7 @@ def analyze(tree, path, resolution, reference_catalog=None):
             # boundary; the diagnostic still applies to known content values.
             comment_index = bisect_left(comment_starts, call.start)
             comments = comment_index < len(comment_starts) and comment_starts[comment_index] < call.end
-            if (ref is not None and not ref.startswith(PROJECT_REFERENCE_LOCAL_PREFIXES)
+            if (root_call and ref is not None and not ref.startswith(PROJECT_REFERENCE_LOCAL_PREFIXES)
                     and project is not None and reference_catalog is not None and not comments
                     and reference_catalog.membership(project, ref) == 'unique'):
                 target = nodes[target_id]
@@ -177,8 +208,9 @@ def analyze(tree, path, resolution, reference_catalog=None):
             add(ARGUMENTS, nodes[target_id].start,
                 f'project-ref target must be a global Typst label, not {target_type}.', edit)
             if edit is None and target_type == 'content':
-                skip(ARGUMENTS, nodes[target_id].start,
-                     'fix_unavailable: requires exactly [@label], a literal project and a unique configured catalog target')
+                reason = ('fix_unavailable: nested footnote calls are diagnostic-only' if footnote_call else
+                          'fix_unavailable: requires exactly [@label], a literal project and a unique configured catalog target')
+                skip(ARGUMENTS, nodes[target_id].start, reason)
         elif label is not None and label.startswith(PROJECT_REFERENCE_LOCAL_PREFIXES):
             add(ARGUMENTS, nodes[target_id].start, 'project-ref target uses a local-scope label prefix rejected by the reviewed API.')
             continue

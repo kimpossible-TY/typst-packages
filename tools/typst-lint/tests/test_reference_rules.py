@@ -135,13 +135,47 @@ class ReferenceRuleTests(unittest.TestCase):
         for call in ('project-ref(project, target)', 'project-ref("pde", (s.tag)("energy"))',
                      'project-ref("pde", label("energy"))', 'project-ref("pde", target)',
                      'project-ref("pde", <energy>, ..args)', 'project-ref(..args)',
-                     'project-ref("pde", (<energy>))'):
+                     'project-ref("pde", ((target)))'):
             source = IMPORT + ('#' + call).encode()
             with self.subTest(call=call):
                 result, candidate = self.candidate(source)
                 self.assertFalse(result[ARGS].diagnostics or result[TARGET].diagnostics)
                 self.assertEqual(candidate, source)
                 self.assertTrue(any('unresolved' in s.lower() for s in result[ARGS].skips))
+
+    def test_grouped_literals_retain_type_and_catalog_identity(self):
+        source = IMPORT + (b'#project-ref((("pde")), ((<missing>)))\n'
+                           b'#project-ref(("absent"), (<energy>))\n'
+                           b'#project-ref("pde", (/* comment */ <local-scope-energy>))\n'
+                           b'#project-ref("pde", ((42)))\n'
+                           b'#project-ref(((42)), <energy>)\n')
+        result, candidate = self.candidate(source)
+        self.assertEqual(candidate, source)
+        self.assertEqual(len(result[ARGS].diagnostics), 3)
+        self.assertIn('local-scope', result[ARGS].diagnostics[0].explanation)
+        self.assertIn('not number', result[ARGS].diagnostics[1].explanation)
+        self.assertIn('must be a string', result[ARGS].diagnostics[2].explanation)
+        self.assertEqual([d.explanation.split()[0] for d in result[TARGET].diagnostics], ['Missing', 'Unknown'])
+
+    def test_grouped_content_remains_diagnostic_only_and_grouped_literal_project_can_fix_exact_content(self):
+        source = IMPORT + b'#project-ref((("pde")), [@energy])\n#project-ref("pde", ([@energy]))\n'
+        result, candidate = self.candidate(source)
+        self.assertEqual(len(result[ARGS].diagnostics), 2)
+        self.assertEqual(len(result[ARGS].edits), 1)
+        self.assertEqual(candidate, IMPORT + b'#project-ref((("pde")), <energy>)\n#project-ref("pde", ([@energy]))\n')
+        self.assertFalse(self.run_source(candidate)[ARGS].edits)
+
+    def test_grouped_dynamic_expressions_and_tuples_are_not_guessed(self):
+        for target in (b'((target))', b'(label("energy"))', b'(<energy>,)', b'("x", "y")'):
+            source = IMPORT + b'#project-ref("pde", ' + target + b')'
+            result, candidate = self.candidate(source)
+            self.assertEqual(candidate, source)
+            self.assertFalse(result[TARGET].diagnostics or result[ARGS].edits)
+            if b'target' in target or b'label(' in target:
+                self.assertFalse(result[ARGS].diagnostics)
+                self.assertTrue(any('unresolved' in item.lower() for item in result[ARGS].skips))
+            else:
+                self.assertEqual(len(result[ARGS].diagnostics), 1)
 
     def test_verified_import_and_callee_aliases(self):
         cases = [
@@ -190,6 +224,44 @@ class ReferenceRuleTests(unittest.TestCase):
                 self.assertFalse(result[ARGS].edits or result[ARGS].diagnostics)
                 self.assertEqual(candidate, IMPORT + body)
                 self.assertTrue(result[ARGS].skips)
+
+    def test_direct_proven_footnotes_get_reference_diagnostics_but_no_repairs(self):
+        source = IMPORT + (b'#footnote[See #project-ref("pde", <missing>) and '
+                           b'#project-ref("absent", <energy>) and '
+                           b'#project-ref("pde", [@energy]) and '
+                           b'#project-ref("pde", (<local-scope-energy>)).]\n')
+        result, candidate = self.candidate(source)
+        self.assertEqual(candidate, source)
+        self.assertEqual(len(result[ARGS].diagnostics), 2)
+        self.assertEqual([d.explanation.split()[0] for d in result[TARGET].diagnostics], ['Missing', 'Unknown'])
+        self.assertFalse(result[ARGS].edits or result[TARGET].edits)
+        self.assertTrue(any('nested footnote calls are diagnostic-only' in reason for reason in result[ARGS].skips))
+
+        source = IMPORT + b'#let note = footnote\n#note[See #project-ref("pde", <missing>)]'
+        result, candidate = self.candidate(source)
+        self.assertEqual(candidate, source)
+        self.assertEqual(len(result[TARGET].diagnostics), 1)
+
+    def test_shadowed_footnote_and_deferred_footnotes_are_not_assumed(self):
+        for body in (b'#let footnote(x) = x\n#footnote[#project-ref("pde", <missing>)]',
+                     b'#footnote[#let project-ref(a, b) = b\n#project-ref("pde", <missing>)]',
+                     b'#let f() = footnote[#project-ref("pde", <missing>)]',
+                     b'#context footnote[#project-ref("pde", <missing>)]',
+                     b'#footnote[*#project-ref("pde", <missing>)*]'):
+            with self.subTest(body=body):
+                result, candidate = self.candidate(IMPORT + body)
+                self.assertEqual(candidate, IMPORT + body)
+                self.assertFalse(result[ARGS].diagnostics or result[TARGET].diagnostics)
+
+    def test_suppression_in_footnote_hides_only_selected_reference(self):
+        source = IMPORT + (b'#footnote[\n'
+                           b'// typst-lint: ignore-next core.project-ref-catalog-target -- example\n'
+                           b'#project-ref("pde", <missing>)\n'
+                           b'#project-ref("pde", <missing>)\n]')
+        result, candidate = self.candidate(source)
+        self.assertEqual(candidate, source)
+        self.assertEqual(len(result[TARGET].suppressed), 1)
+        self.assertEqual(len(result[TARGET].diagnostics), 1)
 
     def test_comments_strings_and_raw_are_not_calls(self):
         source = IMPORT + b'// #project-ref("pde", [@energy])\n`#project-ref("pde", [@energy])`\n#let text = "project-ref(1, 2)"\n'

@@ -18,6 +18,19 @@ class ScriptResult:
     suppressed: tuple[Diagnostic, ...] = ()
 
 
+def _direct_field_reference(operand, nodes):
+    """Admit identifier chains only, not computed or called receivers."""
+    if operand.kind != 'FieldAccess':
+        return False
+    current = operand
+    while current.kind == 'FieldAccess':
+        children = [nodes[index] for index in current.children]
+        if (len(children) != 3 or children[1].kind != 'Dot' or children[2].kind != 'Ident'):
+            return False
+        current = children[0]
+    return current.kind == 'Ident'
+
+
 def analyze(tree, path, *, _verify=True, catalog=None, _allow_code_call=False):
     """No bindings/import execution; scoped directives filter exact operands."""
     source, nodes = tree.source, tree.nodes
@@ -44,10 +57,12 @@ def analyze(tree, path, *, _verify=True, catalog=None, _allow_code_call=False):
                 raise AdapterError('Attachment operand has no matching operator')
             between = preceding[operator_index+1:]
             start = operand.start
-            # Document-only opt-in: a code call is an entire math operand, but
-            # its leading # belongs to the attachment rather than FuncCall.
-            # Parenthesize the hash as well; comments/other escapes stay partial.
-            if (_allow_code_call and operand.kind == 'FuncCall' and between
+            # Document-only opt-in: a code call or direct value/field reference
+            # is an entire math operand, but its leading # belongs to the
+            # attachment. Parenthesize the hash as well; comments and other
+            # code expressions stay partial. Ordinary profiles stay unchanged.
+            if (_allow_code_call and (operand.kind in ('FuncCall', 'Ident')
+                                     or _direct_field_reference(operand, nodes)) and between
                     and between[-1].kind == 'Hash' and between[-1].end == operand.start
                     and all(n.kind == 'Space' for n in between[:-1])):
                 start = between[-1].start
