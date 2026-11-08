@@ -27,6 +27,7 @@ CALLBACK_CONDITIONS = CONDITIONS + (
 )
 _CLOSURE_UNSAFE = frozenset(('Closure', 'Contextual', 'ShowRule', 'Conditional', 'ForLoop', 'WhileLoop',
                              'ModuleInclude', 'ModuleImport', 'DestructAssignment'))
+_CLOSURE_ENCLOSING_UNSAFE = frozenset(('Closure', 'Contextual', 'ShowRule', 'Conditional', 'ForLoop', 'WhileLoop'))
 _ASSIGNMENTS = frozenset(('Eq', 'PlusEq', 'HyphEq', 'StarEq', 'SlashEq'))
 
 
@@ -134,11 +135,17 @@ class _FootnoteResolver(_Resolver):
         self.closure_calls = set()
         self.closure_depth = 0
         self.unresolved = []
+        self.parents = {child: index for index, node in enumerate(tree.nodes) for child in node.children}
 
     def _literal_closure(self, index, state):
         """Identify one non-dynamic literal callback with a proven capture."""
         if state.deferred or self.closure_depth:
             return None
+        parent = self.parents.get(index)
+        while parent is not None:
+            if self.nodes[parent].kind in _CLOSURE_ENCLOSING_UNSAFE:
+                return None
+            parent = self.parents.get(parent)
         previous = state.lookup('footnote')
         preceding = tuple(proof for frame in state.frames for proof in self.evidence.get(frame, ()))
         if not (preceding and previous and previous.kind == 'builtin' and previous.name == 'footnote'):

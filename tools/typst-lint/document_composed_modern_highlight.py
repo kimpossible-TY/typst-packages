@@ -19,7 +19,8 @@ from typst_lint import SafetyError, digest
 
 def stage(proof, records, *, profile='standard', partial_unsupported=False, withheld_records=None,
           partial_unproven_binding=False, explicit_withheld_sources=(), conditional_continuations=False,
-          conditional_adjacent_punctuation=False, sequence_facade_evidence=False):
+          conditional_adjacent_punctuation=False, sequence_facade_evidence=False,
+          conditional_deferred_footnotes=False):
     """Derive both stages from issued inputs; never trust a caller's candidate."""
     if sequence_facade_evidence is True and profile not in ('conditional-gaps-and-spacers',
                                                             'conditional-gaps-punctuation-and-spacers'):
@@ -32,7 +33,8 @@ def stage(proof, records, *, profile='standard', partial_unsupported=False, with
         withheld_records=stable_withheld, partial_unproven_binding=partial_unproven_binding,
         explicit_withheld_sources=explicit_withheld_sources, conditional_continuations=conditional_continuations,
         conditional_adjacent_punctuation=conditional_adjacent_punctuation,
-        sequence_facade_evidence=sequence_facade_evidence)
+        sequence_facade_evidence=sequence_facade_evidence,
+        conditional_deferred_footnotes=conditional_deferred_footnotes)
     session = intermediate.issue_binding(view)
     analyzer = modern.ModernHighlightAnalyzer(session, scoped_callbacks=True)
     diagnostics, proposed = highlight.preview_all(analyzer, return_evidence=True)
@@ -87,7 +89,8 @@ def stage(proof, records, *, profile='standard', partial_unsupported=False, with
 
     if conditional_calls:
         project = {source.path: final['project', source.path] for source in view.context.sources}
-        footnote.PreviewFootnoteEvidence.validate_staged_facades(proof, project, conditional_calls)
+        options = {'allow_deferred': True} if conditional_deferred_footnotes else {}
+        footnote.PreviewFootnoteEvidence.validate_staged_facades(proof, project, conditional_calls, **options)
 
     # Recompute independently before authorizing even a private staging map.
     repeated_diagnostics, repeated_proposed = highlight.preview_all(analyzer, return_evidence=True)

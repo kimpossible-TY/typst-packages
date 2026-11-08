@@ -50,7 +50,7 @@
 | `pde.footnote-trailing-gap` | 제안 | L | G | G 결합 컴파일은 중첩 수식 각주 후보에 한정된다. 별도 소스 미리보기는 제한된 중첩 산문에서 기존 marker(`paragraph_tab`, `paragraph-tab`), 직접 display 또는 figure 앞의 후보를 조건부 제안한다. |
 | `pde.prose-footnote-punctuation` | 제안 | L | P, 선택형 | 각주 앞 공백 제거와 각주 뒤 문장부호 이동은 독립 조건부 미리보기다. 이동은 앞에 수평 공백이 있는 경우와 바로 붙은 경우가 별도이며 후자의 삽입·삭제는 분리할 수 없다. P 결합 컴파일은 공백 제거를 포함하며, 인접 구두점 이동은 별도 선택 시 쌍을 재검증한다. |
 | `pde.aligned-footnote-spacer` | 제안 | L, 독립 미리보기 | — | 독립 미리보기는 제한된 정렬 수식 각주에 spacer 삽입을 제안한다. 실제 바인딩과 실행은 조건부이며 렌더가 달라질 수 있다. |
-| `pde.unaligned-footnote-no-spacer` | 제안 | L | S | 기존 명세대로 제한된 비정렬 수식 각주 앞 spacer를 제거하는 조건부 후보. 실제 렌더는 달라질 수 있다. |
+| `pde.unaligned-footnote-no-spacer` | 제안 | L | S | 기존 명세대로 제한된 비정렬 수식 각주 앞 spacer를 제거하는 조건부 후보. 별도 `--conditional-deferred-footnotes`는 검토된 closure의 호출 경로와 캡처를 추가로 확인한다. 런타임 바인딩과 실행은 미증명이며 실제 렌더는 달라질 수 있다. |
 | `pde.prose-footnote-no-spacer` | 제안 | L, 독립 미리보기 | — | 독립 미리보기는 중첩 산문에서 기존 구두점에 밀착된 리터럴 spacer와 수평 공백만 제거한다. 실제 바인딩과 실행은 조건부이며 렌더가 달라질 수 있다. |
 | `pde.standalone-display` | 제안 | 기본 | 기본 | 파서가 확인한 display와 제한된 직접 문장·라벨. |
 | `pde.text-only-highlight` | 제안 | P, 현대 helper 별도 진단 및 독립 미리보기 | 현대 helper 독립·결합 옵션 | P는 기존 검토 helper와 단순 리터럴 본문에 한정된다. `--modern-highlight-evidence`는 정확한 현대 helper artifact의 제한된 본문을 조건부 진단한다. 별도 소스 미리보기는 단순 텍스트·수식 호출을 지원하고, `--preview-conditional-modern-math-highlights`는 검토된 builtin 수학 호출의 바인딩을 추가로 확인한다. 이 수학 호출 확장은 컴파일 미리보기에 연결되지 않는다. 컴파일의 `--conditional-modern-highlights`는 독립 후보만, `--compose-modern-highlights`는 검증된 중간 소스 뒤의 후보를 컴파일한다. 다른 source의 route·facade 변경은 거절하며 조건부 facade 각주와 겹치는 강조 단계는 해당 소스에서 보류한다. 비중첩 각주는 최종 위치와 facade를 다시 검증한다. 바인딩·실행·렌더는 미증명이고 원본 수정 권한은 없으며 미지원 형태와 파일별 보류가 있다. |

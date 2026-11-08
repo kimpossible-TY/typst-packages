@@ -8,7 +8,7 @@ from document_gap_preview import _MappedEdits, _scopes, preview as preview_gap
 from document_standalone_preview import preview as preview_standalone
 from edit_plan import Edit, plan
 from array import array
-from bisect import bisect_right
+from bisect import bisect_left, bisect_right
 from collections import Counter
 import footnote_rules
 import include_context
@@ -42,12 +42,15 @@ def _profile(value):
     return value
 
 
-def _verification(profile, conditional_continuations, conditional_adjacent_punctuation=False):
+def _verification(profile, conditional_continuations, conditional_adjacent_punctuation=False,
+                  conditional_deferred_footnotes=False):
     base = _VERIFICATIONS[profile]
     if conditional_continuations:
         base += '-conditional-continuation-reanalysis'
     if conditional_adjacent_punctuation:
         base += '-conditional-adjacent-punctuation-reanalysis'
+    if conditional_deferred_footnotes:
+        base += '-conditional-deferred-footnote-reanalysis'
     return base
 
 
@@ -106,13 +109,115 @@ def _same_findings(before_tree, before, after_tree, after, edits):
             and _keys(before_tree.source, before.suppressed, edits) == _keys(after_tree.source, after.suppressed))
 
 
+def _preserve_unresolved_paragraph_boundaries(before, after, path, catalog, edits):
+    """Prove existing unknown marker boundaries retain their literal owners.
+
+    This does not resolve the boundaries or prove execution.  An edit touching
+    any unknown marker's immediate Markup owner, even at its edge, is refused.
+    """
+    import paragraph_rules
+    first = paragraph_rules.analyze_conditional_nested_gap(before, path, catalog=catalog)
+    last = paragraph_rules.analyze_conditional_nested_gap(after, path, catalog=catalog)
+    prefix = paragraph_rules.NESTED_GAP_UNRESOLVED
+
+    def offsets(result):
+        values, other = [], []
+        for reason in result.skips:
+            if not reason.startswith(prefix):
+                other.append(reason)
+                continue
+            value = reason[len(prefix):]
+            if not value.isdecimal() or str(int(value)) != value:
+                raise SafetyError('Invalid unresolved paragraph marker boundary')
+            values.append(int(value))
+        if len(set(values)) != len(values):
+            raise SafetyError('Duplicate unresolved paragraph marker boundary')
+        return values, other
+
+    old_offsets, old_other = offsets(first)
+    new_offsets, new_other = offsets(last)
+    mapper = _MappedEdits(edits)
+    if old_offsets or new_offsets:
+        from document_conditional_continuation import _nontext_signature
+        if _nontext_signature(before) != _nontext_signature(after):
+            raise SafetyError('Conditional edit changed unresolved paragraph marker syntax ownership')
+    if (first.parse_errors or last.parse_errors or old_other != new_other
+            or sorted(map(mapper.mapped, old_offsets)) != sorted(new_offsets)
+            or not _same_findings(before, first, after, last, edits)
+            or _scopes(before, catalog, edits) != _scopes(after, catalog)):
+        raise SafetyError('Conditional edit changed unresolved paragraph boundaries or suppressions')
+
+    def index_tree(tree):
+        parents, ordinals, positions, hashes = {}, {}, {}, {}
+        for index, node in enumerate(tree.nodes):
+            ordinal = 0
+            for position, child in enumerate(node.children):
+                parents[child], ordinals[child] = index, ordinal
+                positions[child] = position
+                ordinal += tree.nodes[child].kind not in ('Text', 'Space')
+            if node.kind == 'Hash' and node.end == node.start + 1:
+                hashes.setdefault(node.start, []).append(index)
+        return parents, ordinals, positions, hashes
+
+    old_index, new_index = index_tree(before), index_tree(after)
+    insertions = sorted(edit.start for edit in edits if edit.start == edit.end)
+
+    def owner_and_path(tree, index, offset):
+        nodes, source = tree.nodes, tree.source
+        parents, ordinals, positions, by_start = index
+        hashes = by_start.get(offset, ())
+        if len(hashes) != 1:
+            raise SafetyError('Unresolved paragraph marker has no unique syntax anchor')
+        marker = hashes[0]
+        owner = parents.get(marker)
+        if owner is None or nodes[owner].kind != 'Markup':
+            raise SafetyError('Unresolved paragraph marker owner is not literal markup')
+        children = nodes[owner].children
+        pos = positions[marker]
+        if (pos + 1 >= len(children) or nodes[children[pos + 1]].kind != 'Ident'
+                or source[nodes[children[pos + 1]].start:nodes[children[pos + 1]].end] != b'paragraph_tab'
+                or nodes[children[pos + 1]].start != offset + 1):
+            raise SafetyError('Unresolved paragraph marker syntax changed')
+        chain = []
+        cursor = owner
+        while cursor is not None:
+            node = nodes[cursor]
+            parent = parents.get(cursor)
+            ordinal = ordinals[cursor] if parent is not None else None
+            chain.append((node.kind, node.start, node.end, node.display, node.errors, ordinal))
+            cursor = parent
+        return nodes[owner], tuple(chain)
+
+    checked_owners = set()
+    for offset in old_offsets:
+        owner, chain = owner_and_path(before, old_index, offset)
+        prior = bisect_left(mapper.starts, owner.end)
+        insertion = bisect_left(insertions, owner.start)
+        if ((prior and mapper.farthest_end[prior - 1] > owner.start)
+                or (insertion < len(insertions) and insertions[insertion] <= owner.end)):
+            raise SafetyError('Conditional edit touches unresolved paragraph marker ownership')
+        target, target_chain = owner_and_path(after, new_index, mapper.mapped(offset))
+        expected = tuple((kind, mapper.mapped(start), mapper.mapped(end), display, errors, ordinal)
+                         for kind, start, end, display, errors, ordinal in chain)
+        if target_chain != expected:
+            raise SafetyError('Conditional edit changed unresolved paragraph marker ownership')
+        key = (owner.start, owner.end, target.start, target.end)
+        if key not in checked_owners:
+            if before.source[owner.start:owner.end] != after.source[target.start:target.end]:
+                raise SafetyError('Conditional edit changed unresolved paragraph marker ownership')
+            checked_owners.add(key)
+
+
 def preview(tree, path, catalog, *, profile=_STANDARD, footnote_evidence=None, classify_deferred=False,
             classify_unproven_binding=False, conditional_continuations=False,
-            conditional_adjacent_punctuation=False):
+            conditional_adjacent_punctuation=False, conditional_deferred_footnotes=False):
     """Return hash-chained edits or a withheld result for this source."""
     _profile(profile)
     if type(conditional_continuations) is not bool or type(conditional_adjacent_punctuation) is not bool:
         raise InputError('Conditional source selections must be Boolean')
+    if (type(conditional_deferred_footnotes) is not bool or (conditional_deferred_footnotes
+            and (footnote_evidence is None or profile not in (_SPACERS, _PUNCTUATION_SPACERS)))):
+        raise InputError('Deferred footnote evidence requires explicit captured facade and spacer profile')
     if type(classify_deferred) is not bool:
         raise InputError('Deferred classification must be an explicit Boolean')
     if type(classify_unproven_binding) is not bool or (classify_unproven_binding and not classify_deferred):
@@ -550,7 +655,9 @@ def preview(tree, path, catalog, *, profile=_STANDARD, footnote_evidence=None, c
                     mapper = _FindingMapper(before_tree.source)
                     target_mapper = _FindingMapper(before_tree.source, edits)
                     conditional_calls = []
+                    deferred_calls = []
                     conditional_proof = None
+                    deferred_proof = None
                     for rid in footnote_rules.RULE_IDS:
                         first, last = notes_before[rid], notes_after[rid]
                         expected = _keys(before_tree.source, first.diagnostics, edits)
@@ -584,7 +691,34 @@ def preview(tree, path, catalog, *, profile=_STANDARD, footnote_evidence=None, c
                                             raise SafetyError('Conditional spacer footnote evidence has a stale source hash'
                                                 if classify_deferred else
                                                 'Conditional spacer footnote binding is not proven by captured facade')
-                                        proved = any(call.start == call_start for call in conditional_proof.calls)
+                                        direct = next((call for call in conditional_proof.calls
+                                                       if call.start == call_start), None)
+                                        import conditional_footnote_binding
+                                        proved = bool(direct and not (conditional_deferred_footnotes
+                                            and direct.conditions == conditional_footnote_binding.CALLBACK_CONDITIONS))
+                                        if not proved and conditional_deferred_footnotes and call_id is not None:
+                                            if deferred_proof is None:
+                                                import document_deferred_footnote_evidence
+                                                positions = []
+                                                for item in edits:
+                                                    position = item.end
+                                                    while before_tree.source[position:position + 1] in (b' ', b'\t', b'\r', b'\n'):
+                                                        position += 1
+                                                    if (position in calls
+                                                            and before_tree.source[position:position + 9] == b'#footnote'):
+                                                        positions.append(position)
+                                                if positions:
+                                                    deferred_proof = document_deferred_footnote_evidence.analyze(
+                                                        footnote_evidence, path, tuple(sorted(set(positions))),
+                                                        candidate=before_tree.source)
+                                            if deferred_proof is not None:
+                                                if deferred_proof.source_sha256 != digest(before_tree.source):
+                                                    raise SafetyError('Deferred footnote evidence has a stale source hash')
+                                                proved = any(call.start == call_start for call in deferred_proof.calls)
+                                                if proved:
+                                                    deferred_calls.append(call_start + sum(
+                                                        len(item.replacement) - (item.end - item.start)
+                                                        for item in edits if item.end <= call_start))
                                     if not proved:
                                         if classify_unproven_binding:
                                             if (conditional_proof is None or conditional_proof.unresolved
@@ -624,6 +758,8 @@ def preview(tree, path, catalog, *, profile=_STANDARD, footnote_evidence=None, c
                                 candidate_sha256=digest(candidate), edits=spacer['edits'])
                     if conditional_calls:
                         step['conditional_footnote_calls'] = sorted(conditional_calls)
+                    if deferred_calls:
+                        step['conditional_deferred_footnote_calls'] = sorted(deferred_calls)
                     steps.append(step)
         if conditional_continuations:
             import document_conditional_continuation as continuation
@@ -678,7 +814,6 @@ def preview(tree, path, catalog, *, profile=_STANDARD, footnote_evidence=None, c
                                   candidate_sha256=digest(candidate), edits=conditional_rows))
         if conditional_adjacent_punctuation:
             import document_adjacent_punctuation_preview as adjacent
-            import paragraph_rules
             before = current
             selected = adjacent.preview(before, path, catalog=catalog)
             exact_edits, targets = adjacent._select(before, path, catalog)
@@ -715,10 +850,7 @@ def preview(tree, path, catalog, *, profile=_STANDARD, footnote_evidence=None, c
                 if (current.nodes[0].errors or adjacent._select(current, path, catalog)[0]
                         or adjacent.preview(current, path, catalog=catalog) is not None):
                     raise SafetyError('Conditional adjacent punctuation stage did not converge')
-                for checked in (before, current):
-                    hints = paragraph_rules.analyze_conditional_nested_gap(checked, path, catalog=catalog)
-                    if any(reason.startswith(paragraph_rules.NESTED_GAP_UNRESOLVED) for reason in hints.skips):
-                        raise SafetyError('Conditional punctuation cannot establish an unrelated paragraph marker boundary')
+                _preserve_unresolved_paragraph_boundaries(before, current, path, catalog, proposal.edits)
                 conditional_rows = [dict(row, conditions=list(selected['conditions']), atomic_edits=True,
                     runtime_binding_proved=False, execution_proved=False, render_equivalence_proved=False,
                     edit_permission=False, compiler_permission=False) for row in rows]
@@ -747,7 +879,8 @@ def preview(tree, path, catalog, *, profile=_STANDARD, footnote_evidence=None, c
         if not steps:
             return None
         result = dict(path=path, baseline_sha256=digest(baseline), candidate_sha256=digest(current.source),
-                      verification=_verification(profile, conditional_continuations, conditional_adjacent_punctuation), steps=steps,
+                      verification=_verification(profile, conditional_continuations, conditional_adjacent_punctuation,
+                                                 conditional_deferred_footnotes), steps=steps,
                       unresolved_display_contexts={rid: len(value.skips) for rid, value in final_displays.items()})
         if profile != _STANDARD or conditional_continuations or conditional_adjacent_punctuation:
             result.update(profile=profile, runtime_binding_proved=False, render_equivalence_proved=False,
@@ -756,6 +889,8 @@ def preview(tree, path, catalog, *, profile=_STANDARD, footnote_evidence=None, c
             result['conditional_continuations'] = True
         if conditional_adjacent_punctuation:
             result['conditional_adjacent_punctuation'] = True
+        if conditional_deferred_footnotes:
+            result['conditional_deferred_footnotes'] = True
         return result
     except (InputError, SafetyError, OSError, ValueError, RecursionError) as error:
         return dict(path=path, baseline_sha256=digest(baseline), candidate_sha256=None,
@@ -775,7 +910,7 @@ def _same_data(expected, supplied):
 
 
 def replay(tree, path, catalog, record, *, profile=_STANDARD, footnote_evidence=None, conditional_continuations=False,
-           conditional_adjacent_punctuation=False):
+           conditional_adjacent_punctuation=False, conditional_deferred_footnotes=False):
     """Recompute and replay a sequence in memory for a downstream consumer.
 
     Serialized plans are data, not authority: reject stale or altered records and
@@ -784,16 +919,19 @@ def replay(tree, path, catalog, record, *, profile=_STANDARD, footnote_evidence=
     """
     expected = preview(tree, path, catalog, profile=profile, footnote_evidence=footnote_evidence,
                        conditional_continuations=conditional_continuations,
-                       conditional_adjacent_punctuation=conditional_adjacent_punctuation)
+                       conditional_adjacent_punctuation=conditional_adjacent_punctuation,
+                       conditional_deferred_footnotes=conditional_deferred_footnotes)
     return _replay_expected(tree, record, expected, profile=profile, conditional_continuations=conditional_continuations,
-                            conditional_adjacent_punctuation=conditional_adjacent_punctuation)
+                            conditional_adjacent_punctuation=conditional_adjacent_punctuation,
+                            conditional_deferred_footnotes=conditional_deferred_footnotes)
 
 
 def _replay_expected(tree, record, expected, *, profile=_STANDARD, conditional_continuations=False,
-                     conditional_adjacent_punctuation=False):
+                     conditional_adjacent_punctuation=False, conditional_deferred_footnotes=False):
     _profile(profile)
     if (type(record) is not dict or expected is None or not _same_data(expected, record)
-            or expected['verification'] != _verification(profile, conditional_continuations, conditional_adjacent_punctuation)):
+            or expected['verification'] != _verification(profile, conditional_continuations,
+                conditional_adjacent_punctuation, conditional_deferred_footnotes)):
         raise SafetyError('Sequence is stale, altered, incomplete or withheld')
     current = tree.source
     for step in record['steps']:
@@ -910,7 +1048,8 @@ def validate_explicit_withheld(context, paths):
 
 def replay_document(context, records, catalog, *, profile=_STANDARD, footnote_evidence=None,
                     partial_unsupported=False, withheld_records=None, partial_unproven_binding=False,
-                    explicit_withheld_sources=(), conditional_continuations=False, conditional_adjacent_punctuation=False):
+                    explicit_withheld_sources=(), conditional_continuations=False, conditional_adjacent_punctuation=False,
+                    conditional_deferred_footnotes=False):
     """Derive an immutable in-memory source map from one issued include capture.
 
     Every captured source must have exactly its current sequence record or no
@@ -921,6 +1060,9 @@ def replay_document(context, records, catalog, *, profile=_STANDARD, footnote_ev
     _profile(profile)
     if type(conditional_continuations) is not bool or type(conditional_adjacent_punctuation) is not bool:
         raise SafetyError('Conditional source selections must be Boolean')
+    if (type(conditional_deferred_footnotes) is not bool or (conditional_deferred_footnotes
+            and (footnote_evidence is None or profile not in (_SPACERS, _PUNCTUATION_SPACERS)))):
+        raise SafetyError('Deferred footnote evidence requires explicit captured facade and spacer profile')
     if type(partial_unsupported) is not bool:
         raise SafetyError('Partial preview selection must be an explicit Boolean')
     if (type(partial_unproven_binding) is not bool
@@ -967,7 +1109,8 @@ def replay_document(context, records, catalog, *, profile=_STANDARD, footnote_ev
                            classify_deferred=partial_unsupported,
                            classify_unproven_binding=partial_unproven_binding,
                            conditional_continuations=conditional_continuations,
-                           conditional_adjacent_punctuation=conditional_adjacent_punctuation)
+                           conditional_adjacent_punctuation=conditional_adjacent_punctuation,
+                           conditional_deferred_footnotes=conditional_deferred_footnotes)
         if excluded is not None:
             if (not partial_unsupported or expected is None or expected.get('verification') != 'withheld'
                     or expected.get('reason_code') not in (('unsupported-deferred-footnote-binding',
@@ -981,7 +1124,8 @@ def replay_document(context, records, catalog, *, profile=_STANDARD, footnote_ev
         else:
             candidates[source.path] = _replay_expected(source.tree, record, expected, profile=profile,
                                                        conditional_continuations=conditional_continuations,
-                                                       conditional_adjacent_punctuation=conditional_adjacent_punctuation)
+                                                       conditional_adjacent_punctuation=conditional_adjacent_punctuation,
+                                                       conditional_deferred_footnotes=conditional_deferred_footnotes)
     conditional_calls = {record['path']: _final_conditional_footnote_calls(
                          context.source_for(record['path']).tree, record) for record in records}
     conditional_calls = {path: offsets for path, offsets in conditional_calls.items() if offsets}
@@ -989,7 +1133,8 @@ def replay_document(context, records, catalog, *, profile=_STANDARD, footnote_ev
         if footnote_evidence is None:
             raise SafetyError('Conditional footnote evidence is missing at replay')
         import document_footnote_evidence
+        options = {'allow_deferred': True} if conditional_deferred_footnotes else {}
         document_footnote_evidence.PreviewFootnoteEvidence.validate_staged_facades(
-            footnote_evidence, candidates, conditional_calls)
+            footnote_evidence, candidates, conditional_calls, **options)
     include_context.assert_include_context(context)
     return MappingProxyType(candidates)

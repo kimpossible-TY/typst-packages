@@ -1,7 +1,9 @@
 """Private preview snapshot binding for conditional footnote calls."""
 from dataclasses import replace
 from pathlib import Path
+import json
 import shutil
+import subprocess
 import sys
 import tempfile
 import unittest
@@ -332,6 +334,48 @@ class PreviewFootnoteEvidenceTests(unittest.TestCase):
                                                    footnote_evidence=proof)
         self.assertNotIn(b'#dots_space', staged['project', 'main.typ'])
         self.assertEqual((self.project / 'main.typ').read_bytes(), self.source)
+
+    def test_callback_declared_in_dynamic_ancestor_is_not_capture_evidence(self):
+        prefix = b'#import "styles.typ": *\n#let footnote = footnote\n'
+        bodies = (
+            b'#for n in (0,1) { let f = x => [#footnote[Note]]; f(0); footnote = none }',
+            b'#while false { let f = x => [#footnote[Note]]; f(0) }',
+            b'#if true { let f = x => [#footnote[Note]]; f(0) }',
+            b'#let outer() = { let f = x => [#footnote[Note]]; f(0) }',
+        )
+        for body in bodies:
+            with self.subTest(body=body):
+                self.source = prefix + body
+                (self.project / 'main.typ').write_bytes(self.source)
+                proof, _, _ = self.capture()
+                self.assertFalse(proof.candidate_calls('main.typ', self.source).calls)
+                offset = self.source.index(b'#footnote[Note]')
+                for allow in (False, True):
+                    with self.subTest(allow_deferred=allow), self.assertRaises(SafetyError):
+                        proof.validate_staged_facades({'main.typ': self.source},
+                                                      {'main.typ': (offset,)}, allow_deferred=allow)
+
+    def test_multiple_root_callbacks_keep_independent_valid_captures(self):
+        self.source = (b'#import "styles.typ": *\n'
+                       b'#use(x => [#footnote[First]], y => [#footnote[Second]])')
+        (self.project / 'main.typ').write_bytes(self.source)
+        proof, _, _ = self.capture()
+        result = proof.candidate_calls('main.typ', self.source)
+        self.assertEqual({call.start for call in result.calls},
+                         {self.source.index(b'#footnote[First]'), self.source.index(b'#footnote[Second]')})
+
+    @unittest.skipUnless(shutil.which('typst'), 'Requires Typst')
+    def test_typst_loop_callback_binding_can_change_between_iterations(self):
+        source = (b'#import "styles.typ": *\n#let original = footnote\n#let footnote = footnote\n'
+                  b'#for n in (0,1) { let f = x => [#metadata(type(footnote) == type(original)) <probe>]; '
+                  b'f(0); footnote = none }')
+        path = self.project / 'query.typ'
+        path.write_bytes(source)
+        run = subprocess.run([shutil.which('typst'), 'query', '--root', str(self.project),
+            '--package-path', str(self.packages), '--package-cache-path', str(self.cache),
+            '--field', 'value', '--format', 'json', str(path), '<probe>'], capture_output=True, text=True, timeout=15)
+        self.assertEqual(run.returncode, 0, run.stderr)
+        self.assertEqual(json.loads(run.stdout), [True, False])
 
 
 if __name__ == '__main__':

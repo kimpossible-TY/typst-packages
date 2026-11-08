@@ -144,21 +144,32 @@ class PreviewFootnoteEvidence:
         _valid(self)
         return result
 
-    def validate_staged_facades(self, candidates, issued_calls):
+    def validate_staged_facades(self, candidates, issued_calls, *, allow_deferred=False):
         """Recheck dependency bytes after all source candidates are known.
 
         Caller-supplied reports are never accepted as proof: recompute every
         referenced call against its final candidate before inspecting facades.
         """
         _valid(self)
-        if type(candidates) is not dict or type(issued_calls) is not dict:
+        if type(candidates) is not dict or type(issued_calls) is not dict or type(allow_deferred) is not bool:
             raise InputError('Expected source candidate and call-offset mappings')
         for path, offsets in issued_calls.items():
             if (path not in candidates or type(offsets) is not tuple
                     or any(type(offset) is not int or offset < 0 for offset in offsets)):
                 raise InputError('Invalid source call selection')
             result = PreviewFootnoteEvidence.candidate_calls(self, path, candidates[path])
-            by_start = {call.start: call for call in result.calls}
+            # When this optional extension is selected, independently check
+            # every closure capture, including calls accepted by the older
+            # resolver. A loop enclosing declaration can change its capture.
+            by_start = {call.start: call for call in result.calls
+                        if not (allow_deferred and call.conditions == bindings.CALLBACK_CONDITIONS)}
+            missing = tuple(offset for offset in offsets if offset not in by_start)
+            if missing and allow_deferred:
+                import document_deferred_footnote_evidence
+                deferred = document_deferred_footnote_evidence.analyze(self, path, missing, candidate=candidates[path])
+                if deferred.source_sha256 != digest(candidates[path]) or deferred.unresolved:
+                    raise SafetyError('Final candidate deferred footnote binding is not proven')
+                by_start.update((call.start, call) for call in deferred.calls)
             for offset in offsets:
                 call = by_start.get(offset)
                 if call is None:

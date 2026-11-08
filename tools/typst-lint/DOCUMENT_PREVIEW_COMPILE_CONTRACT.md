@@ -142,6 +142,18 @@ plan. A bounded literal callback can retain a source-bound declaration-time
 builtin capture; dynamic, nested and shadowed cases remain limited. This
 does not prove runtime selection or execution, and it does not authorize writes.
 
+`--conditional-deferred-footnotes` requires `--conditional-facade-footnotes`
+and extends this conditional spacer preview to selected literal calls in simple
+closure bodies. It follows each call's lexical path and may disregard unrelated
+sibling scopes; outer loops, conditional execution, nested closures, mutations,
+shadowing and unresolved imports on the relevant path remain unsupported. The
+capture is re-evaluated against the stage source, and final call offsets and
+facade/package routes are checked again against the staged map. The report
+counts conditionally proved calls and states that runtime binding and execution
+are unproved. This option grants no source-write authority; spacer removal can
+change visible content or layout. Unsupported transitive package graphs can
+still block a preview, independently of this conditional binding evidence.
+
 The `typst-style compile --preview` form explicitly selects the same preview
 engine and cancellation handling. It does not accept an ordinary compiler tail
 or an output path. The option must precede `--`; a `--preview` appearing in the

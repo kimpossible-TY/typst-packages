@@ -344,6 +344,13 @@ available with this composed profile; these checks do not grant source writes.
 Adding `--conditional-punctuation` appends the separate conditional prose
 footnote spacing stage; it requires `--conditional-gaps`.
 For the separately opted-in spacer and facade profile,
+`--conditional-deferred-footnotes` additionally considers simple closure
+captures whose selected call path can be checked even when unrelated sibling
+scopes contain other code. It rechecks the staged source and captured facade
+and package routes; unsupported execution contexts remain withheld. Runtime
+binding and execution are not proved, and spacer removal can change the PDF.
+This option requires `--conditional-facade-footnotes` and does not permit
+source application.
 `--partial-unsupported-preview` can retain recognized unsupported files in
 their captured original form and compare a partial whole-document candidate.
 Other safety refusals still block the preview; source application remains disabled.

@@ -64,11 +64,66 @@ class ComposedAdjacentPunctuationTests(unittest.TestCase):
         self.assertGreaterEqual(len(record['steps']), 2)
         self.assertEqual(record['steps'][-1]['rule_id'], adjacent.RULE)
 
-    def test_unresolved_paragraph_boundary_withholds_file(self):
+    def test_unresolved_boundary_in_separate_literal_owner_is_preserved(self):
         source = b'#block[\n#paragraph_tab\nNext.]\n#block[This holds#footnote[Reason.].]'
+        record = seq.preview(parse(source), 'main.typ', self.catalog, conditional_adjacent_punctuation=True)
+        self.assertNotEqual(record['verification'], 'withheld', record)
+        candidate = seq.replay(parse(source), 'main.typ', self.catalog, record,
+                               conditional_adjacent_punctuation=True)
+        self.assertIn(b'#block[\n#paragraph_tab\nNext.]', candidate)
+        self.assertIn(b'This holds.#footnote[Reason.]', candidate)
+        self.assertIsNone(seq.preview(parse(source), 'main.typ', self.catalog))
+
+    def test_unresolved_boundary_in_edited_owner_withholds_file(self):
+        source = b'#block[\n#paragraph_tab\nThis holds#footnote[Reason.].]'
         record = seq.preview(parse(source), 'main.typ', self.catalog, conditional_adjacent_punctuation=True)
         self.assertEqual(record['verification'], 'withheld')
         self.assertFalse(record['steps'])
+
+    def test_unresolved_boundary_preservation_rejects_owner_and_reason_changes(self):
+        from dataclasses import replace
+        from edit_plan import Edit, plan
+        import paragraph_rules
+        source = b'#block[\n#paragraph_tab\nNext.]\n#block[This holds#footnote[Reason.].]'
+        before = parse(source)
+        # A byte change inside the unresolved owner's markup is never accepted.
+        at = source.index(b'Next.')
+        edits = (Edit(at, at + 4, b'Other'),)
+        candidate = parse(plan(source, edits).candidate())
+        with self.assertRaises(SafetyError):
+            seq._preserve_unresolved_paragraph_boundaries(before, candidate, 'main.typ', self.catalog, edits)
+
+        # A missing issue or changed suppression result cannot be hidden by
+        # otherwise unrelated edits to a different literal content block.
+        at = source.index(b'#footnote')
+        edits = (Edit(at, at, b'.'),)
+        candidate = parse(plan(source, edits).candidate())
+        original = paragraph_rules.analyze_conditional_nested_gap
+        def altered(tree, *args, **kwargs):
+            result = original(tree, *args, **kwargs)
+            return result if tree is before else replace(result, skips=tuple(
+                x for x in result.skips if not x.startswith(paragraph_rules.NESTED_GAP_UNRESOLVED)))
+        with patch.object(paragraph_rules, 'analyze_conditional_nested_gap', side_effect=altered):
+            with self.assertRaises(SafetyError):
+                seq._preserve_unresolved_paragraph_boundaries(before, candidate, 'main.typ', self.catalog, edits)
+
+        # A same-width change to the helper owning the markup must not pass
+        # merely because the marker's bytes and all ancestor offsets match.
+        source = b'#box[\n#paragraph_tab\nNext.]'
+        before = parse(source)
+        edits = (Edit(1, 4, b'raw'),)
+        candidate = parse(plan(source, edits).candidate())
+        with self.assertRaises(SafetyError):
+            seq._preserve_unresolved_paragraph_boundaries(before, candidate, 'main.typ', self.catalog, edits)
+
+    def test_unresolved_boundary_maps_an_unrelated_earlier_edit(self):
+        from edit_plan import Edit, plan
+        source = b'#block[abc]\n#block[\n#paragraph_tab\nNext.]'
+        before = parse(source)
+        at = source.index(b'abc') + 1
+        edits = (Edit(at, at, b'x'),)
+        after = parse(plan(source, edits).candidate())
+        seq._preserve_unresolved_paragraph_boundaries(before, after, 'main.typ', self.catalog, edits)
 
     def test_forged_proof_and_omitted_candidates_withhold(self):
         source = b'#block[This holds#footnote[Reason.].]'

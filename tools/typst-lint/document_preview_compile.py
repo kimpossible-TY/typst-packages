@@ -177,7 +177,8 @@ def _compile_captured(context, records, catalog, snapshot, *, entrypoint, deadli
                     partial_unsupported=False, withheld_records=None, partial_unproven_binding=False,
                     explicit_withheld_sources=(), conditional_continuations=False, conditional_adjacent_punctuation=False,
                     original_only=False, modern_highlight_evidence=None,
-                    composed_modern_evidence=None, sequence_facade_evidence=False):
+                    composed_modern_evidence=None, sequence_facade_evidence=False,
+                    conditional_deferred_footnotes=False):
     """Compile baseline and candidate from explicit captured bytes in private.
 
     macOS sandbox-exec denies networking and writes outside the temporary
@@ -232,7 +233,8 @@ def _compile_captured(context, records, catalog, snapshot, *, entrypoint, deadli
             partial_unproven_binding=partial_unproven_binding, explicit_withheld_sources=explicit_withheld_sources,
             conditional_continuations=conditional_continuations,
             conditional_adjacent_punctuation=conditional_adjacent_punctuation,
-            sequence_facade_evidence=sequence_facade_evidence)
+            sequence_facade_evidence=sequence_facade_evidence,
+            conditional_deferred_footnotes=conditional_deferred_footnotes)
         if not modern_summary['source_count']:
             raise NoComposedPreview(modern_summary)
     elif sequence_facade_evidence is not False:
@@ -246,7 +248,8 @@ def _compile_captured(context, records, catalog, snapshot, *, entrypoint, deadli
                 or partial_unsupported is not False or partial_unproven_binding is not False
                 or withheld_records is not None or type(explicit_withheld_sources) is not tuple
                 or explicit_withheld_sources or conditional_continuations is not False
-                or conditional_adjacent_punctuation is not False):
+                or conditional_adjacent_punctuation is not False
+                or conditional_deferred_footnotes is not False):
             raise SafetyError('Modern highlight preview requires its own issued capture and exclusive profile')
         candidates, modern_summary = modern_evidence.stage_candidates(modern_highlight_evidence)
         if not modern_summary['candidate_count']:
@@ -261,7 +264,8 @@ def _compile_captured(context, records, catalog, snapshot, *, entrypoint, deadli
                                                        partial_unproven_binding=partial_unproven_binding,
                                                        explicit_withheld_sources=explicit_withheld_sources,
                                                        conditional_continuations=conditional_continuations,
-                                                       conditional_adjacent_punctuation=conditional_adjacent_punctuation)
+                                                       conditional_adjacent_punctuation=conditional_adjacent_punctuation,
+                                                       conditional_deferred_footnotes=conditional_deferred_footnotes)
     cancelled()
     external_fonts = [item for item in snapshot.files
                       if item.request.role == 'font' and item.request.root != 'project']
@@ -440,7 +444,7 @@ def compile_preview(context, records, catalog, snapshot, *, entrypoint, deadline
                     partial_unsupported=False, withheld_records=None, partial_unproven_binding=False,
                     explicit_withheld_sources=(), conditional_continuations=False, conditional_adjacent_punctuation=False,
                     modern_highlight_evidence=None, composed_modern_evidence=None,
-                    sequence_facade_evidence=False):
+                    sequence_facade_evidence=False, conditional_deferred_footnotes=False):
     return _compile_captured(context, records, catalog, snapshot, entrypoint=entrypoint,
         deadline_seconds=deadline_seconds, cancel_event=cancel_event, expected_dependencies=expected_dependencies,
         expected_baseline_sha256=expected_baseline_sha256, profile=profile, starts=starts,
@@ -450,7 +454,8 @@ def compile_preview(context, records, catalog, snapshot, *, entrypoint, deadline
         conditional_adjacent_punctuation=conditional_adjacent_punctuation,
         modern_highlight_evidence=modern_highlight_evidence,
         composed_modern_evidence=composed_modern_evidence,
-        sequence_facade_evidence=sequence_facade_evidence)
+        sequence_facade_evidence=sequence_facade_evidence,
+        conditional_deferred_footnotes=conditional_deferred_footnotes)
 
 
 def compile_original(context, snapshot, *, entrypoint, deadline_seconds=120.0, cancel_event=None,

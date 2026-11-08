@@ -187,6 +187,8 @@ def main(arguments=None, *, gate=False):
                         help='Also preview conditional unaligned footnote spacer removal; visible content or layout may change (requires --conditional-gaps)')
     parser.add_argument('--conditional-facade-footnotes', action='store_true',
                         help='Use captured facade namespaces for spacer footnotes (requires --conditional-spacers)')
+    parser.add_argument('--conditional-deferred-footnotes', action='store_true',
+                        help='Also use conditional closure-capture evidence for spacer footnotes (requires --conditional-facade-footnotes; execution and runtime binding remain unproved)')
     parser.add_argument('--partial-unsupported-preview', action='store_true',
                         help='Keep recognized unsupported deferred-footnote files unchanged (requires --conditional-facade-footnotes)')
     parser.add_argument('--partial-unproven-binding-preview', action='store_true',
@@ -209,7 +211,7 @@ def main(arguments=None, *, gate=False):
         parser.error('--review-edits requires --format json or --pdf-stdout')
     if args.conditional_modern_highlights and (args.conditional_gaps or args.conditional_punctuation
             or args.conditional_spacers or args.conditional_facade_footnotes or args.conditional_continuations
-            or args.conditional_adjacent_punctuation or args.partial_unsupported_preview
+            or args.conditional_adjacent_punctuation or args.conditional_deferred_footnotes or args.partial_unsupported_preview
             or args.partial_unproven_binding_preview or args.withhold_source or args.review_edits
             or args.compose_modern_highlights):
         parser.error('--conditional-modern-highlights is an exclusive preview and does not support --review-edits')
@@ -221,6 +223,8 @@ def main(arguments=None, *, gate=False):
         parser.error('--conditional-spacers requires --conditional-gaps')
     if args.conditional_facade_footnotes and not args.conditional_spacers:
         parser.error('--conditional-facade-footnotes requires --conditional-spacers')
+    if args.conditional_deferred_footnotes and not args.conditional_facade_footnotes:
+        parser.error('--conditional-deferred-footnotes requires --conditional-facade-footnotes')
     if args.partial_unsupported_preview and not args.conditional_spacers:
         parser.error('--partial-unsupported-preview requires --conditional-spacers')
     if args.partial_unsupported_preview and not args.conditional_facade_footnotes:
@@ -268,7 +272,8 @@ def main(arguments=None, *, gate=False):
                                                            classify_deferred=args.partial_unsupported_preview,
                                                            classify_unproven_binding=args.partial_unproven_binding_preview,
                                                            conditional_continuations=args.conditional_continuations,
-                                                           conditional_adjacent_punctuation=args.conditional_adjacent_punctuation)
+                                                           conditional_adjacent_punctuation=args.conditional_adjacent_punctuation,
+                                                           conditional_deferred_footnotes=args.conditional_deferred_footnotes)
                 if record is not None:
                     if record['verification'] == 'withheld':
                         if (args.partial_unsupported_preview and
@@ -377,6 +382,7 @@ def main(arguments=None, *, gate=False):
                                                            explicit_withheld_sources=explicit_paths,
                                                            conditional_continuations=args.conditional_continuations,
                                                            conditional_adjacent_punctuation=args.conditional_adjacent_punctuation,
+                                                           conditional_deferred_footnotes=args.conditional_deferred_footnotes,
                                                            **compile_options)
         modern_summary = preview.modern_highlight_evidence if (args.conditional_modern_highlights
                                                               or args.compose_modern_highlights) else None
@@ -398,6 +404,7 @@ def main(arguments=None, *, gate=False):
                       dependency_closure_proved=False, compiler_sha256=preview.compiler_sha256,
                       sequence_profile=('modern-highlight-only' if args.conditional_modern_highlights else profile),
                       conditional_facade_footnotes=args.conditional_facade_footnotes,
+                      conditional_deferred_footnotes=args.conditional_deferred_footnotes,
                       conditionally_previewed_rule_ids=(
                           (['pde.proof-trailing-gap', 'pde.footnote-trailing-gap'] if args.conditional_gaps else [])
                           + (['pde.prose-footnote-punctuation'] if args.conditional_punctuation else [])
@@ -438,6 +445,13 @@ def main(arguments=None, *, gate=False):
             result['withheld_sources'] = describe_withheld(withheld, catalog['rules'])
         if args.conditional_spacers:
             result['conditional_spacer_preview'] = spacer_preview_summary(records)
+        if args.conditional_deferred_footnotes:
+            result['conditional_deferred_footnote_preview'] = dict(
+                proved_calls=sum(len(step.get('conditional_deferred_footnote_calls', ()))
+                    for record in (records or ()) for step in record['steps']),
+                condition='Static closure-capture evidence is conditional; runtime binding and execution are unproved.',
+                render_effect='Spacer removal may alter visible content or layout.',
+                runtime_binding_proved=False, execution_proved=False, source_apply_authority=False)
         if args.conditional_continuations:
             result['conditional_continuation_preview'] = continuation_preview_summary(records)
         if args.conditional_adjacent_punctuation:
@@ -478,6 +492,11 @@ def main(arguments=None, *, gate=False):
                 'partial_preview_withheld_files', 'no_verified_candidate_edits'])
             if args.conditional_spacers:
                 result['conditional_spacer_preview'] = spacer_preview_summary([])
+            if args.conditional_deferred_footnotes:
+                result['conditional_deferred_footnote_preview'] = dict(proved_calls=0,
+                    condition='Static closure-capture evidence is conditional; runtime binding and execution are unproved.',
+                    render_effect='Spacer removal may alter visible content or layout.',
+                    runtime_binding_proved=False, execution_proved=False, source_apply_authority=False)
             if args.conditional_continuations:
                 result['conditional_continuation_preview'] = continuation_preview_summary([])
             if args.conditional_adjacent_punctuation:
@@ -565,6 +584,10 @@ def main(arguments=None, *, gate=False):
             info = result['conditional_spacer_preview']
             print(f"Conditional spacer removals planned: {info['planned_edits']}. {info['policy']} "
                   f"{info['eligibility']} {info['render_effect']} {info['pdf_attribution']}", file=stream)
+        if 'conditional_deferred_footnote_preview' in result:
+            info = result['conditional_deferred_footnote_preview']
+            print(f"Conditional deferred footnote calls: {info['proved_calls']}. {info['condition']} "
+                  f"{info['render_effect']}", file=stream)
         if 'conditional_continuation_preview' in result:
             info = result['conditional_continuation_preview']
             print(f"Conditional continuation joins planned: {info['planned_edits']}. "
@@ -585,6 +608,10 @@ def main(arguments=None, *, gate=False):
             info = result['conditional_spacer_preview']
             print(f"Conditional spacer removals planned: {info['planned_edits']}. {info['policy']} "
                   f"{info['eligibility']} {info['render_effect']} {info['pdf_attribution']}", file=stream)
+        if 'conditional_deferred_footnote_preview' in result:
+            info = result['conditional_deferred_footnote_preview']
+            print(f"Conditional deferred footnote calls: {info['proved_calls']}. {info['condition']} "
+                  f"{info['render_effect']}", file=stream)
         if 'conditional_continuation_preview' in result:
             info = result['conditional_continuation_preview']
             print(f"Conditional continuation joins planned: {info['planned_edits']}. "

@@ -324,7 +324,8 @@ def assert_intermediate(value):
 
 def derive(proof, records, *, profile='standard', partial_unsupported=False, withheld_records=None,
            partial_unproven_binding=False, explicit_withheld_sources=(), conditional_continuations=False,
-           conditional_adjacent_punctuation=False, sequence_facade_evidence=True):
+           conditional_adjacent_punctuation=False, sequence_facade_evidence=True,
+           conditional_deferred_footnotes=False):
     """Recompute/replay source sequences and issue a restricted in-memory view."""
     if type(proof) is not footnote.PreviewFootnoteEvidence:
         raise InputError('Issued preview resource evidence is required')
@@ -346,7 +347,8 @@ def derive(proof, records, *, profile='standard', partial_unsupported=False, wit
         partial_unsupported=partial_unsupported, withheld_records=stable_withheld,
         partial_unproven_binding=partial_unproven_binding, explicit_withheld_sources=explicit_withheld_sources,
         conditional_continuations=conditional_continuations,
-        conditional_adjacent_punctuation=conditional_adjacent_punctuation)
+        conditional_adjacent_punctuation=conditional_adjacent_punctuation,
+        conditional_deferred_footnotes=conditional_deferred_footnotes)
     context = _derived_include(baseline, candidates,
         {item['path']: item for item in stable_records})
     graph = _derived_import(proof._session._graph, baseline, context)
