@@ -503,3 +503,10 @@ The design follow-up is reviewed and merged first. Groups 2–7 are authorized i
 - [x] 61.1 Expose the same private document preview through an explicit `typst-style compile --preview` selection. Keep the unselected compile gate inert and the ordinary compiler tail unable to select preview. Reject compiler tails and output paths on the preview route; do not grant source or PDF publication authority.
 - [x] 61.2 Preserve executable signal cancellation and child cleanup on the new route. Verify native preview compilation, source preservation, explicit-selection and invalid-tail refusals, and cancellation; successful preview remains status 2 while global rule coverage is incomplete.
 - [x] 61.3 Exercise the new entrypoint on the PDE document with its 22-font seed. Discover 177 dependencies, capture 199 resources and compose 10,274 edits; the captured baseline and candidate PDFs match, and the 38 included source hashes remain unchanged. This is one observed snapshot, not full rule or future dependency coverage.
+
+## 62. Expose a source review and honest application gate
+
+- [x] 62.1 Report partially inspected and uninspected catalog rule IDs and explicit source-apply blockers. The document preview never grants source-write authority, including when both preview PDFs match.
+- [x] 62.2 Add a bounded opt-in JSON review of the same per-source hash-chained edit sequences independently replayed for preview compilation. Identify stage-relative offsets, include unchanged source hashes, and preserve the distinction between captured snapshot evidence and live source freshness. Refuse an oversized review before launching the preview compiler.
+- [x] 62.3 Verify native edit replay and hash chains, missing coverage and unequal-PDF blockers, serialized-size refusal, preview compiler cancellation and source preservation.
+- [x] 62.4 On the PDE snapshot, replay all 10,274 reported edits in memory for 38 captured sources and verify every stage and final hash. The candidate PDF matches the baseline, but 30 catalog rules remain uninspected and the source-apply gate remains blocked. No original files are changed.

@@ -159,6 +159,9 @@ neither accepts compiler-tail arguments nor publishes a PDF. Optional
 `--discover-dependencies` derives current dependency paths from a sandboxed
 read-only baseline using the manifest's explicit font selection, and refuses if
 the captured baseline's PDF or observed dependencies differ from that probe.
+Add `--review-edits --format json` to include file hashes and ordered per-rule
+edit stages in the same report as the compiled preview. The explicit source-apply
+gate lists why these results cannot yet authorize writing original files.
 
 The ordinary modes above remain read-only. Reports may include AST-backed proposed edits
 with baseline hashes, but label them `partial-not-applicable-transaction`.

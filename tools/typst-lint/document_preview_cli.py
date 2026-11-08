@@ -10,11 +10,34 @@ import document_preview_compile
 import document_preview_discover
 import document_resources
 import document_sequence_preview
+import document_display
 import include_context
+import script_rule
 from package_loader import PackageInputError, _absolute_root, read_snapshot_file
 from typst_lint import InputError, SafetyError, VERSION, checked_path, load_rules, relative, require
 
 MAX_MANIFEST_BYTES = 1024 * 1024
+MAX_REVIEW_BYTES = 16 * 1024 * 1024
+
+
+def review_sources(context, records):
+    """Describe the same source sequences the compiler will independently replay.
+
+    This is output for review, never proof of current live files or write authority.
+    """
+    indexed = {record['path']: record for record in records}
+    sources = []
+    for source in context.sources:
+        record = indexed.get(source.path)
+        sources.append(dict(path=source.path, baseline_sha256=source.identity.source_sha256,
+                            candidate_sha256=(record['candidate_sha256'] if record else source.identity.source_sha256),
+                            steps=(record['steps'] if record else []),
+                            unresolved_display_contexts=(record['unresolved_display_contexts'] if record else None)))
+    review = dict(schema=1, stage_offsets='each step applies to its own baseline_sha256',
+                  replacements_may_contain_source_text=True, sources=sources)
+    require(len(json.dumps(review, ensure_ascii=False).encode('utf-8')) <= MAX_REVIEW_BYTES,
+            'Source review exceeds the serialized review size limit')
+    return review
 
 
 def _object(pairs):
@@ -65,7 +88,11 @@ def main(arguments=None, *, gate=False):
                         help='Probe the baseline read-only and add observed dependency paths')
     parser.add_argument('--format', choices=('json', 'text'), default='text')
     parser.add_argument('--pdf-stdout', action='store_true', help='Emit only the candidate PDF to stdout')
+    parser.add_argument('--review-edits', action='store_true',
+                        help='Include bounded per-source, per-stage edits and hashes in the JSON report')
     args = parser.parse_args(sys.argv[1:] if arguments is None else arguments)
+    if args.review_edits and args.format != 'json' and not args.pdf_stdout:
+        parser.error('--review-edits requires --format json or --pdf-stdout')
     # The executable installs cooperative SIGINT/SIGTERM handling; imported
     # callers do not change process-wide signal handlers.
     import offline_compile_cli
@@ -73,6 +100,7 @@ def main(arguments=None, *, gate=False):
     cancel = signals.cancel_event if signals is not None else None
     phase = 'input'
     result = None
+    discovery_completed = False
     try:
         raw_root = args.root
         root = _absolute_root(raw_root)
@@ -101,6 +129,7 @@ def main(arguments=None, *, gate=False):
             raw_dependencies, observed, font_hashes, discovery_baseline_sha256 = document_preview_discover.discover(
                 context, roots, requests, entrypoint=args.entrypoint,
                 allow_apple_asset_fonts=allow, cancel_event=cancel)
+            discovery_completed = True
             selected = {(item.root, item.path): item for item in requests}
             for root_id, path in observed:
                 role = ('source' if root_id == 'project' and path.endswith('.typ') else
@@ -118,6 +147,7 @@ def main(arguments=None, *, gate=False):
             require(captured_fonts == font_hashes, 'Selected fonts changed after dependency discovery')
             comparison = document_dependencies.compare(snapshot, raw_dependencies, cwd=str(root), roots=roots)
             require(not comparison.missing, 'A discovered dependency is absent from the resource capture')
+        review = review_sources(context, records) if args.review_edits else None
         phase = 'compile'
         preview = document_preview_compile.compile_preview(context, records, catalog['rules'], snapshot,
                                                            entrypoint=args.entrypoint, cancel_event=cancel,
@@ -135,7 +165,16 @@ def main(arguments=None, *, gate=False):
                       system_font_files=preview.system_font_files,
                       discovery_performed=observed is not None,
                       discovery_observed_dependencies=len(observed) if observed is not None else None,
-                      dependency_closure_proved=False, compiler_sha256=preview.compiler_sha256)
+                      dependency_closure_proved=False, compiler_sha256=preview.compiler_sha256,
+                      partially_inspected_rule_ids=[document_display.STANDALONE, script_rule.RULE_ID, document_display.RULE_ID],
+                      uninspected_rule_ids=[rule['id'] for rule in catalog['rules'] if rule['id'] not in
+                                           (document_display.STANDALONE, script_rule.RULE_ID, document_display.RULE_ID)],
+                      source_apply_gate=dict(eligible=False,
+                          blockers=['global_rule_coverage_incomplete', 'dependency_closure_unproved',
+                                    'live_source_freshness_unproved', 'protected_source_transaction_unavailable']
+                                   + ([] if preview.pdfs_identical else ['preview_pdfs_differ'])))
+        if review is not None:
+            result['source_review'] = review
         if cancel is not None and cancel.is_set():
             raise runtime.CompilerFailure('cancelled', kind=runtime.CompilerFailureKind.CANCELLED)
         if args.pdf_stdout:
@@ -143,10 +182,11 @@ def main(arguments=None, *, gate=False):
             sys.stdout.buffer.flush()
     except (InputError, SafetyError, PackageInputError, OSError, ValueError, runtime.CompilerFailure) as error:
         result = dict(schema=1, tool_version=VERSION, mode='preview-compile', status=2, phase=phase,
-                      compiler_invoked=None if phase in ('discovery', 'compile') else False, pdf_generated=False,
+                      compiler_invoked=(True if discovery_completed else
+                                        None if phase in ('discovery', 'compile') else False), pdf_generated=False,
                       source_files_modified=False, publication_authority=False, error=str(error))
         if isinstance(error, runtime.CompilerFailure) and error.invocation is not None:
-            if type(error.invocation.started) is bool:
+            if type(error.invocation.started) is bool and not discovery_completed:
                 result['compiler_invoked'] = error.invocation.started
             if error.invocation.stderr:
                 result['compiler_diagnostics'] = error.invocation.stderr[:8192].decode('utf-8', errors='replace')

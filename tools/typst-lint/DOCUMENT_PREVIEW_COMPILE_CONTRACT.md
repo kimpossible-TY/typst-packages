@@ -13,6 +13,8 @@ typst-lint preview-compile --root /absolute/project --entrypoint main.typ \
   --manifest /absolute/font-seed.json --discover-dependencies --format json
 typst-style compile --preview --root /absolute/project --entrypoint main.typ \
   --manifest /absolute/font-seed.json --discover-dependencies --format json
+typst-style compile --preview --root /absolute/project --entrypoint main.typ \
+  --manifest /absolute/font-seed.json --discover-dependencies --review-edits --format json
 typst-lint preview-compile --root /absolute/project --entrypoint main.typ \
   --manifest /absolute/resources.json --pdf-stdout > /path/to/new-preview.pdf
 ```
@@ -23,6 +25,21 @@ or an output path. The option must precede `--`; a `--preview` appearing in the
 ordinary inert compiler tail does not select this route. Without this opt-in,
 the existing compile gate continues to refuse incomplete coverage without
 invoking the compiler. Preview success is not normal build-gate success.
+
+The report lists the three partially inspected rules and the other catalog rules
+not inspected by this route. `source_apply_gate.eligible` is always false: global
+rule coverage and future dependency closure are incomplete, current live-file
+freshness is not proved, and this route has no protected source-write transaction.
+If the preview PDFs differ, that is an additional blocker.
+
+`--review-edits` includes each captured source's baseline and candidate hashes
+and the same ordered edit stages independently replayed for the compiler. Each
+stage's byte offsets apply to its own baseline hash, not the original file after
+earlier stages. Unchanged files have no steps; their unresolved display contexts
+are not counted. Replacement text can include user content. The JSON review is
+bounded to 16 MiB, is output data rather than write authority, and cannot establish
+that live files remain unchanged after capture. It requires `--format json` or
+`--pdf-stdout` (where the report goes to stderr).
 
 The JSON report describes the preview; it does not contain PDF bytes. With
 `--pdf-stdout`, stdout contains only the candidate PDF and stderr contains JSON

@@ -1,5 +1,6 @@
 """Explicit resource-manifest preview CLI; originals remain untouched."""
 import json
+import hashlib
 import contextlib
 import io
 import os
@@ -107,7 +108,9 @@ class DocumentPreviewCliTests(unittest.TestCase):
              contextlib.redirect_stdout(output):
             status = document_preview_cli.main(self.command()[3:] + ['--discover-dependencies', '--format', 'json'])
         self.assertEqual(status, 2)
-        self.assertIn('Selected fonts changed', json.loads(output.getvalue())['error'])
+        report = json.loads(output.getvalue())
+        self.assertIn('Selected fonts changed', report['error'])
+        self.assertTrue(report['compiler_invoked'])
         compile_preview.assert_not_called()
 
     def test_source_drift_after_discovery_refuses_before_compiler_launch(self):
@@ -124,6 +127,30 @@ class DocumentPreviewCliTests(unittest.TestCase):
         self.assertEqual(status, 2)
         self.assertIn('absent or differs', json.loads(output.getvalue())['error'])
         capture.assert_not_called()
+
+    def test_review_is_bounded_and_refuses_before_compiling(self):
+        output = io.StringIO()
+        with patch.object(document_preview_cli, 'MAX_REVIEW_BYTES', 1), \
+             patch.object(document_preview_cli.document_preview_compile, 'compile_preview') as compiler, \
+             contextlib.redirect_stdout(output):
+            status = document_preview_cli.main(self.command()[3:] + ['--review-edits', '--format', 'json'])
+        self.assertEqual(status, 2)
+        self.assertIn('review size limit', json.loads(output.getvalue())['error'])
+        compiler.assert_not_called()
+
+    def test_unequal_preview_cannot_be_an_apply_gate(self):
+        fake = SimpleNamespace(baseline_sha256='a' * 64, candidate_sha256='b' * 64,
+            pdfs_identical=False, dependency_count=1, unobserved_capture_count=0,
+            system_font_files=0, compiler_sha256='c' * 64)
+        output = io.StringIO()
+        with patch.object(document_preview_cli.document_preview_compile, 'compile_preview', return_value=fake), \
+             contextlib.redirect_stdout(output):
+            status = document_preview_cli.main(self.command()[3:] + ['--format', 'json'])
+        report = json.loads(output.getvalue())
+        self.assertEqual(status, 2)
+        self.assertFalse(report['source_apply_gate']['eligible'])
+        self.assertIn('preview_pdfs_differ', report['source_apply_gate']['blockers'])
+        self.assertTrue(report['uninspected_rule_ids'])
 
     @unittest.skipUnless(os.environ.get('TYPST_LINT_RENDER_TESTS') == '1'
                          and sys.platform == 'darwin', 'Opt in on macOS with the reviewed Typst compiler')
@@ -161,13 +188,26 @@ class DocumentPreviewCliTests(unittest.TestCase):
     def test_style_gate_can_explicitly_preview_without_publishing(self):
         self.value['files'] = []
         self.manifest.write_text(json.dumps(self.value), encoding='utf-8')
-        run = subprocess.run(self.gate_command('--discover-dependencies', '--format', 'json'),
+        run = subprocess.run(self.gate_command('--discover-dependencies', '--review-edits', '--format', 'json'),
                              capture_output=True, timeout=60)
         self.assertEqual(run.returncode, 2, run.stderr)
         report = json.loads(run.stdout)
         self.assertEqual(report['phase'], 'preview')
         self.assertTrue(report['pdf_generated'] and report['discovery_performed'])
         self.assertFalse(report['source_files_modified'] or report['publication_authority'])
+        self.assertFalse(report['source_apply_gate']['eligible'])
+        self.assertIn('global_rule_coverage_incomplete', report['source_apply_gate']['blockers'])
+        review = report['source_review']['sources']
+        self.assertEqual(len(review), 1)
+        self.assertEqual(review[0]['path'], 'main.typ')
+        candidate = self.source
+        self.assertEqual(hashlib.sha256(candidate).hexdigest(), review[0]['baseline_sha256'])
+        for step in review[0]['steps']:
+            self.assertEqual(hashlib.sha256(candidate).hexdigest(), step['baseline_sha256'])
+            for edit in reversed(step['edits']):
+                candidate = candidate[:edit['start']] + edit['replacement'].encode('utf-8') + candidate[edit['end']:]
+            self.assertEqual(hashlib.sha256(candidate).hexdigest(), step['candidate_sha256'])
+        self.assertEqual(hashlib.sha256(candidate).hexdigest(), review[0]['candidate_sha256'])
         self.assertEqual((self.project / 'main.typ').read_bytes(), self.source)
         self.assertFalse((self.project / 'output.pdf').exists())
 
