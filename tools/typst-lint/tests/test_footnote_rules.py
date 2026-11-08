@@ -270,7 +270,9 @@ class FootnoteRules(unittest.TestCase):
         with patch.object(footnote_rules, 'analyze_conditional_nested', side_effect=changed):
             result = preview_conditional_unaligned_spacers(tree, 'fixture.typ', resolve(tree))
         self.assertEqual(result['verification'], 'withheld')
-        self.assertFalse(result['edits'] or result['edit_permission'])
+        self.assertFalse(result['edits'] or result['edit_permission'] or result['compiler_permission'])
+        self.assertTrue(result['applicability_conditions'])
+        self.assertIn('visible content', result['possible_render_effect'])
 
     def test_conditional_unaligned_spacer_preview_refuses_unsupported_math_directive(self):
         source = (b'#block[$\n A = B\n'

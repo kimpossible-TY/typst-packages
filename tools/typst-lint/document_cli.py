@@ -36,6 +36,7 @@ def report_document(root, entrypoint, *, rule_set='core', package_path=None,
                     preview_conditional_capitalization=False,
                     preview_conditional_prose_spacers=False,
                     preview_conditional_aligned_spacers=False,
+                    preview_conditional_prose_markers=False,
                     footnote_cache_path=None,
                     footnote_punctuation_evidence=False,
                     reference_package_path=None, reference_facade=None, reference_cache_path=None,
@@ -82,6 +83,9 @@ def report_document(root, entrypoint, *, rule_set='core', package_path=None,
     require(type(preview_conditional_aligned_spacers) is bool
             and (not preview_conditional_aligned_spacers or rule_set == 'pde'),
             'Conditional aligned spacer previews require explicit --rule-set pde')
+    require(type(preview_conditional_prose_markers) is bool
+            and (not preview_conditional_prose_markers or rule_set == 'pde'),
+            'Conditional prose marker previews require explicit --rule-set pde')
     require(footnote_cache_path is None or (type(footnote_cache_path) is str
             and rule_set == 'pde' and package_path is not None),
             'Conditional footnote bindings require --rule-set pde, --package-path and --footnote-cache-path')
@@ -161,6 +165,7 @@ def report_document(root, entrypoint, *, rule_set='core', package_path=None,
     conditional_capitalization_previews = []
     conditional_prose_spacer_previews = []
     conditional_aligned_spacer_previews = []
+    conditional_prose_marker_previews = []
     conditional_detached_annotations = []
     conditional_raw_overlays = []
     conditional_raw_annotations = []
@@ -378,7 +383,7 @@ def report_document(root, entrypoint, *, rule_set='core', package_path=None,
                 spacer = preview_conditional_unaligned_spacers(
                     item.tree, item.path, resolve(item.tree, packages=()), catalog=catalog['rules'])
                 if spacer is not None:
-                    items += 1 + len(spacer['edits'])
+                    items += 1 + len(spacer['edits']) + len(spacer['applicability_conditions'])
                     require(items <= MAX_REPORT_ITEMS, 'Document inspection report item limit exceeded')
                     conditional_spacer_previews.append(spacer)
             if preview_conditional_scoped_calls:
@@ -461,6 +466,18 @@ def report_document(root, entrypoint, *, rule_set='core', package_path=None,
                           + int('reason' in aligned_spacer))
                 require(items <= MAX_REPORT_ITEMS, 'Document inspection report item limit exceeded')
                 conditional_aligned_spacer_previews.append(aligned_spacer)
+            if preview_conditional_prose_markers:
+                from document_conditional_prose_marker import CONDITIONS, preview as preview_prose_marker
+                prose_marker = preview_prose_marker(item.tree, item.path, catalog=catalog['rules'])
+                if prose_marker is None:
+                    prose_marker = dict(path=item.path, baseline_sha256=digest(item.source),
+                        candidate_sha256=None, verification='no-candidate', conditions=CONDITIONS,
+                        runtime_binding_proved=False, execution_proved=False,
+                        render_equivalence_proved=False, edit_permission=False, compiler_permission=False, edits=[])
+                items += (1 + len(prose_marker['edits']) + len(prose_marker['conditions'])
+                          + int('reason' in prose_marker))
+                require(items <= MAX_REPORT_ITEMS, 'Document inspection report item limit exceeded')
+                conditional_prose_marker_previews.append(prose_marker)
         except (InputError, OSError, ValueError) as error:
             raise InputError(f'{item.path}: {error}') from error
         # Keep unsupported baseline operands diagnostic-only, then independently
@@ -654,6 +671,20 @@ def report_document(root, entrypoint, *, rule_set='core', package_path=None,
         report['conditional_spacer_previews'] = conditional_spacer_previews
         report['conditional_spacer_preview_status'] = 'partial-independent-source-only-not-composed-or-render-verified'
     if preview_conditional_scoped_calls:
+        from document_conditional_scope_namespaces import analyze as analyze_scope_namespaces
+        conditional_scope_namespaces = analyze_scope_namespaces(captured, catalog=catalog['rules'])
+        items += (1 + len(conditional_scope_namespaces['diagnostics'])
+                  + len(conditional_scope_namespaces['suppressed'])
+                  + len(conditional_scope_namespaces['unresolved'])
+                  + len(conditional_scope_namespaces['conditions']))
+        items += sum(len(row['include_chain']) + len(row['include_unresolved'])
+                     + len(row['comparison_site']['include_chain'])
+                     + len(row['comparison_site']['include_unresolved'])
+                     + sum(1 + len(scope['rule_ids']) for scope in row['suppressions'])
+                     + sum(1 + len(scope['rule_ids']) for scope in row['comparison_site']['suppressions'])
+                     for row in (*conditional_scope_namespaces['diagnostics'],
+                                 *conditional_scope_namespaces['suppressed']))
+        require(items <= MAX_REPORT_ITEMS, 'Document inspection report item limit exceeded')
         report['conditional_scoped_calls'] = dict(by_file=conditional_scoped_previews,
             edit_permission=False, compiler_permission=False,
             scope='independent-source-pattern-not-composed-or-render-verified')
@@ -665,6 +696,7 @@ def report_document(root, entrypoint, *, rule_set='core', package_path=None,
             edit_permission=False, compiler_permission=False, coverage_complete=False)
         report['conditional_marker_tags'] = dict(by_file=conditional_marker_tags,
             edit_permission=False, compiler_permission=False, coverage_complete=False)
+        report['conditional_scope_namespaces'] = conditional_scope_namespaces
     if preview_conditional_continuations:
         report['conditional_continuation_previews'] = dict(by_file=conditional_continuation_previews,
             edit_permission=False, compiler_permission=False,
@@ -679,6 +711,10 @@ def report_document(root, entrypoint, *, rule_set='core', package_path=None,
             scope='independent-source-pattern-not-composed-or-render-verified')
     if preview_conditional_aligned_spacers:
         report['conditional_aligned_spacer_previews'] = dict(by_file=conditional_aligned_spacer_previews,
+            edit_permission=False, compiler_permission=False,
+            scope='independent-source-pattern-not-composed-or-render-verified')
+    if preview_conditional_prose_markers:
+        report['conditional_prose_marker_previews'] = dict(by_file=conditional_prose_marker_previews,
             edit_permission=False, compiler_permission=False,
             scope='independent-source-pattern-not-composed-or-render-verified')
     if local_rule_hints:
@@ -737,6 +773,8 @@ def main(arguments=None):
                         help='Preview conditional prose footnote spacer removal (requires --rule-set pde)')
     parser.add_argument('--preview-conditional-aligned-spacers', action='store_true',
                         help='Preview conditional aligned footnote spacers (requires --rule-set pde)')
+    parser.add_argument('--preview-conditional-prose-markers', action='store_true',
+                        help='Preview conditional prose paragraph markers (requires --rule-set pde)')
     parser.add_argument('--reference-package-path',
                         help='Explicit canonical root containing the reviewed project-references package')
     parser.add_argument('--reference-facade',
@@ -768,6 +806,7 @@ def main(arguments=None):
                                  preview_conditional_capitalization=args.preview_conditional_capitalization,
                                  preview_conditional_prose_spacers=args.preview_conditional_prose_spacers,
                                  preview_conditional_aligned_spacers=args.preview_conditional_aligned_spacers,
+                                 preview_conditional_prose_markers=args.preview_conditional_prose_markers,
                                  reference_package_path=args.reference_package_path,
                                  reference_facade=args.reference_facade,
                                  reference_cache_path=args.reference_cache_path,
@@ -929,6 +968,19 @@ def main(arguments=None):
             if aligned_spacers['by_file']:
                 for condition in aligned_spacers['by_file'][0]['conditions']:
                     print(f"  condition: {condition}")
+        if 'conditional_prose_marker_previews' in result:
+            prose_markers = result['conditional_prose_marker_previews']
+            print('Conditional prose marker previews: source-only, no edit or compiler permission')
+            for row in prose_markers['by_file']:
+                print(f"  {row['path']}: {row['verification']}; {len(row['edits'])} proposed edits; "
+                      f"source sha256 {row['baseline_sha256']}; candidate sha256 {row['candidate_sha256']}")
+                if 'reason' in row:
+                    print(f"    unresolved: {row['reason']}")
+                for entry in row['edits']:
+                    print(f"    conditional edit bytes {entry['start']}..{entry['end']}: insert #paragraph_tab")
+            if prose_markers['by_file']:
+                for condition in prose_markers['by_file'][0]['conditions']:
+                    print(f"  condition: {condition}")
         if 'conditional_detached_annotations' in result:
             detached = result['conditional_detached_annotations']
             print('Conditional detached annotations: diagnostic-only, no edit or compiler permission')
@@ -989,6 +1041,19 @@ def main(arguments=None):
             if marker_tags['by_file']:
                 for condition in marker_tags['by_file'][0]['conditions']:
                     print(f"  condition: {condition}")
+        if 'conditional_scope_namespaces' in result:
+            namespaces = result['conditional_scope_namespaces']
+            print('Conditional scope namespaces: diagnostic-only, no edit or compiler permission')
+            for label, entries in (('hint', namespaces['diagnostics']), ('suppressed', namespaces['suppressed'])):
+                for entry in entries:
+                    other = entry['comparison_site']
+                    print(f"  {label} {entry['path']}:{entry['line']}:{entry['column']}: "
+                          f"{entry['rule_id']}: {entry['explanation']} "
+                          f"Comparison: {other['path']}:{other['line']}:{other['column']}.")
+            for reason in namespaces['unresolved']:
+                print(f"  unresolved: {reason}")
+            for condition in namespaces['conditions']:
+                print(f"  condition: {condition}")
         if 'conditional_punctuation_details' in result:
             details = result['conditional_punctuation_details']
             print('Conditional adjacent footnote punctuation details: classify existing hints; '
@@ -1048,6 +1113,11 @@ def main(arguments=None):
                     if previews:
                         for condition in previews[0]['conditions']:
                             print(f"  condition: {condition}")
+                if key == 'conditional_spacer_previews':
+                    from footnote_rules import UNALIGNED_PREVIEW_CONDITIONS, UNALIGNED_RENDER_EFFECT
+                    for condition in UNALIGNED_PREVIEW_CONDITIONS:
+                        print(f"  applicability: {condition}")
+                    print(f"  possible render effect: {UNALIGNED_RENDER_EFFECT}")
         for blocker in result['blockers']:
             print(blocker)
         print('Global coverage incomplete (exit 2); compiler not invoked')

@@ -47,6 +47,19 @@ compiled privately; PDF differences are reported and may be intentional under
 the selected style policy. They do not authorize applying edits. This stage does
 not claim complete inspection, and the rule remains in `uninspected_rule_ids`.
 
+When this option is selected, a successful report includes
+`conditional_spacer_preview.planned_edits`: the number of spacer-token edits
+actually included in the whole-document plan, excluding every withheld source.
+The report separately states the rule's eligibility, the unresolved binding and
+execution conditions, and the possibility that removing the helper changes
+visible content or layout. A helper need not be empty space; a captured project
+may define it as visible content. The planned edit count is zero when nothing
+is eligible, including a no-candidate partial preview. If planning fails before
+completion, absence of this summary is not evidence of zero candidates.
+PDF-byte equality is an observation about those captured runs; inequality alone
+does not establish a visual difference or identify which rule caused it.
+The source-application and publication gates remain disabled in either case.
+
 Adding `--conditional-facade-footnotes` explicitly admits a source-bound
 conditional builtin-footnote hint through reviewed direct or relative wildcard
 namespaces. The captured import graph and selected packages, including reviewed

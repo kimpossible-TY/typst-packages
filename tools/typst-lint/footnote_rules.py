@@ -22,6 +22,14 @@ ALIGNED = 'pde.aligned-footnote-spacer'
 UNALIGNED = 'pde.unaligned-footnote-no-spacer'
 PROSE = 'pde.prose-footnote-no-spacer'
 RULE_IDS = (GAP, PUNCT, ALIGNED, UNALIGNED, PROSE)
+UNALIGNED_PREVIEW_CONDITIONS = (
+    'The display is unaligned: it contains neither an alignment point nor a math line break.',
+    'The exact source token resolves to the intended dots_space helper and the call to the intended footnote.',
+    'The display and footnote execute in the expected runtime context.',
+)
+UNALIGNED_RENDER_EFFECT = (
+    'Removing dots_space can remove visible content or change spacing, depending on its runtime binding and context.'
+)
 _NESTED_EXCLUDED = frozenset(('Equation', 'Math', 'Code', 'CodeBlock', 'Heading',
                               'ListItem', 'EnumItem', 'TermItem', 'Raw', 'Str'))
 _BLANK_AFTER_FOOTNOTE = re.compile(rb'(\r?\n)([ \t]*\r?\n)+')
@@ -508,13 +516,18 @@ def preview_conditional_unaligned_spacers(tree, path, resolution, *, catalog=Non
                 raise SafetyError('Conditional spacer changed another finding or suppression')
         return dict(path=path, baseline_sha256=digest(tree.source), candidate_sha256=digest(candidate),
                     verification='conditional-spacer-token-syntax-directives-and-footnote-reanalysis',
-                    runtime_binding_proved=False, render_equivalence_proved=False,
-                    edit_permission=False, edits=[dict(start=edit.start, end=edit.end,
+                    applicability_conditions=UNALIGNED_PREVIEW_CONDITIONS,
+                    possible_render_effect=UNALIGNED_RENDER_EFFECT,
+                    runtime_binding_proved=False, execution_proved=False, render_equivalence_proved=False,
+                    edit_permission=False, compiler_permission=False, edits=[dict(start=edit.start, end=edit.end,
                         replacement='', rule_id=UNALIGNED) for edit in proposal.edits])
     except (InputError, SafetyError, OSError, ValueError, RecursionError) as error:
         return dict(path=path, baseline_sha256=digest(tree.source), candidate_sha256=None,
-                    verification='withheld', runtime_binding_proved=False,
-                    render_equivalence_proved=False, edit_permission=False, edits=[], reason=str(error))
+                    verification='withheld', applicability_conditions=UNALIGNED_PREVIEW_CONDITIONS,
+                    possible_render_effect=UNALIGNED_RENDER_EFFECT,
+                    runtime_binding_proved=False, execution_proved=False,
+                    render_equivalence_proved=False, edit_permission=False, compiler_permission=False,
+                    edits=[], reason=str(error))
 
 
 def _preview_conditional_edits(tree, path, records, baseline, edits, edited_rule):

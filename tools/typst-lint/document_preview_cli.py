@@ -63,6 +63,21 @@ def describe_withheld(records, catalog):
     return result
 
 
+def spacer_preview_summary(records):
+    """Describe actual staged rule proposals without asserting their effect."""
+    return dict(
+        planned_edits=sum(len(step['edits']) for record in records for step in record['steps']
+                          if step['rule_id'] == 'pde.unaligned-footnote-no-spacer'),
+        policy=('The PDE rule forbids a spacer immediately before an equation-level footnote '
+                'in a display without alignment or math line-break tokens.'),
+        eligibility=('The preview selects supported literal tokens with conditional footnote '
+                     'binding and reanalysis; spacer binding and runtime context remain unproved.'),
+        render_effect=('Removing the helper may change visible content or layout; its effect '
+                       'is not established by the source plan.'),
+        pdf_attribution=('The PDF comparison covers all planned edits; it does not attribute '
+                         'a difference to this rule or establish general visual equivalence.'))
+
+
 def _object(pairs):
     result = {}
     for key, value in pairs:
@@ -124,7 +139,7 @@ def main(arguments=None, *, gate=False):
     parser.add_argument('--conditional-punctuation', action='store_true',
                         help='Also preview conditional prose-footnote spacing (requires --conditional-gaps)')
     parser.add_argument('--conditional-spacers', action='store_true',
-                        help='Also preview conditional unaligned footnote spacer removal (requires --conditional-gaps)')
+                        help='Also preview conditional unaligned footnote spacer removal; visible content or layout may change (requires --conditional-gaps)')
     parser.add_argument('--conditional-facade-footnotes', action='store_true',
                         help='Use captured facade namespaces for spacer footnotes (requires --conditional-spacers)')
     parser.add_argument('--partial-unsupported-preview', action='store_true',
@@ -313,6 +328,8 @@ def main(arguments=None, *, gate=False):
             if args.partial_unproven_binding_preview:
                 result['partial_unproven_binding_preview'] = True
             result['withheld_sources'] = describe_withheld(withheld, catalog['rules'])
+        if args.conditional_spacers:
+            result['conditional_spacer_preview'] = spacer_preview_summary(records)
         if review is not None:
             result['source_review'] = review
         if cancel is not None and cancel.is_set():
@@ -333,6 +350,8 @@ def main(arguments=None, *, gate=False):
             result['withheld_sources'] = describe_withheld(error.withheld, catalog['rules'])
             result['source_apply_gate'] = dict(eligible=False, blockers=['global_rule_coverage_incomplete',
                 'partial_preview_withheld_files', 'no_verified_candidate_edits'])
+            if args.conditional_spacers:
+                result['conditional_spacer_preview'] = spacer_preview_summary([])
         if isinstance(error, runtime.CompilerFailure) and error.invocation is not None:
             starts.observe(error.invocation)
             result['compiler_stage'] = document_preview_compile._PURPOSE_STAGES.get(error.invocation.purpose)
@@ -368,10 +387,18 @@ def main(arguments=None, *, gate=False):
                 print(f"{row['path']}: {row['rule_id']} {row['reason_code']} "
                       f"baseline sha256={row['baseline_sha256']}: {row['reason']}", file=stream)
             print('Uninspected rules: ' + ', '.join(result['uninspected_rule_ids']), file=stream)
+        if 'conditional_spacer_preview' in result:
+            info = result['conditional_spacer_preview']
+            print(f"Conditional spacer removals planned: {info['planned_edits']}. {info['policy']} "
+                  f"{info['eligibility']} {info['render_effect']} {info['pdf_attribution']}", file=stream)
     else:
         print(f"typst-lint preview-compile: PDF generated; {result['observed_dependencies']} observed dependencies; "
               f"baseline/candidate identical: {result['pdfs_identical']}", file=stream)
         print('Sources were not modified; global rule coverage remains incomplete (exit 2).', file=stream)
+        if 'conditional_spacer_preview' in result:
+            info = result['conditional_spacer_preview']
+            print(f"Conditional spacer removals planned: {info['planned_edits']}. {info['policy']} "
+                  f"{info['eligibility']} {info['render_effect']} {info['pdf_attribution']}", file=stream)
         if args.partial_unsupported_preview:
             print(f"Partial preview: {len(result['withheld_sources'])} source(s) kept at their captured original bytes; "
                   f"{result['planned_sources']} source(s) have candidate edits.", file=stream)

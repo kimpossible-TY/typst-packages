@@ -470,12 +470,19 @@ class DocumentCliTests(unittest.TestCase):
         self.assertEqual(edit['rule_id'], 'pde.unaligned-footnote-no-spacer')
         self.assertEqual(source[edit['start']:edit['end']], b'#dots_space')
         self.assertFalse(rows[0]['edit_permission'] or rows[0]['runtime_binding_proved']
+                         or rows[0]['execution_proved'] or rows[0]['compiler_permission']
                          or rows[0]['render_equivalence_proved'])
+        self.assertTrue(any('unaligned' in condition for condition in rows[0]['applicability_conditions']))
+        self.assertTrue(any('runtime' in condition for condition in rows[0]['applicability_conditions']))
+        self.assertIn('visible content', rows[0]['possible_render_effect'])
         self.assertEqual(target.read_bytes(), source)
         self.assertEqual(self.run_cli('--preview-conditional-spacers')['phase'], 'input')
         text = self.run_cli('--rule-set', 'pde', '--preview-conditional-spacers', format='text')
         self.assertIn('Conditional spacer previews: 1 edits', text)
         self.assertIn('not render-verified and not applied', text)
+        self.assertIn('applicability:', text)
+        self.assertIn('possible render effect:', text)
+        self.assertIn('visible content', text)
 
     def test_explicit_reference_facade_provenance_is_conditional_and_reports_shadowing(self):
         main = self.write('main.typ', b'#import "Styles/styles.typ": *\n')

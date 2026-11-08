@@ -91,6 +91,14 @@ inserted spacer may change rendering. The plan is not composed or applied,
 does not grant compiler or source-write authority, and does not increase global
 coverage.
 
+The independent `--rule-set pde --preview-conditional-prose-markers` option
+proposes inserting `#paragraph_tab` at an existing literal prose boundary when
+the next paragraph begins with an uppercase ASCII letter. It preserves the
+existing prose bytes, line-ending convention and indentation. Binding, active
+show, prose execution and rendering remain conditional; the marker is intended
+to change indentation. Proposals are not composed or applied and do not grant
+compiler authority or increase global coverage.
+
 The scoped-call option separately reports `conditional_detached_annotations` for
 direct scoped annotation calls outside a display in supported literal callback
 bodies. These are diagnostic-only hints with independent suppression and
@@ -103,6 +111,19 @@ direct math `mark` calls within supported `local-scope-annotations` callbacks.
 Wrapper and raw marker binding, callback execution, and scope ownership remain
 conditions. Dynamic calls, nested effects, aliases and known shadowing remain
 unsupported; no label is changed and global rule coverage remains incomplete.
+The independent `conditional_scope_namespaces` section compares direct literal
+explicit prefixes across issued syntactic include occurrences of each selected
+entrypoint, including repeated includes. Each comparison lists both source sites
+and include chains; their order in the report does not prove execution order.
+Each site retains its applicable suppression directives. If either site is
+suppressed, the comparison is conservatively suppressed because traversal order
+does not establish which site executes later; this can withhold a diagnostic.
+The section enforces item and 16 MiB serialized JSON limits, including repeated
+include chains and suppression details; exceeding a limit refuses the report.
+Wrapper identity, both occurrences actually executing in the same graph, and
+runtime namespace configuration remain conditions. Nested scopes, dynamic names,
+unresolved include execution and sibling-parent identity are not proved. This
+diagnostic grants no edits and does not establish complete namespace coverage.
 
 JSON includes:
 
@@ -153,6 +174,15 @@ JSON includes:
 - `--preview-conditional-spacers` independently previews exact `#dots_space`
   token removal before a footnote in an unaligned nested display. The token's
   binding and effects are unproved: removing it can change the rendered PDF.
+  The report separates the rule's source applicability and unresolved runtime
+  conditions from that possible render effect. In particular, an unaligned
+  display has neither an alignment point nor a math line-break token; source
+  spelling alone does not establish what `dots_space` produces at runtime.
+  For example, the reviewed `math-blocks` 0.2.0 helper produces visible dots.
+  A captured PDE comparison isolated 31 removals and 28 affected pages at
+  72 dpi; that observation does not determine another project's helper binding
+  or rendered output. The existing PDE linter specification calls for removal
+  in this case even when the resulting visible content changes.
   An empty preview does not establish complete inspection or absence of other
   violations. This preview is never automatically applied or composed.
 - With `--rule-set pde --package-path /absolute/packages --footnote-cache-path
