@@ -2,9 +2,11 @@
 
 `typst-style compile --compile-original` is an explicit macOS-only route that
 compiles captured original bytes without proposing or applying source edits.
-It runs **no lint analysis**. A successful status of 0 means only that the
-captured PDF was compiled, validated and streamed; it does not mean that any
-rule passed or that document coverage is complete. The ordinary strict
+By default it runs **no lint analysis**. The explicit `--lint-document` option
+adds [partial source diagnostics](ORIGINAL_COMPILE_LINT_CONTRACT.md) on the same
+capture. A successful status of 0 means only that the captured PDF was compiled,
+validated and streamed; it does not mean that any rule passed or that document
+coverage is complete. The ordinary strict
 `typst-style compile` gate remains unchanged.
 
 For example, send the PDF through a pipe to a newly created file outside the

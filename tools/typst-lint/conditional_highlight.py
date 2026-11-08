@@ -312,6 +312,10 @@ class _Analyzer:
         self.exhausted = self.exhausted or reason
         return _Module(reason=self.exhausted)
 
+    def body_math(self, tree, call_id):
+        """Interpret the reviewed helper's call shape for this analyzer."""
+        return _body_math(tree, call_id)
+
     def refuse_module(self, path, reason):
         """Cache only a fixed-capture refusal, never ancestry/work failures."""
         refusal = _Module(reason=reason, intrinsic_refusal=True)
@@ -850,7 +854,7 @@ def _analyze(tree, path, analyzer):
                     continue
             if RULE_ID not in analyzer.rule_ids or value is None or value.canonical_name != 'highlighted':
                 continue
-            has_math, reason = _body_math(tree, index)
+            has_math, reason = analyzer.body_math(tree, index)
             if reason:
                 record(f'{reason} at byte {node.start}', RULE_ID)
             if not has_math:

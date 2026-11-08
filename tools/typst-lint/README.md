@@ -111,6 +111,7 @@ inspection route:
 /path/to/typst-packages/tools/typst-lint/typst-lint inspect-document --root /absolute/project --entrypoint main.typ --rule-set pde --preview-conditional-aligned-spacers --format json
 /path/to/typst-packages/tools/typst-lint/typst-lint inspect-document --root /absolute/project --entrypoint main.typ --rule-set pde --preview-conditional-prose-markers --format json
 /path/to/typst-packages/tools/typst-lint/typst-lint inspect-document --root /absolute/project --entrypoint main.typ --rule-set pde --package-path /absolute/captured-packages --format json
+/path/to/typst-packages/tools/typst-lint/typst-lint inspect-document --root /absolute/project --entrypoint main.typ --rule-set pde --package-path /absolute/captured-packages --footnote-cache-path /absolute/captured-cache --modern-highlight-evidence --format json
 /path/to/typst-packages/tools/typst-lint/typst-lint inspect-document --root /absolute/project --entrypoint main.typ --rule-set pde --package-path /absolute/captured-packages --reference-package-path /absolute/reference-packages --reference-facade Styles/styles.typ --format json
 /path/to/typst-packages/tools/typst-lint/typst-lint inspect-document --root /absolute/project --entrypoint main.typ --rule-set pde --package-path /absolute/captured-packages --reference-cache-path /absolute/captured-cache --reference-package-path /absolute/reference-packages --reference-facade Styles/styles.typ --format json
 /path/to/typst-packages/tools/typst-lint/typst-lint inspect-document --root /absolute/project --entrypoint main.typ --rule-set pde --package-path /absolute/captured-packages --reference-cache-path /absolute/captured-cache --reference-package-path /absolute/reference-packages --reference-facade Styles/styles.typ --reference-calls --format json
@@ -128,6 +129,25 @@ lexically inside displays and conditionally reports calls outside them, includin
 wrappers in deferred outer contexts. Runtime bindings, execution and display
 ownership remain unproved; hints can duplicate the independent raw annotation
 section and never authorize edits or compilation.
+
+The separately selected `--modern-highlight-evidence` uses both explicit package
+roots and recognizes only the reviewed main-c161707 `text-utils` 0.1.2 source
+and manifest. It reports literal math inside supported `highlighted` bodies,
+distinguishing default flow, explicit flow and explicit phrase mode. Unknown
+versions, dynamic options and unsupported bodies remain unavailable or unresolved;
+the selected higher-priority root is never silently replaced by the cache. This
+is conditional diagnostic evidence, not a claim that runtime binding or rendering
+is proven, nor permission to change sources. See
+[the highlight contract](CONDITIONAL_HIGHLIGHT_CONTRACT.md).
+
+The independent `--preview-conditional-gaps` inspection also offers separate
+source-only footnote-gap candidates before a literal `paragraph-tab` marker or
+direct `figure` call; their bindings, execution and rendering remain conditional.
+
+The `--preview-conditional-punctuation` inspection reports adjacent trailing
+punctuation moves independently from moves whose footnote has preceding spaces.
+Each adjacent move has inseparable insertion and deletion edits; its source-only
+proposal does not establish binding, rendering equivalence or write permission.
 
 This route captures literal relative includes with the fixed `book-v1` budget
 (64 source files and 400,000 syntax nodes), retains separate repeated include
@@ -275,8 +295,10 @@ or transient input modification within it. See the preview contract for limits.
 The ordinary, unprofiled compile gate remains blocked; the preview neither
 accepts compiler-tail arguments nor publishes a PDF. The separate explicit
 [`--compile-original --pdf-stdout` route](DOCUMENT_ORIGINAL_COMPILE_CONTRACT.md)
-compiles captured original bytes without linting or applying source edits. It
-returns PDF bytes through a pipe and reports on stderr; its success does not
+compiles captured original bytes without applying source edits. Add the explicit
+`--lint-document --rule-set pde` option to report the same three partial source
+checks on that capture before compiling; the default performs no lint. It returns
+PDF bytes through a pipe and reports on stderr. Compilation success does not
 mean lint coverage is complete. Shell redirection is caller-managed and can
 truncate files before the process starts. Optional
 `--discover-dependencies` derives current dependency paths from a sandboxed

@@ -494,7 +494,7 @@ def gate_original_compile_requested(arguments):
     if head[:1] != ['compile']:
         return False
     value_options = frozenset(('--root', '--format', '--package-path', '--profile',
-        '--resource-profile', '--target', '--output', '--entrypoint', '--manifest', '--journal-id'))
+        '--resource-profile', '--target', '--output', '--entrypoint', '--manifest', '--journal-id', '--rule-set'))
     i = 1
     while i < len(head):
         if head[i] == '--compile-original':
@@ -535,7 +535,7 @@ def main(argv=None, *, gate=False):
         'Preview does not publish output or establish complete coverage. '
         'Explicit original-only compilation: compile --compile-original --root /absolute/project '
         '--entrypoint main.typ --manifest /absolute/resources.json --pdf-stdout; '
-        'this compiles captured bytes but performs no lint.' if gate else
+        'this compiles captured bytes and only lints with explicit --lint-document.' if gate else
         'Explicit offline routes: fix --profile closed-core-v1 --offline-exclusive --target main.typ; '
         'compile --profile closed-core-v1 --resource-profile embedded-ascii-v1 '
         '--offline-exclusive --offline-output-exclusive --target main.typ --output build/main.pdf; '

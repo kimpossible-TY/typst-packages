@@ -20,7 +20,8 @@ class OriginalCompileDispatchTests(unittest.TestCase):
         for args in (['check', '--compile-original'],
                      ['compile', '--root', '/tmp', '--', '--compile-original'],
                      ['compile', '--root', '--compile-original'],
-                     ['compile', '--entrypoint', '--compile-original']):
+                     ['compile', '--entrypoint', '--compile-original'],
+                     ['compile', '--rule-set', '--compile-original']):
             with self.subTest(args=args):
                 self.assertFalse(requested(args))
 

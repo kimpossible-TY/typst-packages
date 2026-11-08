@@ -47,13 +47,13 @@
 | `pde.continuation-line` | 제안 | L, 독립 미리보기 | — | 제한된 직접 리터럴 문장·어휘와 경계만. `--preview-conditional-continuations`는 소스 줄바꿈을 공백으로 바꾸는 독립 후보를 제안하며 렌더 동등성은 미증명이다. |
 | `pde.display-continuation-gap` | 제안 | 기본 | 기본 | 확인된 display와 직접 이어지는 문장; 주석·불명확한 wrapper는 보류. |
 | `pde.proof-trailing-gap` | 제안 | L | G | 알려진 proof helper와 제한된 경계; G는 조건부 후보다. |
-| `pde.footnote-trailing-gap` | 제안 | L | G | G 결합 컴파일은 중첩 수식 각주 후보에 한정된다. 별도 소스 미리보기는 기존 marker 또는 직접 display 앞 중첩 산문의 제한된 후보를 제안한다. |
-| `pde.prose-footnote-punctuation` | 제안 | L | P | 제한된 직접 문장과 builtin 각주. 문서 검사는 조건부로 각주 앞 공백 제거와 각주 뒤 문장부호 이동을 각각 독립 미리보기로 제공한다. `--footnote-punctuation-evidence`는 일부 진단에 별도 출처 근거를 붙인다. P 결합 컴파일은 공백 제거만 포함한다. |
+| `pde.footnote-trailing-gap` | 제안 | L | G | G 결합 컴파일은 중첩 수식 각주 후보에 한정된다. 별도 소스 미리보기는 제한된 중첩 산문에서 기존 marker(`paragraph_tab`, `paragraph-tab`), 직접 display 또는 figure 앞의 후보를 조건부 제안한다. |
+| `pde.prose-footnote-punctuation` | 제안 | L | P | 각주 앞 공백 제거와 각주 뒤 문장부호 이동은 독립 조건부 미리보기다. 이동은 앞에 수평 공백이 있는 경우와 바로 붙은 경우가 별도이며 후자의 삽입·삭제는 분리할 수 없다. P 결합 컴파일은 공백 제거만 포함한다. |
 | `pde.aligned-footnote-spacer` | 제안 | L, 독립 미리보기 | — | 독립 미리보기는 제한된 정렬 수식 각주에 spacer 삽입을 제안한다. 실제 바인딩과 실행은 조건부이며 렌더가 달라질 수 있다. |
 | `pde.unaligned-footnote-no-spacer` | 제안 | L | S | 기존 명세대로 제한된 비정렬 수식 각주 앞 spacer를 제거하는 조건부 후보. 실제 렌더는 달라질 수 있다. |
 | `pde.prose-footnote-no-spacer` | 제안 | L, 독립 미리보기 | — | 독립 미리보기는 중첩 산문에서 기존 구두점에 밀착된 리터럴 spacer와 수평 공백만 제거한다. 실제 바인딩과 실행은 조건부이며 렌더가 달라질 수 있다. |
 | `pde.standalone-display` | 제안 | 기본 | 기본 | 파서가 확인한 display와 제한된 직접 문장·라벨. |
-| `pde.text-only-highlight` | 제안 | P | — | 알려진 highlight와 단순 리터럴 본문; 옵션·중첩 스타일 등은 보류. |
+| `pde.text-only-highlight` | 제안 | P, 현대 helper 별도 진단 | — | P는 기존 검토 helper와 단순 리터럴 본문에 한정된다. 별도 `--modern-highlight-evidence`는 정확한 현대 helper artifact의 default/flow/phrase 리터럴 본문에 포함된 수식을 조건부 진단한다. 바인딩·실행·렌더와 미지원 본문은 미확인이고 이 경로는 수정안을 내지 않는다. |
 | `pde.theme-cancelmark` | 진단 | L | — | 확인된 수학 취소 호출; 명세의 cancelmark 교체는 현재 제공하지 않는다. |
 | `pde.flowbox-colored-border` | 제안 | — | — | 검토된 전체 math-blocks 모듈의 정확한 형태와 이미 존재하는 theme binding이 필요하다. |
 | `pde.paragraph-capitalization` | 제안 | L, 독립 미리보기 | — | 알려진 마커 뒤 영어의 제한된 소문자 시작어; 독립 조건부 후보는 중첩 본문의 첫 ASCII 문자만 바꾸며 마커 바인딩과 언어·실행은 조건부다. |

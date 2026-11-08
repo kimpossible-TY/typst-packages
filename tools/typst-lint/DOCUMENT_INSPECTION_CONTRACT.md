@@ -180,6 +180,11 @@ JSON includes:
   proposes the break when a direct display follows the footnote. The helper
   binding, actual execution and whether the display is separate at runtime
   remain conditions; it can change rendering and grants no write authority.
+  `conditional_prose_footnote_extra_gap_previews` separately covers a literal
+  hyphenated `paragraph-tab` marker and direct `figure` call. Each edit names
+  its following form and binding/ownership conditions. The two owned Typst
+  fixtures yielded byte-identical PDFs, but other documents can render
+  differently; execution, binding and source-write authority remain unproved.
 - `--preview-conditional-punctuation` independently previews horizontal
   whitespace removal between an existing period/comma and a nested prose
   footnote. A separate `conditional_punctuation_move_previews` list proposes
@@ -187,6 +192,15 @@ JSON includes:
   footnote with a locally proven builtin binding. Neither candidate is composed
   with the other or with other plans; actual include bindings, execution,
   render equivalence and source-write permission remain unproved.
+  An independent `conditional_adjacent_punctuation_move_previews` list handles
+  direct prose predecessors already adjacent to the footnote, including inline
+  math and references, with complex literal footnote bodies retained byte for
+  byte. The earlier punctuation move requires horizontal whitespace before the
+  footnote, so the two selectors cannot select the same call. Each adjacent
+  move consists of an inseparable punctuation insertion and deletion; every row
+  reports `atomic_edits: true`. Helper binding, execution and punctuation
+  ownership remain conditions, and the rendered result may change. Neither
+  plan is composed with the other or authorizes compilation or source writes.
   The separate per-file `conditional_punctuation_details` also classifies
   adjacent `text#footnote[...].` and `text#footnote[...],` patterns, including
   inline-math and reference predecessors and complex literal bodies. It gives

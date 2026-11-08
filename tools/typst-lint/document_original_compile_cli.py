@@ -1,9 +1,11 @@
 """Explicit original-only, captured Typst compilation to stdout.
 
-This route performs no lint and never writes project sources or an output path.
+Optional document lint examines the captured sources without modifying them.
 The compiled PDF is emitted only after capture and compiler checks succeed.
 """
 import argparse
+from dataclasses import asdict
+import heapq
 import io
 import json
 import os
@@ -20,7 +22,117 @@ import document_resources
 import include_context
 from document_preview_cli import MAX_MANIFEST_BYTES, parse_manifest_bytes
 from package_loader import PackageInputError, _absolute_root, read_snapshot_file
-from typst_lint import InputError, SafetyError, VERSION, checked_path, relative, require
+from typst_lint import InputError, SafetyError, VERSION, checked_path, load_rules, relative, require
+
+_LINT_DEFAULT_SAMPLE = 50
+_LINT_DETAIL_SAMPLE = 10_000
+_LINT_ITEM_LIMIT = 100_000
+_LINT_REPORT_BYTES = 8 * 1024 * 1024
+
+
+class _DescendingKey:
+    __slots__ = ('key',)
+
+    def __init__(self, key):
+        self.key = key
+
+    def __lt__(self, other):
+        return self.key > other.key
+
+    def __eq__(self, other):
+        return type(other) is _DescendingKey and self.key == other.key
+
+
+def _retain_sample(heap, finding, sequence, limit):
+    key = (finding.path, finding.line, finding.column, finding.rule_id)
+    entry = (_DescendingKey(key), -sequence, finding)
+    if len(heap) < limit:
+        heapq.heappush(heap, entry)
+    elif key < heap[0][0].key:
+        heapq.heapreplace(heap, entry)
+
+
+def _finish_sample(heap):
+    return [asdict(row) for key, sequence, row in
+            sorted(heap, key=lambda item: (item[0].key, -item[1]))]
+
+
+def lint_captured_document(context, snapshot, *, rule_set, details=False, cancel_event=None):
+    """Run existing document source diagnostics against the issued compile capture."""
+    import document_display
+    import script_rule
+    import syntax_client
+    require(rule_set in ('core', 'pde') and type(details) is bool, 'Invalid document lint selection')
+    document_resources.stage_original(context, snapshot)
+    catalog, catalog_hash = load_rules()
+    enabled = [rule['id'] for rule in catalog['rules']
+               if rule['id'].split('.')[0] in catalog['packs'][rule_set]]
+    backends = [script_rule.RULE_ID]
+    if rule_set == 'pde':
+        backends += [document_display.STANDALONE, document_display.RULE_ID]
+    cap = _LINT_DETAIL_SAMPLE if details else _LINT_DEFAULT_SAMPLE
+    diagnostics, suppressed, files = [], [], []
+    seen_diagnostics = seen_suppressed = 0
+    counts = {rid: 0 for rid in backends}
+    suppressed_counts = {rid: 0 for rid in backends}
+    skipped_counts = {rid: 0 for rid in backends}
+    parse_error_counts = {rid: 0 for rid in backends}
+    items = len(context.sources) + len(context.edges) + len(context.occurrences) + len(context.unresolved)
+    for item in context.sources:
+        if cancel_event is not None and cancel_event.is_set():
+            raise runtime.CompilerFailure('cancelled', kind=runtime.CompilerFailureKind.CANCELLED)
+        results = {script_rule.RULE_ID: script_rule.analyze(item.tree, item.path,
+            catalog=catalog['rules'], _verify=False, _allow_code_call=True)}
+        if rule_set == 'pde':
+            results.update(document_display.analyze_all(item.tree, item.path, catalog=catalog['rules']))
+        for rid in backends:
+            value = results[rid]
+            errors = tuple(value.parse_errors)
+            reasons = tuple(value.skips)
+            items += 1 + len(value.diagnostics) + len(value.suppressed) + len(reasons) + len(errors)
+            require(items <= _LINT_ITEM_LIMIT, 'Document lint item limit exceeded')
+            counts[rid] += len(value.diagnostics)
+            suppressed_counts[rid] += len(value.suppressed)
+            skipped_counts[rid] += len(reasons)
+            parse_error_counts[rid] += len(errors)
+            for row in value.diagnostics:
+                _retain_sample(diagnostics, row, seen_diagnostics, cap)
+                seen_diagnostics += 1
+            for row in value.suppressed:
+                _retain_sample(suppressed, row, seen_suppressed, cap)
+                seen_suppressed += 1
+            files.append(dict(path=item.path, source_sha256=item.identity.source_sha256,
+                tree_sha256=item.identity.tree_sha256, nodes=len(item.tree.nodes), rule_id=rid,
+                status='partial', supported_scope_status='partial' if reasons or errors else 'evaluated',
+                partial_reason=('Source-pattern analysis does not cover all syntax, runtime execution, '
+                                'imports, or rendered contexts'),
+                diagnostics=len(value.diagnostics), suppressed=len(value.suppressed),
+                skip_count=len(reasons), skip_reasons=list(reasons[:20]),
+                skip_reasons_omitted=max(0, len(reasons) - 20),
+                parse_error_count=len(errors), parse_errors=[list(span) for span in errors[:20]],
+                parse_errors_omitted=max(0, len(errors) - 20)))
+    document_resources.stage_original(context, snapshot)
+    total, hidden = sum(counts.values()), sum(suppressed_counts.values())
+    diagnostics = _finish_sample(diagnostics)
+    suppressed = _finish_sample(suppressed)
+    report = dict(rule_set=rule_set, catalog_sha256=catalog_hash,
+        diagnostics_present=bool(total), diagnostics_count=total, diagnostics_by_rule=counts,
+        diagnostics=diagnostics, diagnostics_omitted=total - len(diagnostics),
+        suppressed_count=hidden, suppressed_by_rule=suppressed_counts, suppressed=suppressed,
+        suppressed_omitted=hidden - len(suppressed), sample_limit=cap, details_requested=details,
+        limits=dict(per_source_nodes=syntax_client.MAX_NODES, aggregate_items=_LINT_ITEM_LIMIT,
+                    aggregate_items_used=items, report_bytes=_LINT_REPORT_BYTES),
+        coverage=dict(global_complete=False, enabled=enabled, inspected_backends=backends,
+            uninspected=[rid for rid in enabled if rid not in backends], files=files,
+            skips_by_rule=skipped_counts, parse_errors_by_rule=parse_error_counts,
+            unresolved_includes=[asdict(row) for row in context.unresolved],
+            runtime_execution_proved=False, package_bindings_proved=False,
+            consumer_config_loaded=False, fixes_applied=False))
+    # Use the actual encoding and indentation of the nested stderr section.
+    require(len(json.dumps({'lint': report}, ensure_ascii=False, sort_keys=True, indent=2).encode('utf-8'))
+            <= _LINT_REPORT_BYTES,
+            'Document lint report exceeds its byte limit')
+    return report
 
 
 class _Parser(argparse.ArgumentParser):
@@ -113,6 +225,12 @@ def main(arguments=None):
     parser.add_argument('--entrypoint', required=True)
     parser.add_argument('--manifest', required=True)
     parser.add_argument('--discover-dependencies', action='store_true')
+    parser.add_argument('--lint-document', action='store_true',
+                        help='Run partial document diagnostics on the same captured sources before compiling')
+    parser.add_argument('--rule-set', choices=('core', 'pde'),
+                        help='Explicit document lint rule set (requires --lint-document)')
+    parser.add_argument('--lint-details', action='store_true',
+                        help='Include up to 10,000 diagnostics and suppressed entries instead of 50')
     parser.add_argument('--pdf-stdout', action='store_true', required=True,
                         help='Emit the verified original PDF bytes on stdout; report JSON on stderr')
     words = list(sys.argv[1:] if arguments is None else arguments)
@@ -124,6 +242,8 @@ def main(arguments=None):
                 parser.error(f'Duplicate option: {option}')
             seen.add(option)
     args = parser.parse_args(words)
+    if (args.rule_set is not None or args.lint_details) and not args.lint_document:
+        parser.error('--rule-set and --lint-details require --lint-document')
     output_identity = _stream_identity(getattr(sys.stdout, 'buffer', sys.stdout))
     if output_identity is not None and output_identity[2] not in (stat.S_IFIFO, stat.S_IFSOCK):
         print(json.dumps(dict(schema=1, mode='original-compile', status=2,
@@ -138,7 +258,7 @@ def main(arguments=None):
     starts = document_preview_compile.PreviewCompilerStarts()
     phase = 'input'
     result = dict(schema=1, tool_version=VERSION, mode='original-compile', status=2,
-                  lint_performed=False, global_coverage_complete=False,
+                  lint_attempted=False, lint_completed=False, lint_performed=False, global_coverage_complete=False,
                   source_files_opened_for_write_by_tool=False, source_application_authority=False,
                   publication_authority=False, dependency_closure_proved=False,
                   live_source_freshness_proved=False, pdf_streamed=False,
@@ -202,6 +322,12 @@ def main(arguments=None):
             require(captured_fonts == fonts, 'Selected fonts changed after dependency discovery')
             comparison = document_dependencies.compare(snapshot, raw_deps, cwd=str(root), roots=roots)
             require(not comparison.missing, 'A discovered dependency is absent from the resource capture')
+        if args.lint_document:
+            phase = 'lint'
+            result['lint_attempted'] = True
+            result['lint'] = lint_captured_document(context, snapshot, rule_set=args.rule_set or 'core',
+                                                    details=args.lint_details, cancel_event=cancel)
+            result['lint_completed'] = result['lint_performed'] = True
         phase = 'compile'
         compiled = document_preview_compile.compile_original(context, snapshot, entrypoint=args.entrypoint,
             cancel_event=cancel, expected_dependencies=observed, expected_baseline_sha256=expected_pdf, starts=starts)
@@ -212,7 +338,8 @@ def main(arguments=None):
             selected_system_font_files=compiled.system_font_files, compiler_sha256=compiled.compiler_sha256,
             resource_count=len(snapshot.files), source_count=len(context.sources),
             discovery_performed=observed is not None,
-            note='Compilation succeeded; lint was not performed and rule coverage is incomplete')
+            note=('Compilation succeeded; document lint coverage is incomplete' if args.lint_document else
+                  'Compilation succeeded; lint was not performed and rule coverage is incomplete'))
         phase = 'stream'
         out_collision, err_collision = _stream_collisions(protected)
         if (_same_streams() or err_collision
