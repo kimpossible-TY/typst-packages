@@ -48,16 +48,14 @@ class ConditionalHyphenMarkerGapCliTests(unittest.TestCase):
         rows = {row['path']: row for row in section['by_file']}
         self.assertEqual(rows['child.typ']['verification'], 'no-candidate')
         row = rows['main.typ']
+        self.assertEqual(row['verification'], 'withheld')
         self.assertEqual(len(row['unresolved']), 1)
         self.assertFalse(row['runtime_binding_proved'] or row['execution_proved'])
-        edit, = row['edits']
-        candidate = plan(main, [Edit(edit['start'], edit['end'], edit['replacement'].encode())]).candidate()
         self.assertEqual(row['baseline_sha256'], digest(main))
-        self.assertEqual(row['candidate_sha256'], digest(candidate))
-        self.assertIn(b'First.\n\n#paragraph-tab', candidate)
-        self.assertIn(b'#unknown[X]\n#paragraph-tab', candidate)
+        self.assertIsNone(row['candidate_sha256'])
+        self.assertFalse(row['edits'])
         text = self.run_cli('--rule-set', 'pde', '--preview-conditional-paragraph-gaps', format='text')
-        for phrase in ('Conditional hyphen marker gap previews:', 'conditional edit bytes',
+        for phrase in ('Conditional hyphen marker gap previews:', 'withheld',
                        'unresolved marker at byte', 'condition:', 'no edit or compiler permission'):
             self.assertIn(phrase, text)
         self.assertEqual((self.root / 'main.typ').read_bytes(), main)

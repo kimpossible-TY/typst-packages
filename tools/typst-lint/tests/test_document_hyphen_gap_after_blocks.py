@@ -91,8 +91,8 @@ class HyphenGapAfterBlocksTests(unittest.TestCase):
         self.assertEqual(len(result['edits']), 1)
         self.assertEqual(result['edits'][0]['preceding_kind'], 'flowbox')
         old = conservative(parse(source), 'main.typ')
-        self.assertEqual(len(old['edits']), 1)
-        self.assertNotEqual(old['edits'][0]['start'], result['edits'][0]['start'])
+        self.assertEqual(old['verification'], 'withheld')
+        self.assertFalse(old['edits'])
         self.assertIn(b'#pagebreak(weak: true)\n#paragraph-tab', candidate)
 
     def test_parse_failure_withholds(self):

@@ -153,14 +153,25 @@ def analyze(source, path, *, catalog=None):
             previous = source[previous_start:line_start]
             if previous.endswith(b'\n') and not previous.strip(b' \t\r\n'):
                 continue
+            ignored = any(scope.covers(paragraph_rules.MARKER_GAP, start) for scope in scopes)
+            previous_pos = pos - 2
+            while previous_pos >= 0 and nodes[siblings[previous_pos]].kind in (
+                    'Space', 'Parbreak', 'LineComment', 'BlockComment'):
+                previous_pos -= 1
+            previous_node = nodes[siblings[previous_pos]] if previous_pos >= 0 else None
+            if (previous_node is None or previous_node.kind != 'Text'
+                    or not any(char.isalnum() for char in
+                               source[previous_node.start:previous_node.end].decode('utf-8'))):
+                if not ignored:
+                    result['unresolved'].append(paragraph_rules.NESTED_GAP_UNRESOLVED + str(start))
+                continue
             rule = metadata[paragraph_rules.MARKER_GAP]
             finding = dict(rule_id=paragraph_rules.MARKER_GAP, grade=rule['grade'], path=path,
                 line=line_index + 1, column=len(source[line_start:start].decode('utf-8')) + 1,
                 start=start, end=ident.end, marker_start=start, marker_spelling='paragraph-tab',
                 source=rule['source'], explanation='Conditional source hint: if this standalone name is the '
                 'paragraph marker, place a blank source line before it.')
-            target = ('suppressed' if any(scope.covers(paragraph_rules.MARKER_GAP, start) for scope in scopes)
-                      else 'diagnostics')
+            target = 'suppressed' if ignored else 'diagnostics'
             result[target].append(finding)
             require(len(result['diagnostics']) + len(result['suppressed']) <= MAX_HINT_ITEMS,
                     'Hyphenated marker hint item limit exceeded')
@@ -172,6 +183,14 @@ def analyze(source, path, *, catalog=None):
             values = analyzer(virtual, path, catalog=records)
             if values.parse_errors:
                 raise SafetyError('Virtual marker rule analysis failed')
+            if analyzer is paragraph_rules.analyze_conditional_nested_gap:
+                prefix = paragraph_rules.NESTED_GAP_UNRESOLVED
+                for reason in values.skips:
+                    suffix = reason[len(prefix):] if reason.startswith(prefix) else ''
+                    if suffix.isdecimal() and int(suffix) in marker_starts:
+                        result['unresolved'].append(reason)
+                        require(len(result['unresolved']) <= MAX_HINT_ITEMS,
+                                'Hyphenated marker hint item limit exceeded')
             for target, findings in (('diagnostics', values.diagnostics), ('suppressed', values.suppressed)):
                 for finding in findings:
                     offset = mapper.offset(finding)

@@ -8,7 +8,7 @@ from document_conditional_marker_tags import _has_name
 from document_conditional_hyphen_marker import analyze
 from document_conditional_hyphen_marker_gap import _keys
 from document_display import analyze_all as analyze_displays
-from document_gap_preview import _scopes, _syntax_signature
+from document_gap_preview import _MappedEdits, _scopes, _syntax_signature
 from document_sequence_preview import _same_findings
 from edit_plan import Edit, plan
 import continuation_rules
@@ -109,9 +109,24 @@ def _callee(tree, index):
     return None
 
 
-def _select(tree, diagnostics):
+def _boundary_offsets(reasons):
+    prefix = paragraph_rules.NESTED_GAP_UNRESOLVED
+    offsets = []
+    for reason in reasons:
+        if not reason.startswith(prefix):
+            continue
+        value = reason[len(prefix):]
+        if not value.isdecimal() or str(int(value)) != value:
+            raise SafetyError('Invalid unresolved marker boundary location')
+        offsets.append(int(value))
+    if len(set(offsets)) != len(offsets):
+        raise SafetyError('Duplicate unresolved marker boundary')
+    return tuple(offsets)
+
+
+def _select(tree, unresolved):
     nodes, source = tree.nodes, tree.source
-    targets = {row['marker_start']: row for row in diagnostics if row['rule_id'] == RULE}
+    targets = set(_boundary_offsets(unresolved))
     parents = {child: (index, position) for index, node in enumerate(nodes)
                for position, child in enumerate(node.children)}
     edits, selected, names = [], [], []
@@ -151,7 +166,7 @@ def _select(tree, diagnostics):
             continue
         newline = b'\r\n' if source[max(0, line_start - 2):line_start] == b'\r\n' else b'\n'
         edits.append(Edit(line_start, line_start, newline))
-        selected.append(targets[mark.start])
+        selected.append(mark.start)
         names.append(name)
     return tuple(edits), tuple(selected), tuple(names)
 
@@ -169,7 +184,7 @@ def preview(tree, path, *, catalog=None):
         before = analyze(source, path, catalog=records)
         if before['status'] == 'UNAVAILABLE':
             raise SafetyError('Hyphen marker analysis is unavailable')
-        edits, selected, names = _select(tree, before['diagnostics'])
+        edits, selected, names = _select(tree, before['unresolved'])
         if not edits:
             return None
         proposed = plan(source, edits)
@@ -182,11 +197,23 @@ def preview(tree, path, *, catalog=None):
             raise SafetyError('Blank line changes other syntax or suppression targets')
         after = analyze(candidate, path, catalog=records)
         expected = _keys(before['diagnostics'], proposed.edits)
-        expected.subtract(_keys(selected, proposed.edits))
         if (after['status'] == 'UNAVAILABLE' or any(count < 0 for count in expected.values())
                 or +expected != _keys(after['diagnostics'])
                 or _keys(before['suppressed'], proposed.edits) != _keys(after['suppressed'])):
             raise SafetyError('Blank line changed other hyphen marker hints or suppressions')
+        mapper = _MappedEdits(proposed.edits)
+        prefix = paragraph_rules.NESTED_GAP_UNRESOLVED
+        expected_unresolved = []
+        for reason in before['unresolved']:
+            if reason.startswith(prefix):
+                offset = int(reason[len(prefix):])
+                if offset in selected:
+                    continue
+                expected_unresolved.append(prefix + str(mapper.mapped(offset)))
+            else:
+                expected_unresolved.append(reason)
+        if tuple(expected_unresolved) != tuple(after['unresolved']):
+            raise SafetyError('Blank line changed other unresolved marker boundaries')
         displays_before, displays_after = analyze_displays(tree, path, catalog=records), analyze_displays(parsed, path, catalog=records)
         if any(not _same_findings(tree, displays_before[rid], parsed, displays_after[rid], proposed.edits)
                for rid in displays_before):
@@ -208,7 +235,7 @@ def preview(tree, path, *, catalog=None):
         if not _same_findings(tree, proof_rules.analyze_conditional(tree, path, before_resolution, catalog=records),
                               parsed, proof_rules.analyze_conditional(parsed, path, after_resolution, catalog=records), proposed.edits):
             raise SafetyError('Blank line changed proof findings')
-        if _select(parsed, after['diagnostics'])[0]:
+        if _select(parsed, after['unresolved'])[0]:
             raise SafetyError('Block-adjacent marker gap preview did not converge')
         by_start = {edit.start: name for edit, name in zip(edits, names)}
         return dict(empty, candidate_sha256=digest(candidate),

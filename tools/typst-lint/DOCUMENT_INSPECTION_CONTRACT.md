@@ -168,6 +168,14 @@ runtime namespace configuration remain conditions. Nested scopes, dynamic names,
 unresolved include execution and sibling-parent identity are not proved. This
 diagnostic grants no edits and does not establish complete namespace coverage.
 
+`--preview-conditional-modern-highlights` additionally requires
+`--modern-highlight-evidence` and emits independent source-only edits for a
+narrow no-option literal modern `highlighted` subset. The exact helper artifact
+is required, runtime binding remains conditional, and splitting math from
+highlight can change rendered emphasis and layout. See
+[the preview contract](MODERN_HIGHLIGHT_PREVIEW_CONTRACT.md) for exclusions and
+the shared report budget. The inspection does not apply or compile these edits.
+
 JSON includes:
 
 - `include_context`: selected budget, source hashes/counts, edges, occurrences
@@ -188,6 +196,16 @@ JSON includes:
   include-site bindings, execution, styles and rendering remain unproved.
   The report retains these rules in `coverage.uninspected` because their document
   context is not established. Shared resolver refusals appear once per source.
+  `conditional_local_scope_raw_annotations` separately counts raw `annot`
+  calls lexically inside displays in supported literal
+  `local-scope-annotations` callbacks and gives conditional outside-display
+  hints with source offsets and suppressions. Wrapper/raw helper identity,
+  execution and actual rendered display ownership remain unproved; dynamic
+  nested calls and equation constructors are unresolved. This section can
+  overlap other conditional reports, grants no edit/compiler authority, and
+  is not part of the separate original-compile `--lint-local-hints` summary.
+  Text output shows at most 20 unresolved nested paragraph marker boundaries;
+  the budgeted JSON report retains the complete reason list.
   A separate `conditional_hyphen_markers` section reports root and nested gaps,
   and nested target/capitalization source patterns for literal `#paragraph-tab`.
   The equivalent-length virtual marker spelling is parsed separately and its

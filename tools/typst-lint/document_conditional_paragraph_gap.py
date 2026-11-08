@@ -36,6 +36,10 @@ def preview(tree, path, *, catalog=None):
         if tree.mode != 'markup' or tree.nodes[0].errors:
             raise SafetyError('Requires well-formed markup source')
         before = paragraph_rules.analyze_conditional_nested_gap(tree, path, catalog=records)
+        unresolved = tuple(reason for reason in before.skips
+                           if reason.startswith(paragraph_rules.NESTED_GAP_UNRESOLVED))
+        if unresolved:
+            raise SafetyError('Paragraph marker boundary is unproved: ' + '; '.join(unresolved))
         mapper = _FindingMapper(source)
         edits = []
         for finding in before.diagnostics:

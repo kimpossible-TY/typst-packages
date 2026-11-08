@@ -43,6 +43,7 @@ def report_document(root, entrypoint, *, rule_set='core', package_path=None,
                     footnote_cache_path=None,
                     footnote_punctuation_evidence=False,
                     modern_highlight_evidence=False,
+                    preview_conditional_modern_highlights=False,
                     reference_package_path=None, reference_facade=None, reference_cache_path=None,
                     reference_calls=False, reference_arguments=False, reference_catalog=None):
     """Inspect retained source bytes without reading consumer configuration.
@@ -105,6 +106,9 @@ def report_document(root, entrypoint, *, rule_set='core', package_path=None,
     require(type(modern_highlight_evidence) is bool
             and (not modern_highlight_evidence or footnote_cache_path is not None),
             'Modern highlight evidence requires --rule-set pde, --package-path and --footnote-cache-path')
+    require(type(preview_conditional_modern_highlights) is bool
+            and (not preview_conditional_modern_highlights or modern_highlight_evidence),
+            'Modern highlight previews require --modern-highlight-evidence')
     reference_requested = (reference_package_path is not None or reference_facade is not None
                            or reference_cache_path is not None)
     require(type(reference_calls) is bool and (not reference_calls or reference_requested),
@@ -193,9 +197,11 @@ def report_document(root, entrypoint, *, rule_set='core', package_path=None,
     conditional_marker_tags = []
     local_findings, local_suppressed, local_files, local_contexts = [], [], [], []
     conditional_hyphen_markers = []
+    conditional_local_scope_raw_annotations = []
     items = len(captured.sources) + len(captured.edges) + len(captured.occurrences) + len(captured.unresolved)
     footnote_report = None
     modern_highlight_report = None
+    modern_highlight_previews = None
     if footnote_cache_path is not None:
         from conditional_footnote_binding import ConditionalFootnoteBinding, _valid as valid_footnote_session
         from namespace_multiroot import load_multiroot_capture
@@ -231,14 +237,25 @@ def report_document(root, entrypoint, *, rule_set='core', package_path=None,
         if modern_highlight_evidence:
             from conditional_modern_highlight import ModernHighlightAnalyzer, ModernVariantUnavailable
             try:
-                modern_highlight_report = ModernHighlightAnalyzer(footnote_session, scoped_callbacks=True).analyze_all(
-                    max_items=MAX_REPORT_ITEMS - items)
+                modern_analyzer = ModernHighlightAnalyzer(footnote_session, scoped_callbacks=True)
+                if preview_conditional_modern_highlights:
+                    from document_modern_highlight_preview import preview_all as preview_modern_highlights
+                    modern_highlight_report, modern_highlight_previews = preview_modern_highlights(
+                        modern_analyzer, max_items=MAX_REPORT_ITEMS - items, return_evidence=True)
+                    items += modern_highlight_previews['report_items']
+                else:
+                    modern_highlight_report = modern_analyzer.analyze_all(max_items=MAX_REPORT_ITEMS - items)
                 items += modern_highlight_report['report_items']
             except ModernVariantUnavailable as error:
                 modern_highlight_report = dict(status='UNAVAILABLE', reason=str(error), by_file=[],
                     runtime_binding_proved=False, execution_proved=False, coverage_complete=False,
                     edit_permission=False, compiler_permission=False, render_equivalence_proved=False)
                 items += 1
+                if preview_conditional_modern_highlights:
+                    modern_highlight_previews = dict(status='UNAVAILABLE', reason=str(error), by_file=[],
+                        runtime_binding_proved=False, execution_proved=False, coverage_complete=False,
+                        edit_permission=False, compiler_permission=False, render_equivalence_proved=False)
+                    items += 1
             require(items <= MAX_REPORT_ITEMS, 'Document inspection report item limit exceeded')
     reference_report = None
     if reference_requested:
@@ -361,6 +378,13 @@ def report_document(root, entrypoint, *, rule_set='core', package_path=None,
                           + len(hyphen_markers['unresolved']) + len(hyphen_markers['conditions']))
                 require(items <= MAX_REPORT_ITEMS, 'Document inspection report item limit exceeded')
                 conditional_hyphen_markers.append(hyphen_markers)
+                from document_conditional_local_raw_annot import analyze as analyze_local_raw_annot
+                local_raw = analyze_local_raw_annot(item.source, item.path, catalog=catalog['rules'])
+                items += (1 + len(local_raw['diagnostics']) + len(local_raw['suppressed'])
+                          + len(local_raw['unresolved']) + len(local_raw['conditions'])
+                          + local_raw['wrappers_examined'] + local_raw['lexical_display_calls'])
+                require(items <= MAX_REPORT_ITEMS, 'Document inspection report item limit exceeded')
+                conditional_local_scope_raw_annotations.append(local_raw)
             else:
                 local_results = None
             if preview_conditional_gaps:
@@ -867,12 +891,18 @@ def report_document(root, entrypoint, *, rule_set='core', package_path=None,
             source_contexts=local_contexts, coverage=local_files, edit_permission=False)
         report['conditional_hyphen_markers'] = dict(by_file=conditional_hyphen_markers,
             edit_permission=False, compiler_permission=False, coverage_complete=False)
+        report['conditional_local_scope_raw_annotations'] = dict(by_file=conditional_local_scope_raw_annotations,
+            duplicates_existing_hints_possible=True, edit_permission=False, compiler_permission=False,
+            coverage_complete=False)
     if reference_report is not None:
         report['reference_provenance'] = reference_report
     if footnote_report is not None:
         report['conditional_footnote_bindings'] = footnote_report
     if modern_highlight_report is not None:
         report['conditional_modern_highlight'] = modern_highlight_report
+    if modern_highlight_previews is not None:
+        report['conditional_modern_highlight_previews'] = modern_highlight_previews
+    if modern_highlight_report is not None:
         require(valid_footnote_session(footnote_session), 'Conditional highlight capture changed during inspection')
         require(len(json.dumps(report, ensure_ascii=False, sort_keys=True, indent=2).encode('utf-8'))
                 <= MAX_MODERN_REPORT_BYTES,
@@ -898,6 +928,8 @@ def main(arguments=None):
                         help='Report separately sourced conditional prose footnote punctuation hints (requires --footnote-cache-path)')
     parser.add_argument('--modern-highlight-evidence', action='store_true',
                         help='Report the exact modern text-utils highlighted variant (requires --package-path and --footnote-cache-path)')
+    parser.add_argument('--preview-conditional-modern-highlights', action='store_true',
+                        help='Preview simple modern highlight splits (requires --modern-highlight-evidence)')
     parser.add_argument('--preview-display-gaps', action='store_true',
                         help='Preview independently verified display-gap edits (requires --rule-set pde)')
     parser.add_argument('--preview-standalone-displays', action='store_true',
@@ -948,6 +980,7 @@ def main(arguments=None):
                                  footnote_cache_path=args.footnote_cache_path,
                                  footnote_punctuation_evidence=args.footnote_punctuation_evidence,
                                  modern_highlight_evidence=args.modern_highlight_evidence,
+                                 preview_conditional_modern_highlights=args.preview_conditional_modern_highlights,
                                  preview_display_gaps=args.preview_display_gaps,
                                  preview_standalone_displays=args.preview_standalone_displays,
                                  preview_sequence=args.preview_sequence,
@@ -991,6 +1024,30 @@ def main(arguments=None):
             for finding in result['local_rule_hints']['diagnostics']:
                 print(f"{finding['path']}:{finding['line']}:{finding['column']}: "
                       f"source-local conditional {finding['rule_id']}: {finding['explanation']}")
+            from paragraph_rules import NESTED_GAP_UNRESOLVED
+            unresolved_gaps = [(row['path'], reason) for row in result['local_rule_hints']['coverage']
+                               if row['rule_id'] == 'pde.paragraph-marker-gap'
+                               for reason in row['reasons'] if reason.startswith(NESTED_GAP_UNRESOLVED)]
+            for path, reason in unresolved_gaps[:20]:
+                print(f"  {path}: {reason}")
+            if len(unresolved_gaps) > 20:
+                print(f"  {len(unresolved_gaps) - 20} additional nested paragraph marker boundaries omitted; see JSON")
+        if 'conditional_local_scope_raw_annotations' in result:
+            local_raw = result['conditional_local_scope_raw_annotations']
+            print('Conditional local-scope raw annotations: diagnostic-only, no edit or compiler permission')
+            for row in local_raw['by_file']:
+                if not (row['wrappers_examined'] or row['diagnostics'] or row['suppressed'] or row['unresolved']):
+                    continue
+                print(f"  {row['path']}: {row['wrappers_examined']} callbacks; "
+                      f"{row['lexical_display_calls']} calls lexically in display; "
+                      f"{len(row['diagnostics'])} outside hints; {len(row['suppressed'])} suppressed")
+                for reason in row['unresolved']:
+                    print(f"    unresolved: {reason}")
+                for finding in row['diagnostics']:
+                    print(f"    {finding['line']}:{finding['column']}: {finding['rule_id']}: {finding['explanation']}")
+            if local_raw['by_file']:
+                for condition in local_raw['by_file'][0]['conditions']:
+                    print(f"  condition: {condition}")
         if 'conditional_hyphen_markers' in result:
             markers = result['conditional_hyphen_markers']
             print('Conditional hyphenated paragraph markers: diagnostic-only, no edit or compiler permission')
@@ -1091,6 +1148,26 @@ def main(arguments=None):
                             print(f"      condition: {condition}")
                 for reason in row['unresolved']:
                     print(f"    unresolved: {reason}")
+        if 'conditional_modern_highlight_previews' in result:
+            previews = result['conditional_modern_highlight_previews']
+            print(f"Conditional modern highlight previews: {previews['status']}; "
+                  'source-only, no edit or compiler permission')
+            if 'diagnostics_count' in previews:
+                print(f"  {previews['diagnostics_count']} diagnostics; {previews['previewed_diagnostics']} previewed; "
+                      f"{previews['unpreviewed_diagnostics']} not previewed; "
+                      f"{previews['withheld_source_count']} sources withheld; "
+                      f"{previews['unresolved_reasons_count']} unresolved reasons")
+            if previews.get('reason'):
+                print(f"  unresolved: {previews['reason']}")
+            for row in previews['by_file']:
+                print(f"  {row['path']}: {row['verification']}; {len(row['edits'])} edits; "
+                      f"source sha256 {row['baseline_sha256']}; candidate sha256 {row['candidate_sha256']}")
+                if row.get('reason'):
+                    print(f"    unresolved: {row['reason']}")
+                for edit in row['edits']:
+                    print(f"    conditional edit bytes {edit['start']}..{edit['end']}; replacement in JSON")
+            for condition in previews.get('conditions', ()):
+                print(f"  condition: {condition}")
         if 'conditional_scoped_calls' in result:
             scoped_calls = result['conditional_scoped_calls']
             print('Conditional scoped calls: source-only, no edit or compiler permission')

@@ -45,8 +45,10 @@ def preview(tree, path, *, catalog=None):
         if tree.mode != 'markup' or tree.nodes[0].errors:
             raise SafetyError('Requires well-formed markup source')
         before = marker.analyze(source, path, catalog=records)
-        if before['status'] != 'PARTIAL' or before['unresolved']:
-            raise SafetyError('Hyphen marker hints are unavailable or unresolved')
+        if before['status'] != 'PARTIAL':
+            raise SafetyError('Hyphen marker hints are unavailable')
+        if any('explicit paragraph-tab shadow' in reason for reason in before['unresolved']):
+            raise SafetyError('Hyphen marker binding has an explicit shadow or mutation')
         selected = [row for row in before['diagnostics'] if row['rule_id'] == RULE]
         if not selected:
             return None

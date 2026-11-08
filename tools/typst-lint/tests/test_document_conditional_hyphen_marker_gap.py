@@ -42,14 +42,22 @@ class ConditionalHyphenMarkerGapTests(unittest.TestCase):
 
     def test_root_nested_body_start_crlf_indent_and_utf8(self):
         for newline in (b'\n', b'\r\n'):
-            for prefix in (b'= Heading', '#block[한글.'.encode(), b'#block['):
-                suffix = b'Second.]' if prefix.startswith(b'#block[') else b'Second.'
+            for prefix in ('#block[한글.'.encode(),):
+                suffix = b'Second.]'
                 source = prefix + newline + b'  #paragraph-tab' + newline + b'  ' + suffix
                 with self.subTest(newline=newline, prefix=prefix):
                     result, candidate = self.candidate(source)
                     self.assertEqual(len(result['edits']), 1)
                     self.assertEqual(candidate, source.replace(newline + b'  #paragraph-tab',
                                                                newline * 2 + b'  #paragraph-tab'))
+
+    def test_heading_and_body_start_are_explicitly_unresolved(self):
+        for source in (b'= Heading\n#paragraph-tab\nNext.', b'#block[\n#paragraph-tab\nNext.]'):
+            with self.subTest(source=source):
+                result = self.preview(source)
+                self.assertEqual(result['verification'], 'withheld')
+                self.assertEqual(len(result['unresolved']), 1)
+                self.assertFalse(result['edits'])
 
     def test_multiple_and_other_rule_findings_remain(self):
         source = (b'#block[First.\n#paragraph-tab\nSecond.\n#paragraph-tab\nThird.]\n'
@@ -88,10 +96,10 @@ class ConditionalHyphenMarkerGapTests(unittest.TestCase):
     def test_mixed_safe_and_ambiguous_markers_report_both(self):
         source = (b'#block[First.\n#paragraph-tab\nSecond.]\n'
                   b'#block[Before.#footnote[X]\n#paragraph-tab\nSecond.]')
-        result, candidate = self.candidate(source)
-        self.assertEqual(len(result['edits']), 1)
+        result = self.preview(source)
+        self.assertEqual(result['verification'], 'withheld')
+        self.assertFalse(result['edits'])
         self.assertEqual(len(result['unresolved']), 1)
-        self.assertIn(b'Before.#footnote[X]\n#paragraph-tab', candidate)
 
     def test_malformed_or_changed_other_findings_withhold(self):
         source = b'#block[First.\n#paragraph-tab\nSecond.] #block[Claim #footnote[Y]]'

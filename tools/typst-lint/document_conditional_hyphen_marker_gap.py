@@ -81,6 +81,16 @@ def preview(tree, path, *, catalog=None):
         before = hints.analyze(source, path, catalog=records)
         if before['status'] == 'UNAVAILABLE':
             raise SafetyError('Hyphen marker analysis is unavailable')
+        boundaries = [reason for reason in before['unresolved']
+                      if reason.startswith(paragraph_rules.NESTED_GAP_UNRESOLVED)]
+        if boundaries:
+            prefix = paragraph_rules.NESTED_GAP_UNRESOLVED
+            for reason in boundaries:
+                value = reason[len(prefix):]
+                if not value.isdecimal() or str(int(value)) != value:
+                    raise SafetyError('Invalid unresolved marker boundary location')
+                empty['unresolved'].append(dict(marker_start=int(value), reason=reason))
+            return dict(empty, verification='withheld', reason='One or more marker boundaries are unproved')
         edits, selected, unresolved = _select(tree, before['diagnostics'])
         empty['unresolved'] = list(unresolved)
         if not edits:

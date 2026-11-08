@@ -46,7 +46,7 @@ class ConditionalHyphenMarkerTests(unittest.TestCase):
                        b'First.\n#paragraph-tab\n$ x $'):
             with self.subTest(source=source):
                 self.assertFalse(marker.analyze(source, 'main.typ')['diagnostics'])
-        suppressed = (b'// typst-lint: ignore-next pde.paragraph-marker-gap -- intended\n'
+        suppressed = (b'First.\n// typst-lint: ignore-next pde.paragraph-marker-gap -- intended\n'
                       b'#paragraph-tab\nText.')
         result = marker.analyze(suppressed, 'main.typ')
         self.assertFalse(result['diagnostics'])
@@ -83,6 +83,16 @@ class ConditionalHyphenMarkerTests(unittest.TestCase):
             result = marker.analyze(prefix + body, 'main.typ')
             self.assertFalse(result['diagnostics'] or result['suppressed'])
             self.assertTrue(result['unresolved'])
+
+    def test_unknown_previous_call_or_first_body_is_unresolved_not_a_gap(self):
+        for source in (b'#let n = footnote\n#n[Note.]\n#paragraph-tab\nNext.',
+                       b'#let n = footnote\n#block[#n[Note.]\n#paragraph-tab\nNext.]',
+                       b'#block[\n#paragraph-tab\nNext.]'):
+            with self.subTest(source=source):
+                result = marker.analyze(source, 'main.typ')
+                self.assertFalse(any(row['rule_id'] == 'pde.paragraph-marker-gap' for row in result['diagnostics']))
+                self.assertTrue(any(reason.startswith('Unresolved nested paragraph marker boundary at byte ')
+                                    for reason in result['unresolved']), result)
 
     def test_virtual_parser_failure_and_limits_return_unavailable_not_partial(self):
         source = b'#block[First.\n#paragraph-tab\ntherefore x.]'

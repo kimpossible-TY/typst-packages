@@ -31,7 +31,7 @@ class ConditionalHyphenMarkerCliTests(unittest.TestCase):
         return json.loads(run.stdout) if format == 'json' else run.stdout
 
     def test_root_nested_and_suppression_stay_separate_from_existing_hints(self):
-        main = b'#include "child.typ"\n#paragraph-tab\nText.'
+        main = b'#include "child.typ"\nPlain before.\n#paragraph-tab\nText.'
         child = (b'#block[First.\n// typst-lint: ignore-next pde.paragraph-marker-gap -- intended\n'
                  b'#paragraph-tab\ntherefore x.]')
         (self.root / 'main.typ').write_bytes(main)

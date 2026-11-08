@@ -19,9 +19,8 @@ class ConditionalParagraphGapTests(unittest.TestCase):
         self.assertFalse(tree.nodes[0].errors, source)
         return analyze_conditional_nested_gap(tree, 'chapter.typ')
 
-    def test_nested_marker_adjacent_and_content_opening_are_conditional(self):
+    def test_nested_marker_after_literal_prose_is_conditional(self):
         for source, line in ((b'#block[First.\n#paragraph_tab\nSecond.]', 2),
-                             (b'#block[\n#paragraph_tab\nSecond.]', 2),
                              ('#block[한글.\r\n  #paragraph_tab\r\n다음.]'.encode(), 2)):
             with self.subTest(source=source):
                 result = self.analyze(source)

@@ -11,6 +11,7 @@ from unittest.mock import patch
 TOOL = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(TOOL))
 import conditional_modern_highlight as modern
+import conditional_footnote_binding as footnotes
 import document_cli
 from syntax_client import EXECUTABLE
 from typst_lint import InputError
@@ -86,6 +87,24 @@ class ConditionalModernHighlightCliTests(unittest.TestCase):
                                          modern_highlight_evidence=True)
         with patch.object(document_cli, 'MAX_MODERN_REPORT_BYTES', 1):
             with self.assertRaisesRegex(InputError, 'report byte limit'):
+                document_cli.report_document(str(self.project), 'main.typ', rule_set='pde',
+                    package_path=str(self.packages), footnote_cache_path=str(self.cache),
+                    modern_highlight_evidence=True)
+
+    def test_diagnostic_only_discards_changed_capture_after_analysis(self):
+        original_analyze = modern.ModernHighlightAnalyzer.analyze_all
+        original_valid = footnotes._valid
+        completed = False
+        def analyze_then_invalidate(analyzer, *args, **kwargs):
+            nonlocal completed
+            result = original_analyze(analyzer, *args, **kwargs)
+            completed = True
+            return result
+        def is_valid(session):
+            return not completed and original_valid(session)
+        with patch.object(modern.ModernHighlightAnalyzer, 'analyze_all', analyze_then_invalidate), \
+             patch.object(footnotes, '_valid', side_effect=is_valid):
+            with self.assertRaisesRegex(InputError, 'capture changed during inspection'):
                 document_cli.report_document(str(self.project), 'main.typ', rule_set='pde',
                     package_path=str(self.packages), footnote_cache_path=str(self.cache),
                     modern_highlight_evidence=True)

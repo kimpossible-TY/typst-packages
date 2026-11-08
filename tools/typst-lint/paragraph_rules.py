@@ -17,6 +17,7 @@ CAPITALIZATION = 'pde.paragraph-capitalization'
 MARKER_GAP = 'pde.paragraph-marker-gap'
 MARKER_TARGET = 'pde.paragraph-marker-target'
 RULE_IDS = (CAPITALIZATION, MARKER_GAP, MARKER_TARGET)
+NESTED_GAP_UNRESOLVED = 'Unresolved nested paragraph marker boundary at byte '
 
 _CONDITIONAL_EXCLUDED = frozenset(('Equation', 'Math', 'Code', 'CodeBlock',
                                    'Heading', 'ListItem', 'EnumItem', 'TermItem',
@@ -68,7 +69,7 @@ def analyze_conditional_nested_gap(tree, path, *, catalog=None):
         excluded[index] = parent is not None and (excluded[parent]
                                                    or nodes[parent].kind in _CONDITIONAL_EXCLUDED)
     newlines = [index for index, byte in enumerate(source) if byte == 10]
-    findings, suppressed = [], []
+    findings, suppressed, unresolved = [], [], []
     for body_id, body in enumerate(nodes):
         if body_id == 0 or body.kind != 'Markup' or excluded[body_id]:
             continue
@@ -99,15 +100,26 @@ def analyze_conditional_nested_gap(tree, path, *, catalog=None):
             previous = source[previous_start:line_start]
             if previous.endswith(b'\n') and not previous.strip(b' \t\r\n'):
                 continue
+            ignored = any(scope.covers(MARKER_GAP, start) for scope in scopes)
+            prior = position - 2
+            while prior >= 0 and nodes[children[prior]].kind in ('Space', 'Parbreak', 'LineComment', 'BlockComment'):
+                prior -= 1
+            previous_node = nodes[children[prior]] if prior >= 0 else None
+            if (previous_node is None or previous_node.kind != 'Text'
+                    or not any(char.isalnum() for char in
+                               source[previous_node.start:previous_node.end].decode('utf-8'))):
+                if not ignored:
+                    unresolved.append(NESTED_GAP_UNRESOLVED + str(start))
+                continue
             column = len(source[line_start:start].decode('utf-8')) + 1
             rule = selected[0]
             finding = Diagnostic(MARKER_GAP, rule['grade'], path, line_index + 1, column,
                 'Conditional source hint: if this standalone name is the paragraph marker, place a blank source line before it.',
                 rule['source'])
-            (suppressed if any(scope.covers(MARKER_GAP, start) for scope in scopes)
-             else findings).append(finding)
+            (suppressed if ignored else findings).append(finding)
     return ParagraphResult(tuple(findings), (),
-        ('Nested source pattern only; marker binding, execution, prose ownership and rendering are unproved.',),
+        ('Nested source pattern only; marker binding, execution, prose ownership and rendering are unproved.',
+         *tuple(dict.fromkeys(unresolved))),
         suppressed=tuple(suppressed))
 
 

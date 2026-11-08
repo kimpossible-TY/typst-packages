@@ -144,6 +144,10 @@ is proven, nor permission to change sources. See
 The independent `--preview-conditional-gaps` inspection also offers separate
 source-only footnote-gap candidates before a literal `paragraph-tab` marker or
 direct `figure` call; their bindings, execution and rendering remain conditional.
+With explicit modern highlight evidence, `--preview-conditional-modern-highlights`
+also offers limited independent source splits that leave literal math outside
+highlighting. They are not applied or compiled and can change layout; see the
+[modern highlight preview contract](MODERN_HIGHLIGHT_PREVIEW_CONTRACT.md).
 
 The `--preview-conditional-punctuation` inspection reports adjacent trailing
 punctuation moves independently from moves whose footnote has preceding spaces.
@@ -234,6 +238,12 @@ marker-target hints cover directly following headings or display math. These hin
 retain exclusions for unrelated math, code, raw text, headings and list structures.
 Common resolver refusals are reported once per source. These rules remain in
 `coverage.uninspected` because the document context has not been established.
+The separate `conditional_local_scope_raw_annotations` section counts raw
+`annot` calls lexically inside displays in supported literal
+`local-scope-annotations` callbacks and reports outside patterns as conditional
+hints. Runtime bindings, execution and display ownership are unproved. This
+section is currently specific to inspection and is not included in the separate
+original-compile `--lint-local-hints` summary.
 The separate `conditional_hyphen_markers` section covers literal
 `#paragraph-tab`: root and nested gap hints and nested target/capitalization
 hints. It is diagnostic-only; marker binding and execution remain conditional.
