@@ -145,7 +145,10 @@ compiler authority or increase global coverage.
 The scoped-call option separately reports `conditional_detached_annotations` for
 direct scoped annotation calls outside a display in supported literal callback
 bodies. These are diagnostic-only hints with independent suppression and
-unresolved context; they do not produce edits or complete rule coverage.
+unresolved context; they include bounded deferred outer contexts, but withhold
+calls whose arguments may mutate or expose the scoped receiver. The separate
+original-compile `--lint-local-hints` summary includes bounded samples. They
+do not produce edits or complete rule coverage.
 The separate `conditional_raw_overlays` report covers a narrow direct
 `annot-cetz` spelling outside displays. Its helper identity and execution are
 likewise conditional; alias/shadow and unsupported contexts are withheld.

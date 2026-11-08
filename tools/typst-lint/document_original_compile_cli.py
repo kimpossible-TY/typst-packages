@@ -369,6 +369,135 @@ def _conditional_raw_sections(context, catalog, metadata, cap, items):
     return sections, items
 
 
+def _detached_scoped_positions(tree, *, max_work):
+    """Independently recover direct annotation calls in reviewed callback shapes."""
+    import document_conditional_detached_annotations as hints
+    from document_conditional_local_raw_annot import _wrapper_parameter_or_loop_shadow
+    from document_conditional_raw_annot import _equation_constructor
+    from document_conditional_scoped_calls import _explicit_wrapper_shadows, _parts, _scoped_body, _text
+    nodes = tree.nodes
+    work = len(nodes)
+    require(work <= max_work, 'Scoped annotation ownership work limit exceeded')
+    if _wrapper_parameter_or_loop_shadow(tree) or 'local-scope-annotations' in _explicit_wrapper_shadows(tree):
+        return {}, work
+    parents = {child: index for index, node in enumerate(nodes) for child in node.children}
+    sizes = [1] * len(nodes)
+    for i in range(len(nodes) - 1, -1, -1):
+        sizes[i] = 1 + sum(sizes[c] for c in nodes[i].children)
+    positions = {}
+    for i, node in enumerate(nodes):
+        if node.kind != 'FuncCall':
+            continue
+        parts = _parts(tree, i)
+        if (len(parts) != 2 or nodes[parts[0]].kind != 'Ident'
+                or _text(tree, parts[0]) != 'local-scope-annotations'):
+            continue
+        cursor, dynamic, unknown = parents.get(i), False, False
+        while cursor is not None:
+            work += 1
+            require(work <= max_work, 'Scoped annotation ownership work limit exceeded')
+            if nodes[cursor].kind == 'Equation' or _equation_constructor(tree, cursor):
+                unknown = True
+                break
+            dynamic |= cursor != 0
+            cursor = parents.get(cursor)
+        if unknown:
+            continue
+        callback, _ = _scoped_body(tree, i, 'local-scope-annotations')
+        if callback is None:
+            continue
+        body, params = callback
+        markups = [child for child in nodes[body].children if nodes[child].kind == 'Markup']
+        if len(markups) != 1:
+            continue
+        siblings = nodes[markups[0]].children
+        for pos, child in enumerate(siblings):
+            work += sizes[child]
+            require(work <= max_work, 'Scoped annotation ownership work limit exceeded')
+            current = nodes[child]
+            mark = nodes[siblings[pos - 1]] if pos else None
+            if (current.kind == 'FuncCall' and mark is not None and mark.kind == 'Hash'
+                    and mark.end == current.start and hints._annotation_call(tree, child, params[0])):
+                args = _parts(tree, child)[1]
+                if hints._safe_arguments(tree, args, params[0], parents):
+                    positions[mark.start] = (current.end, node.start, dynamic)
+            if not hints._safe_prefix(tree, child, params[0], parents):
+                break
+    return positions, work
+
+
+def _conditional_detached_section(context, catalog, metadata, cap, items):
+    import document_conditional_detached_annotations as hints
+    from suppression import resolve as resolve_suppressions
+    findings, hidden, files = [], [], []
+    seen = suppressed = work = 0
+    explanation = 'This scoped annotation is outside a display if the wrapper and callback execute as expected.'
+    for item in context.sources:
+        value = hints._analyze_captured_tree(item.tree, item.path, catalog=catalog['rules'])
+        require(type(value) is dict and value.get('path') == item.path
+                and value.get('source_sha256') == item.identity.source_sha256
+                and value.get('status') in ('PARTIAL', 'UNAVAILABLE')
+                and value.get('conditions') == hints.CONDITIONS
+                and all(value.get(k) is False for k in ('runtime_binding_proved', 'execution_proved',
+                    'coverage_complete', 'edit_permission', 'compiler_permission'))
+                and all(type(value.get(k)) is list for k in ('diagnostics', 'suppressed', 'unresolved'))
+                and all(type(reason) is str and reason.strip() for reason in value['unresolved']),
+                'Detached scoped annotation result does not match captured source')
+        if value['status'] == 'UNAVAILABLE':
+            require(not value['diagnostics'] and not value['suppressed'] and value['unresolved'],
+                    'Unavailable scoped annotation result contains partial findings')
+        items += 1 + sum(len(value[k]) for k in ('diagnostics', 'suppressed', 'unresolved')) + len(value['conditions'])
+        require(items <= _LINT_ITEM_LIMIT, 'Document lint item limit exceeded')
+        positions, starts, farthest = {}, [], []
+        line_starts = ()
+        if value['diagnostics'] or value['suppressed']:
+            positions, charged = _detached_scoped_positions(item.tree, max_work=_LOCAL_RAW_OWNER_WORK-work)
+            work += charged
+            line_starts = (0, *(n+1 for n, byte in enumerate(item.source) if byte == 10))
+            scopes = resolve_suppressions(item.tree, {row['id'] for row in catalog['rules']})
+            for start, end in sorted((scope.start, scope.end) for scope in scopes if hints.RULE in scope.rules):
+                starts.append(start); farthest.append(max(end, farthest[-1] if farthest else end))
+        offsets = set()
+        for key, heap in (('diagnostics', findings), ('suppressed', hidden)):
+            for row in value[key]:
+                require(type(row) is dict and set(row) == {'rule_id', 'grade', 'path', 'line', 'column',
+                        'start', 'end', 'source', 'wrapper_start', 'outer_dynamic_context', 'explanation'}
+                        and row.get('rule_id') == hints.RULE and row.get('grade') == metadata['grade']
+                        and row.get('source') == metadata['source'] and row.get('path') == item.path
+                        and type(row.get('line')) is int and row['line'] > 0
+                        and type(row.get('column')) is int and row['column'] > 0
+                        and type(row.get('start')) is int and type(row.get('end')) is int
+                        and 0 <= row['start'] < row['end'] <= len(item.source)
+                        and type(row.get('wrapper_start')) is int and type(row.get('outer_dynamic_context')) is bool
+                        and positions.get(row['start']) == (row['end'], row['wrapper_start'], row['outer_dynamic_context'])
+                        and row['start'] not in offsets and row.get('explanation') == explanation,
+                        'Detached scoped annotation finding does not match captured source')
+                offsets.add(row['start'])
+                line = bisect_right(line_starts, row['start'])-1
+                require(row['line'] == line+1 and row['column'] ==
+                        len(item.source[line_starts[line]:row['start']].decode('utf-8'))+1,
+                        'Detached scoped annotation position is invalid')
+                scope = bisect_right(starts, row['start'])-1
+                require((scope >= 0 and row['start'] < farthest[scope]) == (key == 'suppressed'),
+                        'Detached scoped annotation suppression is invalid')
+                if key == 'diagnostics':
+                    _retain_mapping_sample(heap, row, seen, cap); seen += 1
+                else:
+                    _retain_mapping_sample(heap, row, suppressed, cap); suppressed += 1
+        files.append(dict(path=item.path, source_sha256=item.identity.source_sha256, status=value['status'],
+                          diagnostics=len(value['diagnostics']), suppressed=len(value['suppressed']),
+                          unresolved_count=len(value['unresolved']), unresolved=value['unresolved'][:20],
+                          unresolved_omitted=max(0, len(value['unresolved'])-20)))
+    rows, hidden_rows = _finish_mapping_sample(findings), _finish_mapping_sample(hidden)
+    return dict(rule_id=hints.RULE, diagnostics_count=seen, diagnostics=rows,
+                diagnostics_omitted=seen-len(rows), suppressed_count=suppressed, suppressed=hidden_rows,
+                suppressed_omitted=suppressed-len(hidden_rows), sample_limit=cap, by_file=files,
+                unavailable_files=sum(row['status'] == 'UNAVAILABLE' for row in files),
+                conditions=list(hints.CONDITIONS), duplicates_existing_hints_possible=True,
+                runtime_binding_proved=False, execution_proved=False, coverage_complete=False,
+                edit_permission=False, compiler_permission=False), items
+
+
 def _include_forwarding(context, snapshot, cap):
     """Check conditional forwarding evidence against the issued compile inputs."""
     import include_forwarding_evidence as forwarding
@@ -725,6 +854,7 @@ def lint_captured_document(context, snapshot, *, rule_set, details=False, local_
                 unresolved_omitted=max(0, len(scoped_raw['unresolved']) - 20)))
     if local_hints:
         raw_sections, items = _conditional_raw_sections(context, catalog, scoped_raw_metadata, cap, items)
+        detached_section, items = _conditional_detached_section(context, catalog, scoped_raw_metadata, cap, items)
         include_forwarding, forwarding_items = _include_forwarding(context, snapshot, cap)
         items += forwarding_items
         require(items <= _LINT_ITEM_LIMIT, 'Document lint item limit exceeded')
@@ -774,6 +904,7 @@ def lint_captured_document(context, snapshot, *, rule_set, details=False, local_
             render_equivalence_proved=False, edit_permission=False, compiler_permission=False)
         report['conditional_include_forwarding'] = include_forwarding
         report.update(raw_sections)
+        report['conditional_detached_annotations'] = detached_section
         raw_diagnostics = _finish_mapping_sample(scoped_raw_diagnostics)
         raw_suppressed = _finish_mapping_sample(scoped_raw_suppressed)
         report['conditional_local_scope_raw_annotations'] = dict(rule_id=scoped_raw_rule,

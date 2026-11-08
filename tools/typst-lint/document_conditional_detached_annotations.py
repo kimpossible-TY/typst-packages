@@ -7,7 +7,9 @@ immutable source bytes; callers cannot supply diagnostic records or AST nodes.
 from collections.abc import Mapping
 from bisect import bisect_right
 
-from document_conditional_scoped_calls import (_OUTER_BARRIERS, _explicit_wrapper_shadows,
+from document_conditional_local_raw_annot import _wrapper_parameter_or_loop_shadow
+from document_conditional_raw_annot import _equation_constructor
+from document_conditional_scoped_calls import (_explicit_wrapper_shadows,
                                                 _parts, _scoped_body, _text)
 from scoped_provenance import FIELDS
 from suppression import resolve as resolve_suppressions
@@ -19,6 +21,7 @@ CONDITIONS = (
     'The wrapper resolves to the reviewed local-scope-annotations helper and invokes this literal callback.',
     'The callback parameter retains the expected scoped annotation dictionary until this call.',
     'The callback body and this annotation execute and render in the expected document context.',
+    'No enclosing helper or show rule places the call inside a display equation at runtime.',
 )
 _BARRIERS = frozenset(('LetBinding', 'Closure', 'Contextual', 'CodeBlock', 'ModuleImport',
                        'ModuleInclude', 'ForLoop', 'WhileLoop', 'Conditional', 'FuncReturn',
@@ -47,6 +50,34 @@ def _safe_prefix(tree, root, parameter, parents):
     return True
 
 
+def _safe_arguments(tree, root, parameter, parents):
+    """Reject receiver escape/mutation while evaluating annotation arguments."""
+    nodes = tree.nodes
+    pending = [root]
+    while pending:
+        index = pending.pop()
+        node = nodes[index]
+        if ((node.kind in _BARRIERS and node.kind != 'CodeBlock')
+                or (node.kind == 'Binary' and any(nodes[part].kind in _ASSIGNMENTS
+                                                   for part in _parts(tree, index)))):
+            return False
+        if node.kind == 'Ident' and _text(tree, index) == parameter:
+            field = parents.get(index)
+            parts = _parts(tree, field) if field is not None else ()
+            if (field is None or nodes[field].kind != 'FieldAccess' or len(parts) != 3
+                    or parts[0] != index or nodes[parts[1]].kind != 'Dot'
+                    or nodes[parts[2]].kind != 'Ident' or _text(tree, parts[2]) not in FIELDS):
+                return False
+            wrapped = parents.get(field)
+            call = parents.get(wrapped) if wrapped is not None else None
+            if (wrapped is None or nodes[wrapped].kind != 'Parenthesized'
+                    or call is None or nodes[call].kind != 'FuncCall'
+                    or not _parts(tree, call) or _parts(tree, call)[0] != wrapped):
+                return False
+        pending.extend(node.children)
+    return True
+
+
 def _annotation_call(tree, index, parameter):
     nodes = tree.nodes
     parts = _parts(tree, index)
@@ -68,6 +99,15 @@ def _annotation_call(tree, index, parameter):
 
 def analyze(source, path, *, catalog=None):
     """Inspect exact captured bytes, emitting conditional non-mutating hints."""
+    return _analyze(source, path, catalog=catalog)
+
+
+def _analyze_captured_tree(tree, path, *, catalog=None):
+    """Inspect a validated captured tree without reparsing."""
+    return _analyze(tree.source, path, catalog=catalog, captured_tree=tree)
+
+
+def _analyze(source, path, *, catalog=None, captured_tree=None):
     if type(source) is not bytes or type(path) is not str or not path:
         raise InputError('Detached annotation hints require source bytes and a source path')
     records = load_rules()[0]['rules'] if catalog is None else catalog
@@ -83,7 +123,7 @@ def analyze(source, path, *, catalog=None):
                   runtime_binding_proved=False, execution_proved=False, coverage_complete=False,
                   edit_permission=False, compiler_permission=False)
     try:
-        tree = parse(source)
+        tree = parse(source) if captured_tree is None else captured_tree
     except (AdapterError, OSError, ValueError) as error:
         return dict(result, status='UNAVAILABLE', unresolved=[f'Source syntax unavailable: {error}'])
     if tree.mode != 'markup' or tree.nodes[0].errors:
@@ -93,6 +133,7 @@ def analyze(source, path, *, catalog=None):
     parents = {child: index for index, node in enumerate(nodes) for child in node.children}
     newlines = [index for index, byte in enumerate(source) if byte == 10]
     shadows = _explicit_wrapper_shadows(tree)
+    parameter_shadow = _wrapper_parameter_or_loop_shadow(tree)
     rule = selected[0]
     for index, node in enumerate(nodes):
         if node.kind != 'FuncCall':
@@ -101,11 +142,15 @@ def analyze(source, path, *, catalog=None):
         if (len(parts) != 2 or nodes[parts[0]].kind != 'Ident'
                 or _text(tree, parts[0]) != 'local-scope-annotations'):
             continue
-        ancestor = parents.get(index)
-        while ancestor is not None and nodes[ancestor].kind not in (_OUTER_BARRIERS | {'Equation'}):
+        ancestor, outer_dynamic, unknown_display = parents.get(index), False, False
+        while ancestor is not None:
+            if nodes[ancestor].kind == 'Equation' or _equation_constructor(tree, ancestor):
+                unknown_display = True
+                break
+            outer_dynamic |= ancestor != 0
             ancestor = parents.get(ancestor)
-        if ancestor is not None or 'local-scope-annotations' in shadows:
-            result['unresolved'].append(f'Wrapper binding or execution is unsupported at byte {node.start}')
+        if unknown_display or 'local-scope-annotations' in shadows or parameter_shadow:
+            result['unresolved'].append(f'Wrapper binding or display ownership is unsupported at byte {node.start}')
             continue
         callback, reason = _scoped_body(tree, index, 'local-scope-annotations')
         if callback is None:
@@ -125,14 +170,16 @@ def analyze(source, path, *, catalog=None):
             direct = (item.kind == 'FuncCall' and mark is not None and mark.kind == 'Hash'
                       and mark.end == item.start and _annotation_call(tree, child, parameter))
             if direct:
-                if not prefix_safe:
-                    result['unresolved'].append(f'Prior callback effects are unsupported at byte {item.start}')
+                args = _parts(tree, child)[1]
+                if not prefix_safe or not _safe_arguments(tree, args, parameter, parents):
+                    result['unresolved'].append(f'Callback or annotation argument effects are unsupported at byte {item.start}')
                 else:
                     line = bisect_right(newlines, mark.start) + 1
                     line_start = newlines[line - 2] + 1 if line > 1 else 0
                     column = len(source[line_start:mark.start].decode('utf-8')) + 1
                     finding = dict(rule_id=RULE, grade=rule['grade'], path=path, line=line, column=column,
                         start=mark.start, end=item.end, source=rule['source'], wrapper_start=node.start,
+                        outer_dynamic_context=outer_dynamic,
                         explanation='This scoped annotation is outside a display if the wrapper and callback execute as expected.')
                     target = 'suppressed' if any(scope.covers(RULE, mark.start) for scope in scopes) else 'diagnostics'
                     result[target].append(finding)
