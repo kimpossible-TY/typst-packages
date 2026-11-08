@@ -79,7 +79,10 @@ not supported by the conditional binding analyzer. Explicit parameter or local
 shadows, mutations, unknown imports, unissued/changed evidence and all other
 refusals remain fatal. Other nested closures in that source expression are
 allowed only with simple parameters that cannot shadow `footnote`; their bodies
-are scanned for the same forbidden declarations, mutations and imports. A target
+are scanned for forbidden declarations, mutations and imports. The exact
+`cetz.draw` wildcard may be recognized only when the pinned CeTZ namespace,
+its exported names and required staged package evidence are verified; arbitrary
+field-access imports remain unsupported. A target
 inside another deferred closure still needs its own declaration-time proof.
 Each withheld source has a path, baseline SHA-256,
 `pde.unaligned-footnote-no-spacer`, and the fixed reason code

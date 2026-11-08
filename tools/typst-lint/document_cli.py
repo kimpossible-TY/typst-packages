@@ -135,12 +135,14 @@ def report_document(root, entrypoint, *, rule_set='core', package_path=None,
     standalone_previews = []
     sequence_previews = []
     conditional_gap_previews = []
+    conditional_prose_footnote_gap_previews = []
     conditional_punctuation_previews = []
     conditional_punctuation_move_previews = []
     conditional_punctuation_details = []
     conditional_spacer_previews = []
     conditional_scoped_previews = []
     conditional_detached_annotations = []
+    conditional_raw_overlays = []
     local_findings, local_suppressed, local_files, local_contexts = [], [], [], []
     items = len(captured.sources) + len(captured.edges) + len(captured.occurrences) + len(captured.unresolved)
     footnote_report = None
@@ -295,6 +297,7 @@ def report_document(root, entrypoint, *, rule_set='core', package_path=None,
                 local_results = None
             if preview_conditional_gaps:
                 from footnote_rules import preview_conditional_math_gaps
+                from document_nested_prose_footnote_gap import preview as preview_prose_footnote_gap
                 from proof_rules import preview_conditional as preview_proof_gaps
                 from static_resolver import resolve
                 local_resolution = resolve(item.tree, packages=())
@@ -320,6 +323,12 @@ def report_document(root, entrypoint, *, rule_set='core', package_path=None,
                     items += 1 + len(preview['edits']) + len(preview.get('reasons', ()))
                     require(items <= MAX_REPORT_ITEMS, 'Document inspection report item limit exceeded')
                     conditional_gap_previews.append(preview)
+                prose_gap = preview_prose_footnote_gap(item.tree, item.path, catalog=catalog['rules'])
+                if prose_gap is not None:
+                    items += (1 + len(prose_gap['edits']) + len(prose_gap['conditions'])
+                              + int(bool(prose_gap.get('reason'))))
+                    require(items <= MAX_REPORT_ITEMS, 'Document inspection report item limit exceeded')
+                    conditional_prose_footnote_gap_previews.append(prose_gap)
             if preview_conditional_punctuation:
                 from footnote_rules import preview_conditional_prose_punctuation
                 from document_nested_footnote_punctuation import preview as preview_punctuation_move
@@ -353,6 +362,7 @@ def report_document(root, entrypoint, *, rule_set='core', package_path=None,
             if preview_conditional_scoped_calls:
                 from document_conditional_scoped_calls import analyze as analyze_scoped_calls
                 from document_conditional_detached_annotations import analyze as analyze_detached_annotations
+                from document_conditional_raw_overlay import analyze as analyze_raw_overlay
                 scoped_preview = analyze_scoped_calls(item.tree, item.path, catalog=catalog['rules'])
                 items += (1 + len(scoped_preview['diagnostics']) + len(scoped_preview['suppressed'])
                           + len(scoped_preview['edits']) + len(scoped_preview['conditions'])
@@ -364,6 +374,11 @@ def report_document(root, entrypoint, *, rule_set='core', package_path=None,
                           + len(detached['conditions']) + len(detached['unresolved']))
                 require(items <= MAX_REPORT_ITEMS, 'Document inspection report item limit exceeded')
                 conditional_detached_annotations.append(detached)
+                raw_overlay = analyze_raw_overlay(item.source, item.path, catalog=catalog['rules'])
+                items += (1 + len(raw_overlay['diagnostics']) + len(raw_overlay['suppressed'])
+                          + len(raw_overlay['conditions']) + len(raw_overlay['unresolved']))
+                require(items <= MAX_REPORT_ITEMS, 'Document inspection report item limit exceeded')
+                conditional_raw_overlays.append(raw_overlay)
         except (InputError, OSError, ValueError) as error:
             raise InputError(f'{item.path}: {error}') from error
         # Keep unsupported baseline operands diagnostic-only, then independently
@@ -545,6 +560,7 @@ def report_document(root, entrypoint, *, rule_set='core', package_path=None,
         report['sequence_preview_status'] = 'hash-chained-read-only-not-a-write-transaction'
     if preview_conditional_gaps:
         report['conditional_gap_previews'] = conditional_gap_previews
+        report['conditional_prose_footnote_gap_previews'] = conditional_prose_footnote_gap_previews
         report['conditional_gap_preview_status'] = 'independent-source-only-not-composed-or-render-verified'
     if preview_conditional_punctuation:
         report['conditional_punctuation_previews'] = conditional_punctuation_previews
@@ -560,6 +576,8 @@ def report_document(root, entrypoint, *, rule_set='core', package_path=None,
             edit_permission=False, compiler_permission=False,
             scope='independent-source-pattern-not-composed-or-render-verified')
         report['conditional_detached_annotations'] = dict(by_file=conditional_detached_annotations,
+            edit_permission=False, compiler_permission=False, coverage_complete=False)
+        report['conditional_raw_overlays'] = dict(by_file=conditional_raw_overlays,
             edit_permission=False, compiler_permission=False, coverage_complete=False)
     if local_rule_hints:
         from document_local_rules import RULE_IDS as LOCAL_RULE_IDS
@@ -759,6 +777,21 @@ def main(arguments=None):
             if detached['by_file']:
                 for condition in detached['by_file'][0]['conditions']:
                     print(f"  condition: {condition}")
+        if 'conditional_raw_overlays' in result:
+            raw_overlays = result['conditional_raw_overlays']
+            print('Conditional raw overlays: diagnostic-only, no edit or compiler permission')
+            for row in raw_overlays['by_file']:
+                print(f"  {row['path']}: {row['status']}; {len(row['diagnostics'])} hints; "
+                      f"{len(row['suppressed'])} suppressed; source sha256 {row['source_sha256']}")
+                for label, entries in (('hint', row['diagnostics']), ('suppressed', row['suppressed'])):
+                    for entry in entries:
+                        print(f"    {label} {entry['path']}:{entry['line']}:{entry['column']}: "
+                              f"{entry['rule_id']}: {entry['explanation']}")
+                for reason in row['unresolved']:
+                    print(f"    unresolved: {reason}")
+            if raw_overlays['by_file']:
+                for condition in raw_overlays['by_file'][0]['conditions']:
+                    print(f"  condition: {condition}")
         if 'conditional_punctuation_details' in result:
             details = result['conditional_punctuation_details']
             print('Conditional adjacent footnote punctuation details: classify existing hints; '
@@ -798,6 +831,8 @@ def main(arguments=None):
             print(f"Sequence previews: {sum(len(row['steps']) for row in previews)} passes; "
                   f"{sum(row['verification'] == 'withheld' for row in previews)} sources withheld; not applied")
         for flag, key, label in ((args.preview_conditional_gaps, 'conditional_gap_previews', 'Conditional gap'),
+                                 (args.preview_conditional_gaps, 'conditional_prose_footnote_gap_previews',
+                                  'Conditional prose footnote gap'),
                                  (args.preview_conditional_punctuation, 'conditional_punctuation_previews',
                                   'Conditional punctuation'),
                                  (args.preview_conditional_punctuation, 'conditional_punctuation_move_previews',
@@ -809,6 +844,13 @@ def main(arguments=None):
                 print(f"{label} previews: {sum(len(row['edits']) for row in previews)} edits; "
                       f"{sum(row['verification'] == 'withheld' for row in previews)} sources withheld; "
                       'partial, not composed, not render-verified and not applied')
+                if key == 'conditional_prose_footnote_gap_previews':
+                    for row in previews:
+                        if row.get('reason'):
+                            print(f"  {row['path']}: withheld: {row['reason']}")
+                    if previews:
+                        for condition in previews[0]['conditions']:
+                            print(f"  condition: {condition}")
         for blocker in result['blockers']:
             print(blocker)
         print('Global coverage incomplete (exit 2); compiler not invoked')

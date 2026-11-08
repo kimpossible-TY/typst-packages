@@ -61,6 +61,9 @@ The same option separately reports `conditional_detached_annotations` for
 direct scoped annotation calls outside a display in supported literal callback
 bodies. These are diagnostic-only hints with independent suppression and
 unresolved context; they do not produce edits or complete rule coverage.
+The separate `conditional_raw_overlays` report covers a narrow direct
+`annot-cetz` spelling outside displays. Its helper identity and execution are
+likewise conditional; alias/shadow and unsupported contexts are withheld.
 
 JSON includes:
 
@@ -89,6 +92,10 @@ JSON includes:
   preview is reported as such. These previews use the original bytes separately;
   they are not composed with each other or the ordinary preview sequence, and
   do not prove binding, execution, PDF equivalence or source-write permission.
+  A separate `conditional_prose_footnote_gap_previews` list additionally
+  proposes a paragraph break for the bounded nested prose-footnote pattern
+  followed by an existing standalone marker. These edits are not composed
+  with the other gap proposals and may change rendered layout.
 - `--preview-conditional-punctuation` independently previews horizontal
   whitespace removal between an existing period/comma and a nested prose
   footnote. A separate `conditional_punctuation_move_previews` list proposes

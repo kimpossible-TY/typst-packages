@@ -121,7 +121,7 @@ def preview(tree, path, catalog, *, profile=_STANDARD, footnote_evidence=None, c
                 node = tree.nodes[child]
                 if node.kind in ('Space', 'LineComment', 'BlockComment', 'LeftParen', 'RightParen', 'Comma'):
                     continue
-                if node.kind != 'Ident' or tree.source[node.start:node.end] == b'footnote':
+                if node.kind != 'Ident' or tree.source[node.start:node.end] in (b'footnote', b'cetz'):
                     return False
             return True
         if not safe_params(closure):
@@ -131,16 +131,25 @@ def preview(tree, path, catalog, *, profile=_STANDARD, footnote_evidence=None, c
         # safety refusal, not a reason to silently keep this file unchanged.
         pending = list(closure.children)
         assignments = {'Eq', 'PlusEq', 'HyphEq', 'StarEq', 'SlashEq'}
+        cetz_imports = []
         while pending:
             index = pending.pop()
             node = tree.nodes[index]
             if node.kind == 'Closure' and not safe_params(node):
                 return False
-            if node.kind in ('LetBinding', 'ModuleImport', 'ModuleInclude', 'DestructAssignment'):
+            if node.kind in ('LetBinding', 'ModuleInclude', 'DestructAssignment'):
                 return False
+            if node.kind == 'ModuleImport':
+                cetz_imports.append((node.start, node.end))
             if node.kind == 'Binary' and any(tree.nodes[i].kind in assignments for i in node.children):
                 return False
             pending.extend(node.children)
+
+        if cetz_imports:
+            import document_cetz_draw_evidence
+            if not document_cetz_draw_evidence.supports_imports(
+                    evidence, path, tree.source, closure.start, closure.end, tuple(cetz_imports)):
+                return False
 
         # Re-evaluate the lexical namespace at closure declaration using the
         # same issued graph as conditional footnote evidence. Deferred facts at
