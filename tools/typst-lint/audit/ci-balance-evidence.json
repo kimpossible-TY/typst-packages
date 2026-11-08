@@ -1,0 +1,76 @@
+{
+  "baseline_commit": "bca33cfac3afd0678bba035e05ce28d3b1f62725",
+  "case_identity_multiplicity_preserved": true,
+  "case_ids_sha256": "c1ee0a096940b728f495087dc5f92d0c6bbc692e2deb4d9b1a633f12fb1d27fc",
+  "discovered_modules": 132,
+  "discovered_tests": 2085,
+  "generated_utc": "2026-11-08T02:49:07.752733+00:00",
+  "limitations": [
+    "Scheduling cost is inferred from buffered GitHub log timestamps, not an observed speedup for this new profile.",
+    "Only the reviewed source-pinned method group is split across separate processes; subtests remain indivisible.",
+    "Missing timing weights use a positive fallback and never suppress a discovered case.",
+    "All eight existing jobs and both aggregate gates still determine actual CI success."
+  ],
+  "model": {
+    "observed_max_test_seconds": 1322.003,
+    "observed_next_ci_seconds": null,
+    "predicted_max_test_seconds": 701.713,
+    "source_head": "baf1ae666606c3d075bc2fbc4e7d0a50173e6d54",
+    "source_run": 42430203586
+  },
+  "original_order_per_shard_preserved": true,
+  "other_modules_whole": true,
+  "partitions": [
+    {
+      "estimated_ms": 701713,
+      "modules": 30,
+      "reviewed_methods": 8,
+      "shard": 1,
+      "tests": 465
+    },
+    {
+      "estimated_ms": 701713,
+      "modules": 42,
+      "reviewed_methods": 8,
+      "shard": 2,
+      "tests": 550
+    },
+    {
+      "estimated_ms": 701712,
+      "modules": 30,
+      "reviewed_methods": 9,
+      "shard": 3,
+      "tests": 522
+    },
+    {
+      "estimated_ms": 701712,
+      "modules": 33,
+      "reviewed_methods": 9,
+      "shard": 4,
+      "tests": 548
+    }
+  ],
+  "published_baseline_ci": {
+    "aggregate_gates": 2,
+    "completed_utc": "2026-11-08T02:47:11Z",
+    "conclusion": "success",
+    "elapsed_seconds": 1319,
+    "execution_jobs": 8,
+    "head": "bca33cfac3afd0678bba035e05ce28d3b1f62725",
+    "passed_per_interpreter": 2020,
+    "run": 42438457219,
+    "skipped_per_interpreter": 55,
+    "tests_per_interpreter": 2075
+  },
+  "remote_ci_for_this_change": "not-published",
+  "reviewed_methods": 34,
+  "schema": 1,
+  "source_sha256": {
+    ".github/workflows/typst-lint.yml": "3b1bb54919982867aa510c3a9a56f7dbab23b3f3fd65e78a2c9660e46ddbd6b6",
+    "tools/typst-lint/ci-balance-v1.json": "b509bc67072f8d69c6c33a2f45a8e26916b1413f93fda84d46b1ab357a873e65",
+    "tools/typst-lint/run_test_shard.py": "68ce367d734d5c7e1900920b8d945dc1730279eefda8c006b0e9a8625acfe05c",
+    "tools/typst-lint/tests/test_run_test_shard.py": "da50b2e93b68aa640e0b9fd841a7193d0994ceadbef1f232b2ee59d9c05bb9ba"
+  },
+  "test_runner_unit_tests": 31,
+  "validation": "Full discovery and partition only; protected test bodies were not executed"
+}

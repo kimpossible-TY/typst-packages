@@ -25,7 +25,7 @@ jobs:
   test_shards:
     name: Python ${{ matrix.python }} shard ${{ matrix.shard }}/4 and pinned Typst syntax
     runs-on: ubuntu-latest
-    # Partition whole modules without relaxing any test or compiler deadline.
+    # Balance modules and one reviewed independent method group by measured cost.
     timeout-minutes: 30
     strategy:
       fail-fast: false
@@ -57,7 +57,7 @@ jobs:
           cargo build --locked
           test -x target/debug/typst-lint-syntax
       - name: Test linter components and real parser
-        run: python tools/typst-lint/run_test_shard.py --shard-index ${{ matrix.shard }} --shard-count 4
+        run: python tools/typst-lint/run_test_shard.py --shard-index ${{ matrix.shard }} --shard-count 4 --balance-profile measured-v1
       - name: Check whitespace
         run: git diff --check HEAD^ HEAD
 

@@ -1124,6 +1124,27 @@ The repository test workflow (PRs and relevant main changes) builds the pinned
 adapter and tests Python 3.11/3.15. It neither builds consumer documents nor
 publishes/deploys anything. Renderer-dependent characterization is separate.
 
+CI uses four workers per interpreter with the explicit `measured-v1` balance
+profile in [ci-balance-v1.json](ci-balance-v1.json). It assigns estimated longer work first using
+versioned GitHub log timings. Modules stay together except the reviewed
+`CapturedTextUtilsParagraphBoundaryFixTests` methods, which use independent
+temporary consumers. Those methods run in separate worker processes, retaining
+their original TestCase objects, per-method setup/cleanup and indivisible
+subtests. Exact source/helper pins and fixture/hook checks reject unreviewed
+changes to that exception. All discovered cases remain selected exactly once;
+the default runner selection still uses whole-module round-robin.
+
+```sh
+python3 tools/typst-lint/run_test_shard.py --shard-index 1 --shard-count 4 --balance-profile measured-v1
+```
+
+The frozen baseline model estimates a longest test interval of about 12 minutes
+instead of 22 minutes. This is a scheduling estimate from buffered log
+timestamps, not an observed result for a future CI run. Job counts, test and
+compiler deadlines, adapter checks and both aggregate gates retain their
+existing settings. The [partition evidence](audit/ci-balance-evidence.json)
+records complete discovery, per-worker counts and source/profile hashes.
+
 Next work: extend only provable directive scopes and Markdown extraction contexts; expand
 verified package/local-facade graphs and paragraph ownership; implement
 the remaining rule contracts; validate protected writer/editor transactions and

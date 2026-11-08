@@ -1,5 +1,7 @@
 import contextlib
 import io
+import importlib
+import json
 from pathlib import Path
 import sys
 import tempfile
@@ -305,6 +307,188 @@ class ShardDiscoveryAndCommandTests(unittest.TestCase):
                     runner.main(args)
                 self.assertEqual(raised.exception.code, 2)
                 discover.assert_not_called()
+
+    def test_measured_command_retains_skip_failure_and_complete_test_selection(self):
+        self.write_module('skip', 'import unittest\nclass Cases(unittest.TestCase):\n'
+                          '    @unittest.skip("balanced original skip")\n'
+                          '    def test_skip(self): self.fail("must not execute")\n')
+        self.write_module('failure', 'import unittest\nclass Cases(unittest.TestCase):\n'
+                          '    def test_failure(self):\n'
+                          '        with self.subTest(original=True): self.fail("balanced subtest")\n')
+        self.write_module('pass', 'import unittest\nclass Cases(unittest.TestCase):\n'
+                          '    def test_ok(self): pass\n')
+        outcomes = [self.invoke('--shard-index', str(index), '--shard-count', '3',
+                                '--balance-profile', 'measured-v1') for index in (1, 2, 3)]
+        self.assertEqual(sorted(status for status, _ in outcomes), [0, 0, 1])
+        for _, output in outcomes:
+            self.assertIn('discovered 3 tests in 3 modules; selected 1 tests', output)
+            self.assertIn('Balance profile measured-v1', output)
+            self.assertIn('Ran 1 test', output)
+        self.assertTrue(any('balanced original skip' in output for _, output in outcomes))
+        self.assertTrue(any('balanced subtest' in output for _, output in outcomes))
+
+
+class MeasuredShardTests(unittest.TestCase):
+    def setUp(self):
+        self.profile = runner.load_balance_profile('measured-v1')
+        temporary = tempfile.TemporaryDirectory(prefix='unittest_balance_')
+        self.addCleanup(temporary.cleanup)
+        self.path = Path(temporary.name) / 'profile.json'
+        patch = mock.patch.object(runner, 'BALANCE_PROFILE', self.path)
+        patch.start()
+        self.addCleanup(patch.stop)
+        self.save()
+
+    def save(self):
+        self.path.write_text(json.dumps(self.profile), encoding='utf-8')
+
+    def shards(self, cases, count=4):
+        suite = unittest.TestSuite(cases)
+        return [runner.select_shard(suite, index, count, balance_profile='measured-v1')
+                for index in range(1, count + 1)]
+
+    def reviewed_cases(self):
+        with mock.patch.object(sys, 'path', [str(TOOL / 'tests'), *sys.path]):
+            module = importlib.import_module(runner.SPLIT_MODULE)
+        cls = getattr(module, runner.SPLIT_CLASS)
+        return module, cls, [cls(name) for name in unittest.defaultTestLoader.getTestCaseNames(cls)]
+
+    def test_lpt_is_deterministic_and_retains_original_order_and_objects(self):
+        cases = [make_case(module, str(number)) for number, module in enumerate(
+            ('test_z', 'test_a', 'test_m', 'test_b', 'test_z'))]
+        self.profile['module_weights_ms'] = dict(test_z=4000, test_a=3000, test_m=2000, test_b=1000)
+        self.save()
+        shards = self.shards(cases, 2)
+        self.assertEqual([s.estimated_ms for s in shards], [5000, 5000])
+        self.assertEqual(shards[0].selected_modules, ('test_b', 'test_z'))
+        self.assertEqual(shards[1].selected_modules, ('test_a', 'test_m'))
+        self.assertEqual(shards[0].tests, (cases[0], cases[3], cases[4]))
+        self.assertEqual(shards[1].tests, (cases[1], cases[2]))
+        reversed_shards = self.shards(list(reversed(cases)), 2)
+        for first, second in zip(shards, reversed_shards):
+            self.assertEqual(first.selected_modules, second.selected_modules)
+            self.assertEqual(second.tests, tuple(reversed(first.tests)))
+        default = runner.select_shard(unittest.TestSuite(cases), 1, 2)
+        self.assertEqual(default.selected_modules, ('test_a', 'test_m'))
+        self.assertIsNone(default.estimated_ms)
+
+    def test_reviewed_methods_partition_without_running_or_losing_subtests(self):
+        _, _, cases = self.reviewed_cases()
+        self.assertEqual(len(cases), 34)
+        shards = self.shards(cases)
+        chosen = [case for shard in shards for case in shard.tests]
+        self.assertEqual(sorted(map(id, chosen)), sorted(map(id, cases)))
+        self.assertEqual(len({id(case) for case in chosen}), len(cases))
+        self.assertTrue(all(shard.tests for shard in shards))
+        for shard in shards:
+            self.assertEqual(shard.tests, tuple(case for case in cases if case in shard.tests))
+        self.assertLess(max(s.estimated_ms for s in shards),
+                        self.profile['module_weights_ms'][runner.SPLIT_MODULE] // 2)
+
+    def test_missing_timing_and_duplicate_case_ids_never_drop_cases(self):
+        _, cls, cases = self.reviewed_cases()
+        self.profile['boundary_method_weights_ms'].pop(cases[0].id())
+        self.save()
+        # Keep both a repeated object and a distinct object with the same ID.
+        cases += [cases[0], cls(cases[0]._testMethodName), make_case('test_future', 'Future')]
+        shards = self.shards(cases)
+        from collections import Counter
+        self.assertEqual(Counter(map(id, cases)),
+                         Counter(id(case) for shard in shards for case in shard.tests))
+        self.assertTrue(all(shard.estimated_ms > 0 for shard in shards))
+        duplicates = [index for index, shard in enumerate(shards)
+                      if any(case.id() == cases[0].id() for case in shard.tests)]
+        self.assertEqual(len(duplicates), 1)
+
+    def test_unsplit_modules_retain_real_module_and_class_fixture_lifecycle(self):
+        events = []
+        module_name = 'balanced_fixture'
+        module = types.ModuleType(module_name)
+        module.setUpModule = lambda: events.append('module-up')
+        module.tearDownModule = lambda: events.append('module-down')
+        cls = type('Fixture', (unittest.TestCase,), {
+            '__module__': module_name,
+            'setUpClass': classmethod(lambda cls: events.append('class-up')),
+            'tearDownClass': classmethod(lambda cls: events.append('class-down')),
+            'test_a': lambda self: events.append('a'),
+            'test_b': lambda self: events.append('b'),
+        })
+        cases = [cls('test_a'), cls('test_b'), make_case('other_fixture', 'Other')]
+        with mock.patch.dict(sys.modules, {module_name: module}):
+            shards = self.shards(cases, 2)
+            owner, = [s for s in shards if cls('test_a') in s.tests]
+            self.assertEqual(owner.tests, tuple(cases[:2]))
+            result = unittest.TextTestRunner(stream=io.StringIO()).run(unittest.TestSuite(owner.tests))
+        self.assertTrue(result.wasSuccessful())
+        self.assertEqual(events, ['module-up', 'class-up', 'a', 'b', 'class-down', 'module-down'])
+
+    def test_changed_review_pins_refuse_instead_of_splitting_unreviewed_sources(self):
+        _, _, cases = self.reviewed_cases()
+        for filename in runner.SPLIT_SOURCES:
+            with self.subTest(filename=filename):
+                original = self.profile['source_pins'][filename]
+                self.profile['source_pins'][filename] = '0' * 64
+                self.save()
+                with self.assertRaisesRegex(runner.ShardError, 'source changed'):
+                    self.shards(cases)
+                self.profile['source_pins'][filename] = original
+
+    def test_review_guards_cannot_be_evaded_by_empty_reviewed_module_selection(self):
+        module, _, _ = self.reviewed_cases()
+        cases = [make_case('test_other', 'Other')]
+        original = self.profile['source_pins'][runner.SPLIT_SOURCES[0]]
+        self.profile['source_pins'][runner.SPLIT_SOURCES[0]] = '0' * 64
+        self.save()
+        with self.assertRaisesRegex(runner.ShardError, 'source changed'):
+            self.shards(cases, 1)
+        self.profile['source_pins'][runner.SPLIT_SOURCES[0]] = original
+        self.save()
+        with mock.patch.object(module, 'load_tests', lambda *args: unittest.TestSuite(), create=True):
+            with self.assertRaisesRegex(runner.ShardError, 'load_tests'):
+                self.shards(cases, 1)
+
+    def test_new_fixtures_hooks_or_classes_refuse_even_with_matching_source_pins(self):
+        module, cls, cases = self.reviewed_cases()
+        for target, name in ((module, 'setUpModule'), (module, 'tearDownModule'),
+                             (module, 'load_tests'), (cls, 'setUpClass'),
+                             (cls, 'tearDownClass'), (cls, 'run')):
+            with self.subTest(name=name), mock.patch.object(target, name, lambda *args: None, create=True):
+                with self.assertRaisesRegex(runner.ShardError, 'fixtures|hooks|load_tests'):
+                    self.shards(cases)
+        with self.assertRaisesRegex(runner.ShardError, 'Unreviewed class'):
+            self.shards([*cases, make_case(runner.SPLIT_MODULE, 'Unexpected')])
+
+    def test_malformed_or_unbounded_profile_data_is_rejected(self):
+        for field, bad in (('default_weight_ms', True), ('default_weight_ms', 0),
+                           ('module_weights_ms', {'test_a': -1}),
+                           ('boundary_method_weights_ms', {'method': 0.5}),
+                           ('source_pins', {'../outside': '0' * 64}), ('schema', True)):
+            with self.subTest(field=field, bad=bad):
+                original = self.profile[field]
+                self.profile[field] = bad
+                self.save()
+                with self.assertRaises(runner.ShardError):
+                    runner.load_balance_profile('measured-v1')
+                self.profile[field] = original
+        self.path.write_text('{"schema":1,"schema":1}')
+        with self.assertRaisesRegex(runner.ShardError, 'Duplicate'):
+            runner.load_balance_profile('measured-v1')
+        self.path.write_bytes(b'x' * (runner.MAX_PROFILE_BYTES + 1))
+        with self.assertRaisesRegex(runner.ShardError, 'byte limit'):
+            runner.load_balance_profile('measured-v1')
+        with self.assertRaisesRegex(runner.ShardError, 'Unknown'):
+            runner.load_balance_profile('unknown')
+
+    def test_complete_actual_discovery_is_an_exhaustive_disjoint_partition(self):
+        suite = runner.discover_suite(TOOL / 'tests')
+        cases = tuple(runner.iter_cases(suite))
+        shards = [runner.select_shard(suite, index, 4, balance_profile='measured-v1')
+                  for index in range(1, 5)]
+        selected = [case for shard in shards for case in shard.tests]
+        self.assertEqual(sorted(map(id, selected)), sorted(map(id, cases)))
+        self.assertEqual(sum(len(shard.tests) for shard in shards), len(cases))
+        self.assertEqual(set().union(*(set(shard.selected_modules) for shard in shards)),
+                         set(shards[0].modules))
 
 
 if __name__ == '__main__':
