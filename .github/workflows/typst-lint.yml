@@ -23,15 +23,15 @@ concurrency:
 
 jobs:
   test_shards:
-    name: Python ${{ matrix.python }} shard ${{ matrix.shard }}/4 and pinned Typst syntax
+    name: Python ${{ matrix.python }} shard ${{ matrix.shard }}/8 and pinned Typst syntax
     runs-on: ubuntu-latest
-    # Balance modules and one reviewed independent method group by measured cost.
+    # Balance modules and reviewed independent method groups by measured cost.
     timeout-minutes: 30
     strategy:
       fail-fast: false
       matrix:
         python: ['3.11', '3.15']
-        shard: [1, 2, 3, 4]
+        shard: [1, 2, 3, 4, 5, 6, 7, 8]
     env:
       PYTHONDONTWRITEBYTECODE: '1'
       OPENSPEC_TELEMETRY: '0'
@@ -57,7 +57,7 @@ jobs:
           cargo build --locked
           test -x target/debug/typst-lint-syntax
       - name: Test linter components and real parser
-        run: python tools/typst-lint/run_test_shard.py --shard-index ${{ matrix.shard }} --shard-count 4 --balance-profile measured-v1
+        run: python tools/typst-lint/run_test_shard.py --shard-index ${{ matrix.shard }} --shard-count 8 --balance-profile measured-v1
       - name: Check whitespace
         run: git diff --check HEAD^ HEAD
 

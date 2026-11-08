@@ -568,13 +568,15 @@ class MeasuredShardTests(unittest.TestCase):
     def test_complete_actual_discovery_is_an_exhaustive_disjoint_partition(self):
         suite = runner.discover_suite(TOOL / 'tests')
         cases = tuple(runner.iter_cases(suite))
-        shards = [runner.select_shard(suite, index, 4, balance_profile='measured-v1')
-                  for index in range(1, 5)]
-        selected = [case for shard in shards for case in shard.tests]
-        self.assertEqual(sorted(map(id, selected)), sorted(map(id, cases)))
-        self.assertEqual(sum(len(shard.tests) for shard in shards), len(cases))
-        self.assertEqual(set().union(*(set(shard.selected_modules) for shard in shards)),
-                         set(shards[0].modules))
+        for count in (4, 8):
+            with self.subTest(shard_count=count):
+                shards = [runner.select_shard(suite, index, count, balance_profile='measured-v1')
+                          for index in range(1, count + 1)]
+                selected = [case for shard in shards for case in shard.tests]
+                self.assertEqual(sorted(map(id, selected)), sorted(map(id, cases)))
+                self.assertEqual(sum(len(shard.tests) for shard in shards), len(cases))
+                self.assertEqual(set().union(*(set(shard.selected_modules) for shard in shards)),
+                                 set(shards[0].modules))
 
 
 if __name__ == '__main__':
