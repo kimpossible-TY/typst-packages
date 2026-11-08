@@ -604,24 +604,24 @@ class _ExecutableSignals:
             signal.signal(number, handler)
 
 
-def executable_main(arguments=None):
+def executable_main(arguments=None, *, gate=False):
     """Run, clean, flush, then reproduce a natural/requested signal on self only."""
     global _active_signals
-    from typst_lint import main as lint_main
+    from typst_lint import main as lint_main, gate_preview_requested
     arguments = list(sys.argv[1:] if arguments is None else arguments)
     previous = _active_signals
     if ((offline._command(arguments) == 'compile' and offline.requested(arguments))
-            or arguments[:1] == ['preview-compile']):
+            or arguments[:1] == ['preview-compile'] or (gate and gate_preview_requested(arguments))):
         try:
             with _ExecutableSignals() as coordinator:
                 _active_signals = coordinator
-                status = lint_main(arguments)
+                status = lint_main(arguments, gate=True) if gate else lint_main(arguments)
                 sys.stdout.flush()
                 sys.stderr.flush()
         finally:
             _active_signals = previous
     else:
-        status = lint_main(arguments)
+        status = lint_main(arguments, gate=True) if gate else lint_main(arguments)
         sys.stdout.flush()
         sys.stderr.flush()
     if type(status) is not int:

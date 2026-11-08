@@ -53,8 +53,9 @@ def load_manifest(path, root, *, allow_empty=False):
     return roots, requests, allow
 
 
-def main(arguments=None):
-    parser = argparse.ArgumentParser(prog='typst-lint preview-compile', description=__doc__,
+def main(arguments=None, *, gate=False):
+    parser = argparse.ArgumentParser(prog='typst-style compile --preview' if gate else 'typst-lint preview-compile',
+        description=__doc__, allow_abbrev=False,
         epilog='The resource manifest is explicit. PDF bytes are emitted only with --pdf-stdout. '
                'The selected rules remain partial, so a successful preview exits 2.')
     parser.add_argument('--root', required=True, help='Canonical absolute consumer root')

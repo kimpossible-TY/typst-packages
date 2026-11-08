@@ -17,6 +17,7 @@ from unittest.mock import patch
 TOOL = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(TOOL))
 import document_preview_cli
+import typst_lint
 from syntax_client import EXECUTABLE
 from typst_lint import InputError, SafetyError
 
@@ -40,6 +41,25 @@ class DocumentPreviewCliTests(unittest.TestCase):
     def command(self, *extra):
         return [sys.executable, str(TOOL / 'typst-lint'), 'preview-compile', '--root', str(self.project),
                 '--entrypoint', 'main.typ', '--manifest', str(self.manifest), *extra]
+
+    def gate_command(self, *extra):
+        return [sys.executable, str(TOOL / 'typst-style'), 'compile', '--preview', '--root', str(self.project),
+                '--entrypoint', 'main.typ', '--manifest', str(self.manifest), *extra]
+
+    def test_gate_preview_requires_explicit_option_before_compiler_tail(self):
+        with patch.object(document_preview_cli, 'main', return_value=2) as preview:
+            self.assertEqual(typst_lint.main(['compile', '--preview', '--root', str(self.project)], gate=True), 2)
+            preview.assert_called_once_with(['--root', str(self.project)], gate=True)
+        with patch.object(document_preview_cli, 'main') as preview, contextlib.redirect_stdout(io.StringIO()):
+            self.assertEqual(typst_lint.main(['compile', '--root', str(self.project), '--', '--preview'], gate=True), 2)
+            preview.assert_not_called()
+
+    def test_gate_preview_rejects_compiler_tail_and_duplicate_opt_in(self):
+        for extra in (['--', 'main.typ', 'output.pdf'], ['--preview']):
+            run = subprocess.run(self.gate_command(*extra), capture_output=True, timeout=20)
+            self.assertEqual(run.returncode, 2)
+            self.assertIn(b'unrecognized arguments', run.stderr)
+            self.assertEqual((self.project / 'main.typ').read_bytes(), self.source)
 
     def test_manifest_rejects_duplicate_and_unknown_fields(self):
         self.manifest.write_text('{"roots": {}, "roots": {}, "files": []}', encoding='utf-8')
@@ -138,6 +158,21 @@ class DocumentPreviewCliTests(unittest.TestCase):
 
     @unittest.skipUnless(os.environ.get('TYPST_LINT_RENDER_TESTS') == '1'
                          and sys.platform == 'darwin', 'Opt in on macOS with the reviewed Typst compiler')
+    def test_style_gate_can_explicitly_preview_without_publishing(self):
+        self.value['files'] = []
+        self.manifest.write_text(json.dumps(self.value), encoding='utf-8')
+        run = subprocess.run(self.gate_command('--discover-dependencies', '--format', 'json'),
+                             capture_output=True, timeout=60)
+        self.assertEqual(run.returncode, 2, run.stderr)
+        report = json.loads(run.stdout)
+        self.assertEqual(report['phase'], 'preview')
+        self.assertTrue(report['pdf_generated'] and report['discovery_performed'])
+        self.assertFalse(report['source_files_modified'] or report['publication_authority'])
+        self.assertEqual((self.project / 'main.typ').read_bytes(), self.source)
+        self.assertFalse((self.project / 'output.pdf').exists())
+
+    @unittest.skipUnless(os.environ.get('TYPST_LINT_RENDER_TESTS') == '1'
+                         and sys.platform == 'darwin', 'Opt in on macOS with the reviewed Typst compiler')
     def test_missing_package_failure_reports_compiler_diagnostic(self):
         self.source = b'#import "@local/sample:0.1.0": text-value\n#text-value\n'
         (self.project / 'main.typ').write_bytes(self.source)
@@ -155,10 +190,11 @@ class DocumentPreviewCliTests(unittest.TestCase):
         self.assertIn('lib.typ', report['compiler_diagnostics'])
         self.assertEqual((self.project / 'main.typ').read_bytes(), self.source)
 
-    def _check_sigterm(self, *extra):
+    def _check_sigterm(self, *extra, gate=False):
         self.source = b'#for n in range(5000) [Line #n.]\nThus $ x^i $\n\nHence.\n'
         (self.project / 'main.typ').write_bytes(self.source)
-        process = subprocess.Popen(self.command(*extra, '--format', 'json'), stdout=subprocess.PIPE,
+        command = self.gate_command if gate else self.command
+        process = subprocess.Popen(command(*extra, '--format', 'json'), stdout=subprocess.PIPE,
                                    stderr=subprocess.PIPE, start_new_session=True)
         child = None
         try:
@@ -199,3 +235,9 @@ class DocumentPreviewCliTests(unittest.TestCase):
                          'Opt in on macOS with process inspection available')
     def test_sigterm_cancels_active_discovery_and_preserves_source(self):
         self._check_sigterm('--discover-dependencies')
+
+    @unittest.skipUnless(os.environ.get('TYPST_LINT_RENDER_TESTS') == '1'
+                         and sys.platform == 'darwin' and Path('/usr/bin/pgrep').is_file(),
+                         'Opt in on macOS with process inspection available')
+    def test_style_gate_sigterm_reaps_active_preview(self):
+        self._check_sigterm(gate=True)

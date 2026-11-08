@@ -482,8 +482,19 @@ def report(root, mode, *, package_path=None, _verify=True, _analysis_observer=No
                 **({'convergence_evidence': convergence_evidence} if convergence_evidence else {}))
 
 
+def gate_preview_requested(arguments):
+    """Select only an explicit gate option, never an inert compiler tail."""
+    head = arguments[:arguments.index('--')] if '--' in arguments else arguments
+    return head[:1] == ['compile'] and '--preview' in head[1:]
+
+
 def main(argv=None, *, gate=False):
     arguments = list(sys.argv[1:] if argv is None else argv)
+    if gate and gate_preview_requested(arguments):
+        from document_preview_cli import main as preview_compile_main
+        preview_arguments = arguments[1:]
+        preview_arguments.remove('--preview')
+        return preview_compile_main(preview_arguments, gate=True)
     if not gate and arguments[:1] == ['preview-compile']:
         from document_preview_cli import main as preview_compile_main
         return preview_compile_main(arguments[1:])
@@ -495,7 +506,10 @@ def main(argv=None, *, gate=False):
     from offline_cli import requested, main as offline_main, _command as offline_command
     if requested(arguments):
         return offline_main(arguments, gate=gate)
-    parser = argparse.ArgumentParser(description=__doc__, epilog=None if gate else
+    parser = argparse.ArgumentParser(description=__doc__, epilog=(
+        'Explicit private preview: compile --preview --root /absolute/project --entrypoint main.typ '
+        '--manifest /absolute/font-seed.json --discover-dependencies. '
+        'Preview does not publish output or establish complete coverage.' if gate else
         'Explicit offline routes: fix --profile closed-core-v1 --offline-exclusive --target main.typ; '
         'compile --profile closed-core-v1 --resource-profile embedded-ascii-v1 '
         '--offline-exclusive --offline-output-exclusive --target main.typ --output build/main.pdf; '
@@ -504,7 +518,7 @@ def main(argv=None, *, gate=False):
         'journal-status; recover --offline-exclusive --target main.typ --journal-id ID; '
         'output-status; recover-output --offline-output-exclusive --output build/main.pdf --journal-id ID. '
         'inspect-document --entrypoint main.typ inventories literal includes and proposes math script repairs. '
-        'Use COMMAND --help for route options.')
+        'Use COMMAND --help for route options.'))
     parser.add_argument('--version', action='version', version=VERSION)
     parser.add_argument('command', choices=['compile'] if gate else ['check', 'fix', 'compile', 'journal-status', 'recover'])
     parser.add_argument('--root', required=True, type=Path)

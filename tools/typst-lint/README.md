@@ -151,8 +151,11 @@ The explicit macOS [`preview-compile` route](DOCUMENT_PREVIEW_COMPILE_CONTRACT.m
 can compile the captured baseline and candidate in a private network-denied
 workspace using a caller-supplied resource manifest. It optionally streams the
 candidate PDF to stdout, never changes consumer sources and still exits 2 because
-global rule coverage is incomplete. The ordinary `typst-style compile` gate and
-its source/output transaction requirements are unchanged. Optional
+global rule coverage is incomplete. The same preview is available explicitly as
+`typst-style compile --preview --root /absolute/project --entrypoint main.typ
+--manifest /absolute/font-seed.json --discover-dependencies --format json`.
+Without `--preview`, the ordinary compile gate remains blocked; the preview
+neither accepts compiler-tail arguments nor publishes a PDF. Optional
 `--discover-dependencies` derives current dependency paths from a sandboxed
 read-only baseline using the manifest's explicit font selection, and refuses if
 the captured baseline's PDF or observed dependencies differ from that probe.

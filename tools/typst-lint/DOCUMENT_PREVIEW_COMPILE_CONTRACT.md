@@ -11,9 +11,18 @@ typst-lint preview-compile --root /absolute/project --entrypoint main.typ \
   --manifest /absolute/resources.json --format json
 typst-lint preview-compile --root /absolute/project --entrypoint main.typ \
   --manifest /absolute/font-seed.json --discover-dependencies --format json
+typst-style compile --preview --root /absolute/project --entrypoint main.typ \
+  --manifest /absolute/font-seed.json --discover-dependencies --format json
 typst-lint preview-compile --root /absolute/project --entrypoint main.typ \
   --manifest /absolute/resources.json --pdf-stdout > /path/to/new-preview.pdf
 ```
+
+The `typst-style compile --preview` form explicitly selects the same preview
+engine and cancellation handling. It does not accept an ordinary compiler tail
+or an output path. The option must precede `--`; a `--preview` appearing in the
+ordinary inert compiler tail does not select this route. Without this opt-in,
+the existing compile gate continues to refuse incomplete coverage without
+invoking the compiler. Preview success is not normal build-gate success.
 
 The JSON report describes the preview; it does not contain PDF bytes. With
 `--pdf-stdout`, stdout contains only the candidate PDF and stderr contains JSON
