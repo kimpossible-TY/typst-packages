@@ -82,8 +82,10 @@
   let fill-text(content) = highlight(
     content,
     fill: theme.highlight,
-    top-edge: ascent,
-    bottom-edge: -descent,
+    // Resolve these proportions at each text run, including text(size: ...)
+    // inside the body, rather than freezing every run to the caller's size.
+    top-edge: ascent / text.size * 1em,
+    bottom-edge: -descent / text.size * 1em,
   )
 
   for child in children {

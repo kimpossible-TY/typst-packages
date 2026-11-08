@@ -5,6 +5,7 @@ repo_root=$(CDPATH= cd -- "$(dirname -- "$0")/.." && pwd)
 
 "$repo_root/scripts/install-local.sh"
 python3 "$repo_root/tests/test_project_references.py"
+python3 "$repo_root/tests/test_highlighted_rendering.py"
 typst compile "$repo_root/tests/package-smoke.typ" /tmp/custom-typst-package-smoke.pdf
 typst compile "$repo_root/tests/highlighted-content.typ" /tmp/custom-typst-highlighted-content.pdf
 typst compile "$repo_root/tests/math-block-numbering.typ" /tmp/custom-typst-package-math-block-numbering.pdf
