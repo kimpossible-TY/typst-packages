@@ -5,6 +5,7 @@ or closure executes. No helper binding, rendering context or repair is proved.
 """
 from display_rules import (CONTINUATION_GAP as RULE_ID, STANDALONE, DisplayResult,
                            _diagnostic, _horizontal, _line_prefix, _line_suffix)
+from edit_plan import Edit
 from suppression import resolve as resolve_suppressions
 from typst_lint import load_rules
 
@@ -27,7 +28,17 @@ def analyze_all(tree, path, *, catalog=None):
     return _analyze(tree, path, catalog=catalog, rule_ids=RULE_IDS)
 
 
-def _analyze(tree, path, *, catalog, rule_ids):
+def preview_gap_edits(tree, path, *, catalog=None):
+    """Return source-only gap proposals; callers must independently verify them.
+
+    Unlike the diagnostic API, this opt-in result contains edits. It establishes
+    neither execution context nor permission to modify a consumer document.
+    """
+    return _analyze(tree, path, catalog=catalog, rule_ids=(RULE_ID,),
+                    include_gap_edits=True)[RULE_ID]
+
+
+def _analyze(tree, path, *, catalog, rule_ids, include_gap_edits=False):
     source, nodes = tree.source, tree.nodes
     if nodes[0].errors:
         errors = tuple((node.start, node.end) for node in nodes if node.kind == 'Error')
@@ -49,6 +60,7 @@ def _analyze(tree, path, *, catalog, rule_ids):
             (excluded[parent] or nodes[parent].kind in _EXCLUDED_ANCESTORS))
     findings = {rid: [] for rid in rule_ids}
     suppressed = {rid: [] for rid in rule_ids}
+    edits = {rid: [] for rid in rule_ids}
     skips = {rid: [] for rid in rule_ids}
 
     def skip(rid, equation, reason):
@@ -78,12 +90,14 @@ def _analyze(tree, path, *, catalog, rule_ids):
         return not (node.kind in _STRUCTURAL or (node.kind == 'Equation' and node.display)
                     or literal_prose(index))
 
-    def add(rid, equation, explanation):
+    def add(rid, equation, explanation, proposal=None):
         finding = _diagnostic(source, path, rules[rid], equation.start, explanation)
         if any(scope.covers(rid, equation.start) for scope in scopes):
             suppressed[rid].append(finding)
         else:
             findings[rid].append(finding)
+            if proposal is not None:
+                edits[rid].append(proposal)
 
     for index, equation in enumerate(nodes):
         if equation.kind != 'Equation' or not equation.display:
@@ -167,8 +181,12 @@ def _analyze(tree, path, *, catalog, rule_ids):
                 or _line_suffix(source, end).strip(b' \t\r')):
             skip(RULE_ID, equation, 'Display delimiters are not already on standalone source lines')
             continue
+        first_lf = gap.find(b'\n')
+        newline = b'\r\n' if first_lf and gap[first_lf - 1:first_lf] == b'\r' else b'\n'
+        indentation = gap[gap.rfind(b'\n') + 1:]
         add(RULE_ID, equation,
-            'Use one source newline between a standalone display and its unmarked prose continuation.')
-    return {rid: DisplayResult(diagnostics=tuple(findings[rid]), suppressed=tuple(suppressed[rid]),
+            'Use one source newline between a standalone display and its unmarked prose continuation.',
+            Edit(end, after.start, newline + indentation) if include_gap_edits else None)
+    return {rid: DisplayResult(diagnostics=tuple(findings[rid]), edits=tuple(edits[rid]), suppressed=tuple(suppressed[rid]),
                                skips=tuple(dict.fromkeys(skips[rid])))
             for rid in rule_ids}

@@ -17,9 +17,11 @@ TOOL = Path(__file__).resolve().parents[1]
 REPO = TOOL.parents[1]
 sys.path.insert(0, str(TOOL))
 from document_display import RULE_ID, STANDALONE, analyze, analyze_all
+from document_gap_preview import preview
+from edit_plan import Edit, plan
 from static_resolver import TEXT_UTILS_SOURCE_SHA256
 from syntax_client import EXECUTABLE, parse
-from typst_lint import digest
+from typst_lint import digest, load_rules
 
 
 MAIN = b'''#import "@local/text-utils:0.1.2": apply-paragraph-tabs
@@ -199,6 +201,20 @@ class DocumentDisplayRenderTests(unittest.TestCase):
                         self.assertAlmostEqual(float(hence['xMin']), 30.0, delta=0.01)
                         self.assertAlmostEqual(float(marked['xMin']) - float(hence['xMin']),
                                                18.0, delta=0.01)
+
+    def test_generated_gap_preview_renders_owned_fixture(self):
+        before = BEFORE
+        result = preview(parse(before), 'child.typ', load_rules()[0]['rules'])
+        self.assertEqual(result['verification'], 'parse-syntax-directives-and-display-reanalysis')
+        edits = tuple(Edit(row['start'], row['end'], row['replacement'].encode())
+                      for row in result['edits'])
+        self.assertEqual(len(edits), 1)
+        after = plan(before, edits).candidate()
+        self.assertEqual(result['candidate_sha256'], digest(after))
+        self.assertFalse(analyze(parse(after), 'child.typ').diagnostics)
+        original = self.render('preview-before', 'light', MAIN, before)
+        candidate = self.render('preview-after', 'light', MAIN, after)
+        self.assertEqual(original, candidate)
 
     def test_nested_inline_labeled_display_observation_preserves_fixture_layout_and_indent(self):
         for newline, label in ((b'\n', 'lf'), (b'\r\n', 'crlf')):

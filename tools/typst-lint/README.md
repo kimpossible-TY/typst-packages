@@ -60,6 +60,7 @@ inspection route:
 ```sh
 /path/to/typst-packages/tools/typst-lint/typst-lint inspect-document --root /absolute/project --entrypoint main.typ --format json
 /path/to/typst-packages/tools/typst-lint/typst-lint inspect-document --root /absolute/project --entrypoint main.typ --rule-set pde --format json
+/path/to/typst-packages/tools/typst-lint/typst-lint inspect-document --root /absolute/project --entrypoint main.typ --rule-set pde --preview-display-gaps --format json
 /path/to/typst-packages/tools/typst-lint/typst-lint inspect-document --root /absolute/project --entrypoint main.typ --rule-set pde --package-path /absolute/captured-packages --format json
 ```
 
@@ -74,8 +75,15 @@ inspected even when includes occur inside `book-part` or other opaque wrappers.
 `pde.display-continuation-gap` also diagnoses a standalone typed display followed
 by a blank source line and direct literal prose in the same root or nested
 Markup body. Comments, markers and wrappers are never crossed. These are
-diagnostic-only source patterns: only math scripts have in-memory edit proposals,
-with their verified rule IDs stated in the report. Those wrappers retain
+diagnostic-only source patterns by default: math scripts have in-memory edit proposals,
+with their verified rule IDs stated in the report. The explicit
+`--preview-display-gaps` option separately previews gap edits per source, checking
+a fresh parse, unchanged non-whitespace syntax and directive targets, and display
+rule reanalysis. The continuation line's indentation is preserved. Each preview
+is based on the original source hash and is independent of the script proposals;
+do not combine offsets or candidate hashes as if they were
+one plan. These previews can alter paragraph layout and do not certify rendering or
+authorize source writes. Those wrappers retain
 unresolved execution context. Imports, other style rules, runtime resources and
 actual rendering are outside this inspection.
 `pde.standalone-display` diagnoses literal prose sharing the display's source

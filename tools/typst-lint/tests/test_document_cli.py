@@ -300,6 +300,28 @@ class DocumentCliTests(unittest.TestCase):
         self.assertEqual(result['suppressed'][0]['rule_id'], 'pde.display-continuation-gap')
         self.assertFalse(result['coverage']['global_complete'])
 
+    def test_explicit_gap_preview_is_independent_of_script_edits_and_does_not_write(self):
+        source = b'#wrapper[\n$ x^i $ <equation>\n\nTherefore.\n]\n'
+        target = self.write('main.typ', source)
+        baseline = self.run_cli('--rule-set', 'pde')
+        self.assertNotIn('display_gap_previews', baseline)
+        result = self.run_cli('--rule-set', 'pde', '--preview-display-gaps')
+        self.assertEqual(result['proposed_edits'], baseline['proposed_edits'])
+        self.assertEqual(result['diagnostics'], baseline['diagnostics'])
+        preview, = result['display_gap_previews']
+        self.assertEqual(preview['baseline_sha256'], digest(source))
+        edit, = preview['edits']
+        self.assertEqual(edit['rule_id'], 'pde.display-continuation-gap')
+        self.assertEqual(preview['verification'], 'parse-syntax-directives-and-display-reanalysis')
+        self.assertIn('not-composed', result['display_gap_preview_status'])
+        self.assertEqual(target.read_bytes(), source)
+
+    def test_gap_preview_requires_explicit_pde_rule_set(self):
+        self.write('main.typ', b'$ A=B $\n\nHence.')
+        result = self.run_cli('--preview-display-gaps')
+        self.assertEqual(result['phase'], 'input')
+        self.assertIn('explicit --rule-set pde', result['error'])
+
     def test_nested_standalone_display_is_diagnostic_only(self):
         source = (b'#local-scope-annotations(s => [\n'
                   b'  Thus $ x^i = 1 $ <identity> and the claim follows.\n])\n')

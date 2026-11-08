@@ -26,7 +26,8 @@ MAX_REPORT_ITEMS = 100_000
 CONDITIONAL_RULES = ('pde.text-only-highlight', 'pde.paragraph-marker-gap')
 
 
-def report_document(root, entrypoint, *, rule_set='core', package_path=None):
+def report_document(root, entrypoint, *, rule_set='core', package_path=None,
+                    preview_display_gaps=False):
     """Inspect retained source bytes without reading consumer configuration.
 
     Literal includes inside unknown containers are inventory entries, not proof
@@ -37,6 +38,8 @@ def report_document(root, entrypoint, *, rule_set='core', package_path=None):
             'Document rule-set must be core or pde')
     require(package_path is None or rule_set == 'pde',
             'Conditional package namespace inspection requires explicit --rule-set pde')
+    require(type(preview_display_gaps) is bool and (not preview_display_gaps or rule_set == 'pde'),
+            'Display gap previews require explicit --rule-set pde')
     raw_root = os.fspath(root)
     require(type(raw_root) is str and len(raw_root) <= include_context.MAX_ROOT_BYTES,
             'Document root must be a bounded canonical absolute path')
@@ -78,8 +81,10 @@ def report_document(root, entrypoint, *, rule_set='core', package_path=None):
             edit_permission=False)
     findings, proposed, suppressed, files = [], [], [], []
     conditional_findings, conditional_suppressed, conditional_files = [], [], []
+    gap_previews = []
     items = len(captured.sources) + len(captured.edges) + len(captured.occurrences) + len(captured.unresolved)
     for item in captured.sources:
+        gap_preview = None
         try:
             result = analyze(item.tree, item.path, catalog=catalog['rules'], _verify=False)
             displays = (analyze_display_source(item.tree, item.path, catalog=catalog['rules'])
@@ -98,6 +103,12 @@ def report_document(root, entrypoint, *, rule_set='core', package_path=None):
         if displays is not None:
             items += sum(len(value.diagnostics) + len(value.suppressed) + len(value.skips)
                          for value in displays.values())
+            if preview_display_gaps and displays[DISPLAY_GAP].diagnostics:
+                from document_gap_preview import preview
+                gap_preview = preview(item.tree, item.path, catalog['rules'], baseline_displays=displays)
+                if gap_preview is not None:
+                    items += 1 + len(gap_preview['edits'])
+                    gap_previews.append(gap_preview)
         if conditional is not None:
             items += sum(1 + len(conditional.reasons_for(rid)) + len(conditional.parse_errors)
                          for rid in CONDITIONAL_RULES)
@@ -163,13 +174,18 @@ def report_document(root, entrypoint, *, rule_set='core', package_path=None):
             candidate_verification_rules=[RULE_ID] if verified else []))
         if displays is not None:
             for rid, value in displays.items():
-                files.append(dict(path=item.path, source_sha256=item.identity.source_sha256,
+                coverage = dict(path=item.path, source_sha256=item.identity.source_sha256,
                     tree_sha256=item.identity.tree_sha256, bytes=len(item.source), nodes=len(item.tree.nodes),
                     rule_id=rid, status='partial' if value.skips else 'evaluated',
                     analysis_scope='literal-markup-source-pattern', reasons=list(value.skips),
                     diagnostics=len(value.diagnostics), suppressed=len(value.suppressed),
                     proposed_edits=0, candidate_sha256=None,
-                    candidate_verification='diagnostic-only', candidate_verification_rules=[]))
+                    candidate_verification='diagnostic-only', candidate_verification_rules=[])
+                if preview_display_gaps and rid == DISPLAY_GAP:
+                    coverage['independent_preview_edits'] = len(gap_preview['edits']) if gap_preview else 0
+                    coverage['independent_preview_candidate_sha256'] = (gap_preview['candidate_sha256']
+                                                                         if gap_preview else None)
+                files.append(coverage)
     findings.sort(key=lambda row: (row['path'], row['line'], row['column'], row['rule_id']))
     suppressed.sort(key=lambda row: (row['path'], row['line'], row['column'], row['rule_id']))
     conditional_findings.sort(key=lambda row: (row['path'], row['line'], row['column']))
@@ -179,7 +195,7 @@ def report_document(root, entrypoint, *, rule_set='core', package_path=None):
         record = asdict(edge)
         record['raw_request'] = edge.raw_request.decode('utf-8')
         edges.append(record)
-    return dict(schema=1, tool_version=VERSION, mode='inspect-document', status=2, phase='analysis',
+    report = dict(schema=1, tool_version=VERSION, mode='inspect-document', status=2, phase='analysis',
         root=str(root), entrypoint=entrypoint, rule_set=rule_set, compiler_invoked=False, applied_fixes=[],
         consumer_config_loaded=False, package_resolution_performed=namespace_report is not None,
         package_resolution_scope='namespace-roots-only' if namespace_report is not None else 'not-requested',
@@ -210,6 +226,10 @@ def report_document(root, entrypoint, *, rule_set='core', package_path=None):
                    'Only core.parenthesized-scripts is inspected; full document rule coverage is incomplete'),
                   'Literal include reachability does not establish runtime execution or imported dependencies',
                   'Proposals are read-only; no protected source transaction or compiler is invoked'])
+    if preview_display_gaps:
+        report['display_gap_previews'] = gap_previews
+        report['display_gap_preview_status'] = 'independent-read-only-not-composed-with-script-proposals'
+    return report
 
 
 def main(arguments=None):
@@ -224,11 +244,14 @@ def main(arguments=None):
                         help='Explicit source checks: core (scripts) or pde (also display layout); default core')
     parser.add_argument('--package-path',
                         help='Explicit canonical package root for conditional PDE helper namespace hints')
+    parser.add_argument('--preview-display-gaps', action='store_true',
+                        help='Preview independently verified display-gap edits (requires --rule-set pde)')
     parser.add_argument('--format', choices=('json', 'text'), default='text')
     args = parser.parse_args(sys.argv[1:] if arguments is None else arguments)
     try:
         result = report_document(args.root, args.entrypoint, rule_set=args.rule_set,
-                                 package_path=args.package_path)
+                                 package_path=args.package_path,
+                                 preview_display_gaps=args.preview_display_gaps)
     except (InputError, PackageInputError, OSError, ValueError) as error:
         result = dict(schema=1, tool_version=VERSION, mode='inspect-document', status=2,
                       phase='input', compiler_invoked=False, applied_fixes=[], error=str(error))
@@ -254,6 +277,11 @@ def main(arguments=None):
                   f"{unresolved} unresolved rule contexts; no edit permission")
         if result['conditional_diagnostics']:
             print('Helper hints require successful module initialization and exact runtime package selection; no edit permission')
+        if args.preview_display_gaps:
+            previews = result['display_gap_previews']
+            print(f"Display-gap previews: {sum(len(row['edits']) for row in previews)} edits; "
+                  f"{sum(row['verification'] == 'withheld' for row in previews)} sources withheld; "
+                  'independent of script proposals and not applied')
         for blocker in result['blockers']:
             print(blocker)
         print('Global coverage incomplete (exit 2); compiler not invoked')

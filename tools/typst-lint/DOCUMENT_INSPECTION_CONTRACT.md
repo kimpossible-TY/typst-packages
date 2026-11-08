@@ -55,6 +55,14 @@ JSON includes:
   `coverage.uninspected` or add it to `coverage.available_backends`.
 - `proposed_edits`: source-bound byte offsets, replacement strings and baseline
   hashes. These are in-memory math-script proposals only.
+- With explicit `--rule-set pde --preview-display-gaps`, `display_gap_previews`
+  separately provides independently verified source-bound gap edits and candidate
+  hashes. Each candidate is based on the original source, not on the script
+  proposal candidate; their offsets and hashes cannot be combined directly.
+  Verification reparses, compares non-whitespace syntax and operand relationships,
+  checks all inline directive targets, and reanalyzes the two display rules.
+  A failing source is reported as withheld. These source-level checks do not
+  establish execution, preserve all rendered layout, or grant write authority.
 - `coverage.files`: per-source rule status, refusal reasons, candidate hash and
   candidate verification status. Partial source analysis withholds all proposals
   for that source. Candidates require a successful reparse and a second script
@@ -116,7 +124,9 @@ particular, a label's following period does not become a standalone violation.
 that contain only that rule. `analyze_all` returns separate immutable results
 for both source-display rules using one shared scan.
 
-The backend returns no edits. Explicit temporary render characterization covers
+The default diagnostic backend returns no edits. The separately requested gap
+preview uses the same source matches and is independently verified as above.
+Explicit temporary render characterization covers
 LF/CRLF, light/dark, the genuine paragraph show and scoped PDE wrappers; it does
 not grant arbitrary wrappers the same rendering behavior.
 
