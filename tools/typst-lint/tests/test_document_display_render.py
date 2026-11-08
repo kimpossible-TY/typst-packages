@@ -18,6 +18,7 @@ REPO = TOOL.parents[1]
 sys.path.insert(0, str(TOOL))
 from document_display import RULE_ID, STANDALONE, analyze, analyze_all
 from document_gap_preview import preview
+from document_standalone_preview import preview as preview_standalone
 from edit_plan import Edit, plan
 from static_resolver import TEXT_UTILS_SOURCE_SHA256
 from syntax_client import EXECUTABLE, parse
@@ -215,6 +216,18 @@ class DocumentDisplayRenderTests(unittest.TestCase):
         original = self.render('preview-before', 'light', MAIN, before)
         candidate = self.render('preview-after', 'light', MAIN, after)
         self.assertEqual(original, candidate)
+
+    def test_generated_standalone_preview_renders_owned_fixture(self):
+        result = preview_standalone(parse(STANDALONE_BEFORE), 'child.typ', load_rules()[0]['rules'])
+        self.assertEqual(result['verification'], 'parse-syntax-directives-and-display-reanalysis')
+        edits = tuple(Edit(row['start'], row['end'], row['replacement'].encode())
+                      for row in result['edits'])
+        self.assertEqual(len(edits), 2)
+        candidate = plan(STANDALONE_BEFORE, edits).candidate()
+        self.assertEqual(candidate, STANDALONE_AFTER)
+        original = self.render('standalone-preview-before', 'light', MAIN, STANDALONE_BEFORE)
+        rendered = self.render('standalone-preview-after', 'light', MAIN, candidate)
+        self.assertEqual(original, rendered)
 
     def test_nested_inline_labeled_display_observation_preserves_fixture_layout_and_indent(self):
         for newline, label in ((b'\n', 'lf'), (b'\r\n', 'crlf')):

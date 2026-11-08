@@ -335,6 +335,26 @@ class DocumentCliTests(unittest.TestCase):
         self.assertEqual(result['phase'], 'input')
         self.assertIn('explicit --rule-set pde', result['error'])
 
+    def test_explicit_standalone_preview_is_separate_from_other_proposals(self):
+        source = b'#wrapper[\n  Thus $ x^i = 1 $ <equation> hence.\n]\n'
+        target = self.write('main.typ', source)
+        baseline = self.run_cli('--rule-set', 'pde')
+        self.assertNotIn('standalone_display_previews', baseline)
+        result = self.run_cli('--rule-set', 'pde', '--preview-standalone-displays', '--preview-display-gaps')
+        self.assertEqual(result['proposed_edits'], baseline['proposed_edits'])
+        self.assertEqual(result['diagnostics'], baseline['diagnostics'])
+        preview, = result['standalone_display_previews']
+        self.assertEqual(preview['baseline_sha256'], digest(source))
+        self.assertEqual(len(preview['edits']), 2)
+        self.assertTrue(all(e['rule_id'] == 'pde.standalone-display' for e in preview['edits']))
+        self.assertEqual(target.read_bytes(), source)
+
+    def test_standalone_preview_requires_explicit_pde_rule_set(self):
+        self.write('main.typ', b'Thus $ A=B $ hence.')
+        result = self.run_cli('--preview-standalone-displays')
+        self.assertEqual(result['phase'], 'input')
+        self.assertIn('explicit --rule-set pde', result['error'])
+
     def test_nested_standalone_display_is_diagnostic_only(self):
         source = (b'#local-scope-annotations(s => [\n'
                   b'  Thus $ x^i = 1 $ <identity> and the claim follows.\n])\n')

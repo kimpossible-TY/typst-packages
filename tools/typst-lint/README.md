@@ -61,6 +61,7 @@ inspection route:
 /path/to/typst-packages/tools/typst-lint/typst-lint inspect-document --root /absolute/project --entrypoint main.typ --format json
 /path/to/typst-packages/tools/typst-lint/typst-lint inspect-document --root /absolute/project --entrypoint main.typ --rule-set pde --format json
 /path/to/typst-packages/tools/typst-lint/typst-lint inspect-document --root /absolute/project --entrypoint main.typ --rule-set pde --preview-display-gaps --format json
+/path/to/typst-packages/tools/typst-lint/typst-lint inspect-document --root /absolute/project --entrypoint main.typ --rule-set pde --preview-standalone-displays --format json
 /path/to/typst-packages/tools/typst-lint/typst-lint inspect-document --root /absolute/project --entrypoint main.typ --rule-set pde --package-path /absolute/captured-packages --format json
 ```
 
@@ -95,6 +96,13 @@ actual rendering are outside this inspection.
 line, retaining one attached semantic label. Text without a Unicode letter,
 such as a label's following period, stays unresolved rather than being moved
 onto its own line.
+The separate `--preview-standalone-displays` option proposes source newlines for
+these proven sides, preserves indentation and labels, reparses the candidate,
+and checks syntax, directive ownership and display findings. This can expose a
+new continuation-gap finding, reported for the candidate; inspect the resulting
+source again before producing another rule's edits. Each preview uses the
+original source hash, is independent of all other proposals, and has no write or
+general rendering authority.
 With explicit PDE selection, `--package-path` additionally captures six exact
 package namespace contracts and relative import sources. This can trace
 `highlighted` through the actual PDE wildcard facade, including combined module

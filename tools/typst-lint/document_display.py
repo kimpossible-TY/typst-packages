@@ -4,7 +4,7 @@ These are source-style observations, independent of whether an enclosing call
 or closure executes. No helper binding, rendering context or repair is proved.
 """
 from display_rules import (CONTINUATION_GAP as RULE_ID, STANDALONE, DisplayResult,
-                           _diagnostic, _horizontal, _line_prefix, _line_suffix)
+                           _diagnostic, _horizontal, _line_prefix, _line_suffix, _newline)
 from edit_plan import Edit
 from suppression import resolve as resolve_suppressions
 from typst_lint import load_rules
@@ -38,7 +38,14 @@ def preview_gap_edits(tree, path, *, catalog=None):
                     include_gap_edits=True)[RULE_ID]
 
 
-def _analyze(tree, path, *, catalog, rule_ids, include_gap_edits=False):
+def preview_standalone_edits(tree, path, *, catalog=None):
+    """Return source-only standalone proposals for independent verification."""
+    return _analyze(tree, path, catalog=catalog, rule_ids=(STANDALONE,),
+                    include_standalone_edits=True)[STANDALONE]
+
+
+def _analyze(tree, path, *, catalog, rule_ids, include_gap_edits=False,
+             include_standalone_edits=False):
     source, nodes = tree.source, tree.nodes
     if nodes[0].errors:
         errors = tuple((node.start, node.end) for node in nodes if node.kind == 'Error')
@@ -97,7 +104,7 @@ def _analyze(tree, path, *, catalog, rule_ids, include_gap_edits=False):
         else:
             findings[rid].append(finding)
             if proposal is not None:
-                edits[rid].append(proposal)
+                edits[rid].extend(proposal)
 
     for index, equation in enumerate(nodes):
         if equation.kind != 'Equation' or not equation.display:
@@ -126,6 +133,9 @@ def _analyze(tree, path, *, catalog, rule_ids, include_gap_edits=False):
 
         if STANDALONE in rule_ids:
             violation = False
+            proposals = []
+            prefix = _line_prefix(source, equation.start)
+            indentation = prefix[:len(prefix) - len(prefix.lstrip(b' \t'))]
             before_position = neighbor(siblings, positions[index], -1)
             if before_position is not None:
                 before_id = siblings[before_position]
@@ -134,6 +144,9 @@ def _analyze(tree, path, *, catalog, rule_ids, include_gap_edits=False):
                 if _horizontal(separator):
                     if literal_prose(before_id):
                         violation = True
+                        if include_standalone_edits:
+                            proposals.append(Edit(before.end, equation.start,
+                                                  _newline(source, equation.start) + indentation))
                     elif (_line_prefix(source, equation.start).strip(b' \t')
                           and unknown_neighbor(before_id)):
                         skip(STANDALONE, equation,
@@ -147,6 +160,8 @@ def _analyze(tree, path, *, catalog, rule_ids, include_gap_edits=False):
                 if _horizontal(separator):
                     if literal_prose(after_id):
                         violation = True
+                        if include_standalone_edits:
+                            proposals.append(Edit(end, after.start, _newline(source, end) + indentation))
                     elif unknown_neighbor(after_id):
                         skip(STANDALONE, equation,
                              'Following inline construct/comment is not direct literal prose; no boundary crossed')
@@ -154,7 +169,7 @@ def _analyze(tree, path, *, catalog, rule_ids, include_gap_edits=False):
                     skip(STANDALONE, equation, 'Display separator contains unsupported whitespace or bare CR')
             if violation:
                 add(STANDALONE, equation,
-                    'Place display delimiters on source lines separate from adjacent prose.')
+                    'Place display delimiters on source lines separate from adjacent prose.', proposals)
 
         if RULE_ID not in rule_ids or after_position is None:
             continue
@@ -186,7 +201,7 @@ def _analyze(tree, path, *, catalog, rule_ids, include_gap_edits=False):
         indentation = gap[gap.rfind(b'\n') + 1:]
         add(RULE_ID, equation,
             'Use one source newline between a standalone display and its unmarked prose continuation.',
-            Edit(end, after.start, newline + indentation) if include_gap_edits else None)
+            (Edit(end, after.start, newline + indentation),) if include_gap_edits else None)
     return {rid: DisplayResult(diagnostics=tuple(findings[rid]), edits=tuple(edits[rid]), suppressed=tuple(suppressed[rid]),
                                skips=tuple(dict.fromkeys(skips[rid])))
             for rid in rule_ids}

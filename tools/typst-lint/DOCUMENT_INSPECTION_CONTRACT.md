@@ -69,6 +69,13 @@ JSON includes:
   checks all inline directive targets, and reanalyzes the two display rules.
   A failing source is reported as withheld. These source-level checks do not
   establish execution, preserve all rendered layout, or grant write authority.
+- With explicit `--rule-set pde --preview-standalone-displays`,
+  `standalone_display_previews` separately supplies source-bound standalone edits
+  with the same parsing, syntax and directive checks. This is another candidate
+  based on the original source, independent of the script and gap proposals.
+  Making a display standalone can reveal a previously inapplicable gap finding;
+  the candidate's gap count is reported and must be reanalyzed before a later
+  gap pass. Suppressed display findings retain their original ownership.
 - `coverage.files`: per-source rule status, refusal reasons, candidate hash and
   candidate verification status. Partial source analysis withholds all proposals
   for that source. Candidates require a successful reparse and a second script
