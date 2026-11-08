@@ -50,7 +50,9 @@ class ModernHighlightPreviewTests(unittest.TestCase):
 
     def test_literal_prose_and_math_preserve_tokens_and_unicode_spaces(self):
         cases = ((b'#highlighted[Text $x$ follows.]', b'#highlighted[Text ]$x$#highlighted[ follows.]'),
+                 (b'#highlighted()[Text $x$ follows.]', b'#highlighted[Text ]$x$#highlighted[ follows.]'),
                  (b'#highlighted[$x$]', b'$x$'),
+                 (b'#highlighted()[$x$]', b'$x$'),
                  ('#highlighted[한글 $x$ 다음 $y$ 끝]'.encode(),
                   '#highlighted[한글 ]$x$#highlighted[ 다음 ]$y$#highlighted[ 끝]'.encode()))
         for body, expected in cases:
@@ -58,6 +60,48 @@ class ModernHighlightPreviewTests(unittest.TestCase):
                 source, candidate, _ = self.candidate(body)
                 self.assertEqual(candidate, fixtures.IMPORT + expected)
                 self.assertEqual((self.project / 'main.typ').read_bytes(), source)
+
+    def test_smartquote_tokens_preserve_order_and_empty_parentheses(self):
+        for call in (b'#highlighted', b'#highlighted()'):
+            for quote in (b'"', b"'"):
+                body = call + b'[' + quote + b'text $x$ end' + quote + b']'
+                expected = (b'#highlighted[' + quote + b'text ]$x$'
+                            b'#highlighted[ end' + quote + b']')
+                with self.subTest(call=call, quote=quote):
+                    _, candidate, result = self.candidate(body)
+                    self.assertEqual(candidate, fixtures.IMPORT + expected)
+                    self.assertEqual(candidate.count(quote), fixtures.IMPORT.count(quote) + 2)
+                    self.assertFalse(result['edit_permission'] or result['compiler_permission'])
+
+    def test_smartquote_directive_preserves_suppression_and_side_effects_stay_excluded(self):
+        suppressed = (b'// typst-lint: ignore-next pde.text-only-highlight -- intentional\n'
+                      b'#highlighted["text $x$ end"]')
+        _, _, _, result = self.proposal(suppressed)
+        self.assertFalse(result['by_file'])
+        for body in (b'#highlighted["text $x$ #unknown[] end"]',
+                     b'#highlighted["text $cal(x)$ end"]',
+                     b'#highlighted()["text $x$ // comment\n end"]'):
+            with self.subTest(body=body):
+                _, _, _, result = self.proposal(body)
+                self.assertFalse(any(row['edits'] for row in result['by_file']), result)
+
+    @unittest.skipUnless(os.environ.get('TYPST_LINT_RENDER_TESTS') == '1' and shutil.which('typst'),
+                         'Opt in with the pinned Typst compiler')
+    def test_owned_smartquote_and_korean_fixture_can_change_pdf(self):
+        if not subprocess.check_output(['typst', '--version'], text=True).startswith('typst 0.15.1 '):
+            self.skipTest('Fixture comparison pins Typst 0.15.1')
+        source, candidate, _ = self.candidate('#highlighted()["한글 $x$ 다음"]'.encode())
+        pdfs = []
+        for name, data in (('quote-before', source), ('quote-after', candidate)):
+            path, output = self.project / (name + '.typ'), self.project / (name + '.pdf')
+            path.write_bytes(data)
+            run = subprocess.run(['typst', 'compile', '--root', str(self.project),
+                                  '--package-path', str(self.packages), '--package-cache-path', str(self.cache),
+                                  '--creation-timestamp', '0', str(path), str(output)], capture_output=True, timeout=30)
+            self.assertEqual(run.returncode, 0, run.stderr)
+            pdfs.append(output.read_bytes())
+        self.assertNotEqual(pdfs[0], pdfs[1])
+        self.assertEqual((self.project / 'main.typ').read_bytes(), source)
 
     def test_unrelated_duplicate_math_nodes_and_adjacent_text_keep_ownership(self):
         body = b'Before $x(y)$, #highlighted[Text $x$ follows.] after.'
@@ -84,6 +128,8 @@ class ModernHighlightPreviewTests(unittest.TestCase):
 
     def test_opaque_modes_comments_calls_and_code_math_are_not_proposed(self):
         bodies = (b'#highlighted(mode: "flow")[Text $x$ end.]',
+                  b'#highlighted( )[Text $x$ end.]',
+                  b'#highlighted(/* retain */)[Text $x$ end.]',
                   b'#highlighted[#unknown[$x$]]', b'#highlighted[Text // comment\n$x$]',
                   b'#highlighted[Text $ f(x) $]', b'#highlighted[Text $ #footnote[x] $]',
                   b'#let highlighted = none\n#highlighted[Text $x$]')
@@ -141,6 +187,24 @@ class ModernHighlightPreviewTests(unittest.TestCase):
         source, candidate, _ = self.candidate('#highlighted[한글 $x$ 다음]'.encode())
         pdfs = []
         for name, data in (('before', source), ('after', candidate)):
+            path, output = self.project / (name + '.typ'), self.project / (name + '.pdf')
+            path.write_bytes(data)
+            run = subprocess.run(['typst', 'compile', '--root', str(self.project),
+                                  '--package-path', str(self.packages), '--package-cache-path', str(self.cache),
+                                  '--creation-timestamp', '0', str(path), str(output)], capture_output=True, timeout=30)
+            self.assertEqual(run.returncode, 0, run.stderr)
+            pdfs.append(output.read_bytes())
+        self.assertNotEqual(pdfs[0], pdfs[1])
+        self.assertEqual((self.project / 'main.typ').read_bytes(), source)
+
+    @unittest.skipUnless(os.environ.get('TYPST_LINT_RENDER_TESTS') == '1' and shutil.which('typst'),
+                         'Opt in with the pinned Typst compiler')
+    def test_owned_empty_parens_fixture_preserves_math_and_can_change_pdf(self):
+        if not subprocess.check_output(['typst', '--version'], text=True).startswith('typst 0.15.1 '):
+            self.skipTest('Fixture comparison pins Typst 0.15.1')
+        source, candidate, _ = self.candidate('#highlighted()[앞 $x$ 뒤]'.encode())
+        pdfs = []
+        for name, data in (('empty-before', source), ('empty-after', candidate)):
             path, output = self.project / (name + '.typ'), self.project / (name + '.pdf')
             path.write_bytes(data)
             run = subprocess.run(['typst', 'compile', '--root', str(self.project),

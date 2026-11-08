@@ -95,6 +95,7 @@ inspection route:
 
 ```sh
 /path/to/typst-packages/tools/typst-lint/typst-lint inspect-document --root /absolute/project --entrypoint main.typ --format json
+/path/to/typst-packages/tools/typst-lint/typst-lint inspect-document --root /absolute/project --entrypoint main.typ --import-obligations --format json
 /path/to/typst-packages/tools/typst-lint/typst-lint inspect-document --root /absolute/project --entrypoint main.typ --rule-set pde --format json
 /path/to/typst-packages/tools/typst-lint/typst-lint inspect-document --root /absolute/project --entrypoint main.typ --rule-set pde --preview-display-gaps --format json
 /path/to/typst-packages/tools/typst-lint/typst-lint inspect-document --root /absolute/project --entrypoint main.typ --rule-set pde --preview-standalone-displays --format json
@@ -119,6 +120,17 @@ inspection route:
 /path/to/typst-packages/tools/typst-lint/typst-lint inspect-document --root /absolute/project --entrypoint main.typ --rule-set pde --package-path /absolute/captured-packages --reference-cache-path /absolute/captured-cache --reference-package-path /absolute/reference-packages --reference-facade Styles/styles.typ --reference-arguments --format json
 /path/to/typst-packages/tools/typst-lint/typst-lint inspect-document --root /absolute/project --entrypoint main.typ --rule-set pde --package-path /absolute/captured-packages --reference-cache-path /absolute/captured-cache --reference-package-path /absolute/reference-packages --reference-facade Styles/styles.typ --reference-catalog /absolute/catalog.json --format json
 ```
+
+The optional `--import-obligations` inventory captures explicit relative
+imports under the project root in addition to the included sources. For each
+included source it reports reachable unresolved requests and one shortest
+relative-import path; it also records paths and SHA-256 hashes for the captured
+relative sources. The capture checks files during its transaction and compares
+included source bytes, but does not guarantee that live files remain unchanged
+afterward. Repeated identical requests in a source are deduplicated, so request
+counts are not source-location counts. Dynamic imports and package internals
+are not resolved or exhaustively listed. The graph does not prove include or
+import execution, runtime file/package selection, or permission to edit or compile.
 
 The scoped-call option also reports conditional `core.scoped-marker-tags` hints
 for a narrow literal raw marker-label form. The helper bindings and execution
@@ -241,9 +253,9 @@ Common resolver refusals are reported once per source. These rules remain in
 The separate `conditional_local_scope_raw_annotations` section counts raw
 `annot` calls lexically inside displays in supported literal
 `local-scope-annotations` callbacks and reports outside patterns as conditional
-hints. Runtime bindings, execution and display ownership are unproved. This
-section is currently specific to inspection and is not included in the separate
-original-compile `--lint-local-hints` summary.
+hints. Runtime bindings, execution and display ownership are unproved. The
+separate original-compile `--lint-local-hints` summary includes these conditional
+hints and bounded samples; a successful compilation does not prove them.
 The separate `conditional_hyphen_markers` section covers literal
 `#paragraph-tab`: root and nested gap hints and nested target/capitalization
 hints. It is diagnostic-only; marker binding and execution remain conditional.

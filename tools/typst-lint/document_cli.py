@@ -40,6 +40,7 @@ def report_document(root, entrypoint, *, rule_set='core', package_path=None,
                     preview_conditional_prose_spacers=False,
                     preview_conditional_aligned_spacers=False,
                     preview_conditional_prose_markers=False,
+                    import_obligations=False,
                     footnote_cache_path=None,
                     footnote_punctuation_evidence=False,
                     modern_highlight_evidence=False,
@@ -54,6 +55,7 @@ def report_document(root, entrypoint, *, rule_set='core', package_path=None,
     """
     require(type(rule_set) is str and rule_set in ('core', 'pde'),
             'Document rule-set must be core or pde')
+    require(type(import_obligations) is bool, 'Import obligations must be explicitly requested')
     require(package_path is None or rule_set == 'pde',
             'Conditional package namespace inspection requires explicit --rule-set pde')
     require(type(preview_display_gaps) is bool and (not preview_display_gaps or rule_set == 'pde'),
@@ -199,6 +201,15 @@ def report_document(root, entrypoint, *, rule_set='core', package_path=None,
     conditional_hyphen_markers = []
     conditional_local_scope_raw_annotations = []
     items = len(captured.sources) + len(captured.edges) + len(captured.occurrences) + len(captured.unresolved)
+    import_obligation_report = None
+    if import_obligations:
+        from document_import_obligations import analyze as analyze_import_obligations
+        import_obligation_report = analyze_import_obligations(captured)
+        items += len(import_obligation_report['relative_sources'])
+        for row in import_obligation_report['by_source']:
+            items += 1 + len(row['obligations']) + sum(len(item['relative_import_path'])
+                                                       for item in row['obligations'])
+            require(items <= MAX_REPORT_ITEMS, 'Document inspection report item limit exceeded')
     footnote_report = None
     modern_highlight_report = None
     modern_highlight_previews = None
@@ -898,12 +909,15 @@ def report_document(root, entrypoint, *, rule_set='core', package_path=None,
         report['reference_provenance'] = reference_report
     if footnote_report is not None:
         report['conditional_footnote_bindings'] = footnote_report
+    if import_obligation_report is not None:
+        report['import_obligations'] = import_obligation_report
     if modern_highlight_report is not None:
         report['conditional_modern_highlight'] = modern_highlight_report
     if modern_highlight_previews is not None:
         report['conditional_modern_highlight_previews'] = modern_highlight_previews
     if modern_highlight_report is not None:
         require(valid_footnote_session(footnote_session), 'Conditional highlight capture changed during inspection')
+    if modern_highlight_report is not None or import_obligation_report is not None:
         require(len(json.dumps(report, ensure_ascii=False, sort_keys=True, indent=2).encode('utf-8'))
                 <= MAX_MODERN_REPORT_BYTES,
                 'Document inspection report byte limit exceeded')
@@ -918,6 +932,8 @@ def main(arguments=None):
                'Incomplete global coverage returns 2 even with zero findings.')
     parser.add_argument('--root', required=True, help='Canonical absolute consumer root')
     parser.add_argument('--entrypoint', required=True, help='Canonical project-relative .typ entrypoint')
+    parser.add_argument('--import-obligations', action='store_true',
+                        help='Report unresolved static relative-import graph requests by included source')
     parser.add_argument('--rule-set', choices=('core', 'pde'), default='core',
                         help='Explicit source checks: core (scripts) or pde (also display layout); default core')
     parser.add_argument('--package-path',
@@ -976,6 +992,7 @@ def main(arguments=None):
     args = parser.parse_args(sys.argv[1:] if arguments is None else arguments)
     try:
         result = report_document(args.root, args.entrypoint, rule_set=args.rule_set,
+                                 import_obligations=args.import_obligations,
                                  package_path=args.package_path,
                                  footnote_cache_path=args.footnote_cache_path,
                                  footnote_punctuation_evidence=args.footnote_punctuation_evidence,
@@ -1014,6 +1031,14 @@ def main(arguments=None):
         print(f"typst-lint inspect-document: {len(context['sources'])} sources, "
               f"{len(context['occurrences'])} include occurrences, "
               f"{len(result['diagnostics'])} source-style findings")
+        if 'import_obligations' in result:
+            inventory = result['import_obligations']
+            print('Static import obligations (distinct requests; execution and package evaluation not proved):')
+            for row in inventory['by_source']:
+                if row['obligations']:
+                    print(f"  {row['path']!r}: {len(row['obligations'])} reachable unresolved requests")
+                    for item in row['obligations']:
+                        print(f"    {item['importer']!r}: {item['category']}: {item['request']!r}")
         for finding in result['diagnostics']:
             print(f"{finding['path']}:{finding['line']}:{finding['column']}: "
                   f"{finding['rule_id']}: {finding['explanation']}")

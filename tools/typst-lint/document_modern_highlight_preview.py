@@ -26,7 +26,7 @@ RULE = 'pde.text-only-highlight'
 CONDITIONS = (
     'Runtime resolves highlighted to the exact reviewed modern text-utils helper.',
     'The captured source executes in the same intended prose and math context.',
-    'Splitting highlighting can change emphasis, spacing and page layout; PDF equivalence is not proved.',
+    'Splitting highlighting can change emphasis, smart-quote direction, spacing and page layout; PDF equivalence is not proved.',
 )
 _MATH_EXCLUDED = frozenset(('FuncCall', 'MathCall', 'CodeBlock', 'Hash', 'Contextual', 'LetBinding',
                             'ShowRule', 'ModuleImport', 'ModuleInclude', 'Label', 'LineComment', 'BlockComment'))
@@ -69,15 +69,23 @@ def _select(tree, diagnostics):
                 or import_graph.raw(tree, parts[0]) != b'highlighted' or nodes[parts[1]].kind != 'Args'):
             continue
         args = import_graph.significant(tree, parts[1])
-        if len(args) != 1 or nodes[args[0]].kind != 'ContentBlock':
+        kinds = tuple(nodes[arg].kind for arg in args)
+        if kinds == ('ContentBlock',):
+            body_arg = args[0]
+        elif (kinds == ('LeftParen', 'RightParen', 'ContentBlock')
+              and source[nodes[parts[0]].end:nodes[args[2]].start] == b'()'):
+            # An exact empty argument list is still one no-option body. Refuse
+            # whitespace and comments rather than deleting them implicitly.
+            body_arg = args[2]
+        else:
             continue
-        block = nodes[args[0]]
+        block = nodes[body_arg]
         inner = [c for c in block.children if nodes[c].kind == 'Markup']
         if len(inner) != 1:
             continue
         body = nodes[inner[0]]
         children = [nodes[c] for c in body.children]
-        if not children or any(c.kind not in ('Text', 'Space', 'Equation') for c in children):
+        if not children or any(c.kind not in ('Text', 'Space', 'SmartQuote', 'Equation') for c in children):
             continue
         parent, position = parents.get(index), positions.get(index, 0)
         if parent is None or nodes[parent].kind != 'Markup' or not position:

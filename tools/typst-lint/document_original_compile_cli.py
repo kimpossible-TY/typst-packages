@@ -4,6 +4,7 @@ Optional document lint examines the captured sources without modifying them.
 The compiled PDF is emitted only after capture and compiler checks succeed.
 """
 import argparse
+from bisect import bisect_right
 from dataclasses import asdict
 import heapq
 import io
@@ -29,6 +30,9 @@ _LINT_DEFAULT_SAMPLE = 50
 _LINT_DETAIL_SAMPLE = 10_000
 _LINT_ITEM_LIMIT = 100_000
 _LINT_REPORT_BYTES = 8 * 1024 * 1024
+_LOCAL_RAW_OWNER_WORK = 2_000_000
+_LOCAL_RAW_EXPLANATION = ('This raw annotation is outside a display if the wrapper, helper bindings '
+                          'and execution match the stated conditions.')
 
 
 class _DescendingKey:
@@ -91,6 +95,93 @@ def _hyphen_marker_positions(tree):
             if following < len(siblings) and nodes[siblings[following]].kind == 'Text':
                 following_text[nodes[siblings[following]].start] = mark.start
     return markers, following_text
+
+
+def _local_raw_annotation_positions(tree, *, max_work):
+    """Recover direct raw-annot spans and their syntactic wrapper owners."""
+    from document_conditional_raw_annot import _arguments, _equation_constructor
+    from document_conditional_scoped_calls import _parts, _scoped_body, _text
+
+    nodes = tree.nodes
+    parents = {child: (index, position) for index, node in enumerate(nodes)
+               for position, child in enumerate(node.children)}
+    owners, work = {}, len(nodes)
+    require(work <= max_work, 'Local scoped annotation ownership work limit exceeded')
+    for index, node in enumerate(nodes):
+        if node.kind != 'FuncCall':
+            continue
+        parts = _parts(tree, index)
+        if (len(parts) != 2 or nodes[parts[0]].kind != 'Ident'
+                or _text(tree, parts[0]) != 'local-scope-annotations'):
+            continue
+        callback, _ = _scoped_body(tree, index, 'local-scope-annotations')
+        if callback is None:
+            continue
+        body, _ = callback
+        outer = parents.get(index)
+        dynamic, inside_equation = False, False
+        while outer is not None:
+            work += 1
+            require(work <= max_work, 'Local scoped annotation ownership work limit exceeded')
+            ancestor = outer[0]
+            if nodes[ancestor].kind == 'Equation':
+                inside_equation = True
+                break
+            dynamic |= ancestor != 0
+            outer = parents.get(ancestor)
+        if inside_equation:
+            continue
+        pending = [(body, False)]
+        while pending:
+            current, inside_display = pending.pop()
+            work += 1
+            require(work <= max_work, 'Local scoped annotation ownership work limit exceeded')
+            child = nodes[current]
+            # Nested dynamic bodies or wrappers do not belong to this callback
+            # in the bounded source analyzer.
+            if current != body and child.kind in ('LetBinding', 'Closure', 'Contextual', 'CodeBlock',
+                    'ModuleImport', 'ModuleInclude', 'ForLoop', 'WhileLoop', 'Conditional',
+                    'FuncReturn', 'DestructAssignment', 'Raw', 'Str'):
+                continue
+            if current != body and child.kind == 'Binary' and any(
+                    nodes[part].kind in ('Eq', 'PlusEq', 'HyphEq', 'StarEq', 'SlashEq')
+                    for part in _parts(tree, current)):
+                continue
+            inside_display |= ((child.kind == 'Equation' and child.display is not False)
+                               or _equation_constructor(tree, current))
+            call = _parts(tree, current) if child.kind == 'FuncCall' else ()
+            if (current != body and len(call) == 2 and nodes[call[0]].kind == 'Ident'
+                    and _text(tree, call[0]) in ('local-scope-annotations', 'mannot-scope')):
+                continue
+            pending.extend((descendant, inside_display) for descendant in child.children)
+            if (len(call) != 2 or nodes[call[0]].kind != 'Ident' or _text(tree, call[0]) != 'annot'
+                    or nodes[call[1]].kind != 'Args' or not _arguments(tree, call[1])
+                    or current not in parents or inside_display):
+                continue
+            parent, position = parents[current]
+            if nodes[parent].kind not in ('Markup', 'Math') or not position:
+                continue
+            mark = nodes[nodes[parent].children[position - 1]]
+            if mark.kind == 'Hash' and mark.end == child.start:
+                owners.setdefault(mark.start, set()).add((child.end, node.start, dynamic))
+    return owners, work
+
+
+def _local_raw_shape_counts(tree):
+    """Bound claimed callback and annotation counts by captured syntax."""
+    from document_conditional_scoped_calls import _parts, _text
+
+    wrappers = calls = 0
+    for index, node in enumerate(tree.nodes):
+        if node.kind != 'FuncCall':
+            continue
+        parts = _parts(tree, index)
+        if len(parts) != 2 or tree.nodes[parts[0]].kind != 'Ident':
+            continue
+        name = _text(tree, parts[0])
+        wrappers += name == 'local-scope-annotations'
+        calls += name == 'annot'
+    return wrappers, calls
 
 
 def _include_forwarding(context, snapshot, cap):
@@ -217,6 +308,7 @@ def lint_captured_document(context, snapshot, *, rule_set, details=False, local_
     if local_hints:
         import document_local_rules
         import document_conditional_hyphen_marker
+        import document_conditional_local_raw_annot
         local_rules = tuple(document_local_rules.RULE_IDS)
         local_counts = {rid: 0 for rid in local_rules}
         local_hidden_counts = {rid: 0 for rid in local_rules}
@@ -230,6 +322,13 @@ def lint_captured_document(context, snapshot, *, rule_set, details=False, local_
         hyphen_hidden_counts = {rid: 0 for rid in hyphen_rules}
         hyphen_diagnostics, hyphen_suppressed, hyphen_files = [], [], []
         hyphen_seen_diagnostics = hyphen_seen_suppressed = 0
+        scoped_raw_rule = document_conditional_local_raw_annot.RULE
+        scoped_raw_metadata = next((row for row in catalog['rules'] if row['id'] == scoped_raw_rule), None)
+        require(scoped_raw_metadata is not None and scoped_raw_rule in enabled,
+                'Local scoped raw annotation metadata is unavailable')
+        scoped_raw_diagnostics, scoped_raw_suppressed, scoped_raw_files = [], [], []
+        scoped_raw_seen = scoped_raw_hidden = scoped_raw_wrappers = scoped_raw_dynamic = scoped_raw_display = 0
+        scoped_raw_owner_work = 0
     items = len(context.sources) + len(context.edges) + len(context.occurrences) + len(context.unresolved)
     for item in context.sources:
         if cancel_event is not None and cancel_event.is_set():
@@ -347,6 +446,98 @@ def lint_captured_document(context, snapshot, *, rule_set, details=False, local_
                 status=hyphen['status'], diagnostics=len(hyphen['diagnostics']),
                 suppressed=len(hyphen['suppressed']), unresolved_count=len(hyphen['unresolved']),
                 unresolved=list(hyphen['unresolved'][:20]), unresolved_omitted=max(0, len(hyphen['unresolved']) - 20)))
+            scoped_raw = document_conditional_local_raw_annot.analyze(item.source, item.path, catalog=catalog['rules'])
+            require(type(scoped_raw) is dict and scoped_raw.get('path') == item.path
+                    and scoped_raw.get('source_sha256') == item.identity.source_sha256
+                    and scoped_raw.get('status') in ('PARTIAL', 'UNAVAILABLE')
+                    and all(scoped_raw.get(key) is False for key in ('runtime_binding_proved', 'execution_proved',
+                        'coverage_complete', 'edit_permission', 'compiler_permission'))
+                    and scoped_raw.get('conditions') == document_conditional_local_raw_annot.CONDITIONS
+                    and all(type(scoped_raw.get(key)) is list for key in ('diagnostics', 'suppressed', 'unresolved'))
+                    and all(type(reason) is str and bool(reason.strip()) for reason in scoped_raw['unresolved'])
+                    and all(type(scoped_raw.get(key)) is int and scoped_raw[key] >= 0
+                        for key in ('wrappers_examined', 'wrappers_in_dynamic_context', 'lexical_display_calls'))
+                    and scoped_raw['wrappers_in_dynamic_context'] <= scoped_raw['wrappers_examined']
+                    and (not scoped_raw['lexical_display_calls'] or scoped_raw['wrappers_examined'] > 0),
+                    'Local scoped raw annotation result does not match the captured source')
+            if scoped_raw['status'] == 'UNAVAILABLE':
+                require(not scoped_raw['diagnostics'] and not scoped_raw['suppressed']
+                        and not scoped_raw['wrappers_examined'] and not scoped_raw['lexical_display_calls']
+                        and bool(scoped_raw['unresolved']),
+                        'Unavailable local scoped annotation result contains partial findings')
+            raw_shape_wrappers, raw_shape_calls = _local_raw_shape_counts(item.tree)
+            require(scoped_raw['wrappers_examined'] <= raw_shape_wrappers
+                    and scoped_raw['lexical_display_calls'] + len(scoped_raw['diagnostics'])
+                        + len(scoped_raw['suppressed']) <= raw_shape_calls,
+                    'Local scoped annotation counts exceed captured source syntax')
+            items += (1 + sum(len(scoped_raw[key]) for key in ('diagnostics', 'suppressed', 'unresolved'))
+                      + len(scoped_raw['conditions']) + scoped_raw['wrappers_examined']
+                      + scoped_raw['lexical_display_calls'])
+            require(items <= _LINT_ITEM_LIMIT, 'Document lint item limit exceeded')
+            owners = {}
+            line_starts = ()
+            raw_scope_starts, raw_scope_farthest = [], []
+            if scoped_raw['diagnostics'] or scoped_raw['suppressed']:
+                from suppression import resolve as resolve_suppressions
+                owners, charged = _local_raw_annotation_positions(
+                    item.tree, max_work=_LOCAL_RAW_OWNER_WORK - scoped_raw_owner_work)
+                scoped_raw_owner_work += charged
+                line_starts = (0, *(index + 1 for index, byte in enumerate(item.source) if byte == 10))
+                raw_scopes = resolve_suppressions(item.tree, {row['id'] for row in catalog['rules']})
+                for start, end in sorted((scope.start, scope.end) for scope in raw_scopes
+                                         if scoped_raw_rule in scope.rules):
+                    raw_scope_starts.append(start)
+                    raw_scope_farthest.append(max(end, raw_scope_farthest[-1] if raw_scope_farthest else end))
+            seen_offsets, found_wrappers, found_dynamic_wrappers = set(), set(), set()
+            for key, heap in (('diagnostics', scoped_raw_diagnostics), ('suppressed', scoped_raw_suppressed)):
+                for row in scoped_raw[key]:
+                    require(type(row) is dict and row.get('rule_id') == scoped_raw_rule
+                            and row.get('path') == item.path and type(row.get('line')) is int and row['line'] > 0
+                            and type(row.get('column')) is int and row['column'] > 0
+                            and type(row.get('start')) is int and type(row.get('end')) is int
+                            and 0 <= row['start'] < row['end'] <= len(item.source)
+                            and type(row.get('wrapper_start')) is int and type(row.get('outer_dynamic_context')) is bool
+                            and (row['end'], row['wrapper_start'], row['outer_dynamic_context'])
+                                in owners.get(row['start'], ())
+                            and row['start'] not in seen_offsets
+                            and set(row) == {'rule_id', 'grade', 'path', 'line', 'column', 'start', 'end',
+                                            'source', 'wrapper_start', 'outer_dynamic_context', 'explanation'}
+                            and row.get('explanation') == _LOCAL_RAW_EXPLANATION
+                            and row.get('grade') == scoped_raw_metadata['grade']
+                            and row.get('source') == scoped_raw_metadata['source'],
+                            'Local scoped annotation finding does not match the captured rule or source')
+                    seen_offsets.add(row['start'])
+                    found_wrappers.add(row['wrapper_start'])
+                    if row['outer_dynamic_context']:
+                        found_dynamic_wrappers.add(row['wrapper_start'])
+                    line_index = bisect_right(line_starts, row['start']) - 1
+                    line_start = line_starts[line_index]
+                    require(row['line'] == line_index + 1
+                            and row['column'] == len(item.source[line_start:row['start']].decode('utf-8')) + 1,
+                            'Local scoped annotation finding position does not match captured bytes')
+                    scope_index = bisect_right(raw_scope_starts, row['start']) - 1
+                    is_suppressed = scope_index >= 0 and row['start'] < raw_scope_farthest[scope_index]
+                    require(is_suppressed == (key == 'suppressed'),
+                            'Local scoped annotation suppression does not match captured directives')
+                    if key == 'diagnostics':
+                        _retain_mapping_sample(heap, row, scoped_raw_seen, cap)
+                        scoped_raw_seen += 1
+                    else:
+                        _retain_mapping_sample(heap, row, scoped_raw_hidden, cap)
+                        scoped_raw_hidden += 1
+            require(len(found_wrappers) <= scoped_raw['wrappers_examined']
+                    and len(found_dynamic_wrappers) <= scoped_raw['wrappers_in_dynamic_context'],
+                    'Local scoped annotation wrapper counts contradict captured findings')
+            scoped_raw_wrappers += scoped_raw['wrappers_examined']
+            scoped_raw_dynamic += scoped_raw['wrappers_in_dynamic_context']
+            scoped_raw_display += scoped_raw['lexical_display_calls']
+            scoped_raw_files.append(dict(path=item.path, source_sha256=item.identity.source_sha256,
+                status=scoped_raw['status'], diagnostics=len(scoped_raw['diagnostics']),
+                suppressed=len(scoped_raw['suppressed']), wrappers_examined=scoped_raw['wrappers_examined'],
+                wrappers_in_dynamic_context=scoped_raw['wrappers_in_dynamic_context'],
+                lexical_display_calls=scoped_raw['lexical_display_calls'],
+                unresolved_count=len(scoped_raw['unresolved']), unresolved=list(scoped_raw['unresolved'][:20]),
+                unresolved_omitted=max(0, len(scoped_raw['unresolved']) - 20)))
     if local_hints:
         include_forwarding, forwarding_items = _include_forwarding(context, snapshot, cap)
         items += forwarding_items
@@ -396,6 +587,19 @@ def lint_captured_document(context, snapshot, *, rule_set, details=False, local_
             runtime_binding_proved=False, execution_proved=False, coverage_complete=False,
             render_equivalence_proved=False, edit_permission=False, compiler_permission=False)
         report['conditional_include_forwarding'] = include_forwarding
+        raw_diagnostics = _finish_mapping_sample(scoped_raw_diagnostics)
+        raw_suppressed = _finish_mapping_sample(scoped_raw_suppressed)
+        report['conditional_local_scope_raw_annotations'] = dict(rule_id=scoped_raw_rule,
+            diagnostics_count=scoped_raw_seen, diagnostics=raw_diagnostics,
+            diagnostics_omitted=scoped_raw_seen - len(raw_diagnostics),
+            suppressed_count=scoped_raw_hidden, suppressed=raw_suppressed,
+            suppressed_omitted=scoped_raw_hidden - len(raw_suppressed), sample_limit=cap,
+            wrappers_examined=scoped_raw_wrappers, wrappers_in_dynamic_context=scoped_raw_dynamic,
+            lexical_display_calls=scoped_raw_display, by_file=scoped_raw_files,
+            unavailable_files=sum(row['status'] == 'UNAVAILABLE' for row in scoped_raw_files),
+            conditions=list(document_conditional_local_raw_annot.CONDITIONS),
+            duplicates_existing_hints_possible=True, runtime_binding_proved=False,
+            execution_proved=False, coverage_complete=False, edit_permission=False, compiler_permission=False)
     # Use the actual encoding and indentation of the nested stderr section.
     require(len(json.dumps({'lint': report}, ensure_ascii=False, sort_keys=True, indent=2).encode('utf-8'))
             <= _LINT_REPORT_BYTES,

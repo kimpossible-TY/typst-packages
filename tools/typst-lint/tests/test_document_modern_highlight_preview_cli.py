@@ -73,6 +73,19 @@ class ModernHighlightPreviewCliTests(unittest.TestCase):
         self.assertTrue(section['reason'])
         self.assertFalse(section['by_file'] or section['edit_permission'] or section['compiler_permission'])
 
+    def test_empty_parentheses_and_smart_quotes_reach_cli_preview(self):
+        source = fixtures.IMPORT + b'#highlighted()["Before $x$ after"]'
+        (self.project / 'main.typ').write_bytes(source)
+        report = self.run_cli(*self.options(), '--preview-conditional-modern-highlights')
+        section = report['conditional_modern_highlight_previews']
+        row, = section['by_file']
+        edit, = row['edits']
+        candidate = plan(source, [Edit(edit['start'], edit['end'], edit['replacement'].encode())]).candidate()
+        self.assertIn(b'#highlighted["Before ]$x$#highlighted[ after"]', candidate)
+        self.assertTrue(any('smart-quote direction' in condition for condition in section['conditions']))
+        self.assertFalse(report['applied_fixes'] or report['compiler_invoked'])
+        self.assertEqual((self.project / 'main.typ').read_bytes(), source)
+
     def test_opt_out_does_not_call_preview_and_shared_budget_is_enforced(self):
         source = fixtures.IMPORT + b'#highlighted[Text $x$ end.]'
         (self.project / 'main.typ').write_bytes(source)

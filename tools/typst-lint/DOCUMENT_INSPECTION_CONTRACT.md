@@ -202,8 +202,9 @@ JSON includes:
   hints with source offsets and suppressions. Wrapper/raw helper identity,
   execution and actual rendered display ownership remain unproved; dynamic
   nested calls and equation constructors are unresolved. This section can
-  overlap other conditional reports, grants no edit/compiler authority, and
-  is not part of the separate original-compile `--lint-local-hints` summary.
+  overlap other conditional reports and grants no edit/compiler authority. The
+  separate original-compile `--lint-local-hints` summary includes bounded
+  samples of these conditional hints without establishing execution.
   Text output shows at most 20 unresolved nested paragraph marker boundaries;
   the budgeted JSON report retains the complete reason list.
   A separate `conditional_hyphen_markers` section reports root and nested gaps,
