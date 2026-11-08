@@ -5,7 +5,12 @@ compiler/write authority is provided. Callers supply exact roots and relative
 paths; observed compiler dependencies and font choices remain separate facts.
 """
 from dataclasses import dataclass, field
+import os
 from pathlib import Path
+import pwd
+import re
+import stat
+import sys
 from types import MappingProxyType
 import unicodedata
 import weakref
@@ -20,6 +25,9 @@ MAX_PATH_BYTES = 4096
 MAX_TOTAL_PATH_BYTES = 128 * 1024
 MAX_DEPTH = 64
 ROLES = frozenset(('source', 'package', 'resource', 'font'))
+APPLE_ASSET_ROOT = '/System/Library/AssetsV2/com_apple_MobileAsset_Font8'
+_APPLE_TRUST_PREFIX = '/System'
+_APPLE_ASSET_PATH = re.compile(r'[0-9a-f]{40}\.asset/AssetData/[A-Za-z0-9._ -]+\.(?:ttf|otf|ttc)', re.I)
 
 
 @dataclass(frozen=True, slots=True)
@@ -43,6 +51,7 @@ class ResourceCapture:
     roots: tuple[tuple[str, str], ...]
     files: tuple[ResourceBlob, ...]
     total_bytes: int
+    apple_asset_fonts: bool = False
     complete_dependency_closure: bool = False
     compiler_authority: bool = False
 
@@ -53,6 +62,7 @@ _ISSUED = {}
 def _signature(snapshot):
     if (type(snapshot) is not ResourceCapture or type(snapshot.roots) is not tuple
             or type(snapshot.files) is not tuple or type(snapshot.total_bytes) is not int
+            or type(snapshot.apple_asset_fonts) is not bool
             or snapshot.complete_dependency_closure is not False or snapshot.compiler_authority is not False):
         raise SafetyError('Invalid resource capture representation')
     values = []
@@ -68,7 +78,7 @@ def _signature(snapshot):
         values.append((item.request.root, item.request.path, item.request.role, item.sha256,
                        item.size, evidence.path, evidence.identity, evidence.sha256,
                        evidence.size, evidence.parents, item.data))
-    return snapshot.roots, tuple(values), snapshot.total_bytes
+    return snapshot.roots, tuple(values), snapshot.total_bytes, snapshot.apple_asset_fonts
 
 
 def _same_data(expected, supplied):
@@ -99,7 +109,7 @@ def _issue(snapshot):
 
 
 def _relative(path):
-    if (type(path) is not str or not path or path.startswith('/') or '\\' in path
+    if (type(path) is not str or not path or len(path) > MAX_PATH_BYTES or path.startswith('/') or '\\' in path
             or any(part in ('', '.', '..') for part in path.split('/'))
             or any(ord(char) < 32 or ord(char) == 127 for char in path)):
         raise SafetyError('Resource path must be canonical and relative')
@@ -112,7 +122,49 @@ def _relative(path):
     return length
 
 
-def capture(roots, requests):
+def _apple_asset_font(path, relative, bound):
+    """Capture one explicit MobileAsset font under a narrow owner/path policy."""
+    if not _APPLE_ASSET_PATH.fullmatch(relative):
+        raise SafetyError('Apple asset font path is outside the reviewed layout')
+    try:
+        asset_uid = pwd.getpwnam('_nsurlsessiond').pw_uid
+        with runtime._anchored_parent(path) as (parent, parents, check_parents):
+            for name, identity in parents:
+                if name == _APPLE_TRUST_PREFIX or name.startswith(_APPLE_TRUST_PREFIX + '/'):
+                    if identity[3] not in (0, asset_uid) or identity[2] & 0o022:
+                        raise SafetyError('Unsafe Apple font asset parent owner or mode')
+            descriptor = os.open(path.name, os.O_RDONLY | os.O_NOFOLLOW | os.O_NONBLOCK
+                                 | getattr(os, 'O_CLOEXEC', 0), dir_fd=parent)
+            try:
+                before = os.fstat(descriptor)
+                if (not stat.S_ISREG(before.st_mode) or before.st_nlink != 1
+                        or before.st_uid != asset_uid or before.st_mode & (stat.S_ISUID | stat.S_ISGID | 0o022)
+                        or not 0 <= before.st_size <= bound):
+                    raise SafetyError('Unsafe Apple font asset file owner, mode or size')
+                if runtime._identity(os.stat(path.name, dir_fd=parent, follow_symlinks=False)) != runtime._identity(before):
+                    raise SafetyError('Apple font asset changed while opening')
+                data = bytearray()
+                while True:
+                    chunk = os.read(descriptor, min(65536, bound - len(data) + 1))
+                    if not chunk:
+                        break
+                    data.extend(chunk)
+                    if len(data) > bound:
+                        raise SafetyError('Apple font asset byte limit exceeded')
+                if (runtime._identity(before) != runtime._identity(os.fstat(descriptor))
+                        or runtime._identity(before) != runtime._identity(os.stat(
+                            path.name, dir_fd=parent, follow_symlinks=False)) or len(data) != before.st_size):
+                    raise SafetyError('Apple font asset changed while reading')
+                check_parents()
+                raw = bytes(data)
+                return raw, runtime.FileEvidence(str(path), runtime._identity(before), digest(raw), len(raw), parents)
+            finally:
+                os.close(descriptor)
+    except (KeyError, OSError, ValueError) as error:
+        raise SafetyError(f'Apple font asset is unavailable or unsafe: {error}') from error
+
+
+def capture(roots, requests, *, allow_apple_asset_fonts=False):
     """Capture explicit regular files with retained identity and second reads.
 
     Every root and request must be explicitly supplied. Source bytes, including
@@ -120,14 +172,24 @@ def capture(roots, requests):
     changed file rejects the entire capture; omitted or later-selected resources
     are not inferred and system/font discovery is not disabled or captured.
     """
+    if type(allow_apple_asset_fonts) is not bool:
+        raise SafetyError('Apple asset font selection must be an explicit Boolean')
+    if allow_apple_asset_fonts and sys.platform != 'darwin':
+        raise SafetyError('Apple asset font capture is available only on macOS')
     if type(roots) is not dict or not roots or len(roots) > 8:
         raise SafetyError('Explicit resource roots are required')
     normalized = {}
     for name, raw in roots.items():
         if (type(name) is not str or not name.isascii() or not name.isidentifier()
-                or type(raw) is not str or not raw.startswith('/') or '\x00' in raw
+                or type(raw) is not str or len(raw) > MAX_PATH_BYTES or not raw.startswith('/')
+                or '\\' in raw or any(ord(char) < 32 or ord(char) == 127 for char in raw)
                 or str(Path(raw)) != raw or any(p in ('.', '..') for p in raw.split('/'))):
             raise SafetyError('Resource roots must have canonical absolute paths and identifiers')
+        try:
+            if len(raw.encode('utf-8')) > MAX_PATH_BYTES:
+                raise SafetyError('Resource root path byte limit exceeded')
+        except UnicodeError as error:
+            raise SafetyError('Resource roots must be UTF-8') from error
         normalized[name] = Path(raw)
     if type(requests) not in (list, tuple) or not requests or len(requests) > MAX_FILES:
         raise SafetyError('Explicit resource file count is outside the fixed bounds')
@@ -148,7 +210,11 @@ def capture(roots, requests):
         seen.add(key)
         names.add(collision)
         target = normalized[request.root] / request.path
-        raw, evidence = runtime._capture(target, MAX_FILE_BYTES)
+        apple_asset = allow_apple_asset_fonts and str(normalized[request.root]) == APPLE_ASSET_ROOT
+        if apple_asset and request.role != 'font':
+            raise SafetyError('Apple font asset policy admits only explicitly selected fonts')
+        raw, evidence = (_apple_asset_font(target, request.path, MAX_FILE_BYTES)
+                         if apple_asset else runtime._capture(target, MAX_FILE_BYTES))
         identity = evidence.identity[:2]
         if identity in identities:
             raise SafetyError('Resource identity appears under multiple paths')
@@ -160,11 +226,17 @@ def capture(roots, requests):
     # Recheck the entire captured set after its final member is read. This is a
     # bounded sampled consistency check, not a live lock or atomic snapshot.
     for item in files:
-        current = runtime._same(Path(item.evidence.path), item.evidence, MAX_FILE_BYTES)
+        apple_asset = allow_apple_asset_fonts and str(normalized[item.request.root]) == APPLE_ASSET_ROOT
+        if apple_asset:
+            current, evidence = _apple_asset_font(Path(item.evidence.path), item.request.path, MAX_FILE_BYTES)
+            if evidence != item.evidence:
+                raise SafetyError('Apple font asset identity changed during capture')
+        else:
+            current = runtime._same(Path(item.evidence.path), item.evidence, MAX_FILE_BYTES)
         if current != item.data:
             raise SafetyError('Captured resource bytes changed during capture')
     return _issue(ResourceCapture(tuple(sorted((name, str(path)) for name, path in normalized.items())),
-                                  tuple(files), total))
+                                  tuple(files), total, apple_asset_fonts=allow_apple_asset_fonts))
 
 
 def stage_document(context, records, catalog, snapshot, *, project_root='project'):

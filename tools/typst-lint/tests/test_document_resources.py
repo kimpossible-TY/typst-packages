@@ -6,6 +6,7 @@ import shutil
 import subprocess
 import sys
 import tempfile
+from types import SimpleNamespace
 import unittest
 from unittest.mock import patch
 
@@ -66,6 +67,9 @@ class DocumentResourceCaptureTests(unittest.TestCase):
                         ('project', 'image.png', 'resource')):
             with self.subTest(request=request), self.assertRaises(SafetyError):
                 resources.capture(self.roots, [request])
+        for raw in ('/tmp/../tmp', '/tmp/\nname', '/' + 'a' * (resources.MAX_PATH_BYTES + 1), '/tmp/\ud800'):
+            with self.subTest(root=repr(raw)), self.assertRaises(SafetyError):
+                resources.capture({'project': raw}, [self.req('image.png')])
 
     def test_byte_and_count_limits_refuse_without_partial_result(self):
         with patch.object(resources, 'MAX_FILES', 1), self.assertRaises(SafetyError):
@@ -130,6 +134,71 @@ class DocumentResourceCaptureTests(unittest.TestCase):
         object.__setattr__(evidence, 'identity', tuple(identity))
         with self.assertRaises(SafetyError):
             resources.assert_capture(snapshot)
+
+    def test_explicit_apple_asset_policy_checks_layout_role_owner_and_mode(self):
+        asset = self.root / (('a' * 40) + '.asset') / 'AssetData'
+        asset.mkdir(parents=True)
+        font = asset / 'Sample.otf'
+        font.write_bytes(b'\x00\xffasset-font')
+        path = font.relative_to(self.root).as_posix()
+        request = self.req(path, 'font')
+        with patch.object(resources, 'APPLE_ASSET_ROOT', str(self.root)), \
+             patch.object(resources, '_APPLE_TRUST_PREFIX', str(self.root)), \
+             patch.object(resources.sys, 'platform', 'darwin'), \
+             patch.object(resources.pwd, 'getpwnam', return_value=SimpleNamespace(pw_uid=os.getuid())):
+            snapshot = resources.capture(self.roots, [request], allow_apple_asset_fonts=True)
+            self.assertTrue(snapshot.apple_asset_fonts)
+            self.assertEqual(snapshot.files[0].data, b'\x00\xffasset-font')
+            self.assertIs(resources.assert_capture(snapshot), snapshot)
+            for invalid in (self.req(path, 'resource'), self.req('fonts/sample.otf', 'font')):
+                with self.subTest(invalid=invalid), self.assertRaises(SafetyError):
+                    resources.capture(self.roots, [invalid], allow_apple_asset_fonts=True)
+            font.chmod(0o666)
+            with self.assertRaises(SafetyError):
+                resources.capture(self.roots, [request], allow_apple_asset_fonts=True)
+            font.chmod(0o644)
+            with patch.object(resources.pwd, 'getpwnam', return_value=SimpleNamespace(pw_uid=os.getuid() + 10000)):
+                with self.assertRaises(SafetyError):
+                    resources.capture(self.roots, [request], allow_apple_asset_fonts=True)
+
+    def test_apple_asset_font_change_between_reads_is_rejected(self):
+        asset = self.root / (('b' * 40) + '.asset') / 'AssetData'
+        asset.mkdir(parents=True)
+        font = asset / 'Sample.ttf'
+        font.write_bytes(b'original')
+        request = self.req(font.relative_to(self.root).as_posix(), 'font')
+        original = resources._apple_asset_font
+        calls = []
+        def mutate(path, relative, bound):
+            calls.append(1)
+            if len(calls) == 2:
+                path.write_bytes(b'modified')
+            return original(path, relative, bound)
+        with patch.object(resources, 'APPLE_ASSET_ROOT', str(self.root)), \
+             patch.object(resources, '_APPLE_TRUST_PREFIX', str(self.root)), \
+             patch.object(resources.sys, 'platform', 'darwin'), \
+             patch.object(resources.pwd, 'getpwnam', return_value=SimpleNamespace(pw_uid=os.getuid())), \
+             patch.object(resources, '_apple_asset_font', side_effect=mutate):
+            with self.assertRaises(SafetyError):
+                resources.capture(self.roots, [request], allow_apple_asset_fonts=True)
+
+    @unittest.skipUnless(os.environ.get('TYPST_LINT_RENDER_TESTS') == '1'
+                         and sys.platform == 'darwin' and shutil.which('fc-list'),
+                         'Opt in on macOS with fontconfig available')
+    def test_available_macos_mobileasset_font_is_captured_without_distribution(self):
+        result = subprocess.run(['fc-list', '-f', '%{postscriptname}\t%{file}\n'],
+                                check=True, capture_output=True, text=True, timeout=30)
+        matches = [line.split('\t', 1)[1] for line in result.stdout.splitlines()
+                   if line.startswith('Klee-Medium\t')]
+        root = Path(resources.APPLE_ASSET_ROOT)
+        matches = [Path(path) for path in matches if Path(path).is_relative_to(root)]
+        if len(matches) != 1:
+            self.skipTest('A single Klee MobileAsset font is not available')
+        request = resources.ResourceRequest('assets', matches[0].relative_to(root).as_posix(), 'font')
+        snapshot = resources.capture({'assets': str(root)}, [request], allow_apple_asset_fonts=True)
+        self.assertTrue(snapshot.apple_asset_fonts)
+        self.assertGreater(snapshot.files[0].size, 0)
+        self.assertFalse(snapshot.compiler_authority)
 
     @unittest.skipUnless(os.environ.get('TYPST_LINT_RENDER_TESTS') == '1' and shutil.which('typst'),
                          'Opt in with TYPST_LINT_RENDER_TESTS=1 and Typst')

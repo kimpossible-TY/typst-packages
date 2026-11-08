@@ -16,6 +16,28 @@ fixed bounds are 512 files, 64 MiB per file, 192 MiB aggregate bytes, 64 path
 components and 128 KiB aggregate relative path bytes. Font bytes remain in
 memory and are never serialized by this module.
 
+On macOS only, the explicitly enabled `allow_apple_asset_fonts` option admits
+font files under the fixed `/System/Library/AssetsV2/com_apple_MobileAsset_Font8`
+root and the `<40-hex>.asset/AssetData/<font>` layout. This separate policy
+requires the leaf owner to be the system `_nsurlsessiond` account, safe mode,
+single-link regular files, no-follow traversal, and safe owner/mode on the
+`/System` ancestry. The second read repeats these checks. It does not change
+the ordinary reader's owner rules or assert which face Typst selected from a
+collection. Other asset roots, roles, locations and platforms remain unsupported.
+
+One local PDE snapshot used six system-font files in addition to project and
+embedded fonts. With system discovery disabled, placing those captured system
+files ahead of the project font directory reproduced the ordinary baseline PDF;
+placing the project directory first did not. This is a snapshot observation,
+not a guarantee about future fallback selection or a general font profile.
+
+`document_dependencies.parse` separately classifies bounded zero-format paths
+under caller-supplied staging roots. It rejects duplicates, root ambiguity,
+unselected roots and parent traversal after a named path component. `compare`
+reports captured-but-unobserved and observed-but-uncaptured paths. Raw bytes are
+untrusted: comparison alone does not prove that a compiler emitted them or that
+all OS reads, fonts, future branches or network effects have been observed.
+
 An issued frozen capture retains hashes, sizes, original file/parent evidence
 and immutable bytes. `assert_capture` rejects copies and altered issued data;
 it does not reread the filesystem. `stage_document` accepts an original issued
