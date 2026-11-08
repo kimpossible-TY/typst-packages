@@ -241,6 +241,10 @@ Explicit `--conditional-gaps` also composes the conditional proof and nested
 math-footnote gap stages in that preview; it does not authorize source writes.
 Adding `--conditional-punctuation` appends the separate conditional prose
 footnote spacing stage; it requires `--conditional-gaps`.
+For the separately opted-in spacer and facade profile,
+`--partial-unsupported-preview` can retain recognized unsupported files in
+their captured original form and compare a partial whole-document candidate.
+Other safety refusals still block the preview; source application remains disabled.
 Without `--preview`, the ordinary compile gate remains blocked; the preview
 neither accepts compiler-tail arguments nor publishes a PDF. Optional
 `--discover-dependencies` derives current dependency paths from a sandboxed

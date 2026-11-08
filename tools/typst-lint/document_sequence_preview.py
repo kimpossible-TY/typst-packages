@@ -93,12 +93,80 @@ def _same_findings(before_tree, before, after_tree, after, edits):
             and _keys(before_tree.source, before.suppressed, edits) == _keys(after_tree.source, after.suppressed))
 
 
-def preview(tree, path, catalog, *, profile=_STANDARD, footnote_evidence=None):
+def preview(tree, path, catalog, *, profile=_STANDARD, footnote_evidence=None, classify_deferred=False):
     """Return hash-chained edits or a withheld result for this source."""
     _profile(profile)
+    if type(classify_deferred) is not bool:
+        raise InputError('Deferred classification must be an explicit Boolean')
     baseline = tree.source
     current = tree
     steps = []
+    deferred_unproved = False
+
+    def deferred_closure(tree, resolution, call_id, evidence):
+        if call_id is None or not resolution.facts[call_id].deferred:
+            return False
+        parents = {child: index for index, node in enumerate(tree.nodes) for child in node.children}
+        ancestor = call_id
+        while ancestor in parents and tree.nodes[ancestor].kind != 'Closure':
+            ancestor = parents[ancestor]
+        if tree.nodes[ancestor].kind != 'Closure':
+            return False
+        closure = tree.nodes[ancestor]
+        def safe_params(item):
+            params = [tree.nodes[i] for i in item.children if tree.nodes[i].kind == 'Params']
+            if len(params) != 1:
+                return False
+            for child in params[0].children:
+                node = tree.nodes[child]
+                if node.kind in ('Space', 'LineComment', 'BlockComment', 'LeftParen', 'RightParen', 'Comma'):
+                    continue
+                if node.kind != 'Ident' or tree.source[node.start:node.end] == b'footnote':
+                    return False
+            return True
+        if not safe_params(closure):
+            return False
+        # Do not classify any closure with local declarations, imports, or
+        # mutations as this narrow unsupported case. Such a shadow is a real
+        # safety refusal, not a reason to silently keep this file unchanged.
+        pending = list(closure.children)
+        assignments = {'Eq', 'PlusEq', 'HyphEq', 'StarEq', 'SlashEq'}
+        while pending:
+            index = pending.pop()
+            node = tree.nodes[index]
+            if node.kind == 'Closure' and not safe_params(node):
+                return False
+            if node.kind in ('LetBinding', 'ModuleImport', 'ModuleInclude', 'DestructAssignment'):
+                return False
+            if node.kind == 'Binary' and any(tree.nodes[i].kind in assignments for i in node.children):
+                return False
+            pending.extend(node.children)
+
+        # Re-evaluate the lexical namespace at closure declaration using the
+        # same issued graph as conditional footnote evidence. Deferred facts at
+        # the eventual call alone cannot distinguish a captured builtin from a
+        # preceding shadow or an unknown wildcard.
+        import conditional_footnote_binding as bindings
+        import facade_provenance
+        session = evidence._session
+        engine = bindings._NamespaceAnalyzer(session._graph, session._namespaces, (), False)
+        engine.reason = facade_provenance._graph_reason(session._graph)
+        engine.packages = {item.evidence.import_path: item for item in session._namespaces.packages}
+        engine.evidence = session._namespaces.evidence
+
+        class DeclarationObserver(bindings._FootnoteResolver):
+            found = False
+            def visit(self, index, state, *, output=False):
+                if index == ancestor:
+                    value = state.lookup('footnote')
+                    preceding = any(self.evidence.get(frame) for frame in state.frames)
+                    self.found = bool(not state.deferred and preceding and value
+                                      and value.kind == 'builtin' and value.name == 'footnote')
+                return super().visit(index, state, output=output)
+
+        observer = DeclarationObserver(tree, path, engine)
+        observer.visit(0, observer.state)
+        return observer.found and not observer.unresolved and not engine.exhausted
 
     def apply_display(function, rule_id):
         nonlocal current
@@ -117,6 +185,15 @@ def preview(tree, path, catalog, *, profile=_STANDARD, footnote_evidence=None):
         current = parse(candidate, tree.mode)
 
     try:
+        if classify_deferred:
+            import document_footnote_evidence
+            if type(footnote_evidence) is not document_footnote_evidence.PreviewFootnoteEvidence:
+                raise SafetyError('Partial preview requires issued conditional footnote evidence')
+            captured = document_footnote_evidence._valid(footnote_evidence)
+            checked_packages = set()
+            for item in footnote_evidence._session._namespaces.packages:
+                document_footnote_evidence._verify_package(
+                    footnote_evidence._session, captured, item.evidence, checked_packages)
         apply_display(preview_standalone, STANDALONE)
         script = analyze_script(current, path, catalog=catalog, _verify=False, _allow_code_call=True)
         if script.skips or script.parse_errors:
@@ -347,19 +424,33 @@ def preview(tree, path, catalog, *, profile=_STANDARD, footnote_evidence=None):
                                 binding = before_resolution.facts[call_id].binding if call_id is not None else None
                                 if not (binding and binding.kind == 'builtin' and binding.name == 'footnote'):
                                     if footnote_evidence is None:
-                                        raise SafetyError('Conditional spacer footnote binding is not locally proven')
-                                    import document_footnote_evidence
-                                    if type(footnote_evidence) is not document_footnote_evidence.PreviewFootnoteEvidence:
-                                        raise SafetyError('Invalid conditional footnote evidence')
-                                    if conditional_proof is None:
-                                        conditional_proof = document_footnote_evidence.PreviewFootnoteEvidence.candidate_calls(
-                                            footnote_evidence, path, before_tree.source)
-                                    if (conditional_proof.source_sha256 != digest(before_tree.source)
-                                            or not any(call.start == call_start for call in conditional_proof.calls)):
-                                        raise SafetyError('Conditional spacer footnote binding is not proven by captured facade')
-                                    conditional_calls.append(call_start + sum(
-                                        len(item.replacement) - (item.end - item.start)
-                                        for item in edits if item.end <= call_start))
+                                        proved = False
+                                    else:
+                                        import document_footnote_evidence
+                                        if type(footnote_evidence) is not document_footnote_evidence.PreviewFootnoteEvidence:
+                                            raise SafetyError('Invalid conditional footnote evidence')
+                                        if conditional_proof is None:
+                                            conditional_proof = document_footnote_evidence.PreviewFootnoteEvidence.candidate_calls(
+                                                footnote_evidence, path, before_tree.source)
+                                        if conditional_proof.source_sha256 != digest(before_tree.source):
+                                            raise SafetyError('Conditional spacer footnote evidence has a stale source hash'
+                                                if classify_deferred else
+                                                'Conditional spacer footnote binding is not proven by captured facade')
+                                        proved = any(call.start == call_start for call in conditional_proof.calls)
+                                    if not proved:
+                                        if (classify_deferred and conditional_proof is not None
+                                                and not conditional_proof.unresolved
+                                                and deferred_closure(before_tree, before_resolution, call_id,
+                                                                     footnote_evidence)):
+                                            deferred_unproved = True
+                                        else:
+                                            raise SafetyError('Conditional spacer footnote binding is not locally proven'
+                                                if footnote_evidence is None else
+                                                'Conditional spacer footnote binding is not proven by captured facade')
+                                    else:
+                                        conditional_calls.append(call_start + sum(
+                                            len(item.replacement) - (item.end - item.start)
+                                            for item in edits if item.end <= call_start))
                                 finding = matching[0]
                                 expected[(finding.rule_id, finding.grade, finding.path,
                                           target_mapper.mapped(finding), finding.explanation, finding.source)] -= 1
@@ -387,6 +478,14 @@ def preview(tree, path, catalog, *, profile=_STANDARD, footnote_evidence=None):
                 or final_scripts.diagnostics or final_scripts.edits
                 or any(value.diagnostics for value in final_displays.values())):
             raise SafetyError('Final candidate failed the three selected source checks')
+        if classify_deferred:
+            document_footnote_evidence._valid(footnote_evidence)
+        if deferred_unproved:
+            return dict(path=path, baseline_sha256=digest(baseline), candidate_sha256=None,
+                        verification='withheld', steps=[],
+                        reason='A footnote in a deferred closure has no proven binding',
+                        reason_code='unsupported-deferred-footnote-binding',
+                        rule_id=footnote_rules.UNALIGNED)
         if not steps:
             return None
         result = dict(path=path, baseline_sha256=digest(baseline), candidate_sha256=digest(current.source),
@@ -446,7 +545,8 @@ def _replay_expected(tree, record, expected, *, profile=_STANDARD):
     return current
 
 
-def replay_document(context, records, catalog, *, profile=_STANDARD, footnote_evidence=None):
+def replay_document(context, records, catalog, *, profile=_STANDARD, footnote_evidence=None,
+                    partial_unsupported=False, withheld_records=None):
     """Derive an immutable in-memory source map from one issued include capture.
 
     Every captured source must have exactly its current sequence record or no
@@ -455,6 +555,13 @@ def replay_document(context, records, catalog, *, profile=_STANDARD, footnote_ev
     closure and the returned mapping is not compiler or write authority.
     """
     _profile(profile)
+    if type(partial_unsupported) is not bool:
+        raise SafetyError('Partial preview selection must be an explicit Boolean')
+    if withheld_records is None:
+        withheld_records = []
+    if (type(withheld_records) is not list or len(withheld_records) > len(context.sources)
+            or (withheld_records and not partial_unsupported)):
+        raise SafetyError('Invalid partial preview withheld records')
     include_context.assert_include_context(context)
     if footnote_evidence is not None:
         import document_footnote_evidence
@@ -469,13 +576,27 @@ def replay_document(context, records, catalog, *, profile=_STANDARD, footnote_ev
         if type(record) is not dict or type(record.get('path')) is not str or record['path'] in indexed:
             raise SafetyError('Invalid or duplicate document sequence path')
         indexed[record['path']] = record
-    if not set(indexed).issubset({source.path for source in context.sources}):
+    withheld = {}
+    for record in withheld_records:
+        if (type(record) is not dict or type(record.get('path')) is not str
+                or record['path'] in withheld or record['path'] in indexed):
+            raise SafetyError('Invalid or duplicate partial preview source path')
+        withheld[record['path']] = record
+    if not (set(indexed) | set(withheld)).issubset({source.path for source in context.sources}):
         raise SafetyError('Document sequence contains a foreign path')
     candidates = {}
     for source in context.sources:
-        expected = preview(source.tree, source.path, catalog, profile=profile, footnote_evidence=footnote_evidence)
+        expected = preview(source.tree, source.path, catalog, profile=profile, footnote_evidence=footnote_evidence,
+                           classify_deferred=partial_unsupported)
         record = indexed.get(source.path)
-        if expected is None and record is None:
+        excluded = withheld.get(source.path)
+        if excluded is not None:
+            if (expected is None or expected.get('verification') != 'withheld'
+                    or expected.get('reason_code') != 'unsupported-deferred-footnote-binding'
+                    or not _same_data(expected, excluded)):
+                raise SafetyError('Partial preview withheld record is stale, altered or unsupported')
+            candidates[source.path] = source.source
+        elif expected is None and record is None:
             candidates[source.path] = source.source
         else:
             candidates[source.path] = _replay_expected(source.tree, record, expected, profile=profile)

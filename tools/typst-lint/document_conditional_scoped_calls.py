@@ -3,7 +3,7 @@
 This source-pattern experiment does not prove wrapper or package bindings,
 execution, rendering, compilation, or permission to modify a document.
 """
-from conditional_highlight import _SCOPED_CALLBACKS
+from conditional_highlight import _SCOPED_CALLBACKS, _module_alias
 from document_gap_preview import _MappedEdits, _scopes
 from edit_plan import Edit, plan
 import import_graph
@@ -85,6 +85,19 @@ def _scoped_body(tree, index, wrapper):
 def _explicit_wrapper_shadows(tree):
     shadows = set()
     for node_id, node in enumerate(tree.nodes):
+        if node.kind in ('ModuleImport', 'RenamedImportItem'):
+            parts = _parts(tree, node_id)
+            if node.kind == 'ModuleImport':
+                module = _module_alias(tree, node_id)
+                if module is not None and module[1] in _WRAPPERS:
+                    shadows.add(module[1])
+            for position, part in enumerate(parts[:-1]):
+                target = parts[position + 1]
+                if tree.nodes[part].kind == 'As' and tree.nodes[target].kind == 'Ident':
+                    name = _text(tree, target)
+                    if name in _WRAPPERS:
+                        shadows.add(name)
+            continue
         parts = _parts(tree, node_id) if node.kind in ('LetBinding', 'Binary', 'DestructAssignment') else ()
         if node.kind == 'LetBinding' and len(parts) >= 2:
             target = parts[1]

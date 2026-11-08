@@ -137,8 +137,10 @@ def report_document(root, entrypoint, *, rule_set='core', package_path=None,
     conditional_gap_previews = []
     conditional_punctuation_previews = []
     conditional_punctuation_move_previews = []
+    conditional_punctuation_details = []
     conditional_spacer_previews = []
     conditional_scoped_previews = []
+    conditional_detached_annotations = []
     local_findings, local_suppressed, local_files, local_contexts = [], [], [], []
     items = len(captured.sources) + len(captured.edges) + len(captured.occurrences) + len(captured.unresolved)
     footnote_report = None
@@ -321,6 +323,7 @@ def report_document(root, entrypoint, *, rule_set='core', package_path=None,
             if preview_conditional_punctuation:
                 from footnote_rules import preview_conditional_prose_punctuation
                 from document_nested_footnote_punctuation import preview as preview_punctuation_move
+                from document_adjacent_footnote_punctuation import analyze as analyze_punctuation_detail
                 from static_resolver import resolve
                 punctuation = preview_conditional_prose_punctuation(
                     item.tree, item.path, resolve(item.tree, packages=()), catalog=catalog['rules'])
@@ -333,6 +336,11 @@ def report_document(root, entrypoint, *, rule_set='core', package_path=None,
                     items += 1 + len(punctuation_move['edits'])
                     require(items <= MAX_REPORT_ITEMS, 'Document inspection report item limit exceeded')
                     conditional_punctuation_move_previews.append(punctuation_move)
+                detail = analyze_punctuation_detail(item.tree, item.path, catalog=catalog['rules'])
+                items += (1 + len(detail['diagnostics']) + len(detail['suppressed'])
+                          + len(detail['unresolved']) + len(detail['conditions']))
+                require(items <= MAX_REPORT_ITEMS, 'Document inspection report item limit exceeded')
+                conditional_punctuation_details.append(detail)
             if preview_conditional_spacers:
                 from footnote_rules import preview_conditional_unaligned_spacers
                 from static_resolver import resolve
@@ -344,12 +352,18 @@ def report_document(root, entrypoint, *, rule_set='core', package_path=None,
                     conditional_spacer_previews.append(spacer)
             if preview_conditional_scoped_calls:
                 from document_conditional_scoped_calls import analyze as analyze_scoped_calls
+                from document_conditional_detached_annotations import analyze as analyze_detached_annotations
                 scoped_preview = analyze_scoped_calls(item.tree, item.path, catalog=catalog['rules'])
                 items += (1 + len(scoped_preview['diagnostics']) + len(scoped_preview['suppressed'])
                           + len(scoped_preview['edits']) + len(scoped_preview['conditions'])
                           + len(scoped_preview.get('unresolved', ())))
                 require(items <= MAX_REPORT_ITEMS, 'Document inspection report item limit exceeded')
                 conditional_scoped_previews.append(scoped_preview)
+                detached = analyze_detached_annotations(item.source, item.path, catalog=catalog['rules'])
+                items += (1 + len(detached['diagnostics']) + len(detached['suppressed'])
+                          + len(detached['conditions']) + len(detached['unresolved']))
+                require(items <= MAX_REPORT_ITEMS, 'Document inspection report item limit exceeded')
+                conditional_detached_annotations.append(detached)
         except (InputError, OSError, ValueError) as error:
             raise InputError(f'{item.path}: {error}') from error
         # Keep unsupported baseline operands diagnostic-only, then independently
@@ -535,6 +549,8 @@ def report_document(root, entrypoint, *, rule_set='core', package_path=None,
     if preview_conditional_punctuation:
         report['conditional_punctuation_previews'] = conditional_punctuation_previews
         report['conditional_punctuation_move_previews'] = conditional_punctuation_move_previews
+        report['conditional_punctuation_details'] = dict(by_file=conditional_punctuation_details,
+            duplicates_existing_hints=True, edit_permission=False, compiler_permission=False)
         report['conditional_punctuation_preview_status'] = 'independent-source-only-not-composed-or-render-verified'
     if preview_conditional_spacers:
         report['conditional_spacer_previews'] = conditional_spacer_previews
@@ -543,6 +559,8 @@ def report_document(root, entrypoint, *, rule_set='core', package_path=None,
         report['conditional_scoped_calls'] = dict(by_file=conditional_scoped_previews,
             edit_permission=False, compiler_permission=False,
             scope='independent-source-pattern-not-composed-or-render-verified')
+        report['conditional_detached_annotations'] = dict(by_file=conditional_detached_annotations,
+            edit_permission=False, compiler_permission=False, coverage_complete=False)
     if local_rule_hints:
         from document_local_rules import RULE_IDS as LOCAL_RULE_IDS
         report['local_rule_hints'] = dict(rule_ids=list(LOCAL_RULE_IDS),
@@ -725,6 +743,38 @@ def main(arguments=None):
                     print(f"    conditional edit bytes {entry['start']}..{entry['end']}: {entry['replacement']}")
             if scoped_calls['by_file']:
                 for condition in scoped_calls['by_file'][0]['conditions']:
+                    print(f"  condition: {condition}")
+        if 'conditional_detached_annotations' in result:
+            detached = result['conditional_detached_annotations']
+            print('Conditional detached annotations: diagnostic-only, no edit or compiler permission')
+            for row in detached['by_file']:
+                print(f"  {row['path']}: {row['status']}; {len(row['diagnostics'])} hints; "
+                      f"{len(row['suppressed'])} suppressed")
+                for label, entries in (('hint', row['diagnostics']), ('suppressed', row['suppressed'])):
+                    for entry in entries:
+                        print(f"  {label} {entry['path']}:{entry['line']}:{entry['column']}: "
+                              f"{entry['rule_id']}: {entry['explanation']}")
+                for reason in row['unresolved']:
+                    print(f"  {row['path']}: unresolved: {reason}")
+            if detached['by_file']:
+                for condition in detached['by_file'][0]['conditions']:
+                    print(f"  condition: {condition}")
+        if 'conditional_punctuation_details' in result:
+            details = result['conditional_punctuation_details']
+            print('Conditional adjacent footnote punctuation details: classify existing hints; '
+                  'no edit or compiler permission')
+            for row in details['by_file']:
+                print(f"  {row['path']}: {row['status']}; {len(row['diagnostics'])} details; "
+                      f"{len(row['suppressed'])} suppressed; source sha256 {row['source_sha256']}")
+                for reason in row['unresolved']:
+                    print(f"    unresolved: {reason}")
+                for label, entries in (('conditional', row['diagnostics']), ('suppressed', row['suppressed'])):
+                    for item in entries:
+                        print(f"    {label}: footnote bytes {item['start']}..{item['end']}; "
+                              f"punctuation {item['punctuation']} at byte {item['punctuation_start']}; "
+                              f"preceding {item['preceding_kind']}")
+            if details['by_file']:
+                for condition in details['by_file'][0]['conditions']:
                     print(f"  condition: {condition}")
         if result['namespace_evidence'] is not None:
             unresolved = sum(len(row['reasons']) + len(row['parse_errors'])

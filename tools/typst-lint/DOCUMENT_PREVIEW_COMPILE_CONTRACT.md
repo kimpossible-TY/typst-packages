@@ -52,7 +52,9 @@ conditional builtin-footnote hint through reviewed direct or relative wildcard
 namespaces. The captured import graph and selected packages, including reviewed
 transitive dependencies, must match the staged resource bytes. Candidate calls
 are reparsed for each edit stage and checked again at final staging. Missing or
-ambiguous evidence and deferred closure contexts withhold the source plan. This
+ambiguous evidence and unsupported deferred closure contexts withhold the source
+plan. A bounded literal callback can retain a source-bound declaration-time
+builtin capture; dynamic, nested and shadowed cases remain limited. This
 does not prove runtime selection or execution, and it does not authorize writes.
 
 The `typst-style compile --preview` form explicitly selects the same preview
@@ -67,6 +69,43 @@ not inspected by this route. `source_apply_gate.eligible` is always false: globa
 rule coverage and future dependency closure are incomplete, current live-file
 freshness is not proved, and this route has no protected source-write transaction.
 If the preview PDFs differ, that is an additional blocker.
+
+`--partial-unsupported-preview` is a separate opt-in and requires both
+`--conditional-spacers` and `--conditional-facade-footnotes` (and thus also
+`--conditional-gaps`). It can retain a whole source unchanged when an exact
+spacer candidate's footnote is in a recognized deferred closure, its builtin
+capture at declaration has been conditionally resolved, and the call itself is
+not supported by the conditional binding analyzer. Explicit parameter or local
+shadows, mutations, unknown imports, unissued/changed evidence and all other
+refusals remain fatal. Other nested closures in that source expression are
+allowed only with simple parameters that cannot shadow `footnote`; their bodies
+are scanned for the same forbidden declarations, mutations and imports. A target
+inside another deferred closure still needs its own declaration-time proof.
+Each withheld source has a path, baseline SHA-256,
+`pde.unaligned-footnote-no-spacer`, and the fixed reason code
+`unsupported-deferred-footnote-binding`; earlier stages in that file are
+discarded as well. Replaying independently recomputes every record and each
+withheld result against the issued capture. Omitted, duplicated or changed
+records refuse the entire preview.
+
+```sh
+typst-style compile --preview --root /absolute/project --entrypoint main.typ \
+  --manifest /absolute/resources.json --conditional-gaps --conditional-spacers \
+  --conditional-facade-footnotes --partial-unsupported-preview --format json
+```
+
+The same complete captured document and resource set produces both PDFs; only
+verified candidates replace source bytes in the private candidate workspace.
+This is a partial **whole-document** comparison, not proof that a changed file
+has no effect on a withheld file, runtime binding, rendering equivalence, or
+uninspected rules. The report always lists withheld sources and the ordinary
+uninspected rules, adds `partial_preview_withheld_files` to the apply blockers,
+and keeps source application and publication unavailable. The exit status is 2
+even if the two PDF hashes match. If there are withheld sources but no verified
+candidate edits, the route stops before compilation and reports the withheld
+sources and `no_verified_candidate_edits`. `--review-edits` marks withheld
+sources distinctly from unchanged sources. With `--pdf-stdout`, report metadata
+continues to go to stderr, and the PDF is only a private preview.
 
 `--review-edits` includes each captured source's baseline and candidate hashes
 and the same ordered edit stages independently replayed for the compiler. Each

@@ -152,7 +152,8 @@ def _workspace_guard(base, allowed_files, allowed_dirs, output_limits):
 
 def compile_preview(context, records, catalog, snapshot, *, entrypoint, deadline_seconds=120.0,
                     cancel_event=None, expected_dependencies=None, expected_baseline_sha256=None,
-                    profile='standard', starts=None, footnote_evidence=None):
+                    profile='standard', starts=None, footnote_evidence=None,
+                    partial_unsupported=False, withheld_records=None):
     """Compile baseline and candidate from explicit captured bytes in private.
 
     macOS sandbox-exec denies networking and writes outside the temporary
@@ -192,7 +193,9 @@ def compile_preview(context, records, catalog, snapshot, *, entrypoint, deadline
     if any(len(name) > 64 for name in roots):
         raise SafetyError('Preview resource root ID is too long')
     candidates = document_resources.stage_document(context, records, catalog, snapshot, profile=profile,
-                                                   footnote_evidence=footnote_evidence)
+                                                   footnote_evidence=footnote_evidence,
+                                                   partial_unsupported=partial_unsupported,
+                                                   withheld_records=withheld_records)
     cancelled()
     external_fonts = [item for item in snapshot.files
                       if item.request.role == 'font' and item.request.root != 'project']

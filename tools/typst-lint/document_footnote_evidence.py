@@ -138,7 +138,8 @@ class PreviewFootnoteEvidence:
                 _verify_package(self._session, resources, item)
             calls.append(bindings.FootnoteBinding(path, node.start - 1, node.end, digest(candidate),
                 tuple(sources[key] for key in sorted(sources)),
-                tuple(packages[key] for key in sorted(packages)), tuple(sorted(requests))))
+                tuple(packages[key] for key in sorted(packages)), tuple(sorted(requests)),
+                bindings.CALLBACK_CONDITIONS if index in resolver.closure_calls else bindings.CONDITIONS))
         result = CandidateCalls(path, digest(candidate), tuple(calls), tuple(dict.fromkeys(resolver.unresolved)))
         _valid(self)
         return result

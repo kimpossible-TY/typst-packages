@@ -20,19 +20,31 @@ MAX_MANIFEST_BYTES = 1024 * 1024
 MAX_REVIEW_BYTES = 16 * 1024 * 1024
 
 
-def review_sources(context, records):
+class NoPartialPreview(SafetyError):
+    """Recognized unsupported sources exist, but no candidate can be compared."""
+    def __init__(self, withheld, uninspected_rule_ids):
+        super().__init__('Partial preview has no verified candidate edits')
+        self.withheld = tuple(withheld)
+        self.uninspected_rule_ids = tuple(uninspected_rule_ids)
+
+
+def review_sources(context, records, withheld_records=None):
     """Describe the same source sequences the compiler will independently replay.
 
     This is output for review, never proof of current live files or write authority.
     """
     indexed = {record['path']: record for record in records}
+    withheld = {record['path']: record for record in (withheld_records or ())}
     sources = []
     for source in context.sources:
         record = indexed.get(source.path)
-        sources.append(dict(path=source.path, baseline_sha256=source.identity.source_sha256,
-                            candidate_sha256=(record['candidate_sha256'] if record else source.identity.source_sha256),
-                            steps=(record['steps'] if record else []),
-                            unresolved_display_contexts=(record['unresolved_display_contexts'] if record else None)))
+        row = dict(path=source.path, baseline_sha256=source.identity.source_sha256,
+                   candidate_sha256=(record['candidate_sha256'] if record else source.identity.source_sha256),
+                   steps=(record['steps'] if record else []),
+                   unresolved_display_contexts=(record['unresolved_display_contexts'] if record else None))
+        if withheld_records is not None:
+            row['status'] = ('withheld' if source.path in withheld else 'candidate' if record else 'unchanged')
+        sources.append(row)
     review = dict(schema=1, stage_offsets='each step applies to its own baseline_sha256',
                   replacements_may_contain_source_text=True, sources=sources)
     require(len(json.dumps(review, ensure_ascii=False).encode('utf-8')) <= MAX_REVIEW_BYTES,
@@ -104,6 +116,8 @@ def main(arguments=None, *, gate=False):
                         help='Also preview conditional unaligned footnote spacer removal (requires --conditional-gaps)')
     parser.add_argument('--conditional-facade-footnotes', action='store_true',
                         help='Use captured facade namespaces for spacer footnotes (requires --conditional-spacers)')
+    parser.add_argument('--partial-unsupported-preview', action='store_true',
+                        help='Keep recognized unsupported deferred-footnote files unchanged (requires --conditional-facade-footnotes)')
     args = parser.parse_args(sys.argv[1:] if arguments is None else arguments)
     if args.review_edits and args.format != 'json' and not args.pdf_stdout:
         parser.error('--review-edits requires --format json or --pdf-stdout')
@@ -113,6 +127,10 @@ def main(arguments=None, *, gate=False):
         parser.error('--conditional-spacers requires --conditional-gaps')
     if args.conditional_facade_footnotes and not args.conditional_spacers:
         parser.error('--conditional-facade-footnotes requires --conditional-spacers')
+    if args.partial_unsupported_preview and not args.conditional_spacers:
+        parser.error('--partial-unsupported-preview requires --conditional-spacers')
+    if args.partial_unsupported_preview and not args.conditional_facade_footnotes:
+        parser.error('--partial-unsupported-preview requires --conditional-facade-footnotes')
     # The executable installs cooperative SIGINT/SIGTERM handling; imported
     # callers do not change process-wide signal handlers.
     import offline_compile_cli
@@ -138,21 +156,30 @@ def main(arguments=None, *, gate=False):
         context = include_context.load_include_context(root, ((args.entrypoint, source),), budget='book-v1')
         catalog, catalog_hash = load_rules()
         def plan_records(evidence):
-            records = []
+            records, withheld = [], []
             for item in context.sources:
                 if cancel is not None and cancel.is_set():
                     raise runtime.CompilerFailure('cancelled', kind=runtime.CompilerFailureKind.CANCELLED)
                 record = document_sequence_preview.preview(item.tree, item.path, catalog['rules'], profile=profile,
-                                                           footnote_evidence=evidence)
+                                                           footnote_evidence=evidence,
+                                                           classify_deferred=args.partial_unsupported_preview)
                 if record is not None:
                     if record['verification'] == 'withheld':
-                        raise SafetyError(f"{item.path}: {record['reason']}")
-                    records.append(record)
-            return records
+                        if (args.partial_unsupported_preview
+                                and record.get('reason_code') == 'unsupported-deferred-footnote-binding'):
+                            withheld.append(record)
+                        else:
+                            raise SafetyError(f"{item.path}: {record['reason']}")
+                    else:
+                        records.append(record)
+            if withheld and not records:
+                raise NoPartialPreview(withheld, [rule['id'] for rule in catalog['rules'] if rule['id'] not in
+                    (document_display.STANDALONE, script_rule.RULE_ID, document_display.RULE_ID)])
+            return records, withheld
 
         # Preserve the existing fail-before-discovery behavior unless this
         # profile needs a resource-bound facade proof for planning.
-        records = None if args.conditional_facade_footnotes else plan_records(None)
+        planned = None if args.conditional_facade_footnotes else plan_records(None)
         footnote_session = None
         if args.conditional_facade_footnotes:
             import conditional_footnote_binding
@@ -210,17 +237,20 @@ def main(arguments=None, *, gate=False):
         if footnote_session is not None:
             import document_footnote_evidence
             footnote_evidence = document_footnote_evidence.PreviewFootnoteEvidence(footnote_session, snapshot)
-        if records is None:
+        if planned is None:
             phase = 'planning'
-            records = plan_records(footnote_evidence)
-        review = review_sources(context, records) if args.review_edits else None
+            planned = plan_records(footnote_evidence)
+        records, withheld = planned
+        review = review_sources(context, records, withheld if args.partial_unsupported_preview else None) if args.review_edits else None
         phase = 'compile'
         preview = document_preview_compile.compile_preview(context, records, catalog['rules'], snapshot,
                                                            entrypoint=args.entrypoint, cancel_event=cancel,
                                                            expected_dependencies=observed,
                                                            expected_baseline_sha256=discovery_baseline_sha256,
                                                            profile=profile, starts=starts,
-                                                           footnote_evidence=footnote_evidence)
+                                                           footnote_evidence=footnote_evidence,
+                                                           partial_unsupported=args.partial_unsupported_preview,
+                                                           withheld_records=withheld if args.partial_unsupported_preview else None)
         result = dict(schema=1, tool_version=VERSION, mode='preview-compile', status=2, phase='preview',
                       compiler_invoked=True, pdf_generated=True, source_files_modified=False,
                       publication_authority=False, global_coverage_complete=False,
@@ -246,7 +276,12 @@ def main(arguments=None, *, gate=False):
                       source_apply_gate=dict(eligible=False,
                           blockers=['global_rule_coverage_incomplete', 'dependency_closure_unproved',
                                     'live_source_freshness_unproved', 'protected_source_transaction_unavailable']
-                                   + ([] if preview.pdfs_identical else ['preview_pdfs_differ'])))
+                                   + ([] if preview.pdfs_identical else ['preview_pdfs_differ'])
+                                   + (['partial_preview_withheld_files'] if withheld else [])))
+        if args.partial_unsupported_preview:
+            result['partial_unsupported_preview'] = True
+            result['withheld_sources'] = [dict(path=row['path'], baseline_sha256=row['baseline_sha256'],
+                rule_id=row['rule_id'], reason_code=row['reason_code'], reason=row['reason']) for row in withheld]
         if review is not None:
             result['source_review'] = review
         if cancel is not None and cancel.is_set():
@@ -258,6 +293,14 @@ def main(arguments=None, *, gate=False):
         result = dict(schema=1, tool_version=VERSION, mode='preview-compile', status=2, phase=phase,
                       compiler_stage=None, pdf_generated=False,
                       source_files_modified=False, publication_authority=False, error=str(error))
+        if isinstance(error, NoPartialPreview):
+            result['partial_unsupported_preview'] = True
+            result['global_coverage_complete'] = False
+            result['uninspected_rule_ids'] = list(error.uninspected_rule_ids)
+            result['withheld_sources'] = [dict(path=row['path'], baseline_sha256=row['baseline_sha256'],
+                rule_id=row['rule_id'], reason_code=row['reason_code'], reason=row['reason']) for row in error.withheld]
+            result['source_apply_gate'] = dict(eligible=False, blockers=['global_rule_coverage_incomplete',
+                'partial_preview_withheld_files', 'no_verified_candidate_edits'])
         if isinstance(error, runtime.CompilerFailure) and error.invocation is not None:
             starts.observe(error.invocation)
             result['compiler_stage'] = document_preview_compile._PURPOSE_STAGES.get(error.invocation.purpose)
@@ -287,10 +330,23 @@ def main(arguments=None, *, gate=False):
             print(f"Compiler invoked: {result['compiler_invoked']}", file=stream)
         if result.get('compiler_diagnostics'):
             print(result['compiler_diagnostics'], file=stream)
+        if result.get('partial_unsupported_preview'):
+            print('Global rule coverage remains incomplete; source application is unavailable.', file=stream)
+            for row in result['withheld_sources']:
+                print(f"{row['path']}: {row['rule_id']} {row['reason_code']} "
+                      f"baseline sha256={row['baseline_sha256']}: {row['reason']}", file=stream)
+            print('Uninspected rules: ' + ', '.join(result['uninspected_rule_ids']), file=stream)
     else:
         print(f"typst-lint preview-compile: PDF generated; {result['observed_dependencies']} observed dependencies; "
               f"baseline/candidate identical: {result['pdfs_identical']}", file=stream)
         print('Sources were not modified; global rule coverage remains incomplete (exit 2).', file=stream)
+        if args.partial_unsupported_preview:
+            print(f"Partial preview: {len(result['withheld_sources'])} source(s) kept at their captured original bytes; "
+                  f"{result['planned_sources']} source(s) have candidate edits.", file=stream)
+            for row in result['withheld_sources']:
+                print(f"{row['path']}: {row['rule_id']} {row['reason_code']} "
+                      f"baseline sha256={row['baseline_sha256']}: {row['reason']}", file=stream)
+            print('Uninspected rules: ' + ', '.join(result['uninspected_rule_ids']), file=stream)
     if signals is not None and signals.first_signal is not None:
         return -signals.first_signal
     return result['status']

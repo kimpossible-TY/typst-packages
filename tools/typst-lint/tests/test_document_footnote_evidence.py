@@ -270,6 +270,26 @@ class PreviewFootnoteEvidenceTests(unittest.TestCase):
             document_resources.stage_document(context, [forged], catalog, snapshot, profile=profile,
                                               footnote_evidence=proof)
 
+    def test_literal_callback_candidate_is_reproved_during_staging(self):
+        self.source = (b'#import "styles.typ": *\n'
+                       b'#use(x => [\n$ A #dots_space #footnote[Note] $\n])')
+        (self.project / 'main.typ').write_bytes(self.source)
+        proof, session, snapshot = self.capture()
+        catalog = load_rules()[0]['rules']
+        context = session._context
+        tree = next(item.tree for item in context.sources if item.path == 'main.typ')
+        calls = proof.candidate_calls('main.typ', self.source)
+        self.assertEqual(len(calls.calls), 1)
+        self.assertIn('captured at its declaration', calls.calls[0].conditions[-1])
+        profile = 'conditional-gaps-and-spacers'
+        record = document_sequence_preview.preview(tree, 'main.typ', catalog, profile=profile,
+                                                   footnote_evidence=proof)
+        self.assertNotEqual(record['verification'], 'withheld', record)
+        staged = document_resources.stage_document(context, [record], catalog, snapshot, profile=profile,
+                                                   footnote_evidence=proof)
+        self.assertNotIn(b'#dots_space', staged['project', 'main.typ'])
+        self.assertEqual((self.project / 'main.typ').read_bytes(), self.source)
+
 
 if __name__ == '__main__':
     unittest.main()

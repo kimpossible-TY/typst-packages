@@ -22,6 +22,12 @@ CONDITIONS = (
     'Runtime relative imports select the captured facade paths and source bytes.',
     'This literal source call executes in the expected include context.',
 )
+CALLBACK_CONDITIONS = CONDITIONS + (
+    'The literal closure executes with the footnote binding captured at its declaration.',
+)
+_CLOSURE_UNSAFE = frozenset(('Closure', 'Contextual', 'ShowRule', 'Conditional', 'ForLoop', 'WhileLoop',
+                             'ModuleInclude', 'ModuleImport', 'DestructAssignment'))
+_ASSIGNMENTS = frozenset(('Eq', 'PlusEq', 'HyphEq', 'StarEq', 'SlashEq'))
 
 
 @dataclass(frozen=True)
@@ -117,7 +123,44 @@ class _FootnoteResolver(_Resolver):
         self.engine = engine
         self.evidence = {}
         self.call_evidence = {}
+        self.closure_calls = set()
+        self.closure_depth = 0
         self.unresolved = []
+
+    def _literal_closure(self, index, state):
+        """Identify one non-dynamic literal callback with a proven capture."""
+        if state.deferred or self.closure_depth:
+            return None
+        previous = state.lookup('footnote')
+        preceding = tuple(proof for frame in state.frames for proof in self.evidence.get(frame, ()))
+        if not (preceding and previous and previous.kind == 'builtin' and previous.name == 'footnote'):
+            return None
+        parts = self.sig(index)
+        if (len(parts) != 3 or tuple(self.nodes[i].kind for i in parts[:2]) != ('Params', 'Arrow')):
+            return None
+        body = parts[2]
+        if self.nodes[body].kind == 'Parenthesized':
+            grouped = self.sig(body)
+            if (len(grouped) != 3 or tuple(self.nodes[i].kind for i in grouped)
+                    != ('LeftParen', 'ContentBlock', 'RightParen')):
+                return None
+            body = grouped[1]
+        if self.nodes[body].kind != 'ContentBlock':
+            return None
+        params = self.sig(parts[0])
+        if any(self.nodes[i].kind not in ('Ident', 'LeftParen', 'RightParen', 'Comma') for i in params):
+            return None
+        names = [self.text(i) for i in params if self.nodes[i].kind == 'Ident']
+        if 'footnote' in names or len(names) != len(set(names)):
+            return None
+        pending = [body]
+        while pending:
+            item = self.nodes[pending.pop()]
+            if item.kind in _CLOSURE_UNSAFE or (item.kind == 'Binary' and any(
+                    self.nodes[child].kind in _ASSIGNMENTS for child in item.children)):
+                return None
+            pending.extend(item.children)
+        return body, names, previous, preceding
 
     def import_node(self, index, state):
         shape = import_graph.import_shape(self.tree, index)
@@ -148,6 +191,26 @@ class _FootnoteResolver(_Resolver):
         self.evidence.setdefault(state.frames[-1], []).append((module.sources, module.packages, module.requests))
 
     def visit(self, index, state, *, output=False):
+        if self.nodes[index].kind == 'Closure':
+            literal = self._literal_closure(index, state)
+            if literal is not None:
+                body, names, previous, preceding = literal
+                self.record(index, state)
+                # The normal resolver discards all captures in deferred bodies.
+                # Retain only the independently proved immutable builtin; never
+                # share the parent's mutable lexical frames with this callback.
+                nested = state.nested(deferred=True)
+                nested.deferred = False
+                nested.bind('footnote', previous)
+                for name in names:
+                    nested.bind(name, None)
+                self.evidence[nested.frames[0]] = list(preceding)
+                self.closure_depth += 1
+                try:
+                    self.visit(body, nested)
+                finally:
+                    self.closure_depth -= 1
+                return None
         preceding = tuple(proof for frame in state.frames for proof in self.evidence.get(frame, ()))
         value = super().visit(index, state, output=output)
         node = self.nodes[index]
@@ -159,6 +222,8 @@ class _FootnoteResolver(_Resolver):
                     and self.text(parts[0]) == 'footnote' and node.start > 0
                     and self.tree.source[node.start - 1:node.start] == b'#'):
                 self.call_evidence[index] = preceding
+                if self.closure_depth:
+                    self.closure_calls.add(index)
         return value
 
 
@@ -249,6 +314,7 @@ class ConditionalFootnoteBinding:
             requests = {item for entries in evidence for item in entries[2]}
             calls.append(FootnoteBinding(path, node.start - 1, node.end, digest(source.source),
                 tuple(sources[key] for key in sorted(sources)),
-                tuple(packages[key] for key in sorted(packages)), tuple(sorted(requests))))
+                tuple(packages[key] for key in sorted(packages)), tuple(sorted(requests)),
+                CALLBACK_CONDITIONS if index in resolver.closure_calls else CONDITIONS))
         unresolved = tuple(dict.fromkeys(resolver.unresolved))
         return BindingResult('PARTIAL' if unresolved else 'CONDITIONAL', tuple(calls), unresolved)

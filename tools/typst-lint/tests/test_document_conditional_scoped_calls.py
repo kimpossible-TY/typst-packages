@@ -87,6 +87,22 @@ class ConditionalScopedCallTests(unittest.TestCase):
                 self.assertTrue(any('unsupported deferred or dynamic scope' in reason
                                     for reason in report['unresolved']))
 
+    def test_module_and_named_import_aliases_cannot_shadow_wrapper(self):
+        body = b'\n#local-tag-scope(s => [#s.tag("x")])'
+        for prefix in (b'#import "other.typ" as local-tag-scope',
+                       b'#import "local-tag-scope.typ"',
+                       b'#import "other.typ": other as local-tag-scope',
+                       b'#import "other.typ" as local-tag-scope: *',
+                       b'#import dynamic as local-tag-scope'):
+            with self.subTest(prefix=prefix):
+                report = self.analyze(prefix + body)
+                self.assertFalse(report['diagnostics'] or report['edits'], report)
+                self.assertTrue(any('explicitly shadowed' in reason for reason in report['unresolved']))
+        # A direct named import retains conditional behavior; its origin still
+        # has to be the reviewed helper at runtime.
+        report = self.analyze(b'#import "styles.typ": local-tag-scope' + body)
+        self.assertEqual(len(report['diagnostics']), 1, report)
+
     def test_ambiguous_or_shadowed_callbacks_are_skipped(self):
         examples = (
             b'#let local-tag-scope(f) = f((:))\n#local-tag-scope(s => [#s.tag("x")])',

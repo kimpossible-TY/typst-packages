@@ -25,7 +25,7 @@
 | `core.scoped-anchor-access` | 제안 | — | — | 검토된 CeTZ 증거와 유일한 마커·방향이 확인된 경우. |
 | `core.scoped-reference-access` | 제안 | — | — | 동일 scope와 단일 리터럴 대상이 확인된 경우. |
 | `core.local-overlay-api` | 진단 | — | — | 알려진 로컬 annotation 콜백 안의 제한된 raw API 호출. |
-| `core.annotation-in-display` | 진단 | — | — | 확인된 scoped wrapper 문맥; 표시 수식 이동을 추측하지 않는다. |
+| `core.annotation-in-display` | 진단 | C | — | 제한된 literal scoped callback의 display 밖 직접 호출을 조건부 진단한다. 수식 이동은 추측하지 않는다. |
 | `core.annotation-marker-bounds` | 진단 | — | — | 직접 확인한 display와 같은 scope의 순서가 확인된 대상. |
 | `core.unique-scope-namespace` | 진단 | — | — | 확인된 scoped wrapper 문맥; 이름이나 외부 참조를 자동 변경하지 않는다. |
 | `core.project-ref-arguments` | 제안 | R | — | 단일 소스의 제한된 수정에는 유일한 catalog 대상이 필요하다. R은 추적된 호출에서 검토된 scoped 패키지·namespace 출처와 단일 리터럴 인자가 확인된 직접 `(scope.tag)("이름")`을 조건부 진단한다. 호출 바인딩과 콜백 실행은 전제이며, scope 값이 다른 방식으로 사용되거나 출처가 불명확하면 미확인으로 남긴다. 이 문서 진단은 수정안을 생성하지 않는다. |

@@ -57,6 +57,10 @@ unresolved contexts. It does not inspect package bindings or prove callback
 execution, rendering or authority to write or compile. Complex calls, mutation,
 deferred scopes and unsupported options are conservatively skipped. Its edits
 are independent of all other previews, and the global rule remains uninspected.
+The same option separately reports `conditional_detached_annotations` for
+direct scoped annotation calls outside a display in supported literal callback
+bodies. These are diagnostic-only hints with independent suppression and
+unresolved context; they do not produce edits or complete rule coverage.
 
 JSON includes:
 
@@ -92,6 +96,14 @@ JSON includes:
   footnote with a locally proven builtin binding. Neither candidate is composed
   with the other or with other plans; actual include bindings, execution,
   render equivalence and source-write permission remain unproved.
+  The separate per-file `conditional_punctuation_details` also classifies
+  adjacent `text#footnote[...].` and `text#footnote[...],` patterns, including
+  inline-math and reference predecessors and complex literal bodies. It gives
+  the footnote and punctuation byte spans, conditions, suppressions and
+  unresolved cases. These rows refine existing conditional hints and are not
+  counted as new findings or coverage; they propose no edits and grant neither
+  source-write nor compiler permission. Explicit source-local footnote
+  bindings or mutations withhold this classification conservatively.
 - `--preview-conditional-spacers` independently previews exact `#dots_space`
   token removal before a footnote in an unaligned nested display. The token's
   binding and effects are unproved: removing it can change the rendered PDF.

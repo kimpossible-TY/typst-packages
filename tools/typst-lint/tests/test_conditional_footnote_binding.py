@@ -161,12 +161,28 @@ class ConditionalFootnoteBindingTests(unittest.TestCase):
             self.assertFalse(result.calls)
             self.assertTrue(result.unresolved)
 
-    def test_deferred_closures_do_not_inherit_a_lexical_proof(self):
+    def test_literal_callback_captures_proved_builtin_at_declaration(self):
+        wildcard = b'#import "@local/text-utils:0.1.2": *\n'
+        for body in (b'#use(x => [#footnote[Note]])', b'#use(x => ([#footnote[Note]]))'):
+            for tail in (b'', b'\n#let footnote = none\n', b'\n#{footnote = none}\n'):
+                with self.subTest(body=body, tail=tail):
+                    result = self.session(wildcard + body + tail).analyze('main.typ')
+                    self.assertEqual(len(result.calls), 1, result.unresolved)
+                    self.assertIn('captured at its declaration', result.calls[0].conditions[-1])
+                    self.assertFalse(result.calls[0].edit_permission or result.calls[0].compiler_permission)
+
+    def test_ambiguous_closures_and_shadow_remain_unproved(self):
         wildcard = b'#import "@local/text-utils:0.1.2": *\n'
         bodies = (b'#let show-note() = [#footnote[Note]]',
-                  b'#use(x => [#footnote[Note]])',
                   b'#use(footnote => [#footnote[Note]])',
-                  b'#use(x => [#let footnote = x\n#footnote[Note]])')
+                  b'#use(x => [#let footnote = x\n#footnote[Note]])',
+                  b'#use(x => [#inner(y => [#footnote[Note]])])',
+                  b'#use(x => [#if x [#footnote[Note]]])',
+                  b'#use(x => [#context [#footnote[Note]]])',
+                  b'#use(x => [#import "unknown.typ": *\n#footnote[Note]])',
+                  b'#use(x => [#{footnote = x}\n#footnote[Note]])',
+                  b'#use(x => ([#footnote[Note]], x))',
+                  b'#let footnote = none\n#use(x => [#footnote[Note]])')
         for body in bodies:
             with self.subTest(body=body):
                 self.assertFalse(self.session(wildcard + body).analyze('main.typ').calls)
