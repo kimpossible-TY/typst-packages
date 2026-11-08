@@ -66,7 +66,12 @@ inspection route:
 
 This route captures literal relative includes with the fixed `book-v1` budget
 (64 source files and 400,000 syntax nodes), retains separate repeated include
-occurrences, and checks math scripts once per captured source. The explicit
+occurrences, and checks math scripts once per captured source. This document route
+also recognizes a directly embedded code call such as `x^#footnote[...]` and
+proposes `x^(#footnote[...])`, including the hash in the grouped operand.
+Commented operands and non-call code escapes remain unresolved. The ordinary
+single-source and protected-write profiles keep their previous script behavior.
+The explicit
 `--rule-set pde` selection also checks standalone display lines and source
 display-continuation gaps; omission
 retains the script-only `core` inspection. Consumer configuration is not loaded.

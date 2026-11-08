@@ -194,6 +194,19 @@ class DocumentCliTests(unittest.TestCase):
         self.assertEqual(file['candidate_verification'], 'no-candidate')
         self.assertTrue(any('withheld' in reason for reason in file['reasons']))
 
+    def test_code_call_no_longer_withholds_other_script_proposals(self):
+        source = b'$x^i + y^#footnote[Text]$\n'
+        target = self.write('main.typ', source)
+        result = self.run_cli()
+        self.assertEqual(len(result['diagnostics']), 2)
+        edits = tuple(Edit(e['start'], e['end'], e['replacement'].encode())
+                      for e in result['proposed_edits'])
+        self.assertEqual(plan(source, edits).candidate(), b'$x^(i) + y^(#footnote[Text])$\n')
+        file, = self.script_coverage(result)
+        self.assertEqual(file['status'], 'evaluated')
+        self.assertEqual(file['candidate_verification_rules'], ['core.parenthesized-scripts'])
+        self.assertEqual(target.read_bytes(), source)
+
     def test_candidate_losing_script_coverage_is_withheld_after_fresh_parse(self):
         source = b'$x^i$\n'
         target = self.write('main.typ', source)

@@ -25,6 +25,12 @@ The default `--rule-set core` inspects each unique captured source once for
 `pde.standalone-display` and `pde.display-continuation-gap`;
 `rule_set` and `coverage.available_backends`
 record that selection. Inline suppression directives are honored for both rules.
+The document route additionally accepts a direct `#`-escaped function-call script
+operand and groups the hash together with the call. Whitespace before the hash is
+preserved; comments between the operator and operand and non-call escapes remain
+unsupported. This opt-in analysis does not change the ordinary single-source or
+protected-write profiles. Candidates still require fresh parsing and script
+reanalysis, and the result grants no source-application authority.
 Consumer configuration is deliberately not loaded, so its include/exclude and
 path-ignore settings do not select or suppress this explicit document inventory.
 The report states this choice. By default, import targets and packages are not
@@ -136,6 +142,12 @@ The local evidence in `audit/document-inspection-evidence.json` records a
 37-source, 290,452-node include closure. The command reports 5,044 findings;
 one partially supported source retains diagnostics while its 402 potential
 insertions are withheld. The remaining 9,686 insertions affect 26 copied files.
+That historical run predates direct escaped-call support. On the same source
+snapshot, the current document route reports 5,045 script findings and 10,090
+insertions across 27 sources, with no partially analyzed script source. Replaying
+those proposals in a private copy leaves no script findings and produces a
+byte-identical complete PDF with the copied packages, cache and project fonts.
+This is an observation for that snapshot, not a general rendering guarantee.
 
 In private copies with existing package/font resources, Typst 0.15.1 compiled
 the complete 302-page document before and after those public CLI proposals.

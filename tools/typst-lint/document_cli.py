@@ -86,7 +86,8 @@ def report_document(root, entrypoint, *, rule_set='core', package_path=None,
     for item in captured.sources:
         gap_preview = None
         try:
-            result = analyze(item.tree, item.path, catalog=catalog['rules'], _verify=False)
+            result = analyze(item.tree, item.path, catalog=catalog['rules'], _verify=False,
+                             _allow_code_call=True)
             displays = (analyze_display_source(item.tree, item.path, catalog=catalog['rules'])
                         if rule_set == 'pde' else None)
             conditional = (conditional_session.analyze(item.tree, item.path)
@@ -141,7 +142,8 @@ def report_document(root, entrypoint, *, rule_set='core', package_path=None,
         if edits:
             try:
                 candidate_tree = parse(candidate_plan.candidate(), item.tree.mode)
-                final = analyze(candidate_tree, item.path, catalog=catalog['rules'], _verify=False)
+                final = analyze(candidate_tree, item.path, catalog=catalog['rules'], _verify=False,
+                                _allow_code_call=True)
                 verified = (not candidate_tree.nodes[0].errors and not final.parse_errors
                             and not final.diagnostics and not final.edits and not final.skips
                             and len(final.suppressed) == len(result.suppressed))

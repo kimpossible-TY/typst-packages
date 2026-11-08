@@ -18,7 +18,7 @@ class ScriptResult:
     suppressed: tuple[Diagnostic, ...] = ()
 
 
-def analyze(tree, path, *, _verify=True, catalog=None):
+def analyze(tree, path, *, _verify=True, catalog=None, _allow_code_call=False):
     """No bindings/import execution; scoped directives filter exact operands."""
     source, nodes = tree.source, tree.nodes
     if nodes[0].errors:
@@ -43,6 +43,15 @@ def analyze(tree, path, *, _verify=True, catalog=None):
             if operator_index is None:
                 raise AdapterError('Attachment operand has no matching operator')
             between = preceding[operator_index+1:]
+            start = operand.start
+            # Document-only opt-in: a code call is an entire math operand, but
+            # its leading # belongs to the attachment rather than FuncCall.
+            # Parenthesize the hash as well; comments/other escapes stay partial.
+            if (_allow_code_call and operand.kind == 'FuncCall' and between
+                    and between[-1].kind == 'Hash' and between[-1].end == operand.start
+                    and all(n.kind == 'Space' for n in between[:-1])):
+                start = between[-1].start
+                between = between[:-1]
             if any(n.kind not in ('Space',) for n in between) or operand.start == operand.end:
                 skips.append(f'Unsupported escaped/commented/empty script operand at byte {operand.start}')
                 continue
@@ -54,7 +63,7 @@ def analyze(tree, path, *, _verify=True, catalog=None):
                 suppressed.append(finding)
             else:
                 findings.append(finding)
-                operands.append((operand.start, operand.end))
+                operands.append((start, operand.end))
     # Coalesce parentheses at shared boundaries, preserving nested operand trees.
     opens, closes = {}, {}
     for start, end in sorted(set(operands)):
@@ -65,7 +74,7 @@ def analyze(tree, path, *, _verify=True, catalog=None):
     if edits and _verify:
         candidate = plan(source, edits).candidate()
         checked = parse(candidate, tree.mode)
-        final = analyze(checked, path, _verify=False, catalog=catalog)
+        final = analyze(checked, path, _verify=False, catalog=catalog, _allow_code_call=_allow_code_call)
         if checked.nodes[0].errors or final.edits or final.diagnostics or len(final.suppressed) != len(suppressed):
             return ScriptResult(tuple(findings), skips=tuple(skips)+('Candidate failed parse/idempotence verification; no edits proposed',), suppressed=tuple(suppressed))
     return ScriptResult(tuple(findings), edits, tuple(skips), suppressed=tuple(suppressed))
