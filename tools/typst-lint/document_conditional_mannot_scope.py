@@ -101,6 +101,15 @@ def _callback(tree, index):
 
 def analyze(source, path, *, catalog=None):
     """Report raw-annotation placement and reviewed-shape lexical display counts."""
+    return _analyze(source, path, catalog=catalog)
+
+
+def _analyze_captured_tree(tree, path, *, catalog=None):
+    """Inspect an already validated capture without reparsing its source."""
+    return _analyze(tree.source, path, catalog=catalog, captured_tree=tree)
+
+
+def _analyze(source, path, *, catalog=None, captured_tree=None):
     if type(source) is not bytes or type(path) is not str or not path:
         raise InputError('mannot-scope hints require source bytes and a source path')
     records = load_rules()[0]['rules'] if catalog is None else catalog
@@ -125,7 +134,7 @@ def analyze(source, path, *, catalog=None):
         result['unresolved'].append(reason)
         check_budget()
     try:
-        tree = parse(source)
+        tree = parse(source) if captured_tree is None else captured_tree
     except (AdapterError, OSError, ValueError) as error:
         return dict(result, status='UNAVAILABLE', unresolved=[f'Source syntax unavailable: {error}'])
     if tree.mode != 'markup' or tree.nodes[0].errors:

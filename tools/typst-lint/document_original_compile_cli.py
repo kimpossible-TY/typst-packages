@@ -97,7 +97,7 @@ def _hyphen_marker_positions(tree):
     return markers, following_text
 
 
-def _local_raw_annotation_positions(tree, *, max_work):
+def _local_raw_annotation_positions(tree, *, max_work, wrapper="local-scope-annotations"):
     """Recover direct raw-annot spans and their syntactic wrapper owners."""
     from document_conditional_raw_annot import _arguments, _equation_constructor
     from document_conditional_scoped_calls import _parts, _scoped_body, _text
@@ -112,9 +112,13 @@ def _local_raw_annotation_positions(tree, *, max_work):
             continue
         parts = _parts(tree, index)
         if (len(parts) != 2 or nodes[parts[0]].kind != 'Ident'
-                or _text(tree, parts[0]) != 'local-scope-annotations'):
+                or _text(tree, parts[0]) != wrapper):
             continue
-        callback, _ = _scoped_body(tree, index, 'local-scope-annotations')
+        if wrapper == 'mannot-scope':
+            from document_conditional_mannot_scope import _callback
+            callback, _ = _callback(tree, index)
+        else:
+            callback, _ = _scoped_body(tree, index, 'local-scope-annotations')
         if callback is None:
             continue
         body, _ = callback
@@ -167,7 +171,7 @@ def _local_raw_annotation_positions(tree, *, max_work):
     return owners, work
 
 
-def _local_raw_shape_counts(tree):
+def _local_raw_shape_counts(tree, wrapper="local-scope-annotations"):
     """Bound claimed callback and annotation counts by captured syntax."""
     from document_conditional_scoped_calls import _parts, _text
 
@@ -179,9 +183,177 @@ def _local_raw_shape_counts(tree):
         if len(parts) != 2 or tree.nodes[parts[0]].kind != 'Ident':
             continue
         name = _text(tree, parts[0])
-        wrappers += name == 'local-scope-annotations'
+        wrappers += name == wrapper
         calls += name == 'annot'
     return wrappers, calls
+
+
+def _direct_raw_positions(tree, *, max_work):
+    """Independently verify direct raw calls and their lexical ownership."""
+    from document_conditional_raw_annot import _arguments, _equation_constructor, _explicit_shadow
+    from document_conditional_scoped_calls import _OUTER_BARRIERS, _parts, _text
+    nodes = tree.nodes
+    if _explicit_shadow(tree):
+        return {}, len(nodes)
+    parents = {child: (index, position) for index, node in enumerate(nodes)
+               for position, child in enumerate(node.children)}
+    positions, work = {}, len(nodes)
+    barriers = _OUTER_BARRIERS | {'Equation', 'LetBinding', 'Raw', 'Str'}
+    for index, node in enumerate(nodes):
+        if node.kind != 'FuncCall':
+            continue
+        parts = _parts(tree, index)
+        if (len(parts) != 2 or nodes[parts[0]].kind != 'Ident'
+                or _text(tree, parts[0]) != 'annot' or nodes[parts[1]].kind != 'Args'
+                or not _arguments(tree, parts[1]) or index not in parents):
+            continue
+        parent, position = parents[index]
+        if nodes[parent].kind != 'Markup' or not position:
+            continue
+        mark = nodes[nodes[parent].children[position - 1]]
+        if mark.kind != 'Hash' or mark.end != node.start:
+            continue
+        cursor, valid = parent, True
+        while cursor is not None:
+            work += 1
+            require(work <= max_work, 'Raw annotation ownership work limit exceeded')
+            if nodes[cursor].kind in barriers or _equation_constructor(tree, cursor):
+                valid = False
+                break
+            cursor = parents.get(cursor, (None,))[0]
+        if valid:
+            positions[mark.start] = node.end
+    require(work <= max_work, 'Raw annotation ownership work limit exceeded')
+    return positions, work
+
+
+def _conditional_raw_sections(context, catalog, metadata, cap, items):
+    """Validate source-only analyzers against captured syntax before reporting."""
+    import document_conditional_raw_annot as direct
+    import document_conditional_mannot_scope as scoped
+    from suppression import resolve as resolve_suppressions
+
+    sections = {}
+    work = 0
+    for name, module, wrapper in (('conditional_raw_annotations', direct, None),
+                                  ('conditional_mannot_scope_raw_annotations', scoped, 'mannot-scope')):
+        findings, hidden, files = [], [], []
+        seen = suppressed = wrappers = dynamic = display = 0
+        for item in context.sources:
+            value = module._analyze_captured_tree(item.tree, item.path, catalog=catalog['rules'])
+            require(type(value) is dict and value.get('path') == item.path
+                    and value.get('source_sha256') == item.identity.source_sha256
+                    and value.get('status') in ('PARTIAL', 'UNAVAILABLE')
+                    and value.get('conditions') == module.CONDITIONS
+                    and all(value.get(k) is False for k in ('runtime_binding_proved', 'execution_proved',
+                        'coverage_complete', 'edit_permission', 'compiler_permission'))
+                    and all(type(value.get(k)) is list for k in ('diagnostics', 'suppressed', 'unresolved'))
+                    and all(type(reason) is str and bool(reason.strip()) for reason in value['unresolved']),
+                    'Conditional raw annotation result does not match captured source')
+            if wrapper:
+                require(all(type(value.get(k)) is int and value[k] >= 0 for k in
+                            ('wrappers_examined', 'wrappers_in_dynamic_context', 'lexical_display_calls'))
+                        and value['wrappers_in_dynamic_context'] <= value['wrappers_examined']
+                        and (not value['lexical_display_calls'] or value['wrappers_examined'] > 0),
+                        'Conditional annotation wrapper counts are invalid')
+                shape_wrappers, shape_calls = _local_raw_shape_counts(item.tree, wrapper)
+                require(value['wrappers_examined'] <= shape_wrappers
+                        and value['lexical_display_calls'] + len(value['diagnostics'])
+                            + len(value['suppressed']) <= shape_calls,
+                        'Conditional annotation counts exceed captured syntax')
+                wrappers += value['wrappers_examined']
+                dynamic += value['wrappers_in_dynamic_context']
+                display += value['lexical_display_calls']
+            if value['status'] == 'UNAVAILABLE':
+                require(not value['diagnostics'] and not value['suppressed'] and value['unresolved']
+                        and (not wrapper or not value['wrappers_examined'] and not value['lexical_display_calls']),
+                        'Unavailable annotation result contains partial findings')
+            items += (1 + sum(len(value[k]) for k in ('diagnostics', 'suppressed', 'unresolved'))
+                      + len(value['conditions']) + (value['wrappers_examined'] + value['lexical_display_calls']
+                                                    if wrapper else 0))
+            require(items <= _LINT_ITEM_LIMIT, 'Document lint item limit exceeded')
+            positions, starts, farthest = {}, [], []
+            line_starts = ()
+            if value['diagnostics'] or value['suppressed']:
+                if wrapper:
+                    require(not scoped._wrapper_shadow(item.tree) and not direct._explicit_shadow(item.tree),
+                            'Conditional annotation bindings are shadowed')
+                    positions, charged = _local_raw_annotation_positions(
+                        item.tree, max_work=_LOCAL_RAW_OWNER_WORK - work, wrapper=wrapper)
+                else:
+                    positions, charged = _direct_raw_positions(item.tree, max_work=_LOCAL_RAW_OWNER_WORK - work)
+                work += charged
+                line_starts = (0, *(n + 1 for n, byte in enumerate(item.source) if byte == 10))
+                scopes = resolve_suppressions(item.tree, {row['id'] for row in catalog['rules']})
+                for start, end in sorted((scope.start, scope.end) for scope in scopes if module.RULE in scope.rules):
+                    starts.append(start)
+                    farthest.append(max(end, farthest[-1] if farthest else end))
+            offsets, found_wrappers, found_dynamic = set(), set(), set()
+            for key, heap in (('diagnostics', findings), ('suppressed', hidden)):
+                for row in value[key]:
+                    keys = {'rule_id', 'grade', 'path', 'line', 'column', 'start', 'end', 'source', 'explanation'}
+                    if wrapper:
+                        keys |= {'wrapper_start', 'outer_dynamic_context'}
+                    explanation = (_LOCAL_RAW_EXPLANATION if wrapper else
+                        'This source call has no explicit display ancestor; wrapper and show-rule rendering remain conditional.')
+                    require(type(row) is dict and set(row) == keys and row.get('rule_id') == module.RULE
+                            and row.get('grade') == metadata['grade'] and row.get('source') == metadata['source']
+                            and row.get('path') == item.path and type(row.get('line')) is int and row['line'] > 0
+                            and type(row.get('column')) is int and row['column'] > 0
+                            and type(row.get('start')) is int and type(row.get('end')) is int
+                            and 0 <= row['start'] < row['end'] <= len(item.source)
+                            and row['start'] not in offsets and row.get('explanation') == explanation,
+                            'Conditional raw annotation finding is invalid')
+                    if wrapper:
+                        require(type(row.get('wrapper_start')) is int and type(row.get('outer_dynamic_context')) is bool
+                                and (row['end'], row['wrapper_start'], row['outer_dynamic_context'])
+                                    in positions.get(row['start'], ()),
+                                'Conditional annotation wrapper ownership is invalid')
+                        found_wrappers.add(row['wrapper_start'])
+                        if row['outer_dynamic_context']:
+                            found_dynamic.add(row['wrapper_start'])
+                    else:
+                        require(positions.get(row['start']) == row['end'],
+                                'Conditional raw annotation ownership is invalid')
+                    offsets.add(row['start'])
+                    line = bisect_right(line_starts, row['start']) - 1
+                    require(row['line'] == line + 1 and row['column'] ==
+                            len(item.source[line_starts[line]:row['start']].decode('utf-8')) + 1,
+                            'Conditional annotation source position is invalid')
+                    scope = bisect_right(starts, row['start']) - 1
+                    require((scope >= 0 and row['start'] < farthest[scope]) == (key == 'suppressed'),
+                            'Conditional annotation suppression does not match captured directives')
+                    if key == 'diagnostics':
+                        _retain_mapping_sample(heap, row, seen, cap)
+                        seen += 1
+                    else:
+                        _retain_mapping_sample(heap, row, suppressed, cap)
+                        suppressed += 1
+            if wrapper:
+                require(len(found_wrappers) <= value['wrappers_examined']
+                        and len(found_dynamic) <= value['wrappers_in_dynamic_context'],
+                        'Conditional annotation wrapper counts contradict findings')
+            file = dict(path=item.path, source_sha256=item.identity.source_sha256, status=value['status'],
+                        diagnostics=len(value['diagnostics']), suppressed=len(value['suppressed']),
+                        unresolved_count=len(value['unresolved']), unresolved=value['unresolved'][:20],
+                        unresolved_omitted=max(0, len(value['unresolved']) - 20))
+            if wrapper:
+                file.update({k: value[k] for k in ('wrappers_examined', 'wrappers_in_dynamic_context',
+                                                   'lexical_display_calls')})
+            files.append(file)
+        rows, hidden_rows = _finish_mapping_sample(findings), _finish_mapping_sample(hidden)
+        section = dict(rule_id=module.RULE, diagnostics_count=seen, diagnostics=rows,
+                       diagnostics_omitted=seen-len(rows), suppressed_count=suppressed, suppressed=hidden_rows,
+                       suppressed_omitted=suppressed-len(hidden_rows), sample_limit=cap, by_file=files,
+                       unavailable_files=sum(row['status'] == 'UNAVAILABLE' for row in files),
+                       conditions=list(module.CONDITIONS), duplicates_existing_hints_possible=True,
+                       runtime_binding_proved=False, execution_proved=False, coverage_complete=False,
+                       edit_permission=False, compiler_permission=False)
+        if wrapper:
+            section.update(wrappers_examined=wrappers, wrappers_in_dynamic_context=dynamic,
+                           lexical_display_calls=display)
+        sections[name] = section
+    return sections, items
 
 
 def _include_forwarding(context, snapshot, cap):
@@ -539,6 +711,7 @@ def lint_captured_document(context, snapshot, *, rule_set, details=False, local_
                 unresolved_count=len(scoped_raw['unresolved']), unresolved=list(scoped_raw['unresolved'][:20]),
                 unresolved_omitted=max(0, len(scoped_raw['unresolved']) - 20)))
     if local_hints:
+        raw_sections, items = _conditional_raw_sections(context, catalog, scoped_raw_metadata, cap, items)
         include_forwarding, forwarding_items = _include_forwarding(context, snapshot, cap)
         items += forwarding_items
         require(items <= _LINT_ITEM_LIMIT, 'Document lint item limit exceeded')
@@ -587,6 +760,7 @@ def lint_captured_document(context, snapshot, *, rule_set, details=False, local_
             runtime_binding_proved=False, execution_proved=False, coverage_complete=False,
             render_equivalence_proved=False, edit_permission=False, compiler_permission=False)
         report['conditional_include_forwarding'] = include_forwarding
+        report.update(raw_sections)
         raw_diagnostics = _finish_mapping_sample(scoped_raw_diagnostics)
         raw_suppressed = _finish_mapping_sample(scoped_raw_suppressed)
         report['conditional_local_scope_raw_annotations'] = dict(rule_id=scoped_raw_rule,

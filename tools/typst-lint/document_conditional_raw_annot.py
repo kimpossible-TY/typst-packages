@@ -136,6 +136,15 @@ def _arguments(tree, index):
 
 def analyze(source, path, *, catalog=None):
     """Inspect immutable source bytes without evaluating helpers or imports."""
+    return _analyze(source, path, catalog=catalog)
+
+
+def _analyze_captured_tree(tree, path, *, catalog=None):
+    """Inspect an already validated capture without reparsing its source."""
+    return _analyze(tree.source, path, catalog=catalog, captured_tree=tree)
+
+
+def _analyze(source, path, *, catalog=None, captured_tree=None):
     if type(source) is not bytes or type(path) is not str or not path:
         raise InputError('Raw annot hints require source bytes and a source path')
     records = load_rules()[0]['rules'] if catalog is None else catalog
@@ -150,7 +159,7 @@ def analyze(source, path, *, catalog=None):
                   suppressed=[], unresolved=[], conditions=CONDITIONS, runtime_binding_proved=False,
                   execution_proved=False, coverage_complete=False, edit_permission=False, compiler_permission=False)
     try:
-        tree = parse(source)
+        tree = parse(source) if captured_tree is None else captured_tree
     except (AdapterError, OSError, ValueError) as error:
         return dict(result, status='UNAVAILABLE', unresolved=[f'Source syntax unavailable: {error}'])
     if tree.mode != 'markup' or tree.nodes[0].errors:
