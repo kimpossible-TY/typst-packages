@@ -21,7 +21,12 @@ MARKER_GAP = 'pde.paragraph-marker-gap'
 SUPPORTED_RULE_IDS = (RULE_ID, MARKER_GAP)
 TEXT_UTILS = '@local/text-utils:0.1.2'
 MATH_BLOCKS = '@local/math-blocks:0.2.0'
+SCOPED_ANNOTATIONS = '@local/scoped-annotations:0.3.0'
 _CONTENT_WRAPPERS = frozenset(('proof', 'theorem', 'note'))
+_SCOPED_CALLBACKS = {
+    'local-tag-scope': frozenset(('prefix',)),
+    'local-scope-annotations': frozenset(('prefix', 'parent', 'name')),
+}
 CONDITIONS = (
     'Every referenced module loads and initializes successfully; initializer purity is not proved.',
     'Runtime imports select the exact captured package versions and bytes; ambient package selection is not proved.',
@@ -30,6 +35,10 @@ CONDITIONS = (
 MARKER_CONDITIONS = CONDITIONS[:2] + (
     'The reported source marker is emitted and used as a paragraph marker in the intended document context.',
     'The document applies the captured paragraph-tab transformation; this source pattern does not prove paragraph rendering.',
+)
+CALLBACK_CONDITIONS = (
+    'Every captured scoped callback is invoked by its exact pinned wrapper with the documented single dictionary argument.',
+    'The callback returns this literal content for actual rendering; callback invocation, argument values and rendering are not proved.',
 )
 _ASSIGNMENTS = frozenset(('Eq', 'PlusEq', 'HyphEq', 'StarEq', 'SlashEq'))
 _PACKAGE = re.compile(r'^@(local|preview)/([a-z][a-z0-9-]*):[0-9]+\.[0-9]+\.[0-9]+$')
@@ -56,6 +65,16 @@ class NameRoute:
 
 
 @dataclass(frozen=True)
+class CallbackContext:
+    content_context_index: int
+    call_start: int
+    call_end: int
+    body_start: int
+    body_end: int
+    parameters: tuple[str, ...]
+
+
+@dataclass(frozen=True)
 class ConditionalDiagnostic:
     rule_id: str
     path: str
@@ -71,6 +90,7 @@ class ConditionalDiagnostic:
     route: tuple[NameRoute, ...]
     conditions: tuple[str, ...] = CONDITIONS
     content_context: tuple[tuple[NameRoute, ...], ...] = ()
+    callback_context: tuple[CallbackContext, ...] = ()
     status: str = field(default='CONDITIONAL', init=False)
     edit_permission: bool = field(default=False, init=False)
 
@@ -124,13 +144,19 @@ def _descendants(tree, index, skip=()):
         pending.extend(reversed(tree.nodes[child].children))
 
 
-def _assignment(tree, index, skip=()):
+class _CallbackReturn(Exception):
+    def __init__(self, start):
+        self.start = start
+
+
+def _effects(tree, index, skip=(), *, return_barrier=False):
     """Unknown active mutation defeats lexical identity, even inside arguments.
 
     A function body is deferred. Parameter defaults are still checked
     conservatively; their evaluation timing is not certified here.
     """
     pending = [index]
+    mutation = None
     while pending:
         current = pending.pop()
         if current in skip:
@@ -139,13 +165,19 @@ def _assignment(tree, index, skip=()):
         if node.kind == 'Closure':
             pending.extend(c for c in node.children if tree.nodes[c].kind == 'Params')
             continue
+        if return_barrier and node.kind == 'FuncReturn':
+            return 'return', node.start
         if node.kind == 'DestructAssignment':
-            return True
+            mutation = 'mutation', node.start
         if node.kind == 'Binary' and any(tree.nodes[c].kind in _ASSIGNMENTS
                                         for c in graph.significant(tree, current)):
-            return True
+            mutation = 'mutation', node.start
         pending.extend(node.children)
-    return False
+    return mutation
+
+
+def _assignment(tree, index, skip=()):
+    return _effects(tree, index, skip) is not None
 
 
 def _namespace_injection(tree, index):
@@ -254,9 +286,10 @@ def _combined_import(tree, index):
 
 
 class _Analyzer:
-    def __init__(self, context, namespaces, rule_ids):
+    def __init__(self, context, namespaces, rule_ids, scoped_callbacks):
         self.graph = context
         self.rule_ids = frozenset(rule_ids)
+        self.scoped_callbacks = scoped_callbacks
         self.reason = _graph_reason(context)
         self.packages = {}
         self.evidence = ()
@@ -295,10 +328,12 @@ class _Analyzer:
             self.exhaust('Conditional namespace AST work limit exceeded')
         return self.exhausted is None
 
-    def charge_scope(self, env, sources, packages, requests, context):
+    def charge_scope(self, env, sources, packages, requests, context, *, callbacks=(), parameters=()):
         # Each inherited namespace/evidence/context container is copied once;
         # immutable route entries inside the context remain shared.
         self.ast_work += sum(map(len, (env, sources, packages, requests, context))) + 1
+        if parameters:
+            self.ast_work += len(callbacks) + 1 + len(parameters)
         if self.ast_work > MAX_AST_WORK:
             self.exhaust('Conditional namespace AST work limit exceeded')
         return self.exhausted is None
@@ -348,7 +383,9 @@ class _Analyzer:
                 marker = (MARKER_GAP in self.rule_ids and request == TEXT_UTILS
                           and name in ('paragraph-tab', 'paragraph_tab'))
                 supported = ((name == 'highlighted' and origins.get(name) == TEXT_UTILS)
-                             or (request == MATH_BLOCKS and name in _CONTENT_WRAPPERS) or marker)
+                             or (request == MATH_BLOCKS and name in _CONTENT_WRAPPERS) or marker
+                             or (self.scoped_callbacks and request == SCOPED_ANNOTATIONS
+                                 and name in _SCOPED_CALLBACKS))
                 exports[name] = (_Value((NameRoute(request, package.evidence.source_sha256,
                     'package-export', request, name, name),), 'paragraph_tab' if marker else name)
                     if supported else None)
@@ -521,6 +558,52 @@ def _wrapper_bodies(tree, index, canonical_name):
     return tuple(bodies) if len(bodies) == 1 else ()
 
 
+def _scoped_body(tree, index, canonical_name):
+    """One direct callback, one opaque dictionary parameter, literal return."""
+    children = tree.nodes[index].children
+    if len(children) != 2 or tree.nodes[children[1]].kind != 'Args':
+        return None, 'Scoped wrapper requires one direct positional callback'
+    positional, named = [], set()
+    for child in graph.significant(tree, children[1]):
+        kind = tree.nodes[child].kind
+        if kind in ('LeftParen', 'RightParen', 'Comma'):
+            continue
+        if kind == 'Named':
+            parts = graph.significant(tree, child)
+            if len(parts) != 3 or tree.nodes[parts[0]].kind != 'Ident':
+                return None, 'Unsupported scoped-wrapper option syntax'
+            name = graph.raw(tree, parts[0]).decode('utf-8')
+            if name not in _SCOPED_CALLBACKS[canonical_name] or name in named:
+                return None, 'Unknown or duplicate scoped-wrapper option'
+            if tree.nodes[parts[2]].kind != 'Auto':
+                return None, 'Scoped-wrapper options require literal auto values'
+            named.add(name)
+        else:
+            positional.append(child)
+    if len(positional) != 1 or tree.nodes[positional[0]].kind != 'Closure':
+        return None, 'Scoped wrapper requires one direct positional callback'
+    closure = graph.significant(tree, positional[0])
+    if (len(closure) != 3 or tree.nodes[closure[0]].kind != 'Params'
+            or tree.nodes[closure[1]].kind != 'Arrow'):
+        return None, 'Scoped callback requires an anonymous arrow closure'
+    params = graph.significant(tree, closure[0])
+    if (len(params) == 3 and tree.nodes[params[0]].kind == 'LeftParen'
+            and tree.nodes[params[2]].kind == 'RightParen'):
+        params = (params[1],)
+    if len(params) != 1 or tree.nodes[params[0]].kind != 'Ident':
+        return None, 'Scoped callback requires exactly one positional Ident parameter'
+    body = closure[2]
+    while tree.nodes[body].kind == 'Parenthesized':
+        parts = graph.significant(tree, body)
+        if (len(parts) != 3 or tree.nodes[parts[0]].kind != 'LeftParen'
+                or tree.nodes[parts[2]].kind != 'RightParen'):
+            return None, 'Scoped callback return is not one literal content block'
+        body = parts[1]
+    if tree.nodes[body].kind != 'ContentBlock':
+        return None, 'Scoped callback return is not one literal content block'
+    return (body, (graph.raw(tree, params[0]).decode('utf-8'),)), None
+
+
 def _marker_gap(tree, sequence, position):
     """Physical source-line pattern, not proof of a rendered prose paragraph."""
     source, nodes = tree.source, tree.nodes
@@ -558,12 +641,15 @@ def _marker_gap(tree, sequence, position):
 
 class ConditionalHighlightAnalyzer:
     """One captured session; default highlight-only, marker gaps opt in explicitly."""
-    def __init__(self, import_graph, namespace_capture, *, known_rule_ids=None, rule_ids=(RULE_ID,)):
+    def __init__(self, import_graph, namespace_capture, *, known_rule_ids=None, rule_ids=(RULE_ID,),
+                 scoped_callbacks=False):
         if (type(rule_ids) not in (tuple, frozenset) or not rule_ids
                 or any(type(rid) is not str or rid not in SUPPORTED_RULE_IDS for rid in rule_ids)
                 or len(set(rule_ids)) != len(rule_ids)):
             raise InputError('Conditional inspection requires explicit supported rule IDs')
-        self._analyzer = _Analyzer(import_graph, namespace_capture, rule_ids)
+        if type(scoped_callbacks) is not bool:
+            raise InputError('Scoped callback inspection requires an explicit boolean option')
+        self._analyzer = _Analyzer(import_graph, namespace_capture, rule_ids, scoped_callbacks)
         # Catalog configuration is captured once, separately from source
         # analysis. Callers with an already loaded catalog can pass its IDs.
         self._analyzer.known_rule_ids = frozenset(known_rule_ids if known_rule_ids is not None
@@ -573,9 +659,10 @@ class ConditionalHighlightAnalyzer:
         return _analyze(tree, path, self._analyzer)
 
 
-def analyze(tree, path, import_graph, namespace_capture, *, rule_ids=(RULE_ID,)):
+def analyze(tree, path, import_graph, namespace_capture, *, rule_ids=(RULE_ID,), scoped_callbacks=False):
     """Return separate CONDITIONAL findings; no trusted binding or edit exists."""
-    return ConditionalHighlightAnalyzer(import_graph, namespace_capture, rule_ids=rule_ids).analyze(tree, path)
+    return ConditionalHighlightAnalyzer(import_graph, namespace_capture, rule_ids=rule_ids,
+                                        scoped_callbacks=scoped_callbacks).analyze(tree, path)
 
 
 def _analyze(tree, path, analyzer):
@@ -633,18 +720,20 @@ def _analyze(tree, path, analyzer):
                             and previous.kind == 'Hash' and previous.end == marker.start):
                         record(f'Nested paragraph-marker expression has unresolved binding/execution context at byte {previous.start}', MARKER_GAP)
 
-    def emit(rule_id, start, end, message, value, sources, packages, requests, context, conditions):
+    def emit(rule_id, start, end, message, value, sources, packages, requests, context, callbacks, conditions):
         line = source[:start].count(b'\n') + 1
         column = len(source[source.rfind(b'\n', 0, start) + 1:start].decode('utf-8')) + 1
         conditions += (('Every enclosing recognized literal content wrapper executes and renders this body.',)
-                       if context else ())
+                       if len(context) > len(callbacks) else ())
+        if callbacks:
+            conditions += CALLBACK_CONDITIONS
         finding = ConditionalDiagnostic(rule_id, path, line, column, start, end, message,
             digest(source), tuple(sources[k] for k in sorted(sources)),
             tuple(packages[k] for k in sorted(packages)), tuple(sorted(requests)), value.route,
-            conditions=conditions, content_context=context)
+            conditions=conditions, content_context=context, callback_context=callbacks)
         (suppressed if any(s.covers(rule_id, start) for s in scopes) else findings).append(finding)
 
-    def scan(sequence, env, sources, packages, requests, context=()):
+    def scan(sequence, env, sources, packages, requests, context=(), callbacks=()):
         mutated_outer = False
         for position, index in enumerate(nodes[sequence].children):
             if analyzer.exhausted:
@@ -655,10 +744,18 @@ def _analyze(tree, path, analyzer):
             value = call_value(index, env)
             bodies = (_wrapper_bodies(tree, index, value.canonical_name) if value is not None
                       and value.canonical_name in _CONTENT_WRAPPERS else ())
+            callback, callback_reason = (None, None)
+            if value is not None and value.canonical_name in _SCOPED_CALLBACKS:
+                callback, callback_reason = _scoped_body(tree, index, value.canonical_name)
+                if callback is not None:
+                    bodies = (callback[0],)
             # Admitted literal bodies are scanned exactly once below. Outer
             # assignment/descendant scans skip these subtrees, retaining the
             # bounded source-wide walks charged by charge_ast rather than depth*n.
-            if _assignment(tree, index, bodies):
+            effect = _effects(tree, index, bodies, return_barrier=bool(callbacks))
+            if effect is not None and effect[0] == 'return':
+                raise _CallbackReturn(effect[1])
+            if effect is not None:
                 env.clear()
                 mutated_outer = True
                 record(f'Unknown active namespace mutation at byte {node.start}')
@@ -679,6 +776,8 @@ def _analyze(tree, path, analyzer):
                     packages.update((p.import_path, p) for p in incoming.packages)
                     requests.update(incoming.requests)
                 continue
+            if callback_reason:
+                record(f'{callback_reason} at byte {node.start}')
             nested(index, env, bodies)
             if node.kind == 'LetBinding':
                 binding = _let(tree, index, env, path, analyzer)
@@ -698,11 +797,31 @@ def _analyze(tree, path, analyzer):
                 for body in bodies:
                     parts = graph.significant(tree, body)
                     markup = next((c for c in parts if nodes[c].kind == 'Markup'), None)
-                    if markup is None or not analyzer.charge_scope(env, sources, packages, requests, context):
+                    if markup is None or not analyzer.charge_scope(env, sources, packages, requests, context,
+                                                                  callbacks=callbacks,
+                                                                  parameters=callback[1] if callback is not None else ()):
                         break
-                    changed = scan(markup, dict(env), dict(sources), dict(packages), set(requests),
-                                   context + (value.route,))
-                    if changed:
+                    child_env, child_callbacks = dict(env), callbacks
+                    if callback is not None:
+                        child_env.update((name, None) for name in callback[1])
+                        analyzer.bindings(child_env)
+                        child_callbacks += (CallbackContext(len(context), node.start, node.end,
+                            nodes[body].start, nodes[body].end, callback[1]),)
+                    before = len(findings), len(suppressed)
+                    try:
+                        changed = scan(markup, child_env, dict(sources), dict(packages), set(requests),
+                                       context + (value.route,), child_callbacks)
+                    except _CallbackReturn as barrier:
+                        if callback is None:
+                            raise
+                        # A return can discard content constructed before it;
+                        # do not resume unreachable imports/statements or keep
+                        # hints from this callback's abandoned literal body.
+                        del findings[before[0]:]
+                        del suppressed[before[1]:]
+                        record(f'Active return leaves scoped callback rendering unresolved at byte {barrier.start}')
+                        changed = False
+                    if changed and callback is None:
                         # Local declarations stay inside the content scope;
                         # assignments/default mutations can change outer vars.
                         env.clear()
@@ -720,7 +839,7 @@ def _analyze(tree, path, analyzer):
                     if gap:
                         emit(MARKER_GAP, start, end,
                              'Place a whitespace-only blank source line before the standalone paragraph marker.',
-                             marker, sources, packages, requests, context, MARKER_CONDITIONS)
+                             marker, sources, packages, requests, context, callbacks, MARKER_CONDITIONS)
                     continue
             if RULE_ID not in analyzer.rule_ids or value is None or value.canonical_name != 'highlighted':
                 continue
@@ -731,7 +850,7 @@ def _analyze(tree, path, analyzer):
                 continue
             emit(RULE_ID, node.start, node.end,
                 'Keep math outside text highlighting, conditional on the captured helper identity and execution context.',
-                value, sources, packages, requests, context, CONDITIONS)
+                value, sources, packages, requests, context, callbacks, CONDITIONS)
         return mutated_outer
 
     scan(0, {}, {path: SourceHash(path, digest(source))},

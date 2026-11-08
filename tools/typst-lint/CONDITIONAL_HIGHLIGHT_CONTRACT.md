@@ -19,7 +19,7 @@ aliases preserve their origin, and active assignments/default mutations can
 invalidate outer names. Wrapper aliases are traced; shadowed or unknown wrappers
 do not establish this context. Only one positional literal body is admitted.
 Proof accepts no named options; theorem/note accept at most one `title` option.
-Unknown, duplicate or named-body options are refused. Calls inside callbacks, deferred functions, code
+Unknown, duplicate or named-body options are refused. Other callbacks, deferred functions, code
 or unknown scopes retain explicit unresolved execution context. Math in options,
 raw strings or a nonliteral body does not establish this finding.
 
@@ -35,6 +35,9 @@ capture session. `result.reasons_for(rule_id)` separates each rule's refusals;
 the old `unresolved` field remains their combined record. The document CLI selects
 both under explicit PDE/package-path inspection and counts each serialized
 coverage reason/error and context route against the report budget.
+`scoped_callbacks=False` preserves the previous Python scope default. The
+explicit document namespace route selects `True` for the bounded callback
+extension described below.
 
 ## Retained namespace facts
 
@@ -51,8 +54,9 @@ entrypoint bytes, package metadata and complete exported name sets:
 
 Only `text-utils.highlighted` has a recognized highlight-helper origin. The three
 selected math-blocks wrapper names carry conditional content-context routes;
-the marker rule recognizes the two exact constants described below. Other
-exported values remain opaque. A dependent wildcard namespace requires its
+the marker rule recognizes the two exact constants described below. The two
+scoped callback exports are recognized only by the explicit option below;
+remaining exported values stay opaque. A dependent wildcard namespace requires its
 captured
 namespace prerequisite: scoped-annotations requires mannot, and cetz-helpers
 requires CeTZ. Missing or mismatched packages retain explicit unavailable
@@ -140,6 +144,53 @@ after one manual newline insertion. Two native compilations preserve word
 order and the observed 18pt marker spacing; its word boxes also happen to match.
 This is a snapshot observation, not a general geometry/PDF guarantee or public
 repair output.
+
+## Captured scoped callbacks
+
+Only the exact pinned `scoped-annotations:0.3.0` exports `local-tag-scope` and
+`local-scope-annotations`, including immutable aliases, admit callbacks. The
+call must supply one direct closure with a single simple positional identifier
+and a literal ContentBlock return, optionally parenthesized. Options may be
+omitted or use literal `auto` for the wrapper's declared prefix/parent/name
+options. Computed options, namespace options, spread/destructuring/default or
+multiple required parameters, code bodies and the compatibility `mannot-scope`
+remain unresolved.
+
+Both wrappers pass one dictionary. The analysis copies the namespace at closure
+creation, then shadows its parameter with an opaque local value. Callback-local
+declarations and mutations cannot alter the caller's captured bindings. Parameter
+defaults are checked for immediate outer effects before admission; deferred
+inner function bodies do not supply immediate effects. These rules agree with
+the [pinned closure evaluator](https://github.com/typst/typst/blob/v0.15.1/crates/typst-eval/src/call.rs)
+and [capture bindings](https://github.com/typst/typst/blob/v0.15.1/crates/typst-library/src/foundations/scope.rs),
+and the owned native probe observes capture-by-value and parameter shadowing.
+
+This is not a general control-flow evaluator. An active return, including one
+inside an ordinary literal wrapper or code block, abandons that scoped
+callback's earlier/suppressed hints and prevents later imports from restarting
+its scan. It stops at the nearest callback; an inner callback return does not
+invalidate its caller. Existing block/Contextual barriers remain conservative.
+Return detection shares the existing effects pass and does not raise budgets.
+
+`content_context` retains each wrapper route once. Additional `callback_context`
+records identify its route index, call/body spans and parameter names under the
+finding's root source hash. Conditions require the exact wrapper to invoke the
+callback with its documented dictionary and render its literal result. They do
+not certify invocation, dictionary values, initialization or rendering.
+
+Independent actual inspection reports 73 highlight and 19 marker-gap hints,
+adding 44 and 11 respectively. All previous 29/8 records remain identical, as
+do source findings, script proposals and all 44 retained source hashes. Remaining
+math candidates in chapter 3.5 cross existing block/Contextual refusals; the
+extension does not broaden those boundaries to meet a count. The actual 37
+source trees contain no active return, so the final return guard preserves this
+report. See `audit/conditional-callback-evidence.json`.
+
+One owned nested genuine-wrapper fixture observes both dictionary arguments and
+context routes, then reaches one-to-zero hints for each selected rule with a
+manual candidate. Equation/label bytes, equation order, label target and word
+order are preserved. Paragraph and highlighting geometry may change; no generic
+PDF-equivalence or public repair claim follows from this characterization.
 
 ## Local characterization
 

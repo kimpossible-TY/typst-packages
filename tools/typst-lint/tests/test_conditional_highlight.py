@@ -88,12 +88,13 @@ class ConditionalHighlightTests(unittest.TestCase):
         return graph.load_import_graph(self.root, (('main.typ', source),))
 
     def analyze(self, source=MAIN, style=STYLE, figures=FIGURES, context=None, namespaces=None,
-                rule_ids=(conditional.RULE_ID,)):
+                rule_ids=(conditional.RULE_ID,), scoped_callbacks=False):
         tree = parse(source)
         self.assertFalse(tree.nodes[0].errors, source)
         return conditional.analyze(tree, 'main.typ',
             self.capture(source, style, figures) if context is None else context,
-            self.namespaces if namespaces is None else namespaces, rule_ids=rule_ids)
+            self.namespaces if namespaces is None else namespaces, rule_ids=rule_ids,
+            scoped_callbacks=scoped_callbacks)
 
     def test_realistic_wildcard_facade_and_figures_keep_conditional_identity(self):
         result = self.analyze()
@@ -658,6 +659,141 @@ class ConditionalHighlightTests(unittest.TestCase):
             result = self.analyze(rule_ids=conditional.SUPPORTED_RULE_IDS)
         self.assertEqual(result.reasons_for(conditional.RULE_ID), result.reasons_for(conditional.MARKER_GAP))
         self.assertIn('AST work limit', result.unresolved[0])
+
+    def test_scoped_callbacks_are_opt_in_with_literal_returns_and_bound_provenance(self):
+        source = PREFIX + b'#local-tag-scope(s => ([\n#highlighted[A $x$ B]\n#paragraph_tab\nText.\n]))'
+        default = self.analyze(source, rule_ids=conditional.SUPPORTED_RULE_IDS)
+        self.assertFalse(default.diagnostics)
+        self.assertEqual(default, self.analyze(source, rule_ids=conditional.SUPPORTED_RULE_IDS,
+                                              scoped_callbacks=False))
+        result = self.analyze(source, rule_ids=conditional.SUPPORTED_RULE_IDS, scoped_callbacks=True)
+        self.assertEqual({d.rule_id for d in result.diagnostics}, set(conditional.SUPPORTED_RULE_IDS), result.unresolved)
+        for finding in result.diagnostics:
+            self.assertEqual(len(finding.callback_context), 1)
+            callback = finding.callback_context[0]
+            self.assertEqual(callback.parameters, ('s',))
+            self.assertEqual(callback.content_context_index, 0)
+            self.assertTrue(source[callback.call_start:callback.call_end].startswith(b'local-tag-scope('))
+            self.assertTrue(source[callback.body_start:callback.body_end].startswith(b'[\n'))
+            self.assertEqual(finding.content_context[0][0].request, conditional.SCOPED_ANNOTATIONS)
+            self.assertTrue(all(condition in finding.conditions for condition in conditional.CALLBACK_CONDITIONS))
+            self.assertFalse(finding.edit_permission)
+        json.dumps(asdict(result))
+        with self.assertRaises(FrozenInstanceError):
+            result.diagnostics[0].callback_context[0].parameters = ('forged',)
+        for invalid in (1, None, 'true'):
+            with self.subTest(invalid=invalid), self.assertRaises(InputError):
+                conditional.ConditionalHighlightAnalyzer(self.capture(), self.namespaces, scoped_callbacks=invalid)
+
+    def test_scoped_callbacks_nest_with_literal_wrappers_and_exact_options(self):
+        source = (PREFIX + b'#proof[#local-tag-scope((s) => [#local-scope-annotations(t => [\n'
+                  b'#highlighted[$x$]\n#paragraph_tab\nText.\n], parent:auto, name:auto)], prefix:auto) ]')
+        result = self.analyze(source, rule_ids=conditional.SUPPORTED_RULE_IDS, scoped_callbacks=True)
+        self.assertEqual(len(result.diagnostics), 2, result.unresolved)
+        for finding in result.diagnostics:
+            self.assertEqual(len(finding.content_context), 3)
+            self.assertEqual([c.content_context_index for c in finding.callback_context], [1, 2])
+            self.assertEqual([c.parameters for c in finding.callback_context], [('s',), ('t',)])
+            self.assertIn('Every enclosing recognized literal content wrapper', finding.conditions[3 if finding.rule_id == conditional.RULE_ID else 4])
+
+    def test_scoped_callback_parameters_shadow_inherited_helper_marker_and_wrapper(self):
+        cases = (
+            (b'highlighted', b'#highlighted[$inner$]', b'#highlighted[$root$]', conditional.RULE_ID),
+            (b'paragraph_tab', b'\n#paragraph_tab\nText.\n', b'#paragraph_tab\nRoot.', conditional.MARKER_GAP),
+            (b'proof', b'#proof[#highlighted[$inner$]]', b'#proof[#highlighted[$root$]]', conditional.RULE_ID),
+            (b'local-tag-scope', b'#local-tag-scope(s=>[#highlighted[$inner$]])', b'#highlighted[$root$]', conditional.RULE_ID),
+        )
+        for parameter, body, after, rule in cases:
+            with self.subTest(parameter=parameter):
+                source = PREFIX + b'#local-tag-scope(' + parameter + b' => [' + body + b'])\n' + after
+                result = self.analyze(source, rule_ids=(rule,), scoped_callbacks=True)
+                self.assertEqual(len(result.diagnostics), 1, result.unresolved)
+                self.assertFalse(result.diagnostics[0].callback_context)
+
+    def test_scoped_callback_creation_bindings_aliases_and_local_scope_isolation(self):
+        source = (PREFIX + b'#let saved = highlighted\n#local-tag-scope(s => ['
+                  b'#let highlighted(body)=body\n#saved[$captured$]\n#highlighted[$shadowed$]])\n'
+                  b'#highlighted[$root$]\n#let highlighted(body)=body\n'
+                  b'#local-tag-scope(s => [#highlighted[$later-shadowed$]])')
+        result = self.analyze(source, scoped_callbacks=True)
+        self.assertEqual(len(result.diagnostics), 2, result.unresolved)
+        self.assertTrue(result.diagnostics[0].callback_context)
+        self.assertFalse(result.diagnostics[1].callback_context)
+
+    def test_scoped_callback_mutation_is_local_but_definition_defaults_invalidate_outer(self):
+        source = (PREFIX + b'#local-tag-scope(s => [#(highlighted=fake)\n#highlighted[$inner$]])\n'
+                  b'#highlighted[$outer$]')
+        result = self.analyze(source, scoped_callbacks=True)
+        self.assertEqual(len(result.diagnostics), 1, result.unresolved)
+        self.assertFalse(result.diagnostics[0].callback_context)
+        self.assertTrue(any('mutation' in reason for reason in result.unresolved))
+        source = (PREFIX + b'#local-tag-scope((s:{highlighted=fake;none}) => [#highlighted[$inner$]])\n'
+                  b'#highlighted[$outer$]')
+        result = self.analyze(source, scoped_callbacks=True)
+        self.assertFalse(result.diagnostics)
+        self.assertTrue(any('mutation' in reason for reason in result.unresolved))
+
+    def test_scoped_callback_ambiguous_signatures_and_unknown_contexts_are_refused(self):
+        calls = (
+            b'#local-tag-scope((s,t)=>[#highlighted[$x$]])',
+            b'#local-tag-scope(()=>[#highlighted[$x$]])',
+            b'#local-tag-scope((..s)=>[#highlighted[$x$]])',
+            b'#local-tag-scope((s:1)=>[#highlighted[$x$]])',
+            b'#local-tag-scope(s=>{[#highlighted[$x$]]})',
+            b'#local-tag-scope(s=>[#highlighted[$x$]],unknown:1)',
+            b'#local-tag-scope(s=>[#highlighted[$x$]],prefix:"fixed")',
+            b'#local-tag-scope(s=>[#highlighted[$x$]],namespace:auto)',
+            b'#local-scope-annotations(s=>[#highlighted[$x$]],parent:s)',
+            b'#local-tag-scope(body:s=>[#highlighted[$x$]])',
+            b'#local-tag-scope(s=>[#highlighted[$x$]], t=>[])',
+            b'#local-tag-scope(s=>[#block[#highlighted[$x$]]])',
+            b'#local-tag-scope(s=>[#context [#highlighted[$x$]]])',
+        )
+        for call in calls:
+            with self.subTest(call=call):
+                result = self.analyze(PREFIX + call, scoped_callbacks=True)
+                self.assertFalse(result.diagnostics)
+                self.assertTrue(result.unresolved)
+        source = PREFIX + b'#let local-tag-scope(body)=body\n#local-tag-scope(s=>[#highlighted[$x$]])'
+        self.assertFalse(self.analyze(source, scoped_callbacks=True).diagnostics)
+
+    def test_scoped_callback_suppression_and_scope_budget(self):
+        for source in (
+            PREFIX + f'// typst-lint: ignore-next {conditional.RULE_ID} -- intentional\n#local-tag-scope(s=>[#highlighted[$x$]])'.encode(),
+            PREFIX + f'#local-tag-scope(s=>[\n// typst-lint: ignore-next {conditional.RULE_ID} -- intentional\n#highlighted[$x$]])'.encode()):
+            result = self.analyze(source, scoped_callbacks=True)
+            self.assertFalse(result.diagnostics)
+            self.assertEqual(len(result.suppressed), 1)
+        source = PREFIX + b'#local-tag-scope(s=>[' * 12 + b'#highlighted[$x$]' + b'])' * 12
+        context, tree = self.capture(source), parse(source)
+        session = conditional.ConditionalHighlightAnalyzer(context, self.namespaces, scoped_callbacks=True)
+        session._analyzer.module('Styles/styles.typ', ('main.typ',))
+        session._analyzer.module('Chapter1/figures.typ', ('main.typ',))
+        root_work = session._analyzer.ast_work + 3 * len(tree.nodes)
+        with patch.object(conditional, 'MAX_AST_WORK', root_work + 150):
+            result = session.analyze(tree, 'main.typ')
+            self.assertFalse(result.diagnostics)
+            self.assertIn('AST work limit', result.unresolved[0])
+            self.assertEqual(result, session.analyze(tree, 'main.typ'))
+
+    def test_scoped_callback_returns_withhold_abandoned_and_unreachable_hints(self):
+        for returning in (b'#return []', b'#proof[#return []]', b'#block[#return []]',
+                          b'#let deferred(a:{return [];none})=a'):
+            with self.subTest(returning=returning):
+                source = (PREFIX + b'#local-tag-scope(s=>[#highlighted[$before$]\n' + returning
+                          + b'\n#import "@local/text-utils:0.1.2": highlighted\n#highlighted[$unreachable$]])\n'
+                          b'#highlighted[$caller$]')
+                result = self.analyze(source, scoped_callbacks=True)
+                self.assertEqual(len(result.diagnostics), 1, result.unresolved)
+                self.assertFalse(result.diagnostics[0].callback_context)
+                self.assertTrue(any('Active return' in reason for reason in result.unresolved))
+        # A deferred closure's body does not exit the current callback. A
+        # return from an inner scoped callback exits that inner invocation only.
+        source = (PREFIX + b'#local-tag-scope(s=>[#let later()=[#return []]\n'
+                  b'#local-scope-annotations(t=>[#return []])\n#highlighted[$reachable$]])')
+        result = self.analyze(source, scoped_callbacks=True)
+        self.assertEqual(len(result.diagnostics), 1, result.unresolved)
+        self.assertEqual(len(result.diagnostics[0].callback_context), 1)
 
 
 if __name__ == '__main__':

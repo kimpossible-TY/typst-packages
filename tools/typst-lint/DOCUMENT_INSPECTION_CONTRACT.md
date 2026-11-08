@@ -36,6 +36,11 @@ reference catalogs or runtime resources. See
 The explicit namespace route selects conditional highlight and paragraph-marker
 gap hints. Each has its own metadata, suppression and coverage reasons; neither
 becomes an available source backend or a script proposal.
+The namespace route explicitly enables the bounded scoped-callback context.
+Callback findings add call/body byte spans and opaque parameter names in
+`callback_context`, referencing the existing source-bound `content_context`
+routes. Empty callback metadata is omitted to preserve previous root/literal
+records. Its variable entries are included in report item accounting.
 
 JSON includes:
 

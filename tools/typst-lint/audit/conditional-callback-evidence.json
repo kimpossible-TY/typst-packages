@@ -1,0 +1,766 @@
+{
+  "baseline_commit": "7baf2df0c66029217d6e4a4cbf170abad8e3e64f",
+  "command": "typst-lint inspect-document --root <consumer> --entrypoint main.typ --rule-set pde --package-path <explicit-captured-root> --format json",
+  "focused_tests": {
+    "test_conditional_highlight": 45,
+    "test_document_cli": 29,
+    "total": 74
+  },
+  "generated_utc": "2026-11-08T03:45:03.036972+00:00",
+  "inspection": {
+    "added_findings": {
+      "pde.paragraph-marker-gap": 11,
+      "pde.text-only-highlight": 44
+    },
+    "added_sites": [
+      {
+        "callback_depth": 1,
+        "column": 1,
+        "line": 38,
+        "path": "Preliminaries/Linear_Algebra/abstract_algebra_approach.typ",
+        "rule_id": "pde.paragraph-marker-gap"
+      },
+      {
+        "callback_depth": 1,
+        "column": 4,
+        "line": 220,
+        "path": "chapter 2/2.10.typ",
+        "rule_id": "pde.text-only-highlight"
+      },
+      {
+        "callback_depth": 1,
+        "column": 1,
+        "line": 60,
+        "path": "chapter 2/2.11.typ",
+        "rule_id": "pde.paragraph-marker-gap"
+      },
+      {
+        "callback_depth": 1,
+        "column": 2,
+        "line": 157,
+        "path": "chapter 2/2.11.typ",
+        "rule_id": "pde.text-only-highlight"
+      },
+      {
+        "callback_depth": 1,
+        "column": 2,
+        "line": 292,
+        "path": "chapter 2/2.11.typ",
+        "rule_id": "pde.text-only-highlight"
+      },
+      {
+        "callback_depth": 1,
+        "column": 90,
+        "line": 348,
+        "path": "chapter 2/2.11.typ",
+        "rule_id": "pde.text-only-highlight"
+      },
+      {
+        "callback_depth": 1,
+        "column": 2,
+        "line": 1351,
+        "path": "chapter 2/2.11.typ",
+        "rule_id": "pde.text-only-highlight"
+      },
+      {
+        "callback_depth": 1,
+        "column": 1,
+        "line": 1834,
+        "path": "chapter 2/2.11.typ",
+        "rule_id": "pde.paragraph-marker-gap"
+      },
+      {
+        "callback_depth": 1,
+        "column": 128,
+        "line": 2449,
+        "path": "chapter 2/2.11.typ",
+        "rule_id": "pde.text-only-highlight"
+      },
+      {
+        "callback_depth": 1,
+        "column": 3,
+        "line": 495,
+        "path": "chapter 2/2.7.typ",
+        "rule_id": "pde.paragraph-marker-gap"
+      },
+      {
+        "callback_depth": 1,
+        "column": 34,
+        "line": 613,
+        "path": "chapter 2/2.7.typ",
+        "rule_id": "pde.text-only-highlight"
+      },
+      {
+        "callback_depth": 1,
+        "column": 3,
+        "line": 9,
+        "path": "chapter 2/2.8.typ",
+        "rule_id": "pde.paragraph-marker-gap"
+      },
+      {
+        "callback_depth": 1,
+        "column": 4,
+        "line": 27,
+        "path": "chapter 2/2.8.typ",
+        "rule_id": "pde.text-only-highlight"
+      },
+      {
+        "callback_depth": 1,
+        "column": 4,
+        "line": 75,
+        "path": "chapter 2/2.8.typ",
+        "rule_id": "pde.text-only-highlight"
+      },
+      {
+        "callback_depth": 1,
+        "column": 4,
+        "line": 100,
+        "path": "chapter 2/2.8.typ",
+        "rule_id": "pde.text-only-highlight"
+      },
+      {
+        "callback_depth": 1,
+        "column": 194,
+        "line": 255,
+        "path": "chapter 2/2.8.typ",
+        "rule_id": "pde.text-only-highlight"
+      },
+      {
+        "callback_depth": 1,
+        "column": 1,
+        "line": 9,
+        "path": "chapter 2/2.9.typ",
+        "rule_id": "pde.paragraph-marker-gap"
+      },
+      {
+        "callback_depth": 1,
+        "column": 27,
+        "line": 33,
+        "path": "chapter 2/2.9.typ",
+        "rule_id": "pde.text-only-highlight"
+      },
+      {
+        "callback_depth": 1,
+        "column": 2,
+        "line": 128,
+        "path": "chapter 2/2.9.typ",
+        "rule_id": "pde.text-only-highlight"
+      },
+      {
+        "callback_depth": 1,
+        "column": 47,
+        "line": 154,
+        "path": "chapter 2/2.9.typ",
+        "rule_id": "pde.text-only-highlight"
+      },
+      {
+        "callback_depth": 1,
+        "column": 401,
+        "line": 158,
+        "path": "chapter 2/2.9.typ",
+        "rule_id": "pde.text-only-highlight"
+      },
+      {
+        "callback_depth": 1,
+        "column": 1,
+        "line": 259,
+        "path": "chapter 2/2.9.typ",
+        "rule_id": "pde.paragraph-marker-gap"
+      },
+      {
+        "callback_depth": 1,
+        "column": 2,
+        "line": 397,
+        "path": "chapter 2/2.9.typ",
+        "rule_id": "pde.text-only-highlight"
+      },
+      {
+        "callback_depth": 1,
+        "column": 1,
+        "line": 412,
+        "path": "chapter 2/2.9.typ",
+        "rule_id": "pde.paragraph-marker-gap"
+      },
+      {
+        "callback_depth": 1,
+        "column": 1,
+        "line": 500,
+        "path": "chapter 2/2.9.typ",
+        "rule_id": "pde.paragraph-marker-gap"
+      },
+      {
+        "callback_depth": 1,
+        "column": 4,
+        "line": 629,
+        "path": "chapter 2/2.9.typ",
+        "rule_id": "pde.text-only-highlight"
+      },
+      {
+        "callback_depth": 1,
+        "column": 4,
+        "line": 799,
+        "path": "chapter 2/2.9.typ",
+        "rule_id": "pde.text-only-highlight"
+      },
+      {
+        "callback_depth": 1,
+        "column": 128,
+        "line": 943,
+        "path": "chapter 2/2.9.typ",
+        "rule_id": "pde.text-only-highlight"
+      },
+      {
+        "callback_depth": 1,
+        "column": 1,
+        "line": 11,
+        "path": "chapter 3/3.3.typ",
+        "rule_id": "pde.paragraph-marker-gap"
+      },
+      {
+        "callback_depth": 1,
+        "column": 42,
+        "line": 255,
+        "path": "chapter 3/3.3.typ",
+        "rule_id": "pde.text-only-highlight"
+      },
+      {
+        "callback_depth": 1,
+        "column": 20,
+        "line": 474,
+        "path": "chapter 3/3.3.typ",
+        "rule_id": "pde.text-only-highlight"
+      },
+      {
+        "callback_depth": 1,
+        "column": 75,
+        "line": 944,
+        "path": "chapter 3/3.3.typ",
+        "rule_id": "pde.text-only-highlight"
+      },
+      {
+        "callback_depth": 1,
+        "column": 142,
+        "line": 126,
+        "path": "chapter 3/3.4.typ",
+        "rule_id": "pde.text-only-highlight"
+      },
+      {
+        "callback_depth": 1,
+        "column": 2,
+        "line": 190,
+        "path": "chapter 3/3.4.typ",
+        "rule_id": "pde.text-only-highlight"
+      },
+      {
+        "callback_depth": 1,
+        "column": 189,
+        "line": 343,
+        "path": "chapter 3/3.4.typ",
+        "rule_id": "pde.text-only-highlight"
+      },
+      {
+        "callback_depth": 1,
+        "column": 71,
+        "line": 364,
+        "path": "chapter 3/3.4.typ",
+        "rule_id": "pde.text-only-highlight"
+      },
+      {
+        "callback_depth": 1,
+        "column": 145,
+        "line": 392,
+        "path": "chapter 3/3.4.typ",
+        "rule_id": "pde.text-only-highlight"
+      },
+      {
+        "callback_depth": 1,
+        "column": 2,
+        "line": 412,
+        "path": "chapter 3/3.4.typ",
+        "rule_id": "pde.text-only-highlight"
+      },
+      {
+        "callback_depth": 1,
+        "column": 178,
+        "line": 481,
+        "path": "chapter 3/3.4.typ",
+        "rule_id": "pde.text-only-highlight"
+      },
+      {
+        "callback_depth": 1,
+        "column": 147,
+        "line": 486,
+        "path": "chapter 3/3.4.typ",
+        "rule_id": "pde.text-only-highlight"
+      },
+      {
+        "callback_depth": 1,
+        "column": 251,
+        "line": 506,
+        "path": "chapter 3/3.4.typ",
+        "rule_id": "pde.text-only-highlight"
+      },
+      {
+        "callback_depth": 1,
+        "column": 217,
+        "line": 528,
+        "path": "chapter 3/3.4.typ",
+        "rule_id": "pde.text-only-highlight"
+      },
+      {
+        "callback_depth": 1,
+        "column": 471,
+        "line": 547,
+        "path": "chapter 3/3.4.typ",
+        "rule_id": "pde.text-only-highlight"
+      },
+      {
+        "callback_depth": 1,
+        "column": 235,
+        "line": 560,
+        "path": "chapter 3/3.4.typ",
+        "rule_id": "pde.text-only-highlight"
+      },
+      {
+        "callback_depth": 1,
+        "column": 109,
+        "line": 591,
+        "path": "chapter 3/3.4.typ",
+        "rule_id": "pde.text-only-highlight"
+      },
+      {
+        "callback_depth": 1,
+        "column": 2,
+        "line": 598,
+        "path": "chapter 3/3.4.typ",
+        "rule_id": "pde.text-only-highlight"
+      },
+      {
+        "callback_depth": 1,
+        "column": 182,
+        "line": 615,
+        "path": "chapter 3/3.4.typ",
+        "rule_id": "pde.text-only-highlight"
+      },
+      {
+        "callback_depth": 1,
+        "column": 233,
+        "line": 649,
+        "path": "chapter 3/3.4.typ",
+        "rule_id": "pde.text-only-highlight"
+      },
+      {
+        "callback_depth": 1,
+        "column": 2,
+        "line": 850,
+        "path": "chapter 3/3.4.typ",
+        "rule_id": "pde.text-only-highlight"
+      },
+      {
+        "callback_depth": 1,
+        "column": 103,
+        "line": 895,
+        "path": "chapter 3/3.4.typ",
+        "rule_id": "pde.text-only-highlight"
+      },
+      {
+        "callback_depth": 1,
+        "column": 2,
+        "line": 933,
+        "path": "chapter 3/3.4.typ",
+        "rule_id": "pde.text-only-highlight"
+      },
+      {
+        "callback_depth": 1,
+        "column": 2,
+        "line": 941,
+        "path": "chapter 3/3.4.typ",
+        "rule_id": "pde.text-only-highlight"
+      },
+      {
+        "callback_depth": 1,
+        "column": 1,
+        "line": 984,
+        "path": "chapter 3/3.4.typ",
+        "rule_id": "pde.paragraph-marker-gap"
+      },
+      {
+        "callback_depth": 1,
+        "column": 2,
+        "line": 994,
+        "path": "chapter 3/3.4.typ",
+        "rule_id": "pde.text-only-highlight"
+      },
+      {
+        "callback_depth": 1,
+        "column": 2,
+        "line": 72,
+        "path": "chapter 3/3.5.typ",
+        "rule_id": "pde.text-only-highlight"
+      }
+    ],
+    "budget_refusals": 0,
+    "conditional_backends": [
+      "pde.text-only-highlight",
+      "pde.paragraph-marker-gap"
+    ],
+    "conditional_contexts": [
+      "root-markup",
+      "literal-wrapper-body",
+      "scoped-callback-content"
+    ],
+    "conditional_edits": 0,
+    "conditional_findings": {
+      "pde.paragraph-marker-gap": 19,
+      "pde.text-only-highlight": 73
+    },
+    "coverage_reasons_by_rule": {
+      "pde.paragraph-marker-gap": {
+        "Nested paragraph-marker expression has unresolved binding/execution context": 9,
+        "Unknown root namespace scope": 35
+      },
+      "pde.text-only-highlight": {
+        "Unknown root namespace scope": 35
+      }
+    },
+    "global_complete": false,
+    "include_snapshot_equal": true,
+    "previous_37_records_equal": true,
+    "retained_sources": 44,
+    "sample_callback_finding": {
+      "callback_context": [
+        {
+          "body_end": 2291,
+          "body_start": 164,
+          "call_end": 2292,
+          "call_start": 137,
+          "content_context_index": 0,
+          "parameters": [
+            "s"
+          ]
+        }
+      ],
+      "column": 1,
+      "conditions": [
+        "Every referenced module loads and initializes successfully; initializer purity is not proved.",
+        "Runtime imports select the exact captured package versions and bytes; ambient package selection is not proved.",
+        "The reported source marker is emitted and used as a paragraph marker in the intended document context.",
+        "The document applies the captured paragraph-tab transformation; this source pattern does not prove paragraph rendering.",
+        "Every enclosing recognized literal content wrapper executes and renders this body.",
+        "Every captured scoped callback is invoked by its exact pinned wrapper with the documented single dictionary argument.",
+        "The callback returns this literal content for actual rendering; callback invocation, argument values and rendering are not proved."
+      ],
+      "content_context": [
+        [
+          {
+            "imported_name": "local-scope-annotations",
+            "local_name": "local-scope-annotations",
+            "operation": "package-export",
+            "path": "@local/scoped-annotations:0.3.0",
+            "request": "@local/scoped-annotations:0.3.0",
+            "source_sha256": "eb8e7ff7b31238c8fa4b996deb9502fec0ae4610240427a8b40873708e509203"
+          },
+          {
+            "imported_name": "local-scope-annotations",
+            "local_name": "local-scope-annotations",
+            "operation": "wildcard-import",
+            "path": "Styles/styles.typ",
+            "request": "@local/scoped-annotations:0.3.0",
+            "source_sha256": "ed4ab7c876bd3080f8a0ef9de00fd855c8a8b5c3544483bb6112bdf5e1d466ed"
+          },
+          {
+            "imported_name": "local-scope-annotations",
+            "local_name": "local-scope-annotations",
+            "operation": "wildcard-import",
+            "path": "Preliminaries/Linear_Algebra/abstract_algebra_approach.typ",
+            "request": "../../Styles/styles.typ",
+            "source_sha256": "eb279a00c5eb268efb6d19905a81600ec6aeb9999d9950987f2833b83c99b6c5"
+          }
+        ],
+        [
+          {
+            "imported_name": "proof",
+            "local_name": "proof",
+            "operation": "package-export",
+            "path": "@local/math-blocks:0.2.0",
+            "request": "@local/math-blocks:0.2.0",
+            "source_sha256": "542c7ce1ebfc6fbd51a7fefb2b55405a968a951b61d49170e49ef331948f36ff"
+          },
+          {
+            "imported_name": "proof",
+            "local_name": "proof",
+            "operation": "wildcard-import",
+            "path": "Styles/styles.typ",
+            "request": "@local/math-blocks:0.2.0",
+            "source_sha256": "ed4ab7c876bd3080f8a0ef9de00fd855c8a8b5c3544483bb6112bdf5e1d466ed"
+          },
+          {
+            "imported_name": "proof",
+            "local_name": "proof",
+            "operation": "wildcard-import",
+            "path": "Preliminaries/Linear_Algebra/abstract_algebra_approach.typ",
+            "request": "../../Styles/styles.typ",
+            "source_sha256": "eb279a00c5eb268efb6d19905a81600ec6aeb9999d9950987f2833b83c99b6c5"
+          }
+        ]
+      ],
+      "edit_permission": false,
+      "end": 1096,
+      "grade": "warning",
+      "line": 38,
+      "message": "Place a whitespace-only blank source line before the standalone paragraph marker.",
+      "package_evidence": [
+        {
+          "artifacts": [],
+          "entrypoint": "lib.typ",
+          "import_path": "@local/cetz-helpers:0.2.0",
+          "manifest_identity": "/private/var/folders/n3/yrkwhlf55_913xl78mylpw200000gn/T/typst-lint-namespace-packages-c7k31e31/local/cetz-helpers/0.2.0/typst.toml",
+          "manifest_sha256": "7733132a6cb15391cbe64afc8f5f86281a44b1a87c9df98a7a72e3931ec4e402",
+          "name": "cetz-helpers",
+          "namespace": "local",
+          "source_identity": "/private/var/folders/n3/yrkwhlf55_913xl78mylpw200000gn/T/typst-lint-namespace-packages-c7k31e31/local/cetz-helpers/0.2.0/lib.typ",
+          "source_sha256": "19c807971311c94a58413fbc5cac14ae2ea5065c78206d95ceda97890558e2c3",
+          "version": "0.2.0"
+        },
+        {
+          "artifacts": [],
+          "entrypoint": "lib.typ",
+          "import_path": "@local/math-blocks:0.2.0",
+          "manifest_identity": "/private/var/folders/n3/yrkwhlf55_913xl78mylpw200000gn/T/typst-lint-namespace-packages-c7k31e31/local/math-blocks/0.2.0/typst.toml",
+          "manifest_sha256": "e5eeaa72f830e8893e5f7c4dd10129b9819f31a8f1b80b7fbe22551f1295c5c4",
+          "name": "math-blocks",
+          "namespace": "local",
+          "source_identity": "/private/var/folders/n3/yrkwhlf55_913xl78mylpw200000gn/T/typst-lint-namespace-packages-c7k31e31/local/math-blocks/0.2.0/lib.typ",
+          "source_sha256": "542c7ce1ebfc6fbd51a7fefb2b55405a968a951b61d49170e49ef331948f36ff",
+          "version": "0.2.0"
+        },
+        {
+          "artifacts": [],
+          "entrypoint": "lib.typ",
+          "import_path": "@local/scoped-annotations:0.3.0",
+          "manifest_identity": "/private/var/folders/n3/yrkwhlf55_913xl78mylpw200000gn/T/typst-lint-namespace-packages-c7k31e31/local/scoped-annotations/0.3.0/typst.toml",
+          "manifest_sha256": "2deffaddbdcde7f320f9ff4ed8d16430b41ce0d933140ca7cfb8cdbb708f3dfd",
+          "name": "scoped-annotations",
+          "namespace": "local",
+          "source_identity": "/private/var/folders/n3/yrkwhlf55_913xl78mylpw200000gn/T/typst-lint-namespace-packages-c7k31e31/local/scoped-annotations/0.3.0/lib.typ",
+          "source_sha256": "eb8e7ff7b31238c8fa4b996deb9502fec0ae4610240427a8b40873708e509203",
+          "version": "0.3.0"
+        },
+        {
+          "artifacts": [],
+          "entrypoint": "lib.typ",
+          "import_path": "@local/text-utils:0.1.2",
+          "manifest_identity": "/private/var/folders/n3/yrkwhlf55_913xl78mylpw200000gn/T/typst-lint-namespace-packages-c7k31e31/local/text-utils/0.1.2/typst.toml",
+          "manifest_sha256": "e1d27052412a39d4f839dede28406159c1c9a5394592a73c2ed5666dcbc60df2",
+          "name": "text-utils",
+          "namespace": "local",
+          "source_identity": "/private/var/folders/n3/yrkwhlf55_913xl78mylpw200000gn/T/typst-lint-namespace-packages-c7k31e31/local/text-utils/0.1.2/lib.typ",
+          "source_sha256": "7e151150dac47b01ebf7706457906133d74a52abee1b5c43ce824ff89279bd71",
+          "version": "0.1.2"
+        },
+        {
+          "artifacts": [],
+          "entrypoint": "src/lib.typ",
+          "import_path": "@preview/cetz:0.4.2",
+          "manifest_identity": "/private/var/folders/n3/yrkwhlf55_913xl78mylpw200000gn/T/typst-lint-namespace-packages-c7k31e31/preview/cetz/0.4.2/typst.toml",
+          "manifest_sha256": "2ccea70cc14ad8d79897179d3c8946758e610903e59f154acdb0f9b9ff81ac02",
+          "name": "cetz",
+          "namespace": "preview",
+          "source_identity": "/private/var/folders/n3/yrkwhlf55_913xl78mylpw200000gn/T/typst-lint-namespace-packages-c7k31e31/preview/cetz/0.4.2/src/lib.typ",
+          "source_sha256": "53380cd9de16c1f845f325e9d8be8e0f03493c2073fba1c54d546e1906a8f8ed",
+          "version": "0.4.2"
+        },
+        {
+          "artifacts": [],
+          "entrypoint": "src/lib.typ",
+          "import_path": "@preview/mannot:0.4.0",
+          "manifest_identity": "/private/var/folders/n3/yrkwhlf55_913xl78mylpw200000gn/T/typst-lint-namespace-packages-c7k31e31/preview/mannot/0.4.0/typst.toml",
+          "manifest_sha256": "aef4310b36955dc98d8b03ec4abf17d45777d0a08b65d6e67214752e57647545",
+          "name": "mannot",
+          "namespace": "preview",
+          "source_identity": "/private/var/folders/n3/yrkwhlf55_913xl78mylpw200000gn/T/typst-lint-namespace-packages-c7k31e31/preview/mannot/0.4.0/src/lib.typ",
+          "source_sha256": "288027cea059b327bf3253c44ae975339e7afc0f149375d9d87ca1c1fe739f57",
+          "version": "0.4.0"
+        }
+      ],
+      "package_requests": [
+        "@local/cetz-helpers:0.2.0",
+        "@local/math-blocks:0.2.0",
+        "@local/scoped-annotations:0.3.0",
+        "@local/text-utils:0.1.2",
+        "@preview/cetz:0.4.2",
+        "@preview/mannot:0.4.0"
+      ],
+      "path": "Preliminaries/Linear_Algebra/abstract_algebra_approach.typ",
+      "root_sha256": "eb279a00c5eb268efb6d19905a81600ec6aeb9999d9950987f2833b83c99b6c5",
+      "route": [
+        {
+          "imported_name": "paragraph-tab",
+          "local_name": "paragraph-tab",
+          "operation": "package-export",
+          "path": "@local/text-utils:0.1.2",
+          "request": "@local/text-utils:0.1.2",
+          "source_sha256": "7e151150dac47b01ebf7706457906133d74a52abee1b5c43ce824ff89279bd71"
+        },
+        {
+          "imported_name": "paragraph-tab",
+          "local_name": "paragraph-tab",
+          "operation": "wildcard-import",
+          "path": "Styles/styles.typ",
+          "request": "@local/text-utils:0.1.2",
+          "source_sha256": "ed4ab7c876bd3080f8a0ef9de00fd855c8a8b5c3544483bb6112bdf5e1d466ed"
+        },
+        {
+          "imported_name": "paragraph-tab",
+          "local_name": "paragraph-tab",
+          "operation": "wildcard-import",
+          "path": "Preliminaries/Linear_Algebra/abstract_algebra_approach.typ",
+          "request": "../../Styles/styles.typ",
+          "source_sha256": "eb279a00c5eb268efb6d19905a81600ec6aeb9999d9950987f2833b83c99b6c5"
+        }
+      ],
+      "rule_id": "pde.paragraph-marker-gap",
+      "source": "My / Paragraphs and reading rhythm, PDE book conventions; PDE / spaceing role(including `#paragraph_tab` role).",
+      "source_hashes": [
+        {
+          "path": "Preliminaries/Linear_Algebra/abstract_algebra_approach.typ",
+          "source_sha256": "eb279a00c5eb268efb6d19905a81600ec6aeb9999d9950987f2833b83c99b6c5"
+        },
+        {
+          "path": "Styles/styles.typ",
+          "source_sha256": "ed4ab7c876bd3080f8a0ef9de00fd855c8a8b5c3544483bb6112bdf5e1d466ed"
+        }
+      ],
+      "start": 1082,
+      "status": "CONDITIONAL"
+    },
+    "script_proposals": 9686,
+    "source_backends": [
+      "core.parenthesized-scripts",
+      "pde.standalone-display",
+      "pde.display-continuation-gap"
+    ],
+    "source_diagnostics": {
+      "core.parenthesized-scripts": 5044,
+      "pde.display-continuation-gap": 63,
+      "pde.standalone-display": 7
+    },
+    "source_diagnostics_and_proposals_equal": true,
+    "source_hashes_current": true,
+    "sources": 37,
+    "uninspected_pde_rules": 30
+  },
+  "limitations": [
+    "Exact two wrapper identities, one opaque positional parameter, literal content and omitted/literal-auto options only.",
+    "Callback invocation, dictionary argument values and returned-content rendering remain explicit conditions; no purity or protected writer authority.",
+    "Active return is conservatively refused at its nearest callback, including earlier/suppressed hints; imports cannot revive the abandoned body.",
+    "mannot-scope, computed options, code bodies, complex parameters and existing block/Contextual barriers remain unresolved.",
+    "Native owned manual candidates preserve equation/label bytes, targets and word order but do not establish general geometry/PDF equivalence.",
+    "User originals, packages, caches and editor settings are preserved."
+  ],
+  "native_fixture": {
+    "conditional_diagnostics_before_after": [
+      {
+        "pde.paragraph-marker-gap": 1,
+        "pde.text-only-highlight": 1
+      },
+      {
+        "pde.paragraph-marker-gap": 0,
+        "pde.text-only-highlight": 0
+      }
+    ],
+    "executions": {
+      "compile": 2,
+      "pdftotext": 2,
+      "render_eval_query": 2,
+      "semantic_probe_eval": 1,
+      "version": 1
+    },
+    "general_geometry_pdf_equivalence_claim": false,
+    "native_observations": {
+      "callback_metadata": {
+        "dictionary_parameters": true,
+        "inner_name": "local-scope-annotations-2-owned",
+        "inner_prefix": "local-scope-annotations-2",
+        "inner_tag": "local-scope-annotations-2-owned",
+        "outer_name": "local-scope-1-owned",
+        "outer_prefix": "local-scope-1",
+        "scoped_probe": true
+      },
+      "equation_bodies_and_order_preserved": true,
+      "full_word_order_preserved": true,
+      "sentinel_label_target": "equation",
+      "source_equation_bytes": [
+        "$x^2$",
+        "$ y^2 = 1 $"
+      ],
+      "source_label_bytes": [
+        "<untouched-energy>"
+      ]
+    },
+    "preserved": {
+      "facade_and_consumer_originals": true,
+      "package_files": 80,
+      "private_cache_empty": true
+    },
+    "render_elapsed_seconds": 0.576,
+    "render_fixture_runs": 1,
+    "repository_edits": false,
+    "retries": 0,
+    "scope": "one owned nested genuine scoped-callback fixture",
+    "scoped_callback_contexts_verified": 2,
+    "semantic_probe": {
+      "capture_by_value": true,
+      "dictionary_keys": [
+        7,
+        10
+      ],
+      "parameter_shadowing": true
+    },
+    "semantic_probe_runs": 1,
+    "status": "passed",
+    "tests": 2,
+    "typst_version": "typst 0.15.1 (unknown commit)",
+    "writer_or_edit_permission": false
+  },
+  "post_review_return_guard": {
+    "admitted_callback_bodies": 34,
+    "callback_active_return_or_mutation_effects": 0,
+    "observed_report_unchanged": true,
+    "other_annotations_calls_deferred_for_dynamic_options": 10,
+    "selected_sources": 37,
+    "typed_FuncReturn": 0,
+    "validation": "Independent retained AST inspection after the final effects/return change; no extra full CLI execution"
+  },
+  "published_baseline_ci": {
+    "conclusion": "success",
+    "elapsed_seconds": 1094,
+    "head": "7baf2df0c66029217d6e4a4cbf170abad8e3e64f",
+    "passed_per_interpreter": 2042,
+    "run": 42442128476,
+    "skipped_per_interpreter": 55
+  },
+  "remaining_scope_barriers": {
+    "block_and_contextual_policy_unchanged": true,
+    "contextual_lines": [
+      115,
+      212,
+      381,
+      736
+    ],
+    "path": "chapter 3/3.5.typ",
+    "remaining_math_candidates": 9
+  },
+  "remote_ci_for_this_change": "not-published",
+  "runtime_sha256": {
+    "conditional_highlight.py": "4d668321569f85b822b0473b7d686f46794bcac3acfea98f1891809f47e680d5",
+    "document_cli.py": "af6f1380f23428f24d70ac6ba2773da5d9839fae34ea97c5cc41f6c5fa964641",
+    "document_display.py": "c5b7f492bfc37935d94f63e901ea72b661e96cb6f0dc376bdfc4027879d1f30e",
+    "import_graph.py": "11caef3fe01bb107acdb08fae646764372a2832d8b11b1582e04e6d0bc7fbda4",
+    "namespace_packages.py": "3f2e07a3dd8cccf2be24a21c184639d1be4888a08f94bd60a6717e10cbd1cdf2",
+    "script_rule.py": "de23a485a15a62f968ab1fa6f707899fc5fb05ce00f2aac0836f5db665459b5f",
+    "suppression.py": "398c990af7e65016a739572a62c6b385ce381554185fc96c4bf7b6cadb404057",
+    "syntax_client.py": "4886db74e8314da44f59085254e13e9a683837e4705d80c15ed11c4d2a168562"
+  },
+  "schema": 1
+}

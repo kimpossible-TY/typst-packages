@@ -93,6 +93,10 @@ standalone captured `paragraph_tab`/`paragraph-tab` value or immutable alias.
 File/body openings do not replace that blank line; a following heading/display
 is withheld for the separate marker-target rule. These marker hints additionally
 require the paragraph-tab transformation to be active at rendering time.
+It also follows direct single-parameter literal callbacks of the exact captured
+`local-tag-scope` and `local-scope-annotations` exports, with omitted or literal
+`auto` options. Parameters shadow captured names. Computed options, complex
+callback bodies and the existing block/context barriers retain explicit refusals.
 `conditional_diagnostics` records source/package
 hashes, ordered name routes and the outstanding initialization, runtime package
 selection and rendering conditions. These hints have no edits, stay separate
@@ -1147,7 +1151,8 @@ The frozen baseline model estimates a longest test interval of about 12 minutes
 instead of 22 minutes. The first [measured-profile CI run](https://github.com/kimpossible-TY/typst-packages/actions/runs/42440322213)
 completed in 14m52s versus the previous 21m59s: about 32% shorter. The model
 underestimated that run's slowest test interval; buffered log timestamps and
-runner variance limit predictions for later runs. Job counts, test and
+runner variance limit predictions for later runs. The following marker-gap
+run passed in 18m14s, with the same shard still longest. Job counts, test and
 compiler deadlines, adapter checks and both aggregate gates retain their
 existing settings. The [partition evidence](audit/ci-balance-evidence.json)
 records complete discovery, per-worker counts and source/profile hashes.

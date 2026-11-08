@@ -84,7 +84,7 @@
     "skipped_per_interpreter": 55,
     "tests_per_interpreter": 2075
   },
-  "remote_ci_for_this_change": "not-published",
+  "remote_ci_for_this_change": "published-and-verified-at-7bfa966",
   "reviewed_methods": 34,
   "schema": 1,
   "source_sha256": {
@@ -93,6 +93,26 @@
     "tools/typst-lint/run_test_shard.py": "68ce367d734d5c7e1900920b8d945dc1730279eefda8c006b0e9a8625acfe05c",
     "tools/typst-lint/tests/test_run_test_shard.py": "da50b2e93b68aa640e0b9fd841a7193d0994ceadbef1f232b2ee59d9c05bb9ba"
   },
+  "subsequent_measured_ci": [
+    {
+      "aggregate_gates": 2,
+      "completed_utc": "2026-11-08T03:36:13Z",
+      "conclusion": "success",
+      "elapsed_seconds": 1094,
+      "execution_jobs": 8,
+      "head": "7baf2df0c66029217d6e4a4cbf170abad8e3e64f",
+      "passed_per_interpreter": 2042,
+      "pre_balancing_seconds": 1319,
+      "previous_measured_seconds": 892,
+      "run": 42442128476,
+      "skipped_per_interpreter": 55,
+      "slowest_interpreter": "3.15",
+      "slowest_shard": 1,
+      "slowest_unittest_seconds": 1046.078,
+      "tests_per_interpreter": 2097,
+      "unchanged_bottleneck_test_count": 465
+    }
+  ],
   "test_runner_unit_tests": 31,
   "validation": "Full discovery and partition only; protected test bodies were not executed"
 }

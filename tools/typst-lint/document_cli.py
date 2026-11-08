@@ -67,7 +67,7 @@ def report_document(root, entrypoint, *, rule_set='core', package_path=None):
                 'Conditional namespace graph differs from the included source snapshot')
         conditional_session = ConditionalHighlightAnalyzer(imports, namespaces,
             known_rule_ids=(rule['id'] for rule in catalog['rules']),
-            rule_ids=CONDITIONAL_RULES)
+            rule_ids=CONDITIONAL_RULES, scoped_callbacks=True)
         namespace_report = dict(package_path=namespaces.package_path,
             packages=[dict(**asdict(item.evidence), exports=list(item.exports),
                            origins=[list(origin) for origin in item.origins]) for item in namespaces.packages],
@@ -104,13 +104,17 @@ def report_document(root, entrypoint, *, rule_set='core', package_path=None):
             for finding in (*conditional.diagnostics, *conditional.suppressed):
                 items += (1 + len(finding.source_hashes) + len(finding.package_evidence)
                           + len(finding.package_requests) + len(finding.route) + len(finding.conditions)
-                          + sum(1 + len(route) for route in finding.content_context))
+                          + sum(1 + len(route) for route in finding.content_context)
+                          + sum(1 + len(context.parameters) for context in finding.callback_context))
         require(items <= MAX_REPORT_ITEMS, 'Document inspection report item limit exceeded')
         if conditional is not None:
             metadata = {rule['id']: rule for rule in catalog['rules']}
             def conditional_record(finding):
                 rule = metadata[finding.rule_id]
-                return dict(**asdict(finding), grade=rule['grade'], source=rule['source'])
+                record = asdict(finding)
+                if not finding.callback_context:
+                    record.pop('callback_context')
+                return dict(**record, grade=rule['grade'], source=rule['source'])
             conditional_findings.extend(conditional_record(finding) for finding in conditional.diagnostics)
             conditional_suppressed.extend(conditional_record(finding) for finding in conditional.suppressed)
             for rid in CONDITIONAL_RULES:
@@ -195,6 +199,8 @@ def report_document(root, entrypoint, *, rule_set='core', package_path=None):
         coverage=dict(global_complete=False, enabled=enabled,
             available_backends=backends, uninspected=[rid for rid in enabled if rid not in backends],
             conditional_hint_backends=list(CONDITIONAL_RULES) if conditional_session is not None else [],
+            conditional_contexts=(['root-markup', 'literal-wrapper-body', 'scoped-callback-content']
+                                  if conditional_session is not None else []),
             files=files,
             unresolved_obligations=['other-style-rules', 'import-and-package-resolution',
                 'include-runtime-execution', 'render-context-and-resources',

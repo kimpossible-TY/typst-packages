@@ -482,6 +482,80 @@ class DocumentCliTests(unittest.TestCase):
         self.assertTrue(any('paragraph-tab transformation' in condition for condition in finding['conditions']))
         self.assertEqual(result['applied_fixes'], [])
 
+    def test_conditional_scoped_callbacks_keep_provenance_and_script_candidates(self):
+        package_root = self.namespace_packages()
+        target = self.conditional_fixture()
+        source = target.read_bytes() + (
+            b'#local-tag-scope(s => [\n'
+            b'#local-scope-annotations(t => ([\n'
+            b'#paragraph_tab\nCallback #highlighted[$y^2$].\n]))\n])\n'
+            b'#highlighted[$z^2$]\n')
+        target.write_bytes(source)
+        result = self.run_cli('--rule-set', 'pde', '--package-path', str(package_root))
+        callbacks = [row for row in result['conditional_diagnostics'] if row.get('callback_context')]
+        self.assertEqual({row['rule_id'] for row in callbacks},
+                         {'pde.text-only-highlight', 'pde.paragraph-marker-gap'})
+        self.assertEqual(len(result['conditional_diagnostics']), 4)
+        for finding in callbacks:
+            self.assertEqual([row['parameters'] for row in finding['callback_context']], [['s'], ['t']])
+            for context in finding['callback_context']:
+                self.assertLess(context['content_context_index'], len(finding['content_context']))
+                self.assertLessEqual(context['call_start'], context['body_start'])
+                self.assertLess(context['body_start'], context['body_end'])
+                self.assertLessEqual(context['body_end'], context['call_end'])
+            self.assertFalse(finding['edit_permission'])
+        self.assertEqual(len(result['proposed_edits']), 6)
+        self.assertTrue(all(row['rule_id'] == 'core.parenthesized-scripts' for row in result['proposed_edits']))
+        self.assertEqual(target.read_bytes(), source)
+        self.assertFalse(result['coverage']['global_complete'])
+
+    def test_callback_parameter_shadow_and_rule_suppression_remain_local(self):
+        package_root = self.namespace_packages()
+        target = self.conditional_fixture()
+        target.write_bytes(target.read_bytes() + (
+            b'#local-tag-scope(highlighted => [#highlighted[$hidden^2$]])\n'
+            b'#local-tag-scope(s => [\n'
+            b'// typst-lint: ignore-next pde.text-only-highlight -- intentional\n'
+            b'#highlighted[$suppressed^2$]\n])\n'
+            b'#highlighted[$visible^2$]\n'))
+        result = self.run_cli('--rule-set', 'pde', '--package-path', str(package_root))
+        self.assertEqual(len(result['conditional_diagnostics']), 2)
+        suppressed, = result['conditional_suppressed']
+        self.assertEqual(suppressed['rule_id'], 'pde.text-only-highlight')
+        self.assertTrue(suppressed['callback_context'])
+        self.assertTrue(all(not row.get('callback_context') for row in result['conditional_diagnostics']))
+
+    def test_callback_metadata_participates_in_report_item_limit(self):
+        package_root = self.namespace_packages()
+        target = self.conditional_fixture()
+        target.write_bytes(target.read_bytes().replace(
+            b'#highlighted[Text and $x^2$ together.]',
+            b'#local-tag-scope(s => [#highlighted[Text and $x^2$ together.]])'))
+        with patch.object(document_cli, 'MAX_REPORT_ITEMS', 37):
+            with self.assertRaisesRegex(InputError, 'report item limit'):
+                document_cli.report_document(str(self.root), 'main.typ', rule_set='pde',
+                                             package_path=package_root)
+        with patch.object(document_cli, 'MAX_REPORT_ITEMS', 100):
+            result = document_cli.report_document(str(self.root), 'main.typ', rule_set='pde',
+                                                  package_path=package_root)
+        finding, = result['conditional_diagnostics']
+        self.assertTrue(finding['callback_context'])
+
+    def test_callback_return_withholds_abandoned_hints_without_hiding_outer_call(self):
+        package_root = self.namespace_packages()
+        target = self.conditional_fixture()
+        target.write_bytes(target.read_bytes() + (
+            b'#local-tag-scope(s => [\n#highlighted[$a^2$]\n#return []\n'
+            b'#import "@local/text-utils:0.1.2": highlighted\n'
+            b'#highlighted[$b^2$]\n])\n#highlighted[$c^2$]\n'))
+        result = self.run_cli('--rule-set', 'pde', '--package-path', str(package_root))
+        self.assertEqual(len(result['conditional_diagnostics']), 2)
+        self.assertTrue(all(not row.get('callback_context') for row in result['conditional_diagnostics']))
+        self.assertEqual(result['conditional_suppressed'], [])
+        self.assertTrue(any('return' in reason.lower() for row in result['conditional_coverage']
+                            for reason in row['reasons']))
+        self.assertEqual(len(result['proposed_edits']), 8)
+
     def test_namespace_option_requires_pde_and_unsafe_evidence_refuses(self):
         self.write('main.typ', b'$x^i$\n')
         result = self.run_cli('--package-path', str(self.root / 'never-opened'))
