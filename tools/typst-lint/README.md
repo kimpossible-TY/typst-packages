@@ -223,6 +223,8 @@ global rule coverage is incomplete. The same preview is available explicitly as
 --manifest /absolute/font-seed.json --discover-dependencies --format json`.
 Explicit `--conditional-gaps` also composes the conditional proof and nested
 math-footnote gap stages in that preview; it does not authorize source writes.
+Adding `--conditional-punctuation` appends the separate conditional prose
+footnote spacing stage; it requires `--conditional-gaps`.
 Without `--preview`, the ordinary compile gate remains blocked; the preview
 neither accepts compiler-tail arguments nor publishes a PDF. Optional
 `--discover-dependencies` derives current dependency paths from a sandboxed

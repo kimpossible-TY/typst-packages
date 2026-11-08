@@ -98,6 +98,18 @@ class DocumentCliTests(unittest.TestCase):
         self.assertFalse(hints['edit_permission'] or report['applied_fixes'] or report['proposed_edits'])
         self.assertEqual(target.read_bytes(), source)
 
+    def test_nested_paragraph_marker_gap_hint_is_conditional(self):
+        source = b'#block[\nBefore.\n#paragraph_tab\nAfter.\n]'
+        target = self.write('main.typ', source)
+        report = self.run_cli('--rule-set', 'pde', '--local-rule-hints')
+        hints = report['local_rule_hints']
+        findings = [item for item in hints['diagnostics']
+                    if item['rule_id'] == 'pde.paragraph-marker-gap']
+        self.assertEqual(len(findings), 1)
+        self.assertIn('if this standalone name', findings[0]['explanation'])
+        self.assertFalse(hints['edit_permission'] or report['applied_fixes'] or report['proposed_edits'])
+        self.assertEqual(target.read_bytes(), source)
+
     def test_prose_and_theme_hints_in_included_source_are_conditional(self):
         self.write('main.typ', b'#include "chapter.typ"\n')
         source = (b'First ordinary paragraph.\n\nSecond ordinary paragraph.\n\n'

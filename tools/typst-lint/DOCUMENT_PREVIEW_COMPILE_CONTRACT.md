@@ -13,6 +13,8 @@ typst-lint preview-compile --root /absolute/project --entrypoint main.typ \
   --manifest /absolute/font-seed.json --discover-dependencies --format json
 typst-lint preview-compile --root /absolute/project --entrypoint main.typ \
   --manifest /absolute/font-seed.json --discover-dependencies --conditional-gaps --format json
+typst-lint preview-compile --root /absolute/project --entrypoint main.typ \
+  --manifest /absolute/font-seed.json --discover-dependencies --conditional-gaps --conditional-punctuation --format json
 typst-style compile --preview --root /absolute/project --entrypoint main.typ \
   --manifest /absolute/font-seed.json --discover-dependencies --format json
 typst-style compile --preview --root /absolute/project --entrypoint main.typ \
@@ -27,7 +29,9 @@ from the captured source with the same profile, hash and suppression checks;
 the final candidate is reanalyzed against the affected rules. These stages
 remain conditional on runtime binding and execution, and do not grant source
 application authority. Their rules remain in `uninspected_rule_ids` for full
-coverage. Prose punctuation previews are not included in this profile.
+coverage. Adding `--conditional-punctuation` explicitly appends the separate
+prose-footnote punctuation-spacing stage; it requires `--conditional-gaps`.
+Its binding, execution and rendering remain conditional as well.
 
 The `typst-style compile --preview` form explicitly selects the same preview
 engine and cancellation handling. It does not accept an ordinary compiler tail

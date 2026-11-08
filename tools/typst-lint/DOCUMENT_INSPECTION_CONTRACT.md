@@ -89,8 +89,9 @@ JSON includes:
 - With the same explicit reference options, `--reference-calls` separately
   traces supported direct calls in each captured source. Each file reports
   `CONDITIONAL`, `PARTIAL`, or `UNAVAILABLE` and includes outstanding refusal
-  reasons; a partial result is never a complete call inventory. Equations,
-  deferred functions and unsupported execution contexts remain uninspected.
+  reasons; a partial result is never a complete call inventory. Direct literal
+  `#footnote[...]` bodies in display equations are traced conditionally; other
+  equation code, deferred functions and unsupported execution remain uninspected.
   Trace evidence does not prove runtime execution, catalog membership or edit
   safety, and analysis budget exhaustion discards that file's partial calls.
 - Optional `--reference-cache-path` adds a second explicit namespace root for

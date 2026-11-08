@@ -98,9 +98,13 @@ def main(arguments=None, *, gate=False):
                         help='Include bounded per-source, per-stage edits and hashes in the JSON report')
     parser.add_argument('--conditional-gaps', action='store_true',
                         help='Also preview conditional proof and nested math-footnote gap edits')
+    parser.add_argument('--conditional-punctuation', action='store_true',
+                        help='Also preview conditional prose-footnote spacing (requires --conditional-gaps)')
     args = parser.parse_args(sys.argv[1:] if arguments is None else arguments)
     if args.review_edits and args.format != 'json' and not args.pdf_stdout:
         parser.error('--review-edits requires --format json or --pdf-stdout')
+    if args.conditional_punctuation and not args.conditional_gaps:
+        parser.error('--conditional-punctuation requires --conditional-gaps')
     # The executable installs cooperative SIGINT/SIGTERM handling; imported
     # callers do not change process-wide signal handlers.
     import offline_compile_cli
@@ -109,7 +113,8 @@ def main(arguments=None, *, gate=False):
     phase = 'input'
     result = None
     discovery_completed = False
-    profile = 'conditional-gaps' if args.conditional_gaps else 'standard'
+    profile = ('conditional-gaps-and-punctuation' if args.conditional_punctuation else
+               'conditional-gaps' if args.conditional_gaps else 'standard')
     try:
         raw_root = args.root
         root = _absolute_root(raw_root)
@@ -177,8 +182,9 @@ def main(arguments=None, *, gate=False):
                       discovery_observed_dependencies=len(observed) if observed is not None else None,
                       dependency_closure_proved=False, compiler_sha256=preview.compiler_sha256,
                       sequence_profile=profile,
-                      conditionally_previewed_rule_ids=(['pde.proof-trailing-gap', 'pde.footnote-trailing-gap']
-                                                        if args.conditional_gaps else []),
+                      conditionally_previewed_rule_ids=(
+                          (['pde.proof-trailing-gap', 'pde.footnote-trailing-gap'] if args.conditional_gaps else [])
+                          + (['pde.prose-footnote-punctuation'] if args.conditional_punctuation else [])),
                       partially_inspected_rule_ids=[document_display.STANDALONE, script_rule.RULE_ID, document_display.RULE_ID],
                       uninspected_rule_ids=[rule['id'] for rule in catalog['rules'] if rule['id'] not in
                                            (document_display.STANDALONE, script_rule.RULE_ID, document_display.RULE_ID)],

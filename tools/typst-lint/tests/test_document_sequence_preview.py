@@ -70,6 +70,99 @@ class DocumentSequencePreviewTests(unittest.TestCase):
             with self.subTest(profile=profile), self.assertRaises(InputError):
                 document_sequence_preview.preview(tree, 'main.typ', self.catalog, profile=profile)
 
+    def test_punctuation_profile_chains_all_stages_and_is_profile_bound(self):
+        source = (b'Thus $ x^i $\n\nHence.\n\n#block[\n$\nA #footnote[X]\n\nB\n$\n'
+                  b'#proof[Done.]\nNext.\nClaim. #footnote[Reason.]\n]')
+        tree = parse(source)
+        standard = document_sequence_preview.preview(tree, 'main.typ', self.catalog, profile='conditional-gaps')
+        report = document_sequence_preview.preview(tree, 'main.typ', self.catalog,
+                                                   profile='conditional-gaps-and-punctuation')
+        self.assertEqual(report['verification'],
+                         'hash-chained-three-rule-and-conditional-gap-punctuation-reanalysis', report)
+        self.assertEqual([step['rule_id'] for step in report['steps']],
+                         [step['rule_id'] for step in standard['steps']] + ['pde.prose-footnote-punctuation'])
+        self.assertFalse(report['edit_permission'] or report['runtime_binding_proved']
+                         or report['render_equivalence_proved'])
+        current = document_sequence_preview.replay(tree, 'main.typ', self.catalog, report,
+                                                    profile='conditional-gaps-and-punctuation')
+        self.assertIn(b'Claim.#footnote[Reason.]', current)
+        self.assertIsNone(document_sequence_preview.preview(parse(current), 'main.typ', self.catalog,
+                                                             profile='conditional-gaps-and-punctuation'))
+        with self.assertRaises(SafetyError):
+            document_sequence_preview.replay(tree, 'main.typ', self.catalog, report, profile='conditional-gaps')
+        with self.assertRaises(SafetyError):
+            document_sequence_preview.replay(tree, 'main.typ', self.catalog, standard,
+                                              profile='conditional-gaps-and-punctuation')
+
+    def test_punctuation_profile_preserves_other_findings_and_suppression(self):
+        source = ('#block[한글. #footnote[이유]\r\n\r\nNext.\r\n]\r\n'
+                  '// typst-lint: ignore-next pde.prose-footnote-punctuation -- intentional\r\n'
+                  '#block[Ignored. #footnote[Note.]]').encode()
+        tree = parse(source)
+        report = document_sequence_preview.preview(tree, 'main.typ', self.catalog,
+                                                   profile='conditional-gaps-and-punctuation')
+        self.assertEqual(report['verification'],
+                         'hash-chained-three-rule-and-conditional-gap-punctuation-reanalysis', report)
+        self.assertEqual([step['rule_id'] for step in report['steps']], ['pde.prose-footnote-punctuation'])
+        result = document_sequence_preview.replay(tree, 'main.typ', self.catalog, report,
+                                                   profile='conditional-gaps-and-punctuation')
+        self.assertIn('한글.#footnote[이유]'.encode(), result)
+        self.assertIn(b'Ignored. #footnote[Note.]', result)
+        self.assertEqual(result.count(b'\r\n'), source.count(b'\r\n'))
+
+    def test_punctuation_profile_withholds_on_unknown_or_withheld_evidence(self):
+        source = b'#block[Claim. #footnote[Reason.]]'
+        tree = parse(source)
+        with patch.object(document_sequence_preview.footnote_rules, 'preview_conditional_prose_punctuation',
+                          return_value={'verification': 'withheld', 'reason': 'fixture refusal'}):
+            report = document_sequence_preview.preview(tree, 'main.typ', self.catalog,
+                                                       profile='conditional-gaps-and-punctuation')
+        self.assertEqual(report['verification'], 'withheld')
+        self.assertIn('fixture refusal', report['reason'])
+        self.assertEqual(report['steps'], [])
+
+    def test_punctuation_profile_withholds_on_cross_rule_mutation(self):
+        source = b'#block[Claim. #footnote[Reason.]\n#proof[Done.]\nNext.\n]'
+        tree = parse(source)
+        # A forged stage deletes the proof name while keeping its own declared
+        # hashes internally consistent. The independent cross-rule pass refuses.
+        start = source.index(b'proof')
+        edits = [Edit(start, start + len(b'proof'), b'other')]
+        changed = plan(source, edits).candidate()
+        fake = dict(verification='conditional-parse-syntax-directives-and-footnote-reanalysis',
+                    baseline_sha256=digest(source), candidate_sha256=digest(changed),
+                    edits=[dict(start=start, end=start + len(b'proof'), replacement='other',
+                                rule_id='pde.prose-footnote-punctuation')])
+        # Keep the original proof unchanged until the punctuation stage.
+        with patch.object(document_sequence_preview.proof_rules, 'preview_conditional',
+                          return_value=document_sequence_preview.proof_rules.ProofResult()), \
+             patch.object(document_sequence_preview.footnote_rules, 'preview_conditional_prose_punctuation',
+                          return_value=fake):
+            report = document_sequence_preview.preview(tree, 'main.typ', self.catalog,
+                                                       profile='conditional-gaps-and-punctuation')
+        self.assertEqual(report['verification'], 'withheld')
+        self.assertEqual(report['steps'], [])
+        self.assertIn('changed proof findings', report['reason'])
+
+    def test_punctuation_only_source_is_required_in_document_replay(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory).resolve()
+            source = b'#block[Claim. #footnote[Reason.]]'
+            (root / 'main.typ').write_bytes(source)
+            context = include_context.load_include_context(root, (('main.typ', source),))
+            tree = context.source_for('main.typ').tree
+            self.assertIsNone(document_sequence_preview.preview(tree, 'main.typ', self.catalog,
+                                                                 profile='conditional-gaps'))
+            record = document_sequence_preview.preview(tree, 'main.typ', self.catalog,
+                                                       profile='conditional-gaps-and-punctuation')
+            with self.assertRaises(SafetyError):
+                document_sequence_preview.replay_document(context, [], self.catalog,
+                                                           profile='conditional-gaps-and-punctuation')
+            replayed = document_sequence_preview.replay_document(context, [record], self.catalog,
+                                                                  profile='conditional-gaps-and-punctuation')
+            self.assertEqual(replayed['main.typ'], b'#block[Claim.#footnote[Reason.]]')
+            self.assertEqual((root / 'main.typ').read_bytes(), source)
+
     def test_conditional_replay_requires_every_candidate_source(self):
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory).resolve()

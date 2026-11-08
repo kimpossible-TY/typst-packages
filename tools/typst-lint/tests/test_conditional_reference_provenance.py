@@ -17,7 +17,7 @@ import namespace_multiroot
 import namespace_packages
 from namespace_packages import load_namespace_packages
 from package_loader import PackageInputError
-from syntax_client import EXECUTABLE
+from syntax_client import EXECUTABLE, parse
 
 
 @unittest.skipUnless(EXECUTABLE.is_file(), 'Requires the pinned syntax adapter')
@@ -248,6 +248,71 @@ class ConditionalReferenceProvenanceTests(unittest.TestCase):
                 result = analyzer.calls('main.typ')
                 self.assertEqual(result.status, 'PARTIAL', result.unresolved)
                 self.assertTrue(result.unresolved)
+
+    def test_direct_display_math_footnote_content_traces_reference_conditionally(self):
+        facade = b'#import "@local/math-blocks:0.2.0": *\n'
+        main = (b'#import "Styles/styles.typ": *\n'
+                b'$\n x + y #dots_space #footnote[See #project-ref("book", <x>) and $z^2$.]\n$\n')
+        analyzer = self.capture(facade, main)
+        result = analyzer.calls('main.typ')
+        self.assertEqual(len(result.calls), 1, result.unresolved)
+        self.assertEqual(result.calls[0].line, 3)
+        self.assertEqual(result.status, 'PARTIAL')
+        self.assertTrue(any('binding and rendering are not proved' in s for s in result.calls[0].conditions))
+        self.assertFalse(result.calls[0].edit_permission)
+        self.assertIn('Code expressions inside equations are not inspected', result.unresolved)
+
+    def test_math_footnote_trace_refuses_other_shapes_and_shadowing(self):
+        facade = b'#import "@local/math-blocks:0.2.0": *\n'
+        snippets = (
+            b'$ x #project-ref("book", <x>) $',
+            b'$ x #footnote("not literal", [#project-ref("book", <x>)]) $',
+            b'$ x #wrapper[#project-ref("book", <x>)] $',
+            b'$ x #footnote[#let project-ref = none\n#project-ref("book", <x>)] $',
+            b'$ x #let project-ref = none; #footnote[#project-ref("book", <x>)] $',
+            b'$ x #{ project-ref = none } #footnote[#project-ref("book", <x>)] $',
+            b'$ x #footnote[#project-ref("book", <x>)] $',
+        )
+        for index, snippet in enumerate(snippets):
+            prefix = (b'#import "Styles/styles.typ": *\n'
+                      + (b'#let project-ref = none\n' if index == len(snippets) - 1 else b''))
+            display = b'$\n ' + snippet[1:-1].strip() + b'\n$\n'
+            with self.subTest(snippet=display):
+                tree = parse(prefix + display)
+                self.assertFalse(tree.nodes[0].errors)
+                self.assertTrue(any(node.kind == 'Equation' and node.display for node in tree.nodes))
+                analyzer = self.capture(facade, prefix + display)
+                result = analyzer.calls('main.typ')
+                self.assertFalse(result.calls, result)
+                self.assertEqual(result.status, 'PARTIAL')
+
+    def test_inline_math_footnote_remains_uninspected(self):
+        facade = b'#import "@local/math-blocks:0.2.0": *\n'
+        analyzer = self.capture(facade, b'#import "Styles/styles.typ": *\n'
+                                       b'Inline $x #footnote[#project-ref("book", <x>) ]$ text.\n')
+        result = analyzer.calls('main.typ')
+        self.assertFalse(result.calls)
+        self.assertEqual(result.status, 'PARTIAL')
+
+    def test_display_math_footnote_preserves_traced_alias(self):
+        facade = b'#import "@local/math-blocks:0.2.0": *\n'
+        analyzer = self.capture(facade, b'#import "Styles/styles.typ": *\n'
+            b'#let cite = project-ref\n$\n x #footnote[See #cite("book", <x>).]\n$\n')
+        result = analyzer.calls('main.typ')
+        self.assertEqual(len(result.calls), 1, result.unresolved)
+        self.assertTrue(any(step.operation == 'alias' for step in result.calls[0].route))
+        self.assertEqual(result.status, 'PARTIAL')
+
+    def test_display_math_footnotes_have_independent_content_scopes(self):
+        facade = b'#import "@local/math-blocks:0.2.0": *\n'
+        source = (b'#import "Styles/styles.typ": *\n$\n'
+                  b' x #footnote[#let project-ref = none\n#project-ref("book", <bad>)]\n'
+                  b' y #footnote[See #project-ref("book", <good>).]\n$\n')
+        analyzer = self.capture(facade, source)
+        result = analyzer.calls('main.typ')
+        self.assertEqual(len(result.calls), 1, result.unresolved)
+        self.assertEqual(result.calls[0].line, 5)
+        self.assertEqual(result.status, 'PARTIAL')
 
     def test_reference_named_import_binding_budget_refuses(self):
         names = ', '.join(f'project-ref as p{i}' for i in range(1025)).encode()

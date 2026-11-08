@@ -5,6 +5,7 @@ This is partial analysis, not permission to write or compile consumer sources.
 """
 from dataclasses import dataclass
 from collections.abc import Mapping
+from bisect import bisect_left
 import re
 
 from capitalization import BodyKind, Context, MarkerBinding, StartKind, evaluate
@@ -16,6 +17,10 @@ CAPITALIZATION = 'pde.paragraph-capitalization'
 MARKER_GAP = 'pde.paragraph-marker-gap'
 MARKER_TARGET = 'pde.paragraph-marker-target'
 RULE_IDS = (CAPITALIZATION, MARKER_GAP, MARKER_TARGET)
+
+_CONDITIONAL_EXCLUDED = frozenset(('Equation', 'Math', 'Code', 'CodeBlock',
+                                   'Heading', 'ListItem', 'EnumItem', 'TermItem',
+                                   'Raw', 'Str'))
 
 
 @dataclass(frozen=True)
@@ -31,6 +36,79 @@ def _diagnostic(source, path, rule, start, explanation):
     line = source[:start].count(b'\n') + 1
     column = len(source[source.rfind(b'\n', 0, start) + 1:start].decode('utf-8')) + 1
     return Diagnostic(rule['id'], rule['grade'], path, line, column, explanation, rule['source'])
+
+
+def analyze_conditional_nested_gap(tree, path, *, catalog=None):
+    """Find standalone marker-shaped tokens in nested literal markup only.
+
+    These are source patterns: the identifier's binding, execution and prose
+    ownership are not established.  No repair is proposed, and callers must not
+    interpret an empty result as coverage of arbitrary rendered content.
+    """
+    source, nodes = tree.source, tree.nodes
+    if nodes[0].errors:
+        errors = tuple((n.start, n.end) for n in nodes if n.kind == 'Error')
+        return ParagraphResult(skips=('Malformed Typst syntax; no source pattern diagnosis',),
+                               parse_errors=errors or ((0, len(source)),))
+    if tree.mode != 'markup' or nodes[0].kind != 'Markup':
+        return ParagraphResult(skips=('Only nested markup source patterns are supported',))
+    records = load_rules()[0]['rules'] if catalog is None else catalog
+    if (type(records) not in (list, tuple) or any(not isinstance(row, Mapping)
+            or type(row.get('id')) is not str or not row['id'] for row in records)):
+        raise InputError('Conditional paragraph analysis requires rule metadata records')
+    selected = [row for row in records if row['id'] == MARKER_GAP]
+    if (len(selected) != 1 or any(type(selected[0].get(key)) is not str or not selected[0][key]
+                                   for key in ('grade', 'source'))):
+        raise InputError('Missing or invalid paragraph marker gap metadata')
+    scopes = resolve_suppressions(tree, {row['id'] for row in records})
+    parents = {child: index for index, node in enumerate(nodes) for child in node.children}
+    excluded = {}
+    for index, node in enumerate(nodes):
+        parent = parents.get(index)
+        excluded[index] = parent is not None and (excluded[parent]
+                                                   or nodes[parent].kind in _CONDITIONAL_EXCLUDED)
+    newlines = [index for index, byte in enumerate(source) if byte == 10]
+    findings, suppressed = [], []
+    for body_id, body in enumerate(nodes):
+        if body_id == 0 or body.kind != 'Markup' or excluded[body_id]:
+            continue
+        children = body.children
+        for position, index in enumerate(children):
+            marker = nodes[index]
+            if (position == 0 or marker.kind != 'Ident'
+                    or source[marker.start:marker.end] != b'paragraph_tab'):
+                continue
+            hash_node = nodes[children[position - 1]]
+            if hash_node.kind != 'Hash' or hash_node.end != marker.start:
+                continue
+            start, end = hash_node.start, marker.end
+            line_index = bisect_left(newlines, start)
+            line_start = 0 if line_index == 0 else newlines[line_index - 1] + 1
+            line_end = newlines[line_index] if line_index < len(newlines) else len(source)
+            if source[line_start:start].strip(b' \t') or source[end:line_end].strip(b' \t\r'):
+                continue
+            next_pos = position + 1
+            while (next_pos < len(children) and nodes[children[next_pos]].kind in
+                   ('Space', 'Parbreak', 'LineComment', 'BlockComment')):
+                next_pos += 1
+            target = nodes[children[next_pos]] if next_pos < len(children) else None
+            if target is not None and (target.kind == 'Heading'
+                                       or (target.kind == 'Equation' and target.display)):
+                continue
+            previous_start = 0 if line_index < 2 else newlines[line_index - 2] + 1
+            previous = source[previous_start:line_start]
+            if previous.endswith(b'\n') and not previous.strip(b' \t\r\n'):
+                continue
+            column = len(source[line_start:start].decode('utf-8')) + 1
+            rule = selected[0]
+            finding = Diagnostic(MARKER_GAP, rule['grade'], path, line_index + 1, column,
+                'Conditional source hint: if this standalone name is the paragraph marker, place a blank source line before it.',
+                rule['source'])
+            (suppressed if any(scope.covers(MARKER_GAP, start) for scope in scopes)
+             else findings).append(finding)
+    return ParagraphResult(tuple(findings), (),
+        ('Nested source pattern only; marker binding, execution, prose ownership and rendering are unproved.',),
+        suppressed=tuple(suppressed))
 
 
 def analyze(tree, path, resolution, *, catalog=None, _bounded_gap_markers=frozenset()):

@@ -46,6 +46,9 @@ CALL_CONDITIONS = CONDITIONS[:3] + (
     'The reported call and any enclosing literal content or callback actually execute.',
     'This trace does not prove catalog membership, argument validity or rendered output.',
 )
+MATH_FOOTNOTE_CONDITIONS = CALL_CONDITIONS + (
+    'The direct footnote-shaped expression inside the equation evaluates its literal content as traced; its binding and rendering are not proved.',
+)
 
 
 @dataclass(frozen=True)
@@ -323,7 +326,7 @@ class ConditionalReferenceProvenance:
                                      or any(injections[c] for c in children))
         line_starts = [0] + [i + 1 for i, byte in enumerate(source) if byte == 10]
 
-        def visit(index, env, sources, packages, requests, depth=0):
+        def visit(index, env, sources, packages, requests, depth=0, math_footnote=False):
             work[0] += 1
             if work[0] > conditional.MAX_AST_WORK:
                 engine.exhaust('Reference call inspection work limit exceeded')
@@ -404,12 +407,43 @@ class ConditionalReferenceProvenance:
                         local.clear()
                         unresolved.append(f'Unsupported namespace scope at byte {part.start}')
                     else:
-                        visit(child, local, local_sources, local_packages, local_requests, depth + 1)
+                        visit(child, local, local_sources, local_packages, local_requests, depth + 1,
+                              math_footnote)
                 return
             if node.kind == 'Equation':
                 reason = 'Code expressions inside equations are not inspected'
                 if reason not in unresolved:
                     unresolved.append(reason)
+                # Only a directly embedded, literal #footnote[...] body is
+                # admitted; the remaining equation code stays uninspected.
+                # Declarations outside content bodies may shadow the incoming
+                # namespace and therefore block all tracing in this equation.
+                if not node.display or injections[index]:
+                    return
+                for math_id in node.children:
+                    math = nodes[math_id]
+                    if math.kind != 'Math':
+                        continue
+                    work[0] += len(math.children)
+                    if work[0] > conditional.MAX_AST_WORK:
+                        engine.exhaust('Reference call inspection work limit exceeded')
+                        return
+                    for position, child_id in enumerate(math.children):
+                        if position == 0:
+                            continue
+                        child = nodes[child_id]
+                        previous = nodes[math.children[position - 1]]
+                        if (child.kind != 'FuncCall' or previous.kind != 'Hash'
+                                or previous.end != child.start or len(child.children) != 2):
+                            continue
+                        callee, args = (nodes[child.children[0]], nodes[child.children[1]])
+                        if (callee.kind != 'Ident' or source[callee.start:callee.end] != b'footnote'
+                                or args.kind != 'Args'):
+                            continue
+                        parts = graph.significant(tree, child.children[1])
+                        if len(parts) != 1 or nodes[parts[0]].kind != 'ContentBlock':
+                            continue
+                        visit(parts[0], env, sources, packages, requests, depth + 1, True)
                 return
             if node.kind == 'Closure':
                 reason = 'Deferred closure body is not inspected'
@@ -435,7 +469,8 @@ class ConditionalReferenceProvenance:
                     column = len(source[start:node.start].decode('utf-8')) + 1
                     found.append(ReferenceCall(path, node.start, node.end, line, column, item.sha256,
                         value.route, tuple(sources[k] for k in sorted(sources)),
-                        tuple(packages[k] for k in sorted(packages)), tuple(sorted(requests))))
+                        tuple(packages[k] for k in sorted(packages)), tuple(sorted(requests)),
+                        conditions=MATH_FOOTNOTE_CONDITIONS if math_footnote else CALL_CONDITIONS))
                 if value is not None and value.canonical_name in conditional._SCOPED_CALLBACKS:
                     callback, reason = _reference_scoped_body(tree, index, value.canonical_name)
                     if callback is not None:
@@ -446,7 +481,7 @@ class ConditionalReferenceProvenance:
                             return
                         child_env = dict(env)
                         child_env.update((name, None) for name in callback[1])
-                        visit(callback[0], child_env, sources, packages, requests, depth + 1)
+                        visit(callback[0], child_env, sources, packages, requests, depth + 1, math_footnote)
                     else:
                         unresolved.append(f'{reason} at byte {node.start}')
                     return
@@ -460,7 +495,7 @@ class ConditionalReferenceProvenance:
                 unresolved.append(f'Unsupported expression declaration at byte {node.start}')
                 return
             for child in node.children:
-                visit(child, env, sources, packages, requests, depth + 1)
+                visit(child, env, sources, packages, requests, depth + 1, math_footnote)
 
         visit(0, {}, {path: conditional.SourceHash(path, item.sha256)},
               {p.import_path: p for p in engine.evidence}, set())

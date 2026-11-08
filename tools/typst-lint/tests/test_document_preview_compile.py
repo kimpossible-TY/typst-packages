@@ -79,6 +79,32 @@ class DocumentPreviewCompileTests(unittest.TestCase):
         self.assertTrue(result.pdfs_identical)
         self.assertEqual((self.project / 'main.typ').read_bytes(), source)
 
+    @unittest.skipUnless(os.environ.get('TYPST_LINT_RENDER_TESTS') == '1'
+                         and sys.platform == 'darwin' and compiler.SANDBOX.is_file(),
+                         'Opt in on macOS with the reviewed Typst compiler')
+    def test_conditional_punctuation_profile_compiles_a_private_combined_fixture(self):
+        source = (b'#import "@local/sample:0.1.0": proof\n#block[\n'
+                  b'#proof[Done.]\nNext.\n$\n A #footnote[Reason.]\n\n B\n$\n'
+                  b'Claim. #footnote[Prose reason.]\n]\n')
+        (self.project / 'main.typ').write_bytes(source)
+        (self.packages / 'local/sample/0.1.0/lib.typ').write_bytes(b'#let proof(body) = block(body)\n')
+        context = include_context.load_include_context(self.project, (('main.typ', source),))
+        profile = 'conditional-gaps-and-punctuation'
+        records = [r for item in context.sources
+                   if (r := sequence.preview(item.tree, item.path, self.catalog, profile=profile))]
+        self.assertEqual({step['rule_id'] for row in records for step in row['steps']},
+                         {'pde.proof-trailing-gap', 'pde.footnote-trailing-gap',
+                          'pde.prose-footnote-punctuation'})
+        requests = [resources.ResourceRequest('project', 'main.typ', 'source')]
+        requests += [resources.ResourceRequest('packages', f'local/sample/0.1.0/{name}', 'package')
+                     for name in ('typst.toml', 'lib.typ')]
+        snapshot = resources.capture({'project': str(self.project), 'packages': str(self.packages),
+                                      'cache': str(self.cache)}, requests)
+        result = compiler.compile_preview(context, records, self.catalog, snapshot,
+                                          entrypoint='main.typ', profile=profile)
+        self.assertTrue(result.pdfs_identical)
+        self.assertEqual((self.project / 'main.typ').read_bytes(), source)
+
     def test_pre_cancelled_preview_refuses_before_compiler_capture(self):
         cancel = threading.Event()
         cancel.set()

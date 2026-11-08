@@ -22,8 +22,10 @@ from typst_lint import InputError, SafetyError, digest
 
 _STANDARD = 'standard'
 _CONDITIONAL = 'conditional-gaps'
+_PUNCTUATION = 'conditional-gaps-and-punctuation'
 _VERIFICATIONS = {_STANDARD: 'hash-chained-parse-and-three-rule-reanalysis',
-                  _CONDITIONAL: 'hash-chained-three-rule-and-conditional-gap-reanalysis'}
+                  _CONDITIONAL: 'hash-chained-three-rule-and-conditional-gap-reanalysis',
+                  _PUNCTUATION: 'hash-chained-three-rule-and-conditional-gap-punctuation-reanalysis'}
 
 
 def _profile(value):
@@ -134,7 +136,7 @@ def preview(tree, path, catalog, *, profile=_STANDARD):
                                      for e in proposal.edits]))
             current = candidate_tree
         apply_display(preview_gap, GAP)
-        if profile == _CONDITIONAL and (b'#proof' in current.source or b'#footnote' in current.source):
+        if profile in (_CONDITIONAL, _PUNCTUATION) and (b'#proof' in current.source or b'#footnote' in current.source):
             before_tree = current
             before_resolution = resolve(before_tree, packages=())
             notes_before = footnote_rules.analyze_conditional_nested(before_tree, path, before_resolution, catalog=catalog)
@@ -217,6 +219,66 @@ def preview(tree, path, catalog, *, profile=_STANDARD):
                                   candidate_sha256=digest(candidate),
                                   edits=[dict(start=e.start, end=e.end, replacement=e.replacement.decode('utf-8'),
                                               rule_id=proof_rules.RULE_ID) for e in candidate_plan.edits]))
+            if profile == _PUNCTUATION:
+                before_tree = current
+                before_resolution = resolve(before_tree, packages=())
+                notes_before = footnote_rules.analyze_conditional_nested(
+                    before_tree, path, before_resolution, catalog=catalog)
+                proof_before = proof_rules.analyze_conditional(before_tree, path, before_resolution, catalog=catalog)
+                punctuation = footnote_rules.preview_conditional_prose_punctuation(
+                    before_tree, path, before_resolution, catalog=catalog)
+                if punctuation is not None:
+                    if punctuation['verification'] == 'withheld':
+                        raise SafetyError('Conditional punctuation preview withheld: ' + punctuation['reason'])
+                    if punctuation['verification'] != 'conditional-parse-syntax-directives-and-footnote-reanalysis':
+                        raise SafetyError('Conditional punctuation preview has unknown verification')
+                    edits = tuple(Edit(row['start'], row['end'], row['replacement'].encode('utf-8'))
+                                  for row in punctuation['edits'])
+                    candidate_plan = plan(before_tree.source, edits)
+                    candidate = candidate_plan.candidate()
+                    if (candidate_plan.deferred or len(candidate_plan.edits) != len(edits)
+                            or digest(before_tree.source) != punctuation['baseline_sha256']
+                            or digest(candidate) != punctuation['candidate_sha256']):
+                        raise SafetyError('Conditional punctuation preview hash or edit mismatch')
+                    current = parse(candidate, tree.mode)
+                    current_resolution = resolve(current, packages=())
+                    notes_after = footnote_rules.analyze_conditional_nested(
+                        current, path, current_resolution, catalog=catalog)
+                    proof_after = proof_rules.analyze_conditional(current, path, current_resolution, catalog=catalog)
+                    if not _same_findings(before_tree, proof_before, current, proof_after, edits):
+                        raise SafetyError('Conditional punctuation stage changed proof findings or suppressions')
+                    for rid in footnote_rules.RULE_IDS:
+                        first, last = notes_before[rid], notes_after[rid]
+                        if rid != footnote_rules.PUNCT:
+                            if not _same_findings(before_tree, first, current, last, edits):
+                                raise SafetyError('Conditional punctuation stage changed another footnote rule')
+                            continue
+                        expected = _keys(before_tree.source, first.diagnostics, edits)
+                        mapper = _FindingMapper(before_tree.source)
+                        target_mapper = _FindingMapper(before_tree.source, edits)
+                        diagnosed = {}
+                        for finding in first.diagnostics:
+                            diagnosed.setdefault(mapper.offset(finding), []).append(finding)
+                        for edit in edits:
+                            matching = diagnosed.get(edit.end, ())
+                            if len(matching) != 1:
+                                raise SafetyError('Conditional punctuation edit does not match one diagnosed call')
+                            finding = matching[0]
+                            key = (finding.rule_id, finding.grade, finding.path, target_mapper.mapped(finding),
+                                   finding.explanation, finding.source)
+                            expected[key] -= 1
+                        if (any(count < 0 for count in expected.values())
+                                or +expected != _keys(current.source, last.diagnostics)
+                                or _keys(before_tree.source, first.suppressed, edits)
+                                   != _keys(current.source, last.suppressed)):
+                            raise SafetyError('Conditional punctuation findings changed beyond selected spacing')
+                    if (footnote_rules.preview_conditional_prose_punctuation(
+                            current, path, current_resolution, catalog=catalog) is not None
+                            or footnote_rules.preview_conditional_math_gaps(
+                                current, path, current_resolution, catalog=catalog) is not None):
+                        raise SafetyError('Conditional punctuation stage did not converge or introduced gaps')
+                    steps.append(dict(rule_id=footnote_rules.PUNCT, baseline_sha256=digest(before_tree.source),
+                                      candidate_sha256=digest(candidate), edits=punctuation['edits']))
         final_displays = analyze_all(current, path, catalog=catalog)
         final_scripts = analyze_script(current, path, catalog=catalog, _verify=False, _allow_code_call=True)
         if (current.nodes[0].errors or final_scripts.parse_errors or final_scripts.skips
@@ -228,7 +290,7 @@ def preview(tree, path, catalog, *, profile=_STANDARD):
         result = dict(path=path, baseline_sha256=digest(baseline), candidate_sha256=digest(current.source),
                       verification=_VERIFICATIONS[profile], steps=steps,
                       unresolved_display_contexts={rid: len(value.skips) for rid, value in final_displays.items()})
-        if profile == _CONDITIONAL:
+        if profile in (_CONDITIONAL, _PUNCTUATION):
             result.update(profile=profile, runtime_binding_proved=False, render_equivalence_proved=False,
                           edit_permission=False)
         return result

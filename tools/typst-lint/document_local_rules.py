@@ -9,7 +9,8 @@ from continuation_rules import RULE_ID as CONTINUATION, analyze_conditional as c
 from dataclasses import replace
 from footnote_rules import (RULE_IDS as FOOTNOTES, analyze as footnotes,
                             analyze_conditional_nested as nested_footnotes)
-from paragraph_rules import RULE_IDS as PARAGRAPHS, analyze as paragraphs
+from paragraph_rules import (RULE_IDS as PARAGRAPHS, MARKER_GAP,
+                             analyze as paragraphs, analyze_conditional_nested_gap)
 from proof_rules import RULE_ID as PROOF, analyze_conditional as proof
 from prose_marker_rules import RULE_ID as PROSE_MARKER, analyze_conditional as prose_marker
 from static_resolver import resolve
@@ -21,6 +22,15 @@ RULE_IDS = (*PARAGRAPHS, CONTINUATION, *FOOTNOTES, CANCEL, PROOF, PROSE_MARKER, 
 def analyze(tree, path, catalog):
     resolution = resolve(tree, packages=())
     results = paragraphs(tree, path, resolution, catalog=catalog)
+    first, second = results[MARKER_GAP], analyze_conditional_nested_gap(tree, path, catalog=catalog)
+    key = lambda item: (item.rule_id, item.path, item.line, item.column)
+    suppressed = {key(item): item for item in (*second.suppressed, *first.suppressed)}
+    findings = {key(item): item for item in (*second.diagnostics, *first.diagnostics)
+                if key(item) not in suppressed}
+    results[MARKER_GAP] = replace(first,
+        diagnostics=tuple(findings.values()), suppressed=tuple(suppressed.values()),
+        edits=(), skips=tuple(dict.fromkeys(first.skips + second.skips)),
+        parse_errors=tuple(dict.fromkeys(first.parse_errors + second.parse_errors)))
     results[CONTINUATION] = continuation(tree, path, catalog=catalog)
     root_footnotes = footnotes(tree, path, resolution, resolution.spacer_proof)
     nested = nested_footnotes(tree, path, resolution, catalog=catalog)
