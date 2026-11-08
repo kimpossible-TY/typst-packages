@@ -53,7 +53,7 @@ class DocumentCliTests(unittest.TestCase):
         result = self.run_cli('--rule-set', 'pde', '--local-rule-hints')
         hints = result['local_rule_hints']
         self.assertFalse(hints['edit_permission'])
-        self.assertEqual(len(hints['rule_ids']), 10)
+        self.assertEqual(len(hints['rule_ids']), 11)
         found = {(row['path'], row['rule_id']) for row in hints['diagnostics']}
         self.assertIn(('chapter.typ', 'pde.continuation-line'), found)
         self.assertIn(('chapter.typ', 'pde.theme-cancelmark'), found)
@@ -89,6 +89,15 @@ class DocumentCliTests(unittest.TestCase):
         self.assertFalse(hints['edit_permission'] or report['applied_fixes'] or report['proposed_edits'])
         self.assertEqual(target.read_bytes(), source)
 
+    def test_nested_proof_hints_remain_conditional_and_do_not_apply_edits(self):
+        source = b'#block[\n#proof[Done.]\nNext.\n]\n'
+        target = self.write('main.typ', source)
+        report = self.run_cli('--rule-set', 'pde', '--local-rule-hints')
+        hints = report['local_rule_hints']
+        self.assertTrue(any(item['rule_id'] == 'pde.proof-trailing-gap' for item in hints['diagnostics']))
+        self.assertFalse(hints['edit_permission'] or report['applied_fixes'] or report['proposed_edits'])
+        self.assertEqual(target.read_bytes(), source)
+
     def test_explicit_reference_facade_provenance_is_conditional_and_reports_shadowing(self):
         main = self.write('main.typ', b'#import "Styles/styles.typ": *\n')
         facade = self.write('Styles/styles.typ', b'#import "@local/math-blocks:0.2.0": *\n')
@@ -109,8 +118,21 @@ class DocumentCliTests(unittest.TestCase):
         self.assertEqual(proof['reference_package_evidence'][0]['import_path'], '@local/project-references:0.1.0')
         self.assertTrue(proof['export']['route'])
         self.assertEqual(main.read_bytes(), b'#import "Styles/styles.typ": *\n')
+        cache = self.root / 'reference-cache'
+        cache.mkdir()
+        shutil.move(str(packages / 'preview'), str(cache / 'preview'))
+        shutil.copytree(destination, packages / 'local/project-references/0.1.0')
+        multi_options = ('--rule-set', 'pde', '--package-path', str(packages),
+                         '--reference-package-path', str(packages), '--reference-facade', 'main.typ',
+                         '--reference-cache-path', str(cache))
+        multi = self.run_cli(*multi_options)['reference_provenance']
+        self.assertEqual(multi['export']['status'], 'CONDITIONAL')
+        self.assertEqual(multi['namespace_roots'], [str(packages), str(cache)])
+        selections = {row['import_path']: row['root_index'] for row in multi['namespace_selections']}
+        self.assertEqual(selections['@preview/mannot:0.4.0'], 1)
+        self.assertFalse(multi['runtime_selection_proved'])
         facade.write_bytes(facade.read_bytes() + b'#let project-ref = none\n')
-        refused = self.run_cli(*options)['reference_provenance']
+        refused = self.run_cli(*multi_options)['reference_provenance']
         self.assertEqual(refused['export']['status'], 'UNAVAILABLE')
         self.assertTrue(refused['export']['reason'])
         self.assertTrue(refused['reference_package_evidence'])

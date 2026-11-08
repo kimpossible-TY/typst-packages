@@ -54,6 +54,42 @@ safely rechecked before parsing; no truncated input is accepted. See
 /path/to/typst-packages/tools/typst-lint/typst-style compile --root /path/to/project --format json -- main.typ output.pdf
 ```
 
+To inspect freshness for package paths listed in an explicit resource manifest,
+use the separate read-only package report:
+
+```sh
+/path/to/typst-packages/tools/typst-lint/typst-lint packages-status \
+  --root /absolute/project --manifest /absolute/resources.json \
+  --checkout /absolute/typst-packages --upstream https://github.com/OWNER/REPOSITORY.git \
+  --ref refs/heads/main --online --format json
+/path/to/typst-packages/tools/typst-lint/typst-lint packages-status \
+  --root /absolute/project --manifest /absolute/font-seed.json \
+  --discover-dependencies --entrypoint main.typ --checkout /absolute/typst-packages \
+  --upstream https://github.com/OWNER/REPOSITORY.git --ref refs/heads/main --online --format json
+```
+
+The first form treats the manifest as caller-supplied selection data; it does not
+prove the compiler selected those paths. The second explicitly runs the pinned
+macOS compiler once in the existing network-denied, outside-write-denied sandbox
+with the manifest's selected fonts and uses that run's observed dependency paths.
+It does not prove future branches, future runtime selection, exhaustive OS reads,
+or that compared bytes remained unchanged since discovery. Only local and
+preview paths under the explicit package/cache roots are classified. Local package directories are compared with the
+explicit checkout and, when the selected upstream commit is locally available,
+its Git tree. The report separates checkout branch/ref relation, package-copy
+equality, raw checkout-versus-HEAD and index-versus-HEAD comparisons, and unknown
+outcomes. Global Git dirty state remains unknown: the tool does not run Git
+status, which can execute repository-configured clean filters. Raw and index
+comparisons are not equivalent to Git's filtered dirty status. Preview package
+versions are compared with the official registry index, which does not prove
+installed bytes or compatibility.
+Omit `--online` to avoid all network lookups. The online route reads only the
+specified GitHub ref and the fixed official registry index; it does not fetch
+Git objects, update packages or modify the project. Exit 0 means the report was
+generated, not that every package is current or that runtime selection is proved.
+See [PACKAGE_FRESHNESS_CONTRACT.md](PACKAGE_FRESHNESS_CONTRACT.md) for scope,
+failure states, and the distinction between sampled files and Git dirty status.
+
 For an entrypoint and its included chapters, use the explicit read-only document
 inspection route:
 
@@ -66,6 +102,7 @@ inspection route:
 /path/to/typst-packages/tools/typst-lint/typst-lint inspect-document --root /absolute/project --entrypoint main.typ --rule-set pde --local-rule-hints --format json
 /path/to/typst-packages/tools/typst-lint/typst-lint inspect-document --root /absolute/project --entrypoint main.typ --rule-set pde --package-path /absolute/captured-packages --format json
 /path/to/typst-packages/tools/typst-lint/typst-lint inspect-document --root /absolute/project --entrypoint main.typ --rule-set pde --package-path /absolute/captured-packages --reference-package-path /absolute/reference-packages --reference-facade Styles/styles.typ --format json
+/path/to/typst-packages/tools/typst-lint/typst-lint inspect-document --root /absolute/project --entrypoint main.typ --rule-set pde --package-path /absolute/captured-packages --reference-cache-path /absolute/captured-cache --reference-package-path /absolute/reference-packages --reference-facade Styles/styles.typ --format json
 ```
 
 This route captures literal relative includes with the fixed `book-v1` budget
@@ -141,8 +178,8 @@ from source findings and leave that rule in `coverage.uninspected`. Only an
 explicit package root is read; installed caches are not searched. See
 [CONDITIONAL_HIGHLIGHT_CONTRACT.md](CONDITIONAL_HIGHLIGHT_CONTRACT.md).
 The separate `--local-rule-hints` option analyzes each included file as a
-standalone lexical environment for ten additional paragraph, continuation,
-footnote and cancellation rules. Its findings and per-file refusals are grouped
+standalone lexical environment for eleven additional paragraph, continuation,
+footnote, proof and cancellation rules. Its findings and per-file refusals are grouped
 under `local_rule_hints` and remain conditional on the actual include-site
 bindings, styles and execution; it does not propose or apply these rules' edits.
 Continuation-line hints also inspect literal nested Markup bodies. Footnote hints
@@ -156,6 +193,12 @@ captured package hashes and namespace evidence. It reports either conditional
 provenance or an unavailable reason, even when the reference package itself was
 captured successfully. It does not prove a call's binding or runtime initialization,
 check a reference catalog, or propose edits.
+An optional `--reference-cache-path` supplies a second explicit namespace root:
+the package root takes precedence, even when its selected version is incomplete.
+For this route the reviewed reference package must be captured from that first
+root; a separate or cache-only reference package remains unavailable.
+The separately reviewed text-utils variant contributes only an opaque export
+name set; it cannot acquire highlighted-helper or paragraph-marker identity.
 The report keeps global coverage incomplete and exits 2; it never applies the
 proposals or invokes Typst compilation. Unsafe paths, malformed sources and
 exhausted budgets return an input error rather than a truncated document report.

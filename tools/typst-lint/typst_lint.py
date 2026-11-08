@@ -490,6 +490,9 @@ def gate_preview_requested(arguments):
 
 def main(argv=None, *, gate=False):
     arguments = list(sys.argv[1:] if argv is None else argv)
+    if not gate and arguments[:1] == ['packages-status']:
+        from package_status_cli import main as package_status_main
+        return package_status_main(arguments[1:])
     if gate and gate_preview_requested(arguments):
         from document_preview_cli import main as preview_compile_main
         preview_arguments = arguments[1:]
@@ -518,6 +521,7 @@ def main(argv=None, *, gate=False):
         'journal-status; recover --offline-exclusive --target main.typ --journal-id ID; '
         'output-status; recover-output --offline-output-exclusive --output build/main.pdf --journal-id ID. '
         'inspect-document --entrypoint main.typ inventories literal includes and proposes math script repairs. '
+        'packages-status compares explicitly selected package copies and versions; use packages-status --help. '
         'Use COMMAND --help for route options.'))
     parser.add_argument('--version', action='version', version=VERSION)
     parser.add_argument('command', choices=['compile'] if gate else ['check', 'fix', 'compile', 'journal-status', 'recover'])

@@ -1,16 +1,20 @@
 """Conditional facade tracing with real pinned package snapshots."""
 from dataclasses import replace
+import hashlib
 from pathlib import Path
 import shutil
 import sys
 import tempfile
 import unittest
+from unittest.mock import patch
 
 TOOL = Path(__file__).resolve().parents[1]
 REPOSITORY = TOOL.parents[1]
 sys.path.insert(0, str(TOOL))
 import conditional_reference_provenance as reference
 import import_graph
+import namespace_multiroot
+import namespace_packages
 from namespace_packages import load_namespace_packages
 from package_loader import PackageInputError
 from syntax_client import EXECUTABLE
@@ -62,6 +66,57 @@ class ConditionalReferenceProvenanceTests(unittest.TestCase):
         self.assertEqual(analyzer.package_evidence[0].import_path, reference.PROJECT_REFERENCES)
         with self.assertRaises(AttributeError):
             analyzer.package_path = 'changed'
+
+    def test_multiroot_collision_only_variant_keeps_helper_opaque(self):
+        # Synthetic bytes exercise capability separation without redistributing
+        # the user's installed text-utils source.
+        synthetic = b'#let highlighted(body) = body\n#let paragraph_tab = none\n'
+        source = self.namespaces / 'local/text-utils/0.1.2/lib.typ'
+        source.write_bytes(synthetic)
+        shutil.copytree(self.references / 'local/project-references',
+                        self.namespaces / 'local/project-references')
+        cache = self.base / 'cache'
+        cache.mkdir()
+        styles = self.project / 'Styles'
+        styles.mkdir()
+        (styles / 'styles.typ').write_bytes(b'#import "@local/text-utils:0.1.2": *\n'
+                                            b'#import "@local/math-blocks:0.2.0": *\n')
+        main = b'#import "Styles/styles.typ": *\n'
+        (self.project / 'main.typ').write_bytes(main)
+        graph = import_graph.load_import_graph(self.project, (('main.typ', main),))
+        variant = replace(namespace_packages._TEXT_COLLISION_CONTRACT,
+                          source_sha256=hashlib.sha256(synthetic).hexdigest())
+        with patch.object(namespace_packages, '_TEXT_COLLISION_CONTRACT', variant):
+            captured = namespace_multiroot.load_multiroot_capture(self.namespaces, cache)
+            analyzer = reference.ConditionalReferenceProvenance(graph, captured, self.namespaces)
+            result = analyzer.export('main.typ')
+            self.assertEqual(result.status, 'CONDITIONAL', result.reason)
+            self.assertFalse(result.edit_permission)
+            self.assertIsNone(dict(analyzer._engine.module('main.typ', ()).exports)['highlighted'])
+            # A serialization/reconstruction cannot mint the issued capture.
+            forged = reference.ConditionalReferenceProvenance(graph, replace(captured), self.namespaces)
+            self.assertEqual(forged.export('main.typ').status, 'UNAVAILABLE')
+
+    def test_multiroot_refuses_reference_from_separate_or_second_root(self):
+        cache = self.base / 'cache'
+        cache.mkdir()
+        main = b'#import "@local/math-blocks:0.2.0": *\n'
+        (self.project / 'main.typ').write_bytes(main)
+        graph = import_graph.load_import_graph(self.project, (('main.typ', main),))
+        first = self.namespaces / 'local/project-references/0.1.0'
+        first.mkdir(parents=True)
+        (first / 'typst.toml').write_text('unreviewed')
+        (first / 'lib.typ').write_text('#let project-ref = none')
+        captured = namespace_multiroot.load_multiroot_capture(self.namespaces, cache)
+        separate = reference.ConditionalReferenceProvenance(graph, captured, self.references).export('main.typ')
+        self.assertEqual(separate.status, 'UNAVAILABLE')
+        self.assertIn('first namespace root', separate.reason)
+        shutil.rmtree(first.parent)
+        shutil.copytree(self.references / 'local/project-references', cache / 'local/project-references')
+        captured = namespace_multiroot.load_multiroot_capture(self.namespaces, cache)
+        second = reference.ConditionalReferenceProvenance(graph, captured, cache).export('main.typ')
+        self.assertEqual(second.status, 'UNAVAILABLE')
+        self.assertIn('first namespace root', second.reason)
 
     def test_shadowing_and_unavailable_wildcard_refuse_promotion(self):
         before = b'#import "@local/math-blocks:0.2.0": *\n'

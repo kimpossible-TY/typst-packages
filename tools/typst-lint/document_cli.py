@@ -30,7 +30,7 @@ CONDITIONAL_RULES = ('pde.text-only-highlight', 'pde.paragraph-marker-gap')
 def report_document(root, entrypoint, *, rule_set='core', package_path=None,
                     preview_display_gaps=False, preview_standalone_displays=False,
                     preview_sequence=False, local_rule_hints=False,
-                    reference_package_path=None, reference_facade=None):
+                    reference_package_path=None, reference_facade=None, reference_cache_path=None):
     """Inspect retained source bytes without reading consumer configuration.
 
     Literal includes inside unknown containers are inventory entries, not proof
@@ -50,7 +50,8 @@ def report_document(root, entrypoint, *, rule_set='core', package_path=None,
             'Sequence previews require explicit --rule-set pde')
     require(type(local_rule_hints) is bool and (not local_rule_hints or rule_set == 'pde'),
             'Source-local rule hints require explicit --rule-set pde')
-    reference_requested = reference_package_path is not None or reference_facade is not None
+    reference_requested = (reference_package_path is not None or reference_facade is not None
+                           or reference_cache_path is not None)
     require(not reference_requested or (rule_set == 'pde' and package_path is not None
             and reference_package_path is not None and type(reference_facade) is str),
             'Reference provenance requires --rule-set pde, --package-path, '
@@ -110,12 +111,20 @@ def report_document(root, entrypoint, *, rule_set='core', package_path=None,
     reference_report = None
     if reference_requested:
         from conditional_reference_provenance import ConditionalReferenceProvenance
-        analyzer = ConditionalReferenceProvenance(imports, namespaces, reference_package_path)
+        reference_namespaces = namespaces
+        if reference_cache_path is not None:
+            from namespace_multiroot import load_multiroot_capture
+            reference_namespaces = load_multiroot_capture(package_path, reference_cache_path)
+        analyzer = ConditionalReferenceProvenance(imports, reference_namespaces, reference_package_path)
         export = analyzer.export(reference_facade)
         reference_report = dict(reference_package_path=analyzer.package_path,
             reference_package_evidence=[asdict(evidence) for evidence in analyzer.package_evidence],
             facade=reference_facade, export=asdict(export), call_binding_proved=False,
             runtime_selection_proved=False, catalog_checked=False, edit_permission=False)
+        if reference_cache_path is not None:
+            reference_report['namespace_roots'] = list(reference_namespaces.roots)
+            reference_report['namespace_selections'] = [asdict(item) for item in reference_namespaces.selections]
+            reference_report['namespace_unavailable'] = [asdict(item) for item in reference_namespaces.unavailable]
         items += 1 + len(export.route) + len(export.source_hashes) + len(export.package_evidence)
         require(items <= MAX_REPORT_ITEMS, 'Document inspection report item limit exceeded')
     for item in captured.sources:
@@ -350,6 +359,8 @@ def main(arguments=None):
                         help='Explicit canonical root containing the reviewed project-references package')
     parser.add_argument('--reference-facade',
                         help='Graph-captured project-relative .typ file whose project-ref export is traced')
+    parser.add_argument('--reference-cache-path',
+                        help='Explicit second namespace root, consulted after --package-path for reference tracing')
     parser.add_argument('--format', choices=('json', 'text'), default='text')
     args = parser.parse_args(sys.argv[1:] if arguments is None else arguments)
     try:
@@ -360,7 +371,8 @@ def main(arguments=None):
                                  preview_sequence=args.preview_sequence,
                                  local_rule_hints=args.local_rule_hints,
                                  reference_package_path=args.reference_package_path,
-                                 reference_facade=args.reference_facade)
+                                 reference_facade=args.reference_facade,
+                                 reference_cache_path=args.reference_cache_path)
     except (InputError, PackageInputError, OSError, ValueError) as error:
         result = dict(schema=1, tool_version=VERSION, mode='inspect-document', status=2,
                       phase='input', compiler_invoked=False, applied_fixes=[], error=str(error))

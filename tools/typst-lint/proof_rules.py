@@ -4,18 +4,24 @@ Only insertion proposals are returned. No package evaluation, source writes or
 compiler invocation happens here. See PROOF_CONTRACT.md for the exact boundary.
 """
 from dataclasses import dataclass
+from bisect import bisect_left
+from collections.abc import Mapping
 
 from edit_plan import Edit, plan
 from static_resolver import is_proof_binding
 from suppression import resolve as resolve_suppressions
 from syntax_client import AdapterError, parse
-from typst_lint import Diagnostic, SafetyError, digest, load_rules
+from typst_lint import Diagnostic, InputError, SafetyError, digest, load_rules
 
 RULE_ID = 'pde.proof-trailing-gap'
 _WHITESPACE = frozenset(('Space', 'Parbreak'))
 _STRUCTURAL = frozenset(('Heading', 'ListItem', 'EnumItem', 'TermItem', 'Raw'))
 _BLOCK_CALLS = frozenset(('block', 'figure', 'heading', 'list', 'enum', 'terms'))
 _BOM = b'\xef\xbb\xbf'
+_CONDITIONAL_EXCLUDED = frozenset(('Equation', 'Math', 'Code', 'CodeBlock',
+                                   'Heading', 'ListItem', 'EnumItem', 'TermItem', 'Raw', 'Str'))
+_CONDITIONAL_BLOCK_NAMES = frozenset((b'proof', b'note', b'theorem', b'lemma', b'definition',
+                                     b'proposition', b'block', b'figure', b'heading', b'list', b'enum', b'terms'))
 
 
 @dataclass(frozen=True)
@@ -178,3 +184,146 @@ def analyze(tree, path, resolution):
             skips.append(f'fix_unavailable: {error}; no proof edits proposed')
     return ProofResult(tuple(findings), tuple(edits), tuple(dict.fromkeys(skips)),
                        suppressed=tuple(suppressed))
+
+
+def analyze_conditional(tree, path, resolution, *, catalog=None):
+    """Report literal proof-boundary source patterns without proposing edits.
+
+    The include-site binding, execution, output semantics and rendered context
+    remain conditions. A known different local binding is not treated as proof.
+    """
+    source, nodes = tree.source, tree.nodes
+    reason = ('Source-local proof pattern only; include-site binding, execution, '
+              'styles and rendered context are unproved.')
+    if nodes[0].errors:
+        errors = tuple((n.start, n.end) for n in nodes if n.kind == 'Error') or ((0, len(source)),)
+        return ProofResult(skips=('Malformed Typst syntax; no proof source diagnosis',), parse_errors=errors)
+    if resolution.source_sha256 != digest(source) or len(resolution.facts) != len(nodes):
+        return ProofResult(skips=('Stale or mismatched static resolution',))
+    if tree.mode != 'markup' or nodes[0].kind != 'Markup':
+        return ProofResult(skips=('Only markup source patterns are supported',))
+    records = load_rules()[0]['rules'] if catalog is None else catalog
+    if (type(records) not in (tuple, list) or any(not isinstance(item, Mapping)
+            or type(item.get('id')) is not str for item in records)):
+        raise InputError('Conditional proof analysis requires rule metadata records')
+    selected = [item for item in records if item['id'] == RULE_ID]
+    if (len(selected) != 1 or any(type(selected[0].get(key)) is not str
+            or not selected[0][key] for key in ('grade', 'source'))):
+        raise InputError('Missing or invalid proof rule metadata')
+    rule = selected[0]
+    scopes = resolve_suppressions(tree, {item['id'] for item in records})
+    parents = {child: index for index, node in enumerate(nodes) for child in node.children}
+    obvious_shadows = []
+    for node in nodes:
+        if node.kind != 'LetBinding':
+            continue
+        parts = [nodes[i] for i in node.children if nodes[i].kind not in
+                 ('Space', 'Parbreak', 'LineComment', 'BlockComment')]
+        if len(parts) < 2 or parts[0].kind != 'Let':
+            continue
+        declared = parts[1]
+        if declared.kind == 'Closure':
+            children = [nodes[i] for i in declared.children if nodes[i].kind not in
+                        ('Space', 'Parbreak', 'LineComment', 'BlockComment')]
+            declared = children[0] if children else declared
+        if declared.kind == 'Ident' and source[declared.start:declared.end] == b'proof':
+            obvious_shadows.append(node.start)
+    obvious_shadows.sort()
+    excluded = {}
+    for index, node in enumerate(nodes):
+        parent = parents.get(index)
+        excluded[index] = (parent is not None and
+                           (excluded[parent] or nodes[parent].kind in _CONDITIONAL_EXCLUDED))
+    newlines = [index for index, byte in enumerate(source) if byte == 10]
+    findings, suppressed = [], []
+
+    def conditional_block(siblings, position):
+        """Recognize only direct literal named block calls as a source pattern."""
+        mark = nodes[siblings[position]]
+        if mark.kind != 'Hash' or position + 1 >= len(siblings):
+            return False
+        call = nodes[siblings[position + 1]]
+        if mark.end != call.start or call.kind != 'FuncCall' or len(call.children) != 2:
+            return False
+        callee, args = (nodes[i] for i in call.children)
+        if (callee.kind != 'Ident' or source[callee.start:callee.end] not in _CONDITIONAL_BLOCK_NAMES
+                or args.kind != 'Args'):
+            return False
+        parts = [nodes[i] for i in args.children if nodes[i].kind != 'Space']
+        if [part.kind for part in parts] == ['ContentBlock']:
+            return True
+        if (len(parts) not in (4, 5) or parts[0].kind != 'LeftParen'
+                or parts[-2].kind != 'RightParen' or parts[-1].kind != 'ContentBlock'
+                or parts[1].kind != 'Named'):
+            return False
+        if len(parts) == 5 and parts[2].kind != 'Comma':
+            return False
+        named = [nodes[i] for i in parts[1].children if nodes[i].kind != 'Space']
+        return (len(named) == 3 and named[0].kind == 'Ident'
+                and source[named[0].start:named[0].end] == b'title'
+                and named[1].kind == 'Colon' and named[2].kind in ('Str', 'ContentBlock'))
+
+    for body_id, body in enumerate(nodes):
+        if body.kind != 'Markup' or excluded[body_id]:
+            continue
+        siblings = body.children
+        for position, index in enumerate(siblings):
+            call = nodes[index]
+            if (position == 0 or call.kind != 'FuncCall' or not _content_call(nodes, index)
+                    or nodes[call.children[0]].kind != 'Ident'
+                    or source[nodes[call.children[0]].start:nodes[call.children[0]].end] != b'proof'):
+                continue
+            mark = nodes[siblings[position - 1]]
+            if mark.kind != 'Hash' or mark.end != call.start:
+                continue
+            binding = resolution.facts[index].binding
+            if binding is not None and not is_proof_binding(binding):
+                continue
+            # Resolver facts do not distinguish an unresolved name from an
+            # arbitrary local definition. Refuse the obvious earlier direct
+            # definitions rather than suggesting a condition known false.
+            if binding is None and bisect_left(obvious_shadows, call.start):
+                continue
+            start = mark.start
+            line_start = source.rfind(b'\n', 0, start) + 1
+            prefix = source[line_start:start]
+            if line_start == 0 and prefix.startswith(_BOM):
+                prefix = prefix[len(_BOM):]
+            if prefix.strip(b' \t'):
+                continue
+            following = position + 1
+            while following < len(siblings) and nodes[siblings[following]].kind in _WHITESPACE:
+                following += 1
+            end = call.end
+            if following < len(siblings) and nodes[siblings[following]].kind == 'Label':
+                label = nodes[siblings[following]]
+                if source[end:label.start].strip(b' \t'):
+                    continue
+                end = label.end
+                following += 1
+                while following < len(siblings) and nodes[siblings[following]].kind in _WHITESPACE:
+                    following += 1
+            if following == len(siblings):
+                continue
+            after = nodes[siblings[following]]
+            gap = source[end:after.start]
+            if (gap.strip(b' \t\r\n') or b'\r' in gap.replace(b'\r\n', b'')
+                    or gap.count(b'\n') >= 2):
+                continue
+            if after.kind == 'Text':
+                value = source[after.start:after.end].decode('utf-8')
+                if not value or value[0].isspace() or value[-1].isspace():
+                    continue
+            elif after.kind not in _STRUCTURAL and not (after.kind == 'Equation' and after.display):
+                if after.kind != 'Hash' or not conditional_block(siblings, following):
+                    continue
+            line_index = bisect_left(newlines, start)
+            finding = Diagnostic(RULE_ID, rule['grade'], path, line_index + 1,
+                len(source[line_start:start].decode('utf-8')) + 1,
+                'Insert a blank line if this is the reviewed proof and the following source renders as the expected block or prose.',
+                rule['source'])
+            if any(scope.covers(RULE_ID, start) for scope in scopes):
+                suppressed.append(finding)
+            else:
+                findings.append(finding)
+    return ProofResult(tuple(findings), (), (reason,), suppressed=tuple(suppressed))

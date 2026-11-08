@@ -10,9 +10,10 @@ from dataclasses import replace
 from footnote_rules import (RULE_IDS as FOOTNOTES, analyze as footnotes,
                             analyze_conditional_nested as nested_footnotes)
 from paragraph_rules import RULE_IDS as PARAGRAPHS, analyze as paragraphs
+from proof_rules import RULE_ID as PROOF, analyze_conditional as proof
 from static_resolver import resolve
 
-RULE_IDS = (*PARAGRAPHS, CONTINUATION, *FOOTNOTES, CANCEL)
+RULE_IDS = (*PARAGRAPHS, CONTINUATION, *FOOTNOTES, CANCEL, PROOF)
 
 
 def analyze(tree, path, catalog):
@@ -28,4 +29,5 @@ def analyze(tree, path, catalog):
                                skips=tuple(dict.fromkeys(first.skips + second.skips)),
                                parse_errors=tuple(dict.fromkeys(first.parse_errors + second.parse_errors)))
     results[CANCEL] = cancel(tree, path, resolution)
+    results[PROOF] = proof(tree, path, resolution, catalog=catalog)
     return resolution.skips, results

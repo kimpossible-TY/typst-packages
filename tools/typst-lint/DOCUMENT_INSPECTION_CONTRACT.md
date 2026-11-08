@@ -62,8 +62,8 @@ JSON includes:
   `coverage.uninspected` or add it to `coverage.available_backends`.
 - `proposed_edits`: source-bound byte offsets, replacement strings and baseline
   hashes. These are in-memory math-script proposals only.
-- With `--rule-set pde --local-rule-hints`, ten paragraph, continuation,
-  footnote and cancellation backends inspect each captured file independently.
+- With `--rule-set pde --local-rule-hints`, eleven paragraph, continuation,
+  footnote, proof and cancellation backends inspect each captured file independently.
   Continuation and footnotes additionally inspect nested literal markup as source patterns.
   Findings and refusals are separate conditional hints, without edits; actual
   include-site bindings, execution, styles and rendering remain unproved.
@@ -76,6 +76,14 @@ JSON includes:
   an UNAVAILABLE result retains the separately captured package evidence and
   explains the refusal. Runtime selection, catalog membership and editing remain
   unproved. No package roots are inferred from ambient caches.
+- Optional `--reference-cache-path` adds a second explicit namespace root for
+  this reference-export trace only. The first existing package version wins,
+  including an incomplete or unreviewed one. For this multi-root route the
+  reviewed reference package must currently be captured from the first root;
+  a separate or cache-only reference root stays unavailable. The independently reviewed
+  text-utils variant supplies opaque export names only; it grants no helper or
+  paragraph-marker identity. Ordinary conditional helper analysis retains its
+  original single-root contracts.
 - With explicit `--rule-set pde --preview-display-gaps`, `display_gap_previews`
   separately provides independently verified source-bound gap edits and candidate
   hashes. Each candidate is based on the original source, not on the script

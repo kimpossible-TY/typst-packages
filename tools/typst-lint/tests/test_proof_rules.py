@@ -10,7 +10,7 @@ REPO = TOOL.parents[1]
 sys.path.insert(0, str(TOOL))
 from edit_plan import Edit, plan
 from package_loader import load_packages
-from proof_rules import RULE_ID, analyze
+from proof_rules import RULE_ID, analyze, analyze_conditional
 from script_rule import analyze as scripts
 from static_resolver import MATH_BLOCKS, MATH_BLOCKS_SOURCE_SHA256, PackageSource, is_proof_binding, resolve
 from suppression import resolve as suppressions
@@ -241,6 +241,67 @@ class ProofRuleTests(unittest.TestCase):
         # A callable binding alone does not make a code-mode call root output.
         source = b'import "@local/math-blocks:0.2.0": proof; proof([X]); [Next.]'
         self.check(source, source, mode='code', active=False)
+
+    def test_conditional_patterns_include_nested_markup_without_edits(self):
+        source = (b'#proof[Root.]\nNext.\n\n#block[\n'
+                  b'#proof[Nested.] <claim>\nFollowing.\n]')
+        tree = parse(source)
+        result = analyze_conditional(tree, 'fixture.typ', resolve(tree))
+        self.assertEqual(len(result.diagnostics), 2)
+        self.assertEqual([item.line for item in result.diagnostics], [1, 5])
+        self.assertFalse(result.edits)
+        self.assertTrue(all('if this is the reviewed proof' in item.explanation for item in result.diagnostics))
+        self.assertTrue(any('unproved' in item for item in result.skips))
+
+    def test_conditional_omits_obvious_shadow_and_unsupported_contexts(self):
+        examples = (
+            b'#let proof(body) = body\n#proof[X]\nNext.',
+            b'#let proof = none\n#proof[X]\nNext.',
+            b'#proof[X]\n\nNext.', b'#proof[X]',
+            b'#proof[X] <one> <two>\nNext.',
+            b'#proof[X]\n// comment\nNext.', b'Inline #proof[X]\nNext.',
+            b'#proof(variable)\nNext.', b'#proof[X]\n#unknown[Next.]',
+            b'`#proof[X]\nNext.`', b'- #proof[X]\n  Next.',
+            b'#let other = { [\n#proof[X]\nNext.\n] }',
+        )
+        for source in examples:
+            with self.subTest(source=source):
+                tree = parse(source)
+                result = analyze_conditional(tree, 'fixture.typ', resolve(tree))
+                self.assertFalse(result.diagnostics or result.edits)
+
+    def test_conditional_suppression_utf8_metadata_and_stale_resolution(self):
+        source = ('한글\n#block[\n// typst-lint: ignore-next pde.proof-trailing-gap -- intentional\n'
+                  '#proof[X]\nNext.\n]').encode()
+        tree = parse(source)
+        resolution = resolve(tree)
+        catalog = load_rules()[0]['rules']
+        with patch('proof_rules.load_rules', side_effect=AssertionError('ambient catalog')):
+            result = analyze_conditional(tree, 'fixture.typ', resolution, catalog=catalog)
+        self.assertFalse(result.diagnostics or result.edits)
+        self.assertEqual(len(result.suppressed), 1)
+        self.assertEqual((result.suppressed[0].line, result.suppressed[0].column), (4, 1))
+        stale = analyze_conditional(tree, 'fixture.typ', replace(resolution, source_sha256='0' * 64),
+                                    catalog=catalog)
+        self.assertFalse(stale.diagnostics or stale.edits)
+        self.assertTrue(any('Stale' in reason for reason in stale.skips))
+
+    def test_conditional_recognizes_direct_literal_following_blocks(self):
+        for following in (b'#note[Body.]', b'#theorem(title: "Result")[Body.]',
+                          b'#note(title: [Heading],)[Body.]'):
+            with self.subTest(following=following):
+                source = b'#block[\n#proof[Done.]\n' + following + b'\n]'
+                tree = parse(source)
+                result = analyze_conditional(tree, 'fixture.typ', resolve(tree))
+                self.assertEqual(len(result.diagnostics), 1)
+                self.assertIn('expected block', result.diagnostics[0].explanation)
+                self.assertFalse(result.edits)
+        for following in (b'#unknown[Body.]', b'#note(title: dynamic)[Body.]',
+                          b'#theorem(extra: "x")[Body.]', b'#note(title: "x", extra: 1)[Body.]'):
+            with self.subTest(following=following):
+                tree = parse(b'#block[\n#proof[Done.]\n' + following + b'\n]')
+                result = analyze_conditional(tree, 'fixture.typ', resolve(tree))
+                self.assertFalse(result.diagnostics or result.edits)
 
 
 if __name__ == '__main__':

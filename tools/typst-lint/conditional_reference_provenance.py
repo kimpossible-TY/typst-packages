@@ -9,6 +9,8 @@ import os
 
 import conditional_highlight as conditional
 import import_graph as graph
+import namespace_multiroot
+import namespace_packages
 from package_loader import PackageInputError, _absolute_root, load_packages
 from static_resolver import MATH_BLOCKS, MATH_BLOCKS_SOURCE_SHA256
 from static_resolver import PROJECT_REFERENCES, PROJECT_REFERENCES_SOURCE_SHA256
@@ -40,6 +42,14 @@ class ReferenceExport:
 class _ReferenceNamespace(conditional._Analyzer):
     def __init__(self, context, namespaces, reference_package):
         super().__init__(context, namespaces, (conditional.RULE_ID,), False)
+        # Multi-root evidence is accepted only in this reference-specific
+        # analyzer. It cannot grant highlight or paragraph-marker capabilities.
+        self.multi_root = None
+        if namespace_multiroot.verify_multiroot_capture(namespaces):
+            self.multi_root = namespaces
+            self.reason = conditional._graph_reason(context)
+            self.packages = {item.evidence.import_path: item for item in namespaces.packages}
+            self.evidence = namespaces.evidence
         self.reference_package = reference_package
         self.reference_evidence = reference_package.evidence[0]
 
@@ -55,6 +65,26 @@ class _ReferenceNamespace(conditional._Analyzer):
             return conditional._Module(reason=self.exhausted)
         shape, alias, combined = self._selection(tree, index)
         request = shape.request if shape is not None else None
+        # A reviewed namespace-only variant contributes names but no helper or
+        # marker identities. Preserve it as opaque for every imported name.
+        module_alias = conditional._module_alias(tree, index) if shape is None else None
+        collision_request = request if request is not None else (module_alias[0] if module_alias else None)
+        package = self.packages.get(collision_request)
+        if type(package) is namespace_packages.CollisionOnlyNamespace:
+            if shape is None:
+                return conditional._Module(((module_alias[1], None),), packages=(package.evidence,),
+                                           requests=(collision_request,))
+            items = tuple((name, name) for name in package.exports) if shape.items is None else shape.items
+            if len(items) + int(combined) > conditional.MAX_BINDINGS:
+                return self.exhaust('Conditional namespace binding limit exceeded')
+            if any(original not in package.exports for original, _ in items):
+                return conditional._Module(reason=f'Requested namespace export unavailable: {collision_request}',
+                                           intrinsic_refusal=True)
+            exports = [(alias, None)] if combined else []
+            exports.extend((local, None) for _, local in items)
+            if not self.bindings(exports):
+                return conditional._Module(reason=self.exhausted)
+            return conditional._Module(tuple(exports), packages=(package.evidence,), requests=(collision_request,))
         if request == PROJECT_REFERENCES:
             items = ((NAME, NAME),) if shape.items is None else shape.items
             if len(items) + int(combined) > conditional.MAX_BINDINGS:
@@ -123,6 +153,14 @@ class ConditionalReferenceProvenance:
             raise PackageInputError('Exact reviewed project-references package is unavailable')
         self._reference_capture = captured
         self._engine = _ReferenceNamespace(import_graph, namespace_capture, captured)
+        # A separately captured reference package cannot override the stated
+        # package/cache precedence. Require it in the first root, where its
+        # successful capture proves this exact version exists. A reference
+        # found only in a later root needs separate first-root absence evidence.
+        self._selection_reason = None
+        if (self._engine.multi_root is not None
+                and str(root) != self._engine.multi_root.roots[0]):
+            self._selection_reason = 'Reference package is not captured from the first namespace root'
 
     @property
     def package_path(self):
@@ -140,6 +178,10 @@ class ConditionalReferenceProvenance:
             return ReferenceExport(str(path), str(name), 'UNAVAILABLE', 'Invalid source path or export name')
         if engine.reason or engine.exhausted:
             return ReferenceExport(path, name, 'UNAVAILABLE', engine.reason or engine.exhausted)
+        if engine.multi_root is not None and not namespace_multiroot.verify_multiroot_capture(engine.multi_root):
+            return ReferenceExport(path, name, 'UNAVAILABLE', 'Multi-root capture was changed or expired')
+        if self._selection_reason:
+            return ReferenceExport(path, name, 'UNAVAILABLE', self._selection_reason)
         module = engine.module(path, ())
         if module.reason:
             return ReferenceExport(path, name, 'UNAVAILABLE', module.reason)

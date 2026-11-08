@@ -54,6 +54,12 @@ def load_manifest(path, root, *, allow_empty=False):
     require(type(path) is str and path.startswith('/') and str(Path(path)) == path,
             'Manifest must be a canonical absolute path')
     raw, _ = runtime._capture(Path(path), MAX_MANIFEST_BYTES)
+    return parse_manifest_bytes(raw, root, allow_empty=allow_empty)
+
+
+def parse_manifest_bytes(raw, root, *, allow_empty=False):
+    """Parse retained manifest bytes without rereading or granting authority."""
+    require(type(raw) is bytes and len(raw) <= MAX_MANIFEST_BYTES, 'Invalid resource manifest bytes')
     try:
         data = json.loads(raw.decode('utf-8'), object_pairs_hook=_object,
                           parse_constant=lambda value: (_ for _ in ()).throw(ValueError('Invalid JSON constant')))
