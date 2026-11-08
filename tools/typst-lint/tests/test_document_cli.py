@@ -1,6 +1,7 @@
 """Actual document CLI over isolated include graphs and source-only candidates."""
 import json
 import os
+import shutil
 from dataclasses import replace
 from pathlib import Path
 import subprocess
@@ -43,6 +44,37 @@ class DocumentCliTests(unittest.TestCase):
     def script_coverage(self, result):
         return [row for row in result['coverage']['files']
                 if row['rule_id'] == 'core.parenthesized-scripts']
+
+    def namespace_packages(self):
+        package_root = self.root / 'packages'
+        roots = [('local', name, version, 'lib.typ', TOOL.parents[1])
+                 for name, version in (('text-utils', '0.1.2'), ('math-blocks', '0.2.0'),
+                                       ('scoped-annotations', '0.3.0'), ('cetz-helpers', '0.2.0'))]
+        roots.extend((('preview', 'mannot', '0.4.0', 'src/lib.typ',
+                       TOOL / 'tests/fixtures/scoped-reference-packages'),
+                      ('preview', 'cetz', '0.4.2', 'src/lib.typ',
+                       TOOL / 'tests/fixtures/anchor-overlay-packages')))
+        for namespace, name, version, entrypoint, source in roots:
+            relative = Path(namespace) / name / version
+            for filename in ('typst.toml', entrypoint):
+                target = package_root / relative / filename
+                target.parent.mkdir(parents=True, exist_ok=True)
+                shutil.copyfile(source / relative / filename, target)
+        return package_root
+
+    def conditional_fixture(self):
+        self.write('Styles/styles.typ', b'#import "@local/text-utils:0.1.2": *\n'
+            b'#import "@local/math-blocks:0.2.0": *\n'
+            b'#import "@local/scoped-annotations:0.3.0": *\n'
+            b'#import "@local/cetz-helpers:0.2.0": *\n'
+            b'#import "@preview/mannot:0.4.0": *\n'
+            b'#let rmark = mark.with(color: red)\n#let dx = $upright(d) x$\n')
+        self.write('figures.typ', b'#import "@preview/cetz:0.4.2": *\n'
+            b'#import "@preview/fletcher:0.5.8": diagram, node, edge\n'
+            b'#let wave(t) = (t,t)\n')
+        return self.write('main.typ', b'#import "Styles/styles.typ": *\n'
+            b'#import "figures.typ": *\n#import "@preview/mannot:0.4.0": *\n'
+            b'#highlighted[Text and $x^2$ together.]\n')
 
     def test_nested_repeated_includes_and_opaque_wrappers_preserve_inventory(self):
         self.write('main.typ', b'#book-part[\n#include "chapter/chapter.typ"\n'
@@ -303,6 +335,74 @@ class DocumentCliTests(unittest.TestCase):
         with patch.object(document_cli, 'MAX_REPORT_ITEMS', 1):
             with self.assertRaisesRegex(InputError, 'report item limit'):
                 document_cli.report_document(str(self.root), 'main.typ')
+
+    def test_explicit_package_namespace_hints_are_separate_and_never_edits(self):
+        package_root = self.namespace_packages()
+        target = self.conditional_fixture()
+        original = target.read_bytes()
+        plain = self.run_cli('--rule-set', 'pde')
+        self.assertIsNone(plain['namespace_evidence'])
+        self.assertEqual(plain['conditional_diagnostics'], [])
+        result = self.run_cli('--rule-set', 'pde', '--package-path', str(package_root))
+        finding, = result['conditional_diagnostics']
+        self.assertEqual(finding['rule_id'], 'pde.text-only-highlight')
+        self.assertEqual(finding['status'], 'CONDITIONAL')
+        self.assertFalse(finding['edit_permission'])
+        self.assertTrue(finding['conditions'])
+        self.assertEqual(finding['root_sha256'], digest(original))
+        self.assertEqual({item['path'] for item in finding['source_hashes']},
+                         {'main.typ', 'Styles/styles.typ', 'figures.typ'})
+        self.assertEqual(len(result['namespace_evidence']['packages']), 6)
+        self.assertFalse(result['namespace_evidence']['initializer_purity_proved'])
+        self.assertEqual(result['package_resolution_scope'], 'namespace-roots-only')
+        self.assertIn('pde.text-only-highlight', result['coverage']['uninspected'])
+        self.assertNotIn('pde.text-only-highlight', result['coverage']['available_backends'])
+        self.assertEqual(len(result['coverage']['uninspected']), 30)
+        self.assertTrue(all(d['rule_id'] != 'pde.text-only-highlight' for d in result['diagnostics']))
+        self.assertTrue(all(e['rule_id'] == 'core.parenthesized-scripts' for e in result['proposed_edits']))
+        self.assertEqual(target.read_bytes(), original)
+
+    def test_namespace_hints_withhold_later_shadowed_or_unreviewed_helpers(self):
+        package_root = self.namespace_packages()
+        self.conditional_fixture()
+        figures = self.root / 'figures.typ'
+        figures.write_bytes(figures.read_bytes() + b'#let highlighted(body) = body\n')
+        result = self.run_cli('--rule-set', 'pde', '--package-path', str(package_root))
+        self.assertEqual(result['conditional_diagnostics'], [])
+        figures.write_bytes(b'#import "@preview/cetz:0.4.2": *\n')
+        package = package_root / 'local/text-utils/0.1.2/lib.typ'
+        package.write_bytes(package.read_bytes() + b'\n')
+        result = self.run_cli('--rule-set', 'pde', '--package-path', str(package_root))
+        self.assertEqual(result['conditional_diagnostics'], [])
+        self.assertTrue(result['namespace_evidence']['unavailable'])
+        self.assertTrue(result['conditional_coverage'][0]['reasons'])
+        self.assertEqual(len(result['proposed_edits']), 2)
+
+    def test_conditional_suppression_does_not_hide_source_script_finding(self):
+        package_root = self.namespace_packages()
+        target = self.conditional_fixture()
+        target.write_bytes(target.read_bytes().replace(b'#highlighted',
+            b'// typst-lint: ignore-next pde.text-only-highlight -- intentional\n#highlighted'))
+        result = self.run_cli('--rule-set', 'pde', '--package-path', str(package_root))
+        self.assertEqual(result['conditional_diagnostics'], [])
+        self.assertEqual(result['conditional_suppressed_count'], 1)
+        self.assertEqual(result['suppressed_count'], 0)
+        self.assertEqual([d['rule_id'] for d in result['diagnostics']], ['core.parenthesized-scripts'])
+
+    def test_namespace_option_requires_pde_and_unsafe_evidence_refuses(self):
+        self.write('main.typ', b'$x^i$\n')
+        result = self.run_cli('--package-path', str(self.root / 'never-opened'))
+        self.assertEqual(result['phase'], 'input')
+        self.assertIn('explicit --rule-set pde', result['error'])
+        packages = self.namespace_packages()
+        target = packages / 'local/text-utils/0.1.2/lib.typ'
+        backup = self.root / 'real-helper.typ'
+        target.rename(backup)
+        target.symlink_to(backup)
+        result = self.run_cli('--rule-set', 'pde', '--package-path', str(packages))
+        self.assertEqual(result['phase'], 'input')
+        self.assertNotIn('conditional_diagnostics', result)
+        self.assertFalse(result['compiler_invoked'])
 
 
 if __name__ == '__main__':

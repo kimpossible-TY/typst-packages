@@ -27,14 +27,23 @@ The default `--rule-set core` inspects each unique captured source once for
 record that selection. Inline suppression directives are honored for both rules.
 Consumer configuration is deliberately not loaded, so its include/exclude and
 path-ignore settings do not select or suppress this explicit document inventory.
-The report states this choice. Import targets, package definitions, reference
-catalogs and runtime resources are not resolved by this route.
+The report states this choice. By default, import targets and packages are not
+resolved. Explicit PDE selection with `--package-path` captures bounded relative
+import sources and six pinned package namespace roots for separate conditional
+helper hints. It does not resolve full package initialization dependencies,
+reference catalogs or runtime resources. See
+`CONDITIONAL_HIGHLIGHT_CONTRACT.md` for the separate evidence and refusal model.
 
 JSON includes:
 
 - `include_context`: selected budget, source hashes/counts, edges, occurrences
   and explicit unresolved containment, missing or dynamic requests.
 - `diagnostics` and `suppressed`: source-style findings over the captured ASTs.
+- `conditional_diagnostics`, `conditional_suppressed` and
+  `conditional_coverage`: opt-in helper namespace hints with explicit outstanding
+  conditions and no edit permission. `namespace_evidence` records the retained
+  package/source facts. Conditional hints do not remove a rule from
+  `coverage.uninspected` or add it to `coverage.available_backends`.
 - `proposed_edits`: source-bound byte offsets, replacement strings and baseline
   hashes. These are in-memory math-script proposals only.
 - `coverage.files`: per-source rule status, refusal reasons, candidate hash and

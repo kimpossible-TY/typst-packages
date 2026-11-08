@@ -60,6 +60,7 @@ inspection route:
 ```sh
 /path/to/typst-packages/tools/typst-lint/typst-lint inspect-document --root /absolute/project --entrypoint main.typ --format json
 /path/to/typst-packages/tools/typst-lint/typst-lint inspect-document --root /absolute/project --entrypoint main.typ --rule-set pde --format json
+/path/to/typst-packages/tools/typst-lint/typst-lint inspect-document --root /absolute/project --entrypoint main.typ --rule-set pde --package-path /absolute/captured-packages --format json
 ```
 
 This route captures literal relative includes with the fixed `book-v1` budget
@@ -81,6 +82,15 @@ actual rendering are outside this inspection.
 line, retaining one attached semantic label. Text without a Unicode letter,
 such as a label's following period, stays unresolved rather than being moved
 onto its own line.
+With explicit PDE selection, `--package-path` additionally captures six exact
+package namespace contracts and relative import sources. This can trace
+`highlighted` through the actual PDE wildcard facade and report literal math
+inside a root-level helper body. `conditional_diagnostics` records source/package
+hashes, ordered name routes and the outstanding initialization, runtime package
+selection and rendering conditions. These hints have no edits, stay separate
+from source findings and leave that rule in `coverage.uninspected`. Only an
+explicit package root is read; installed caches are not searched. See
+[CONDITIONAL_HIGHLIGHT_CONTRACT.md](CONDITIONAL_HIGHLIGHT_CONTRACT.md).
 The report keeps global coverage incomplete and exits 2; it never applies the
 proposals or invokes Typst compilation. Unsafe paths, malformed sources and
 exhausted budgets return an input error rather than a truncated document report.
