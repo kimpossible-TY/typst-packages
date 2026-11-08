@@ -488,6 +488,34 @@ def preview(tree, path, catalog, *, profile=_STANDARD, footnote_evidence=None, c
                 proof_before = proof_rules.analyze_conditional(before_tree, path, before_resolution, catalog=catalog)
                 spacer = footnote_rules.preview_conditional_unaligned_spacers(
                     before_tree, path, before_resolution, catalog=catalog)
+                if (spacer is not None and spacer['verification'] == 'withheld'
+                        and spacer.get('reason') == 'Explicit shadow: footnote binding is not locally proven'
+                        and footnote_rules._explicit_footnote_shadow(before_tree)
+                        and classify_unproven_binding):
+                    # The source-only guard must never emit edits after an
+                    # explicit shadow. Partial preview may still withhold the
+                    # whole file, but only after the same call-shape, graph,
+                    # package and later analysis checks as any other refusal.
+                    potential = []
+                    footnote_rules.analyze_conditional_nested(before_tree, path, before_resolution,
+                        catalog=catalog, _unaligned_spacer_edits=potential)
+                    calls = {node.start - 1: index for index, node in enumerate(before_tree.nodes)
+                             if node.kind == 'FuncCall' and node.start > 0
+                             and before_tree.source[node.start - 1:node.start] == b'#'}
+                    if not potential:
+                        raise SafetyError('Explicit shadow has no active spacer candidate')
+                    for edit in potential:
+                        position = edit.end
+                        while before_tree.source[position:position + 1] in (b' ', b'\t', b'\r', b'\n'):
+                            position += 1
+                        if not eligible_source_binding(before_tree, calls.get(position), footnote_evidence):
+                            raise SafetyError('Source footnote binding or import cannot be classified')
+                    conditional = document_footnote_evidence.PreviewFootnoteEvidence.candidate_calls(
+                        footnote_evidence, path, before_tree.source)
+                    if conditional.source_sha256 != digest(before_tree.source) or conditional.unresolved:
+                        raise SafetyError('Source footnote binding or import cannot be classified')
+                    source_binding_unproved = True
+                    spacer = None
                 if spacer is not None:
                     if spacer['verification'] == 'withheld':
                         raise SafetyError('Conditional spacer preview withheld: ' + spacer['reason'])
