@@ -86,6 +86,22 @@ class ModernHighlightPreviewCliTests(unittest.TestCase):
         self.assertFalse(report['applied_fixes'] or report['compiler_invoked'])
         self.assertEqual((self.project / 'main.typ').read_bytes(), source)
 
+    def test_partial_preview_reports_unpreviewed_conflicting_finding(self):
+        source = fixtures.IMPORT + (b'#highlighted[Bad $x_1$ end.]\n'
+                                    b'#highlighted[Good $x$ end.]')
+        (self.project / 'main.typ').write_bytes(source)
+        report = self.run_cli(*self.options(), '--preview-conditional-modern-highlights')
+        section = report['conditional_modern_highlight_previews']
+        self.assertEqual(section['status'], 'INCOMPLETE')
+        self.assertEqual((section['diagnostics_count'], section['previewed_diagnostics'],
+                          section['unpreviewed_diagnostics']), (2, 1, 1))
+        row, = section['by_file']
+        edit, = row['edits']
+        candidate = plan(source, [Edit(edit['start'], edit['end'], edit['replacement'].encode())]).candidate()
+        self.assertIn(b'#highlighted[Bad $x_1$ end.]', candidate)
+        self.assertIn(b'#highlighted[Good ]$x$#highlighted[ end.]', candidate)
+        self.assertEqual((self.project / 'main.typ').read_bytes(), source)
+
     def test_opt_out_does_not_call_preview_and_shared_budget_is_enforced(self):
         source = fixtures.IMPORT + b'#highlighted[Text $x$ end.]'
         (self.project / 'main.typ').write_bytes(source)

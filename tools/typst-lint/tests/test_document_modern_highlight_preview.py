@@ -167,6 +167,69 @@ class ModernHighlightPreviewTests(unittest.TestCase):
         self.assertEqual(row['verification'], 'withheld')
         self.assertFalse(row['edits'])
 
+    def test_subset_keeps_conflicting_finding_and_rechecks_combination(self):
+        body = (b'#highlighted[Bad $x_1$ end.]\n'
+                b'#highlighted[Good $x$ end.]\n#highlighted()[More $y$ end.]')
+        source, candidate, result = self.candidate(body)
+        self.assertIn(b'#highlighted[Bad $x_1$ end.]', candidate)
+        self.assertIn(b'#highlighted[Good ]$x$#highlighted[ end.]', candidate)
+        self.assertIn(b'#highlighted[More ]$y$#highlighted[ end.]', candidate)
+        self.assertEqual((result['diagnostics_count'], result['previewed_diagnostics'],
+                          result['unpreviewed_diagnostics'], result['withheld_source_count']), (3, 2, 1, 0))
+        self.assertEqual(result['status'], 'INCOMPLETE')
+        self.assertEqual((self.project / 'main.typ').read_bytes(), source)
+
+        # Individually safe edits do not establish that their union is safe.
+        original = preview._preview_source
+        def refuse_union(evidence, tree, path, diagnostics, records):
+            value = original(evidence, tree, path, diagnostics, records)
+            if len(diagnostics) == 2 and value is not None:
+                return dict(value, verification='withheld', edits=[], reason='combined conflict')
+            return value
+        session, _ = self.fixture.session(source)
+        evidence = modern.ModernHighlightAnalyzer(session, scoped_callbacks=True)
+        with patch.object(preview, '_preview_source', side_effect=refuse_union):
+            row, = preview.preview_all(evidence)['by_file']
+        self.assertEqual(row['verification'], 'withheld')
+        self.assertFalse(row['edits'])
+
+    def test_subset_work_is_bounded_and_suppression_is_not_retargeted(self):
+        body = (b'#highlighted[Bad $x_1$ end.]\n'
+                b'#highlighted[Good $x$ end.]\n#highlighted[More $y$ end.]')
+        with patch.object(preview, 'MAX_SUBSET_CHECKS', 2):
+            _, _, _, result = self.proposal(body)
+        row, = result['by_file']
+        self.assertEqual(row['verification'], 'withheld')
+        self.assertIn('budget exceeded', row['reason'])
+        self.assertFalse(row['edits'])
+        body = (b'// typst-lint: ignore-next core.parenthesized-scripts -- deliberate\n'
+                b'#highlighted[Bad $x_1$ end.]\n#highlighted[Good $x$ end.]')
+        _, _, _, result = self.proposal(body)
+        row, = result['by_file']
+        self.assertEqual(row['verification'], 'withheld')
+        self.assertIn('suppression targets', row['reason'])
+
+    @unittest.skipUnless(os.environ.get('TYPST_LINT_RENDER_TESTS') == '1' and shutil.which('typst'),
+                         'Opt in with the pinned Typst compiler')
+    def test_owned_partial_subset_renders_before_and_after(self):
+        if not subprocess.check_output(['typst', '--version'], text=True).startswith('typst 0.15.1 '):
+            self.skipTest('Fixture comparison pins Typst 0.15.1')
+        body = (b'#highlighted[Bad $x_1$ end.]\n'
+                b'#highlighted[Good $x$ end.]\n#highlighted[More $y$ end.]')
+        source, candidate, result = self.candidate(body)
+        self.assertEqual(result['previewed_diagnostics'], 2)
+        pdfs = []
+        for name, data in (('partial-before', source), ('partial-after', candidate)):
+            path, output = self.project / (name + '.typ'), self.project / (name + '.pdf')
+            path.write_bytes(data)
+            run = subprocess.run(['typst', 'compile', '--root', str(self.project),
+                                  '--package-path', str(self.packages), '--package-cache-path', str(self.cache),
+                                  '--creation-timestamp', '0', str(path), str(output)], capture_output=True, timeout=30)
+            self.assertEqual(run.returncode, 0, run.stderr)
+            pdfs.append(output.read_bytes())
+        self.assertNotEqual(pdfs[0], pdfs[1])
+        self.assertEqual((self.project / 'main.typ').read_bytes(), source)
+
     def test_reparse_failure_and_unsafe_owner_are_withheld(self):
         source, context, evidence, _ = self.proposal(b'#highlighted[Text $x$ follows.]')
         with patch.object(preview, 'parse', side_effect=ValueError('fixture parse failure')):

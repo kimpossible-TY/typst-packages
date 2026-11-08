@@ -18,7 +18,14 @@ Each equation is copied unchanged outside highlighting; nonempty prose segments
 are individually highlighted and whitespace bytes are preserved. Each file's
 edits are independent of other preview plans. Reparse checks equation and
 generated prose ownership, untouched syntax, suppression scopes and supported
-cross-rule diagnostics. A mismatch withholds the entire file.
+cross-rule diagnostics. When an existing finding falls inside a proposed edit,
+the tool can check edits individually, exclude failed edits, and revalidate the
+combined subset against the original file, including excluded findings and
+suppression targets. Any other mismatch or failed combined check withholds the
+entire file. To bound work, at most 32 individual fallback checks are made per
+batch; exceeding that budget withholds the source with an explicit reason.
+The summary's unpreviewed count includes excluded findings, and the batch is
+`INCOMPLETE` when findings remain unpreviewed.
 
 The JSON section contains exact byte offsets and replacement text, which can
 include document content. The batch has a shared item and serialized-byte limit

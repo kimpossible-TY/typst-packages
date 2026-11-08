@@ -32,6 +32,10 @@ _MATH_EXCLUDED = frozenset(('FuncCall', 'MathCall', 'CodeBlock', 'Hash', 'Contex
                             'ShowRule', 'ModuleImport', 'ModuleInclude', 'Label', 'LineComment', 'BlockComment'))
 MAX_PREVIEW_ITEMS = 100_000
 MAX_PREVIEW_BYTES = 16 * 1024 * 1024
+# Every fallback reanalyses an entire source; keep work bounded independently
+# of the output size. Exhaustion never permits an unverified partial plan.
+MAX_SUBSET_CHECKS = 32
+_OVERLAPPING_FINDING = 'An existing conditional finding lies inside an edit'
 
 
 def _math_signature(tree, root):
@@ -258,6 +262,38 @@ def _preview_source(evidence, tree, path, diagnostics, records):
         return dict(empty, reason=str(error))
 
 
+def _partial_preview(evidence, tree, path, diagnostics, records, original, budget):
+    """Retry independent edits, then revalidate their union on the original tree."""
+    if original['verification'] != 'withheld' or original.get('reason') != _OVERLAPPING_FINDING:
+        return original
+    edits, _ = _select(tree, diagnostics)
+    if len(edits) < 2:
+        return original
+    if len(edits) > budget[0]:
+        return dict(original, reason='Partial highlight verification budget exceeded; entire source withheld')
+    budget[0] -= len(edits)
+    by_span = {(item['start'] - 1, item['end']): item for item in diagnostics}
+    accepted = []
+    for edit in edits:
+        diagnostic = by_span.get((edit.start, edit.end))
+        if diagnostic is None:
+            return original
+        candidate = _preview_source(evidence, tree, path, [diagnostic], records)
+        if candidate is not None and candidate['verification'] != 'withheld':
+            accepted.append(diagnostic)
+    if not accepted or len(accepted) == len(edits):
+        # A combination may fail even when all its members pass separately.
+        return original
+    # The final result is based on the original source, not independently
+    # generated candidates. This catches interactions among accepted edits and
+    # rechecks all existing diagnostics and suppression scopes, including the
+    # excluded source. If the union fails, retain the original withheld result.
+    combined = _preview_source(evidence, tree, path, accepted, records)
+    if combined is None or combined['verification'] == 'withheld':
+        return original
+    return combined
+
+
 def preview_all(evidence, *, max_items=MAX_PREVIEW_ITEMS, max_bytes=MAX_PREVIEW_BYTES, return_evidence=False):
     """Recompute pinned evidence and return an all-or-nothing source-only batch."""
     if type(evidence) is not modern.ModernHighlightAnalyzer:
@@ -280,6 +316,7 @@ def preview_all(evidence, *, max_items=MAX_PREVIEW_ITEMS, max_bytes=MAX_PREVIEW_
     items = 6 + len(CONDITIONS)
     require(items + diagnostics['report_items'] <= max_items and size <= max_bytes,
             'Modern highlight preview report budget exceeded')
+    subset_budget = [MAX_SUBSET_CHECKS]
     for row in diagnostics['by_file']:
         result['diagnostics_count'] += len(row['diagnostics'])
         result['unresolved_reasons_count'] += len(row['unresolved'])
@@ -290,6 +327,7 @@ def preview_all(evidence, *, max_items=MAX_PREVIEW_ITEMS, max_bytes=MAX_PREVIEW_
         if record is None:
             result['unpreviewed_diagnostics'] += len(row['diagnostics'])
             continue
+        record = _partial_preview(evidence, source.tree, source.path, row['diagnostics'], records, record, subset_budget)
         if record['verification'] == 'withheld':
             result['withheld_source_count'] += 1
             result['unpreviewed_diagnostics'] += len(row['diagnostics'])
