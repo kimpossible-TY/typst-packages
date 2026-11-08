@@ -4,7 +4,7 @@ This is an independent source-pattern diagnostic, not a replacement for the
 existing footnote rule or a proposal to move punctuation or edit a document.
 """
 from document_sequence_preview import _FindingMapper
-from conditional_highlight import _module_alias
+from footnote_shadow import _explicit_footnote_shadow
 import footnote_rules
 import import_graph
 from static_resolver import resolve
@@ -16,61 +16,6 @@ CONDITIONS = (
     'The source call executes as prose in the captured document context.',
     'Runtime sources and imports match the analyzed snapshot; initialization and rendering are not proved.',
 )
-
-
-def _explicit_footnote_shadow(tree):
-    """Conservatively refuse explicit local bindings, including unrelated scopes."""
-    nodes = tree.nodes
-    def contains_name(root):
-        pending = [root]
-        while pending:
-            index = pending.pop()
-            node = nodes[index]
-            if node.kind == 'Ident' and tree.source[node.start:node.end] == b'footnote':
-                return True
-            pending.extend(node.children)
-        return False
-    for index, node in enumerate(nodes):
-        parts = import_graph.significant(tree, index) if node.kind in (
-            'LetBinding', 'Binary', 'DestructAssignment', 'Closure', 'ForLoop', 'ModuleImport') else ()
-        if node.kind == 'LetBinding' and len(parts) >= 2:
-            target = parts[1]
-            if nodes[target].kind == 'Closure':
-                closure = import_graph.significant(tree, target)
-                if closure and nodes[closure[0]].kind == 'Ident' and contains_name(closure[0]):
-                    return True
-            elif contains_name(target):
-                return True
-        elif node.kind == 'Closure':
-            for child in parts:
-                if nodes[child].kind == 'Params' and contains_name(child):
-                    return True
-        elif node.kind == 'Binary' and parts and any(nodes[x].kind in
-                ('Eq', 'PlusEq', 'HyphEq', 'StarEq', 'SlashEq') for x in parts):
-            if contains_name(parts[0]):
-                return True
-        elif node.kind == 'DestructAssignment' and parts and contains_name(parts[0]):
-            return True
-        elif node.kind == 'ForLoop':
-            for child in parts[1:]:
-                if nodes[child].kind == 'In':
-                    break
-                if contains_name(child):
-                    return True
-        elif node.kind == 'ModuleImport':
-            module = _module_alias(tree, index)
-            if module is not None and module[1] == 'footnote':
-                return True
-            shape = import_graph.import_shape(tree, index)
-            if shape is not None and shape.items is not None and any(local == 'footnote' for _, local in shape.items):
-                return True
-            # A named module import can also shadow the builtin. Check its
-            # syntactic destination without treating a wildcard as evidence.
-            for pos, part in enumerate(parts[:-1]):
-                if nodes[part].kind == 'As' and nodes[parts[pos + 1]].kind == 'Ident' \
-                        and tree.source[nodes[parts[pos + 1]].start:nodes[parts[pos + 1]].end] == b'footnote':
-                    return True
-    return False
 
 
 def analyze(tree, path, *, catalog=None):

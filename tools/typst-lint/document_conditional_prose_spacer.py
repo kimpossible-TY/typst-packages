@@ -64,6 +64,8 @@ def preview(tree, path, *, catalog=None):
     try:
         if tree.mode != 'markup' or tree.nodes[0].errors:
             raise SafetyError('Requires well-formed markup source')
+        if b'#footnote[' in source and footnote_rules._explicit_footnote_shadow(tree):
+            raise SafetyError('Explicit footnote binding or mutation; spacer removal is withheld')
         before_resolution = resolve(tree, packages=())
         before = footnote_rules.analyze_conditional_nested(tree, path, before_resolution, catalog=records)
         edits, calls = _select(tree, before)

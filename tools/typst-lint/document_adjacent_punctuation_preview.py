@@ -53,6 +53,8 @@ def preview(tree, path, *, catalog=None):
     try:
         if tree.mode != 'markup' or tree.nodes[0].errors:
             raise SafetyError('Requires well-formed markup source')
+        if b'#footnote[' in source and footnote_rules._explicit_footnote_shadow(tree):
+            raise SafetyError('Explicit footnote binding or mutation; punctuation move is withheld')
         edits, targets = _select(tree, path, records)
         if not edits:
             return None

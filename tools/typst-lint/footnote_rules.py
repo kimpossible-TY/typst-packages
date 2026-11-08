@@ -11,6 +11,7 @@ from collections.abc import Mapping
 import re
 
 from edit_plan import Edit
+from footnote_shadow import _explicit_footnote_shadow
 from static_resolver import SpacerProof
 from prose_boundary import footnote_boundaries, valid_insertion_proof
 from suppression import resolve as resolve_suppressions
@@ -282,6 +283,7 @@ def analyze_conditional_nested(tree, path, resolution, *, catalog=None, _math_ga
                 for key in ('grade', 'source')) for rid in RULE_IDS)):
         raise InputError('Missing or invalid footnote rule metadata')
     scopes = resolve_suppressions(tree, set(metadata))
+    explicit_shadow = _explicit_footnote_shadow(tree)
     parents = {child: index for index, node in enumerate(nodes) for child in node.children}
     excluded = {}
     for index, node in enumerate(nodes):
@@ -396,7 +398,9 @@ def analyze_conditional_nested(tree, path, resolution, *, catalog=None, _math_ga
                 for math_id in equation.children:
                     if nodes[math_id].kind == 'Math':
                         inspect(math_id, math=True, has_alignment=aligned(math_id))
-    return {rid: FootnoteResult(tuple(findings[rid]), (), (reason,),
+    return {rid: FootnoteResult(tuple(findings[rid]), (), (reason,) + (
+                                ('Explicit footnote binding or mutation; source patterns remain conditional',)
+                                if explicit_shadow else ()),
                                 suppressed=tuple(suppressed[rid])) for rid in RULE_IDS}
 
 
@@ -483,6 +487,8 @@ def preview_conditional_unaligned_spacers(tree, path, resolution, *, catalog=Non
     if not edits:
         return None
     try:
+        if _explicit_footnote_shadow(tree):
+            raise SafetyError('Explicit shadow: footnote binding is not locally proven')
         proposal = plan(tree.source, edits)
         if proposal.deferred or len(proposal.edits) != len(edits):
             raise SafetyError('Conflicting conditional spacer proposals')
@@ -540,6 +546,8 @@ def _preview_conditional_edits(tree, path, records, baseline, edits, edited_rule
     if not edits:
         return None
     try:
+        if _explicit_footnote_shadow(tree):
+            raise SafetyError('Explicit shadow: footnote binding is not locally proven')
         candidate_plan = plan(tree.source, edits)
         if candidate_plan.deferred or len(candidate_plan.edits) != len(edits):
             raise SafetyError('Overlapping or ineffective conditional footnote gaps')
