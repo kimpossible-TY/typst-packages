@@ -22,7 +22,7 @@ RULE = paragraph_rules.CAPITALIZATION
 CONDITIONS = (
     'The source paragraph_tab resolves to the intended paragraph marker at runtime.',
     'The selected paragraph is ordinary English prose and this content executes.',
-    'Runtime sources and include context match this snapshot; rendered output will change.',
+    'Source capitalization changes; rendered text may change depending on marker and show behavior.',
 )
 
 

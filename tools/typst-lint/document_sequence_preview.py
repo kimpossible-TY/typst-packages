@@ -668,10 +668,10 @@ def explicit_withheld_record(source):
                 reason='Caller excluded this entire source from all preview rule stages')
 
 
-def validate_explicit_withheld(context, paths, partial_unsupported):
+def validate_explicit_withheld(context, paths):
     """Validate the separately supplied, exact caller selection."""
-    if type(paths) is not tuple or (paths and not partial_unsupported):
-        raise SafetyError('Explicit source withholding requires partial preview')
+    if type(paths) is not tuple:
+        raise SafetyError('Explicit source withholding requires a tuple of paths')
     if (len(paths) > len(context.sources) or any(type(path) is not str for path in paths)
             or len(set(paths)) != len(paths)):
         raise SafetyError('Invalid or duplicate explicitly withheld sources')
@@ -701,11 +701,11 @@ def replay_document(context, records, catalog, *, profile=_STANDARD, footnote_ev
         raise SafetyError('Unproven binding selection requires explicit partial preview')
     if withheld_records is None:
         withheld_records = []
-    if (type(withheld_records) is not list or len(withheld_records) > len(context.sources)
-            or (withheld_records and not partial_unsupported)):
-        raise SafetyError('Invalid partial preview withheld records')
     include_context.assert_include_context(context)
-    explicit = validate_explicit_withheld(context, explicit_withheld_sources, partial_unsupported)
+    explicit = validate_explicit_withheld(context, explicit_withheld_sources)
+    if (type(withheld_records) is not list or len(withheld_records) > len(context.sources)
+            or (withheld_records and not partial_unsupported and not explicit)):
+        raise SafetyError('Invalid partial preview withheld records')
     if footnote_evidence is not None:
         import document_footnote_evidence
         if (type(footnote_evidence) is not document_footnote_evidence.PreviewFootnoteEvidence
@@ -740,7 +740,7 @@ def replay_document(context, records, catalog, *, profile=_STANDARD, footnote_ev
                            classify_deferred=partial_unsupported,
                            classify_unproven_binding=partial_unproven_binding)
         if excluded is not None:
-            if (expected is None or expected.get('verification') != 'withheld'
+            if (not partial_unsupported or expected is None or expected.get('verification') != 'withheld'
                     or expected.get('reason_code') not in (('unsupported-deferred-footnote-binding',
                         'unproven-source-footnote-binding') if partial_unproven_binding else
                         ('unsupported-deferred-footnote-binding',))

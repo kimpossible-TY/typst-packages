@@ -41,7 +41,7 @@
 | --- | --- | --- | --- | --- |
 | `pde.import-order` | 제안 | L | — | 명시적 import 그래프와 순수한 리터럴 모듈에서만 안전한 순서 변경. |
 | `pde.no-redundant-facade-import` | 제안 | — | — | facade와 원래 바인딩의 동일성이 그래프로 증명된 중복 import. |
-| `pde.paragraph-marker-gap` | 제안 | L, P, 독립 미리보기 | — | 조건부 독립 수정안은 root·중첩 `paragraph-tab`도 별도로 다룬다. 직전 함수 호출 등 불명확한 경계는 보류하며, 렌더가 달라질 수 있고 바인딩과 실행은 미증명이다. |
+| `pde.paragraph-marker-gap` | 제안 | L, P, 독립 미리보기 | — | 기본 독립 수정안은 불명확한 직전 함수 호출을 보류한다. 별도 선택 시 제한된 pagebreak·flowbox 뒤의 후보도 개별 바인딩 조건과 함께 제안한다. 렌더가 달라질 수 있고 바인딩과 실행은 미증명이다. |
 | `pde.paragraph-marker-target` | 제안 | L | — | 직접 중첩 본문의 제목·display 앞 marker를 조건부 진단하며 `paragraph-tab`도 별도로 포함한다. 바인딩·실행·본문 소유권은 미확인이다. |
 | `pde.prose-paragraph-marker` | 제안 | L, 독립 미리보기 | — | 독립 미리보기는 기존의 제한된 리터럴 문단 경계에서 ASCII 대문자로 시작하는 산문 앞에만 마커 삽입을 제안한다. 마커·show 바인딩과 실행은 조건부다. |
 | `pde.continuation-line` | 제안 | L, 독립 미리보기 | — | 제한된 직접 리터럴 문장·어휘와 경계만. `--preview-conditional-continuations`는 소스 줄바꿈을 공백으로 바꾸는 독립 후보를 제안하며 렌더 동등성은 미증명이다. |
@@ -56,7 +56,7 @@
 | `pde.text-only-highlight` | 제안 | P, 현대 helper 별도 진단 | — | P는 기존 검토 helper와 단순 리터럴 본문에 한정된다. 별도 `--modern-highlight-evidence`는 정확한 현대 helper artifact의 default/flow/phrase 리터럴 본문에 포함된 수식을 조건부 진단한다. 바인딩·실행·렌더와 미지원 본문은 미확인이고 이 경로는 수정안을 내지 않는다. |
 | `pde.theme-cancelmark` | 진단 | L | — | 확인된 수학 취소 호출; 명세의 cancelmark 교체는 현재 제공하지 않는다. |
 | `pde.flowbox-colored-border` | 제안 | — | — | 검토된 전체 math-blocks 모듈의 정확한 형태와 이미 존재하는 theme binding이 필요하다. |
-| `pde.paragraph-capitalization` | 제안 | L, 독립 미리보기 | — | `paragraph-tab`을 포함한 중첩 marker 뒤 제한된 소문자 시작어를 조건부 진단한다. 독립 수정안의 기존 범위와 marker 바인딩·언어·실행은 별도다. |
+| `pde.paragraph-capitalization` | 제안 | L, 독립 미리보기 | — | 중첩 `paragraph_tab`/`paragraph-tab` 뒤 제한된 소문자 시작어를 별도 조건부 진단·수정 제안한다. 바인딩·언어·실행은 미증명이고 렌더가 달라질 수 있다. |
 
 ## 읽을 때 주의할 점
 

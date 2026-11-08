@@ -36,6 +36,7 @@ def report_document(root, entrypoint, *, rule_set='core', package_path=None,
                     preview_conditional_continuations=False,
                     preview_conditional_capitalization=False,
                     preview_conditional_paragraph_gaps=False,
+                    preview_conditional_block_marker_gaps=False,
                     preview_conditional_prose_spacers=False,
                     preview_conditional_aligned_spacers=False,
                     preview_conditional_prose_markers=False,
@@ -83,6 +84,9 @@ def report_document(root, entrypoint, *, rule_set='core', package_path=None,
     require(type(preview_conditional_paragraph_gaps) is bool
             and (not preview_conditional_paragraph_gaps or rule_set == 'pde'),
             'Conditional paragraph gap previews require explicit --rule-set pde')
+    require(type(preview_conditional_block_marker_gaps) is bool
+            and (not preview_conditional_block_marker_gaps or rule_set == 'pde'),
+            'Conditional block marker gap previews require explicit --rule-set pde')
     require(type(preview_conditional_prose_spacers) is bool
             and (not preview_conditional_prose_spacers or rule_set == 'pde'),
             'Conditional prose spacer previews require explicit --rule-set pde')
@@ -175,8 +179,10 @@ def report_document(root, entrypoint, *, rule_set='core', package_path=None,
     conditional_scoped_previews = []
     conditional_continuation_previews = []
     conditional_capitalization_previews = []
+    conditional_hyphen_capitalization_previews = []
     conditional_paragraph_gap_previews = []
     conditional_hyphen_marker_gap_previews = []
+    conditional_hyphen_block_gap_previews = []
     conditional_prose_spacer_previews = []
     conditional_aligned_spacer_previews = []
     conditional_prose_marker_previews = []
@@ -496,6 +502,8 @@ def report_document(root, entrypoint, *, rule_set='core', package_path=None,
                 conditional_continuation_previews.append(continuation)
             if preview_conditional_capitalization:
                 from document_conditional_capitalization import CONDITIONS, preview as preview_capitalization
+                from document_hyphen_marker_capitalization import CONDITIONS as HYPHEN_CAPITALIZATION_CONDITIONS
+                from document_hyphen_marker_capitalization import preview as preview_hyphen_capitalization
                 capitalization = preview_capitalization(item.tree, item.path, catalog=catalog['rules'])
                 if capitalization is None:
                     capitalization = dict(path=item.path, baseline_sha256=digest(item.source),
@@ -506,6 +514,16 @@ def report_document(root, entrypoint, *, rule_set='core', package_path=None,
                           + int('reason' in capitalization))
                 require(items <= MAX_REPORT_ITEMS, 'Document inspection report item limit exceeded')
                 conditional_capitalization_previews.append(capitalization)
+                hyphen_capitalization = preview_hyphen_capitalization(item.tree, item.path, catalog=catalog['rules'])
+                if hyphen_capitalization is None:
+                    hyphen_capitalization = dict(path=item.path, baseline_sha256=digest(item.source),
+                        candidate_sha256=None, verification='no-candidate', conditions=HYPHEN_CAPITALIZATION_CONDITIONS,
+                        execution_proved=False, runtime_binding_proved=False,
+                        render_equivalence_proved=False, edit_permission=False, compiler_permission=False, edits=[])
+                items += (1 + len(hyphen_capitalization['edits']) + len(hyphen_capitalization['conditions'])
+                          + int('reason' in hyphen_capitalization))
+                require(items <= MAX_REPORT_ITEMS, 'Document inspection report item limit exceeded')
+                conditional_hyphen_capitalization_previews.append(hyphen_capitalization)
             if preview_conditional_paragraph_gaps:
                 from document_conditional_paragraph_gap import CONDITIONS, preview as preview_paragraph_gap
                 paragraph_gap = preview_paragraph_gap(item.tree, item.path, catalog=catalog['rules'])
@@ -530,6 +548,19 @@ def report_document(root, entrypoint, *, rule_set='core', package_path=None,
                           + len(hyphen_gap['unresolved']) + int('reason' in hyphen_gap))
                 require(items <= MAX_REPORT_ITEMS, 'Document inspection report item limit exceeded')
                 conditional_hyphen_marker_gap_previews.append(hyphen_gap)
+            if preview_conditional_block_marker_gaps:
+                from document_hyphen_gap_after_blocks import CONDITIONS, preview as preview_hyphen_block_gap
+                block_gap = preview_hyphen_block_gap(item.tree, item.path, catalog=catalog['rules'])
+                if block_gap is None:
+                    block_gap = dict(path=item.path, baseline_sha256=digest(item.source),
+                        candidate_sha256=None, verification='no-candidate', conditions=CONDITIONS,
+                        execution_proved=False, runtime_binding_proved=False,
+                        render_equivalence_proved=False, edit_permission=False, compiler_permission=False, edits=[])
+                items += (1 + len(block_gap['edits']) + len(block_gap['conditions'])
+                          + int('reason' in block_gap)
+                          + sum(len(edit['preceding_conditions']) for edit in block_gap['edits']))
+                require(items <= MAX_REPORT_ITEMS, 'Document inspection report item limit exceeded')
+                conditional_hyphen_block_gap_previews.append(block_gap)
             if preview_conditional_prose_spacers:
                 from document_conditional_prose_spacer import CONDITIONS, preview as preview_prose_spacer
                 prose_spacer = preview_prose_spacer(item.tree, item.path, catalog=catalog['rules'])
@@ -799,11 +830,18 @@ def report_document(root, entrypoint, *, rule_set='core', package_path=None,
         report['conditional_capitalization_previews'] = dict(by_file=conditional_capitalization_previews,
             edit_permission=False, compiler_permission=False,
             scope='independent-source-pattern-not-composed-or-render-verified')
+        report['conditional_hyphen_capitalization_previews'] = dict(by_file=conditional_hyphen_capitalization_previews,
+            edit_permission=False, compiler_permission=False,
+            scope='independent-source-pattern-not-composed-or-render-verified')
     if preview_conditional_paragraph_gaps:
         report['conditional_paragraph_gap_previews'] = dict(by_file=conditional_paragraph_gap_previews,
             edit_permission=False, compiler_permission=False,
             scope='independent-source-pattern-not-composed-or-render-verified')
         report['conditional_hyphen_marker_gap_previews'] = dict(by_file=conditional_hyphen_marker_gap_previews,
+            edit_permission=False, compiler_permission=False,
+            scope='independent-source-pattern-not-composed-or-render-verified')
+    if preview_conditional_block_marker_gaps:
+        report['conditional_hyphen_block_gap_previews'] = dict(by_file=conditional_hyphen_block_gap_previews,
             edit_permission=False, compiler_permission=False,
             scope='independent-source-pattern-not-composed-or-render-verified')
     if preview_conditional_prose_spacers:
@@ -882,6 +920,8 @@ def main(arguments=None):
                         help='Preview conditional nested paragraph capitalization (requires --rule-set pde)')
     parser.add_argument('--preview-conditional-paragraph-gaps', action='store_true',
                         help='Preview conditional nested marker blank lines (requires --rule-set pde)')
+    parser.add_argument('--preview-conditional-block-marker-gaps', action='store_true',
+                        help='Preview extra marker gaps after conditional block-like calls (requires --rule-set pde)')
     parser.add_argument('--preview-conditional-prose-spacers', action='store_true',
                         help='Preview conditional prose footnote spacer removal (requires --rule-set pde)')
     parser.add_argument('--preview-conditional-aligned-spacers', action='store_true',
@@ -919,6 +959,7 @@ def main(arguments=None):
                                  preview_conditional_continuations=args.preview_conditional_continuations,
                                  preview_conditional_capitalization=args.preview_conditional_capitalization,
                                  preview_conditional_paragraph_gaps=args.preview_conditional_paragraph_gaps,
+                                 preview_conditional_block_marker_gaps=args.preview_conditional_block_marker_gaps,
                                  preview_conditional_prose_spacers=args.preview_conditional_prose_spacers,
                                  preview_conditional_aligned_spacers=args.preview_conditional_aligned_spacers,
                                  preview_conditional_prose_markers=args.preview_conditional_prose_markers,
@@ -1091,6 +1132,20 @@ def main(arguments=None):
             if capitalizations['by_file']:
                 for condition in capitalizations['by_file'][0]['conditions']:
                     print(f"  condition: {condition}")
+        if 'conditional_hyphen_capitalization_previews' in result:
+            capitalizations = result['conditional_hyphen_capitalization_previews']
+            print('Conditional hyphen-marker capitalization previews: source-only, no edit or compiler permission')
+            for row in capitalizations['by_file']:
+                print(f"  {row['path']}: {row['verification']}; {len(row['edits'])} proposed edits; "
+                      f"source sha256 {row['baseline_sha256']}; candidate sha256 {row['candidate_sha256']}")
+                if 'reason' in row:
+                    print(f"    unresolved: {row['reason']}")
+                for entry in row['edits']:
+                    print(f"    conditional edit bytes {entry['start']}..{entry['end']}: "
+                          f"replace with {entry['replacement']}")
+            if capitalizations['by_file']:
+                for condition in capitalizations['by_file'][0]['conditions']:
+                    print(f"  condition: {condition}")
         if 'conditional_paragraph_gap_previews' in result:
             paragraph_gaps = result['conditional_paragraph_gap_previews']
             print('Conditional paragraph gap previews: source-only, no edit or compiler permission')
@@ -1119,6 +1174,21 @@ def main(arguments=None):
                     print(f"    conditional edit bytes {entry['start']}..{entry['end']}: insert blank line")
             if hyphen_gaps['by_file']:
                 for condition in hyphen_gaps['by_file'][0]['conditions']:
+                    print(f"  condition: {condition}")
+        if 'conditional_hyphen_block_gap_previews' in result:
+            block_gaps = result['conditional_hyphen_block_gap_previews']
+            print('Conditional block-adjacent marker gap previews: source-only, no edit or compiler permission')
+            for row in block_gaps['by_file']:
+                print(f"  {row['path']}: {row['verification']}; {len(row['edits'])} proposed edits; "
+                      f"source sha256 {row['baseline_sha256']}; candidate sha256 {row['candidate_sha256']}")
+                if 'reason' in row:
+                    print(f"    unresolved: {row['reason']}")
+                for entry in row['edits']:
+                    print(f"    conditional edit at byte {entry['start']} after {entry['preceding_kind']}: insert blank line")
+                    for condition in entry['preceding_conditions']:
+                        print(f"      condition: {condition}")
+            if block_gaps['by_file']:
+                for condition in block_gaps['by_file'][0]['conditions']:
                     print(f"  condition: {condition}")
         if 'conditional_prose_spacer_previews' in result:
             prose_spacers = result['conditional_prose_spacer_previews']

@@ -82,9 +82,15 @@ The independent `--rule-set pde --preview-conditional-capitalization` option
 proposes capitalizing the first ASCII byte of a narrowly recognized nested
 paragraph starter. Per-file rows retain exact edits and source/candidate hashes;
 reasoned suppressions and other checked source findings are preserved. The marker
-binding, English prose context and execution remain conditions. The intended
-rendered text changes, and the source-only proposals are not composed or applied
-and do not grant compiler authority or increase global coverage.
+binding, English prose context and execution remain conditions. Source casing
+changes, while rendered text may already be capitalized by a show rule. The
+source-only proposals are not composed or applied and do not grant compiler
+authority or increase global coverage.
+The option's separate `conditional_hyphen_capitalization_previews` section
+handles nested literal `#paragraph-tab` spelling under the same English and
+binding conditions. The source casing changes; rendered text may differ or
+already be capitalized by a show rule. Root casing is not supported and no
+source writes or compiler authority follow.
 
 The independent `--rule-set pde --preview-conditional-paragraph-gaps` option
 proposes an LF or CRLF blank line before a narrowly recognized nested standalone
@@ -100,6 +106,16 @@ function call, identifier, comment or other unclassified expression is reported
 unresolved: it could be a footnote or output requiring a different repair.
 The source-only plan remains separate from the underscore marker plan and can
 change rendering; marker binding and execution are not established.
+
+The separately explicit `--rule-set pde --preview-conditional-block-marker-gaps`
+option offers a source-only plan for a literal `#paragraph-tab` after either
+`pagebreak(weak: true|false)` or `flowbox()[...]`. Each edit lists its own
+callee-specific binding and output conditions; obvious shadows, mutations,
+unsupported arguments and other calls are refused. Wildcard imports, include
+context, execution and rendering remain unproved. This option never widens or
+composes the conservative marker-gap plan and grants no write or compiler
+authority. Two owned fixtures produced byte-identical PDFs; that does not prove
+equivalence for another document.
 
 The independent `--rule-set pde --preview-conditional-prose-spacers` option
 proposes removing a literal `#dots_space` and horizontal separator immediately

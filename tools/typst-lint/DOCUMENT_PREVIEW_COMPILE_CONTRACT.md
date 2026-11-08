@@ -141,12 +141,19 @@ record; omitting the new opt-in cannot replay it.
 For example, add `--partial-unproven-binding-preview` to the partial preview
 command above to request this additional, more limited source-only withholding.
 
-`--withhold-source PROJECT_RELATIVE_PATH` is a separate explicit choice that
-requires `--partial-unsupported-preview` and may be repeated. Each selected
-path must be a distinct canonical relative path in the captured include document.
+`--withhold-source PROJECT_RELATIVE_PATH` is a separate explicit choice that may
+be repeated with the standard profile or any conditional profile; it does not
+require spacer, facade or automatic unsupported-source withholding. Each
+selected path must be a distinct canonical relative path in the captured include document.
 All rule stages skip that file; the report records its captured SHA-256 and all
 catalog rules as uninspected for that source. Replay separately checks the exact
 selection, original hash and withheld records and rejects overlapping edits.
+Only the selected sources are exempt from rule stages. Any other unsupported
+or failed analysis remains fatal unless the separately requested automatic
+withholding mode recognizes it. If no verified candidate edits remain, the
+preview stops before the final baseline/candidate compilation and reports the
+withheld paths with `no_verified_candidate_edits`. A facade-dependent profile
+may already have invoked dependency discovery before planning completes.
 This is a file selection, not a recursive include selection: included sources may
 still have candidate edits. The source and its imports are still captured as
 required and can execute during both PDF compilations. This is for non-adversarial
@@ -162,6 +169,14 @@ edit, so unchanged bytes alone do not establish unchanged runtime behavior.
 Global coverage, dependency closure, source application and publication remain
 unproved, and the status and source-apply blockers remain unchanged.
 
+For example, this partial comparison does not request spacer removal:
+
+```sh
+typst-style compile --preview --root /absolute/project --entrypoint main.typ \
+  --manifest /absolute/resources.json --conditional-gaps \
+  --withhold-source chapter/section.typ --format json
+```
+
 `--review-edits` includes each captured source's baseline and candidate hashes
 and the same ordered edit stages independently replayed for the compiler. Each
 stage's byte offsets apply to its own baseline hash, not the original file after
@@ -173,11 +188,20 @@ that live files remain unchanged after capture. It requires `--format json` or
 
 The JSON report describes the preview; it does not contain PDF bytes. With
 `--pdf-stdout`, stdout contains only the candidate PDF and stderr contains JSON
-metadata. Shell redirection is controlled by the caller and can overwrite an
-existing destination, so choose a new path outside the consumer project. Both
-successful preview forms exit 2 because global lint coverage remains incomplete;
-`phase=preview` and `pdf_generated=true` distinguish a completed preview from
-an input or compiler refusal.
+metadata. In that mode stdout must be a pipe or socket, stderr must not be a
+regular file, and merged stdout/stderr are refused before argument parsing;
+stderr-file and merged-stream refusals are silent. Both stream identities are
+checked again before transfer; a changed stderr identity is also refused silently
+to avoid writing a report to an unverified target. Shell redirection can create or truncate a file
+before the program starts, even when the tool later refuses that stream. A
+downstream pipe consumer controls its own writes. A broken or interrupted pipe can
+already contain part of the PDF; a transfer error reports `status=3`,
+`pdf_streamed=false` and `stdout_may_be_partial=true` when reporting is possible.
+Drain PDF stdout and JSON stderr concurrently when both are pipes. These stream
+restrictions apply only when `--pdf-stdout` is requested. Successful previews
+exit 2 because global lint coverage remains incomplete; `phase=preview`,
+`pdf_generated=true` and, when applicable, `pdf_streamed=true` identify a
+completed preview, not source-write or publication authority.
 
 Warnings or other compiler stderr still refuse the preview. For this refusal,
 the report includes `compiler_stage` (`discovery`, `baseline` or `candidate`), the observed

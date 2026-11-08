@@ -2,6 +2,7 @@
 import argparse
 import json
 from pathlib import Path
+import stat
 import sys
 
 import closed_core_compile as runtime
@@ -26,6 +27,15 @@ class NoPartialPreview(SafetyError):
         super().__init__('Partial preview has no verified candidate edits')
         self.withheld = tuple(withheld)
         self.uninspected_rule_ids = tuple(uninspected_rule_ids)
+
+
+class _PreviewParser(argparse.ArgumentParser):
+    def __init__(self, *args, pdf_stream=False, **kwargs):
+        self._pdf_stream = pdf_stream
+        super().__init__(*args, **kwargs)
+
+    def print_help(self, file=None):
+        super().print_help(file or (sys.stderr if self._pdf_stream else None))
 
 
 def review_sources(context, records, withheld_records=None):
@@ -121,10 +131,19 @@ def parse_manifest_bytes(raw, root, *, allow_empty=False):
 
 
 def main(arguments=None, *, gate=False):
-    parser = argparse.ArgumentParser(prog='typst-style compile --preview' if gate else 'typst-lint preview-compile',
+    words = list(sys.argv[1:] if arguments is None else arguments)
+    pdf_requested = any(word.split('=', 1)[0] == '--pdf-stdout' for word in words)
+    streams = None
+    if pdf_requested:
+        # Lazy import avoids the original compiler's manifest-parser import cycle.
+        import document_original_compile_cli as streams
+        if (streams._same_streams()
+                or streams._regular_stream_id(getattr(sys.stderr, 'buffer', sys.stderr)) is not None):
+            return 2
+    parser = _PreviewParser(prog='typst-style compile --preview' if gate else 'typst-lint preview-compile',
         description=__doc__, allow_abbrev=False,
         epilog='The resource manifest is explicit. PDF bytes are emitted only with --pdf-stdout. '
-               'The selected rules remain partial, so a successful preview exits 2.')
+               'The selected rules remain partial, so a successful preview exits 2.', pdf_stream=pdf_requested)
     parser.add_argument('--root', required=True, help='Canonical absolute consumer root')
     parser.add_argument('--entrypoint', required=True, help='Canonical project-relative .typ entrypoint')
     parser.add_argument('--manifest', required=True, help='Canonical absolute resource manifest JSON')
@@ -147,8 +166,19 @@ def main(arguments=None, *, gate=False):
     parser.add_argument('--partial-unproven-binding-preview', action='store_true',
                         help='Also keep exact source-footnote binding refusals unchanged (requires --partial-unsupported-preview)')
     parser.add_argument('--withhold-source', action='append', default=[], metavar='PROJECT_RELATIVE_PATH',
-                        help='Skip rule stages for this source, but it can still execute during PDF compilation; may be repeated (requires --partial-unsupported-preview)')
-    args = parser.parse_args(sys.argv[1:] if arguments is None else arguments)
+                        help='Keep this source unchanged through every rule stage; it can still execute during PDF compilation (may be repeated)')
+    args = parser.parse_args(words)
+    output_identity = error_identity = None
+    if args.pdf_stdout:
+        output_identity = streams._stream_identity(getattr(sys.stdout, 'buffer', sys.stdout))
+        error_identity = streams._stream_identity(getattr(sys.stderr, 'buffer', sys.stderr))
+        if output_identity is not None and output_identity[2] not in (stat.S_IFIFO, stat.S_IFSOCK):
+            print(json.dumps(dict(schema=1, mode='preview-compile', status=2,
+                error='PDF stdout must be a pipe or socket; regular-file aliases are refused',
+                pdf_generated=False, pdf_streamed=False, publication_authority=False,
+                output_stream_note='Shell redirection may already have truncated its target before this program starts.')),
+                file=sys.stderr)
+            return 2
     if args.review_edits and args.format != 'json' and not args.pdf_stdout:
         parser.error('--review-edits requires --format json or --pdf-stdout')
     if args.conditional_punctuation and not args.conditional_gaps:
@@ -163,8 +193,7 @@ def main(arguments=None, *, gate=False):
         parser.error('--partial-unsupported-preview requires --conditional-facade-footnotes')
     if args.partial_unproven_binding_preview and not args.partial_unsupported_preview:
         parser.error('--partial-unproven-binding-preview requires --partial-unsupported-preview')
-    if args.withhold_source and not args.partial_unsupported_preview:
-        parser.error('--withhold-source requires --partial-unsupported-preview')
+    partial_requested = args.partial_unsupported_preview or bool(args.withhold_source)
     # The executable installs cooperative SIGINT/SIGTERM handling; imported
     # callers do not change process-wide signal handlers.
     import offline_compile_cli
@@ -190,8 +219,7 @@ def main(arguments=None, *, gate=False):
         context = include_context.load_include_context(root, ((args.entrypoint, source),), budget='book-v1')
         catalog, catalog_hash = load_rules()
         explicit_paths = tuple(args.withhold_source)
-        explicit = document_sequence_preview.validate_explicit_withheld(context, explicit_paths,
-                                                                         args.partial_unsupported_preview)
+        explicit = document_sequence_preview.validate_explicit_withheld(context, explicit_paths)
         def plan_records(evidence):
             records, withheld = [], []
             for item in context.sources:
@@ -284,7 +312,7 @@ def main(arguments=None, *, gate=False):
             phase = 'planning'
             planned = plan_records(footnote_evidence)
         records, withheld = planned
-        review = review_sources(context, records, withheld if args.partial_unsupported_preview else None) if args.review_edits else None
+        review = review_sources(context, records, withheld if partial_requested else None) if args.review_edits else None
         phase = 'compile'
         preview = document_preview_compile.compile_preview(context, records, catalog['rules'], snapshot,
                                                            entrypoint=args.entrypoint, cancel_event=cancel,
@@ -293,7 +321,7 @@ def main(arguments=None, *, gate=False):
                                                            profile=profile, starts=starts,
                                                            footnote_evidence=footnote_evidence,
                                                            partial_unsupported=args.partial_unsupported_preview,
-                                                           withheld_records=withheld if args.partial_unsupported_preview else None,
+                                                           withheld_records=withheld if partial_requested else None,
                                                            partial_unproven_binding=args.partial_unproven_binding_preview,
                                                            explicit_withheld_sources=explicit_paths)
         result = dict(schema=1, tool_version=VERSION, mode='preview-compile', status=2, phase='preview',
@@ -323,8 +351,11 @@ def main(arguments=None, *, gate=False):
                                     'live_source_freshness_unproved', 'protected_source_transaction_unavailable']
                                    + ([] if preview.pdfs_identical else ['preview_pdfs_differ'])
                                    + (['partial_preview_withheld_files'] if withheld else [])))
-        if args.partial_unsupported_preview:
-            result['partial_unsupported_preview'] = True
+        if partial_requested:
+            if args.partial_unsupported_preview:
+                result['partial_unsupported_preview'] = True
+            if args.withhold_source:
+                result['explicit_source_withholding'] = True
             if args.partial_unproven_binding_preview:
                 result['partial_unproven_binding_preview'] = True
             result['withheld_sources'] = describe_withheld(withheld, catalog['rules'])
@@ -335,14 +366,28 @@ def main(arguments=None, *, gate=False):
         if cancel is not None and cancel.is_set():
             raise runtime.CompilerFailure('cancelled', kind=runtime.CompilerFailureKind.CANCELLED)
         if args.pdf_stdout:
-            sys.stdout.buffer.write(preview.candidate_pdf)
-            sys.stdout.buffer.flush()
+            phase = 'stream'
+            if (streams._same_streams()
+                    or streams._regular_stream_id(getattr(sys.stderr, 'buffer', sys.stderr)) is not None
+                    or streams._stream_identity(getattr(sys.stderr, 'buffer', sys.stderr)) != error_identity):
+                return 2
+            require(streams._stream_identity(getattr(sys.stdout, 'buffer', sys.stdout)) == output_identity,
+                    'PDF stdout stream changed before transfer')
+            streams._write_pdf(preview.candidate_pdf, cancel)
+            if cancel is not None and cancel.is_set():
+                raise runtime.CompilerFailure('cancelled', kind=runtime.CompilerFailureKind.CANCELLED)
+            result['pdf_streamed'] = True
     except (InputError, SafetyError, PackageInputError, OSError, ValueError, runtime.CompilerFailure) as error:
-        result = dict(schema=1, tool_version=VERSION, mode='preview-compile', status=2, phase=phase,
-                      compiler_stage=None, pdf_generated=False,
+        result = dict(schema=1, tool_version=VERSION, mode='preview-compile', status=3 if phase == 'stream' else 2,
+                      phase=phase, compiler_stage=None, pdf_generated=(phase == 'stream'),
                       source_files_modified=False, publication_authority=False, error=str(error))
+        if args.pdf_stdout and phase == 'stream':
+            result['stdout_may_be_partial'] = True
         if isinstance(error, NoPartialPreview):
-            result['partial_unsupported_preview'] = True
+            if args.partial_unsupported_preview:
+                result['partial_unsupported_preview'] = True
+            if args.withhold_source:
+                result['explicit_source_withholding'] = True
             if args.partial_unproven_binding_preview:
                 result['partial_unproven_binding_preview'] = True
             result['global_coverage_complete'] = False
@@ -371,6 +416,17 @@ def main(arguments=None, *, gate=False):
     result['compiler_stages_started'] = stage_starts
     result['compiler_invoked'] = document_preview_compile.PreviewCompilerStarts._combine(stage_starts.values())
     result['compiler_version_probe_invoked'] = starts.version_probe_invoked()
+    if args.pdf_stdout:
+        result.setdefault('pdf_streamed', False)
+        result['source_modification_scope'] = ('Tool-controlled actions only; caller redirection and '
+                                               'downstream pipe consumers are outside this report')
+        result['output_stream_note'] = ('Stdout and stderr are caller-managed; shell redirection can truncate files '
+            'before this program starts. Stdout requires a pipe or socket. A broken stdout stream can contain '
+            'a partial PDF. Stderr regular files are refused without a report.')
+        if (streams._same_streams()
+                or streams._regular_stream_id(getattr(sys.stderr, 'buffer', sys.stderr)) is not None
+                or streams._stream_identity(getattr(sys.stderr, 'buffer', sys.stderr)) != error_identity):
+            return 2
     stream = sys.stderr if args.pdf_stdout else sys.stdout
     if args.format == 'json' or args.pdf_stdout:
         print(json.dumps(result, ensure_ascii=False, sort_keys=True, indent=2), file=stream)
@@ -381,7 +437,7 @@ def main(arguments=None, *, gate=False):
             print(f"Compiler invoked: {result['compiler_invoked']}", file=stream)
         if result.get('compiler_diagnostics'):
             print(result['compiler_diagnostics'], file=stream)
-        if result.get('partial_unsupported_preview'):
+        if result.get('partial_unsupported_preview') or result.get('explicit_source_withholding'):
             print('Global rule coverage remains incomplete; source application is unavailable.', file=stream)
             for row in result['withheld_sources']:
                 print(f"{row['path']}: {row['rule_id']} {row['reason_code']} "
@@ -399,7 +455,7 @@ def main(arguments=None, *, gate=False):
             info = result['conditional_spacer_preview']
             print(f"Conditional spacer removals planned: {info['planned_edits']}. {info['policy']} "
                   f"{info['eligibility']} {info['render_effect']} {info['pdf_attribution']}", file=stream)
-        if args.partial_unsupported_preview:
+        if partial_requested:
             print(f"Partial preview: {len(result['withheld_sources'])} source(s) kept at their captured original bytes; "
                   f"{result['planned_sources']} source(s) have candidate edits.", file=stream)
             for row in result['withheld_sources']:

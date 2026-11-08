@@ -107,6 +107,7 @@ inspection route:
 /path/to/typst-packages/tools/typst-lint/typst-lint inspect-document --root /absolute/project --entrypoint main.typ --rule-set pde --preview-conditional-continuations --format json
 /path/to/typst-packages/tools/typst-lint/typst-lint inspect-document --root /absolute/project --entrypoint main.typ --rule-set pde --preview-conditional-capitalization --format json
 /path/to/typst-packages/tools/typst-lint/typst-lint inspect-document --root /absolute/project --entrypoint main.typ --rule-set pde --preview-conditional-paragraph-gaps --format json
+/path/to/typst-packages/tools/typst-lint/typst-lint inspect-document --root /absolute/project --entrypoint main.typ --rule-set pde --preview-conditional-block-marker-gaps --format json
 /path/to/typst-packages/tools/typst-lint/typst-lint inspect-document --root /absolute/project --entrypoint main.typ --rule-set pde --preview-conditional-prose-spacers --format json
 /path/to/typst-packages/tools/typst-lint/typst-lint inspect-document --root /absolute/project --entrypoint main.typ --rule-set pde --preview-conditional-aligned-spacers --format json
 /path/to/typst-packages/tools/typst-lint/typst-lint inspect-document --root /absolute/project --entrypoint main.typ --rule-set pde --preview-conditional-prose-markers --format json
@@ -236,9 +237,16 @@ Common resolver refusals are reported once per source. These rules remain in
 The separate `conditional_hyphen_markers` section covers literal
 `#paragraph-tab`: root and nested gap hints and nested target/capitalization
 hints. It is diagnostic-only; marker binding and execution remain conditional.
+The independent `--preview-conditional-capitalization` option also offers a
+separate source-only casing candidate for its supported nested hyphenated marker.
+This changes source casing and can change rendered text; it does not establish
+the marker binding, show behavior or language.
 The paragraph-gap preview option separately reports eligible root and nested
 `#paragraph-tab` edits, withholding ambiguous preceding calls. The candidates
 are independent of underscore-marker previews and may change rendering.
+The separately opted-in block-marker-gap preview handles two additional literal
+call forms under explicit per-edit `pagebreak` or `flowbox` binding and output
+conditions. It is independent of the conservative plan and may change rendering.
 See [document rule coverage](DOCUMENT_RULE_COVERAGE.md) for each rule's current
 single-source, document-hint and compile-preview scope.
 To inspect conditional builtin-footnote bindings through captured relative
@@ -293,9 +301,10 @@ entire source with an unproven footnote binding. Unknown or dynamic transitive
 imports and other safety failures still block the preview. Both options retain
 the withheld source unchanged and do not authorize source application.
 The separately explicit, repeatable `--withhold-source PROJECT_RELATIVE_PATH`
-skips every preview rule stage for the selected captured source. The source and
-its dependencies still execute in the PDF preview; included sources are not
-automatically excluded. Use it only with non-adversarial inputs. The sandbox
+skips every preview rule stage for the selected captured source, independently
+of whether conditional spacers are selected. The source and its dependencies
+can still execute in the PDF preview; included sources are not automatically
+excluded. Use it only with non-adversarial inputs. The sandbox
 denies network and writes outside its workspace, but does not prevent every read
 or transient input modification within it. See the preview contract for limits.
 The ordinary, unprofiled compile gate remains blocked; the preview neither
