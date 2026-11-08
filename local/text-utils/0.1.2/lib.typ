@@ -21,102 +21,47 @@
   body
 }
 
-// Applies background highlighting to text content.
-// Handles both regular inline text and math equations differently.
-// For math equations, it wraps them in a colored box with y-outset.
-// For normal text, it uses the standard Typst highlight element.
-#let highlighted(body) = context {
-  // Determine appropriate highlight colors based on the current text color (light vs dark theme)
-  let theme = if text.fill == rgb("#e8edf3") {
-    (highlight: rgb("#665c1f")) // Dark mode highlight color (muted gold/green)
+// Highlights flowing prose, or one explicitly selected inline phrase.
+// Use adjacent flow / phrase / flow calls rather than nesting the modes.
+#let highlighted(body, mode: "flow") = context {
+  assert(("flow", "phrase").contains(mode),
+    message: "highlighted: mode must be \"flow\" or \"phrase\".")
+
+  let fill = if text.fill == rgb("#e8edf3") {
+    rgb("#665c1f")
   } else {
-    (highlight: rgb("#FFFE80")) // Light mode highlight color (bright yellow)
+    rgb("#FFFE80")
   }
-
-  // Plain strings have no `.has`, so normalize them to content first.
   let body = if type(body) == str { [#body] } else { body }
-  let children = if body.has("children") { body.children } else { (body,) }
-  let is-eq(child) = repr(child.func()) == "equation"
 
-  // The highlight uses one common extent above and below the baseline: the
-  // plain-text ascender/descender, grown to the tallest equation in the body.
-  // Every piece then gets the same background height. The background is only
-  // painted; it does not change line spacing.
-  let base-ascent = measure(text(top-edge: "ascender", bottom-edge: "baseline")[x]).height
-  let base-descent = measure(text(top-edge: "baseline", bottom-edge: "descender")[x]).height
-  let ascent = base-ascent
-  let descent = base-descent
-  for child in children.filter(is-eq) {
-    let eq = box($#child.at("body")$)
-    ascent = calc.max(ascent, measure({
-      set text(top-edge: "bounds", bottom-edge: "baseline")
-      eq
-    }).height)
-    descent = calc.max(descent, measure({
-      set text(top-edge: "baseline", bottom-edge: "bounds")
-      eq
-    }).height)
+  // Preserve the original inline equation and its inherited math styles.
+  // Natural glyph bounds reserve room for tall formulas instead of clipping
+  // them to the prose's height or painting over the following line.
+  let natural-equations(body, fill: none) = {
+    show math.equation.where(block: false): it => box(
+      fill: fill,
+      inset: if fill == none { 0pt } else { (x: 0.05em, y: 0.08em) },
+    )[
+      #set text(top-edge: "bounds", bottom-edge: "bounds")
+      #it
+    ]
+    body
   }
 
-  // Backgrounds of adjacent lines are painted line by line, so a later line
-  // would paint over the previous line's equation. Never let the extent exceed
-  // the line pitch: backgrounds then at most touch, so the colour stays
-  // consistent with no overlap. Extra room beyond the text is shared in
-  // proportion to what the equations need.
-  let pitch = base-ascent + base-descent + par.leading.to-absolute()
-  let extra = (ascent - base-ascent) + (descent - base-descent)
-  let room = pitch - base-ascent - base-descent
-  if extra > room and extra > 0pt {
-    let ratio = room / extra
-    ascent = base-ascent + (ascent - base-ascent) * ratio
-    descent = base-descent + (descent - base-descent) * ratio
-  }
-
-  // Keep adjacent text in one highlight element so its background geometry is
-  // calculated consistently instead of once per child (or character).
-  // Equations are emitted separately as boxes pinned to the common extent.
-  let parts = ()
-  let buf = []
-  let has-text = false
-
-  let fill-text(content) = highlight(
-    content,
-    fill: theme.highlight,
-    // Resolve these proportions at each text run, including text(size: ...)
-    // inside the body, rather than freezing every run to the caller's size.
-    top-edge: ascent / text.size * 1em,
-    bottom-edge: -descent / text.size * 1em,
-  )
-
-  for child in children {
-    if is-eq(child) {
-      if has-text {
-        parts.push(fill-text(buf))
-        buf = []
-        has-text = false
-      }
-
-      // The frame keeps the normal line height (so line spacing is unchanged);
-      // only the background is extended with `outset`.
-      parts.push(box(
-        fill: theme.highlight,
-        outset: (top: ascent - base-ascent, bottom: descent - base-descent),
-      )[
-        #set text(top-edge: base-ascent, bottom-edge: -base-descent)
-        #box($#child.at("body")$)
-      ])
-    } else {
-      buf = buf + child
-      has-text = true
-    }
-  }
-
-  if has-text {
-    parts.push(fill-text(buf))
-  }
-
-  for part in parts {
-    part
+  if mode == "flow" {
+    highlight(
+      fill: fill, top-edge: "ascender", bottom-edge: "descender",
+      natural-equations(body, fill: fill),
+    )
+  } else {
+    // One box moves as a unit in its paragraph; its contents can still wrap.
+    // Include the prose's descenders, including larger text at the end.
+    box(
+      fill: fill, radius: 0.08em, inset: (x: 0.15em, y: 0.1em),
+    )[
+      #set text(top-edge: "ascender", bottom-edge: "descender")
+      #natural-equations(body)
+    ]
   }
 }
 

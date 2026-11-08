@@ -95,7 +95,7 @@ TYPST_PACKAGE_PATH="$HOME/.local/share/typst/packages" ./scripts/install-local.s
 Provides text helpers, title capitalization, and custom paragraph markers.
 
 * **Paragraph Tabs (`apply-paragraph-tabs`)**: Renders custom paragraph markers. If `#paragraph-tab` is followed by a lowercase letter, it automatically capitalizes the letter and indents by `1.5em`.
-* **Highlighter (`highlighted`)**: Intelligently highlights background colors for both inline text and mathematical equations, automatically adjusting color based on whether light or dark theme is active.
+* **Highlighter (`highlighted`)**: Highlights prose and inline equations with theme-aware colors. The default `mode: "flow"` follows each text run's font metrics and lets sentences wrap normally. Inline equations retain their original styles and reserve their natural glyph height, including inside bold, italic, links, and size changes; tall formulas can increase line spacing. Use `mode: "phrase"` to group a short, explicitly chosen phrase into one rectangular inline box.
 
 ```typst
 #import "@local/text-utils:0.1.2": *
@@ -110,7 +110,17 @@ We can highlight text and inline formulas:
 #highlighted[
   This is highlighted text containing a formula $a^2 + b^2 = c^2$.
 ]
+
+// Keep flow / phrase / flow adjacent in the same paragraph.
+#highlighted[The value ]#highlighted(mode: "phrase")[#text(size: 1.6em)[Agjp] $x^2$]#highlighted[ remains positive.]
 ```
+
+Keep the two modes adjacent rather than nesting them. A phrase box moves as
+one unit in the surrounding paragraph; long contents can wrap inside the box,
+and unbreakable text or formulas can overflow the available width. Choose short
+phrases explicitly: there is no automatic mode selection or overflow fallback.
+Only `"flow"` and `"phrase"` are accepted. Keep display equations outside prose
+highlights.
 
 ---
 
