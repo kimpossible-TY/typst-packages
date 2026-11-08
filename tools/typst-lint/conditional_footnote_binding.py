@@ -107,11 +107,19 @@ def _graph_signature(graph):
 def _valid(session):
     try:
         issued = _ISSUED.get(id(session))
-        return bool(type(session) is ConditionalFootnoteBinding and issued and issued[0]() is session
+        valid = bool(type(session) is ConditionalFootnoteBinding and issued and issued[0]() is session
                     and issued[1] is session._context and issued[2] is session._namespaces
                     and issued[3] == _graph_signature(session._graph)
-                    and include_context.assert_include_context(session._context)
+                    and (len(issued) == 5 or include_context.assert_include_context(session._context))
                     and namespace_multiroot.verify_multiroot_capture(session._namespaces))
+        if not valid or len(issued) == 4:
+            return valid
+        if len(issued) != 5:
+            return False
+        import document_intermediate_context
+        derived = document_intermediate_context.assert_intermediate(issued[4])
+        return (derived.context is session._context and derived.graph is session._graph
+                and derived._proof._session._namespaces is session._namespaces)
     except Exception:
         return False
 

@@ -348,6 +348,9 @@ _CODES = frozenset(('dynamic-request', 'escaped-request', 'package-request',
 # Its independent primitive signature attests original parser-produced facts,
 # not current filesystem state or any protected authority.
 _ISSUED = {}
+# A derived in-memory context additionally depends on its original capture.
+# Weak references ensure holding only the context cannot prolong that proof.
+_DERIVED = {}
 
 
 def _context_signature(context):
@@ -497,7 +500,23 @@ def assert_include_context(context):
         raise
     except (AttributeError, TypeError, ValueError, UnicodeError, RecursionError) as error:
         raise IncludeCaptureError('Issued include context representation changed') from error
+    derived = _DERIVED.get(id(context))
+    if derived is not None:
+        if derived[0]() is not context or derived[1]() is None:
+            raise IncludeCaptureError('Derived include context backing has expired')
+        import document_intermediate_context
+        document_intermediate_context._assert_backing(derived[1](), context)
     return context
+
+
+def _bind_derived(context, owner):
+    """Tie a newly derived context to its independently issued owner."""
+    key = id(context)
+    def expired(reference):
+        retained = _DERIVED.get(key)
+        if retained is not None and retained[0] is reference:
+            _DERIVED.pop(key, None)
+    _DERIVED[key] = weakref.ref(context, expired), weakref.ref(owner)
 
 
 def load_include_context(project_root, entrypoint_sources, *, budget='standard-v1'):
