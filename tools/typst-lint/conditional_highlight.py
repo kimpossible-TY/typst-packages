@@ -788,6 +788,13 @@ def _analyze(tree, path, analyzer):
                     env[binding[0]] = binding[1]
                     analyzer.bindings(env)
                 continue
+            if node.kind == 'Contextual' and callbacks:
+                # Context captures its surrounding lexical bindings. Its body
+                # remains unresolved; assignments and returns detected by the
+                # syntactic effects scan were already refused above. Other
+                # effects and the rendering context are not proved here.
+                record(f'Contextual body has unresolved execution context at byte {node.start}')
+                continue
             if node.kind in ('ModuleInclude', 'CodeBlock', 'Conditional', 'WhileLoop', 'ForLoop', 'Contextual'):
                 env.clear()
                 mutated_outer = True

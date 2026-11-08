@@ -757,6 +757,24 @@ class ConditionalHighlightTests(unittest.TestCase):
         source = PREFIX + b'#let local-tag-scope(body)=body\n#local-tag-scope(s=>[#highlighted[$x$]])'
         self.assertFalse(self.analyze(source, scoped_callbacks=True).diagnostics)
 
+    def test_context_without_detected_mutation_preserves_callback_bindings(self):
+        source = (PREFIX + b'#local-tag-scope(s => [\n'
+                  b'#context { let highlighted = "local"; [inside] }\n'
+                  b'#highlighted[$x^2$]\n])\n')
+        result = self.analyze(source, scoped_callbacks=True)
+        self.assertEqual(len(result.diagnostics), 1, result.unresolved)
+        self.assertTrue(result.diagnostics[0].callback_context)
+        self.assertTrue(any('Contextual body' in reason for reason in result.unresolved))
+        root = PREFIX + b'#context { let highlighted = "local"; [inside] }\n#highlighted[$x^2$]'
+        self.assertFalse(self.analyze(root, scoped_callbacks=True).diagnostics)
+
+    def test_context_with_active_mutation_still_invalidates_callback_bindings(self):
+        source = (PREFIX + b'#local-tag-scope(s => [\n'
+                  b'#context { highlighted = other }\n#highlighted[$x^2$]\n])\n')
+        result = self.analyze(source, scoped_callbacks=True)
+        self.assertFalse(result.diagnostics)
+        self.assertTrue(any('mutation' in reason for reason in result.unresolved))
+
     def test_scoped_callback_suppression_and_scope_budget(self):
         for source in (
             PREFIX + f'// typst-lint: ignore-next {conditional.RULE_ID} -- intentional\n#local-tag-scope(s=>[#highlighted[$x$]])'.encode(),
@@ -778,6 +796,7 @@ class ConditionalHighlightTests(unittest.TestCase):
 
     def test_scoped_callback_returns_withhold_abandoned_and_unreachable_hints(self):
         for returning in (b'#return []', b'#proof[#return []]', b'#block[#return []]',
+                          b'#context { return [] }',
                           b'#let deferred(a:{return [];none})=a'):
             with self.subTest(returning=returning):
                 source = (PREFIX + b'#local-tag-scope(s=>[#highlighted[$before$]\n' + returning

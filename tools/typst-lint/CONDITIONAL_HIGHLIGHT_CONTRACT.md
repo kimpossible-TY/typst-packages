@@ -169,7 +169,12 @@ This is not a general control-flow evaluator. An active return, including one
 inside an ordinary literal wrapper or code block, abandons that scoped
 callback's earlier/suppressed hints and prevents later imports from restarting
 its scan. It stops at the nearest callback; an inner callback return does not
-invalidate its caller. Existing block/Contextual barriers remain conservative.
+invalidate its caller. Block and Contextual bodies remain unresolved. Inside an
+admitted callback, a Contextual expression preserves the enclosing lexical
+bindings for subsequent source expressions when the syntactic scan finds no
+assignment or return. Other effects and rendering remain unproved. Detected
+assignments and returns still take the existing conservative path. Root-level
+Contextual expressions retain the earlier behavior.
 Return detection shares the existing effects pass and does not raise budgets.
 
 `content_context` retains each wrapper route once. Additional `callback_context`
@@ -178,13 +183,15 @@ finding's root source hash. Conditions require the exact wrapper to invoke the
 callback with its documented dictionary and render its literal result. They do
 not certify invocation, dictionary values, initialization or rendering.
 
-Independent actual inspection reports 73 highlight and 19 marker-gap hints,
-adding 44 and 11 respectively. All previous 29/8 records remain identical, as
-do source findings, script proposals and all 44 retained source hashes. Remaining
-math candidates in chapter 3.5 cross existing block/Contextual refusals; the
-extension does not broaden those boundaries to meet a count. The actual 37
-source trees contain no active return, so the final return guard preserves this
-report. See `audit/conditional-callback-evidence.json`.
+The initial callback checkpoint reports 73 highlight and 19 marker-gap hints,
+adding 44 and 11 respectively; all previous 29/8 records remain identical.
+Preserving bindings after Contextual expressions without detected assignment or
+return adds six highlight hints in chapter 3.5, for 79 highlight and 19
+marker-gap hints. All
+earlier records, source findings, script proposals and 44 retained source hashes
+remain identical. Contextual bodies themselves and remaining block-contained
+calls stay unresolved. See `audit/conditional-callback-evidence.json` and
+`audit/conditional-context-evidence.json`.
 
 One owned nested genuine-wrapper fixture observes both dictionary arguments and
 context routes, then reaches one-to-zero hints for each selected rule with a

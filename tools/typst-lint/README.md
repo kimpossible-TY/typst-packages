@@ -97,6 +97,9 @@ It also follows direct single-parameter literal callbacks of the exact captured
 `local-tag-scope` and `local-scope-annotations` exports, with omitted or literal
 `auto` options. Parameters shadow captured names. Computed options, complex
 callback bodies and the existing block/context barriers retain explicit refusals.
+Inside an admitted callback, a `context` body remains unresolved but does not
+erase later known lexical bindings when the syntactic scan detects no assignment
+or return. This is not a claim that the context has no other effects.
 `conditional_diagnostics` records source/package
 hashes, ordered name routes and the outstanding initialization, runtime package
 selection and rendering conditions. These hints have no edits, stay separate

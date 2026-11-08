@@ -556,6 +556,23 @@ class DocumentCliTests(unittest.TestCase):
                             for reason in row['reasons']))
         self.assertEqual(len(result['proposed_edits']), 8)
 
+    def test_context_without_detected_mutation_keeps_later_scoped_hints_available(self):
+        package_root = self.namespace_packages()
+        target = self.conditional_fixture()
+        source = target.read_bytes() + (
+            b'#local-tag-scope(s => [#proof[\n'
+            b'#context { let highlighted = "local"; [inside] }\n'
+            b'#paragraph_tab\nBody #highlighted[$y^2$].\n]])\n')
+        target.write_bytes(source)
+        result = self.run_cli('--rule-set', 'pde', '--package-path', str(package_root))
+        callbacks = [row for row in result['conditional_diagnostics'] if row.get('callback_context')]
+        self.assertEqual({row['rule_id'] for row in callbacks},
+                         {'pde.text-only-highlight', 'pde.paragraph-marker-gap'})
+        self.assertEqual(len(callbacks), 2)
+        self.assertTrue(all(not row['edit_permission'] for row in callbacks))
+        self.assertEqual(len(result['proposed_edits']), 4)
+        self.assertEqual(target.read_bytes(), source)
+
     def test_namespace_option_requires_pde_and_unsafe_evidence_refuses(self):
         self.write('main.typ', b'$x^i$\n')
         result = self.run_cli('--package-path', str(self.root / 'never-opened'))
