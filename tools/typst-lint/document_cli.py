@@ -45,6 +45,7 @@ def report_document(root, entrypoint, *, rule_set='core', package_path=None,
                     footnote_punctuation_evidence=False,
                     modern_highlight_evidence=False,
                     preview_conditional_modern_highlights=False,
+                    preview_conditional_modern_math_highlights=False,
                     reference_package_path=None, reference_facade=None, reference_cache_path=None,
                     reference_calls=False, reference_arguments=False, reference_catalog=None):
     """Inspect retained source bytes without reading consumer configuration.
@@ -111,6 +112,9 @@ def report_document(root, entrypoint, *, rule_set='core', package_path=None,
     require(type(preview_conditional_modern_highlights) is bool
             and (not preview_conditional_modern_highlights or modern_highlight_evidence),
             'Modern highlight previews require --modern-highlight-evidence')
+    require(type(preview_conditional_modern_math_highlights) is bool
+            and (not preview_conditional_modern_math_highlights or modern_highlight_evidence),
+            'Modern math highlight previews require --modern-highlight-evidence')
     reference_requested = (reference_package_path is not None or reference_facade is not None
                            or reference_cache_path is not None)
     require(type(reference_calls) is bool and (not reference_calls or reference_requested),
@@ -213,6 +217,8 @@ def report_document(root, entrypoint, *, rule_set='core', package_path=None,
     footnote_report = None
     modern_highlight_report = None
     modern_highlight_previews = None
+    modern_math_report = None
+    modern_math_previews = None
     if footnote_cache_path is not None:
         from conditional_footnote_binding import ConditionalFootnoteBinding, _valid as valid_footnote_session
         from namespace_multiroot import load_multiroot_capture
@@ -249,13 +255,21 @@ def report_document(root, entrypoint, *, rule_set='core', package_path=None,
             from conditional_modern_highlight import ModernHighlightAnalyzer, ModernVariantUnavailable
             try:
                 modern_analyzer = ModernHighlightAnalyzer(footnote_session, scoped_callbacks=True)
+                if preview_conditional_modern_math_highlights:
+                    from document_modern_highlight_preview import preview_reviewed_math_all
+                    modern_highlight_report, modern_math_report, modern_math_previews = preview_reviewed_math_all(
+                        modern_analyzer, max_items=MAX_REPORT_ITEMS - items, return_evidence=True)
+                    items += modern_math_previews['report_items']
+                elif not preview_conditional_modern_highlights:
+                    modern_highlight_report = modern_analyzer.analyze_all(max_items=MAX_REPORT_ITEMS - items)
                 if preview_conditional_modern_highlights:
                     from document_modern_highlight_preview import preview_all as preview_modern_highlights
-                    modern_highlight_report, modern_highlight_previews = preview_modern_highlights(
+                    repeated_report, modern_highlight_previews = preview_modern_highlights(
                         modern_analyzer, max_items=MAX_REPORT_ITEMS - items, return_evidence=True)
+                    if modern_highlight_report is not None:
+                        require(modern_highlight_report == repeated_report, 'Modern highlight evidence changed between previews')
+                    modern_highlight_report = repeated_report
                     items += modern_highlight_previews['report_items']
-                else:
-                    modern_highlight_report = modern_analyzer.analyze_all(max_items=MAX_REPORT_ITEMS - items)
                 items += modern_highlight_report['report_items']
             except ModernVariantUnavailable as error:
                 modern_highlight_report = dict(status='UNAVAILABLE', reason=str(error), by_file=[],
@@ -267,6 +281,12 @@ def report_document(root, entrypoint, *, rule_set='core', package_path=None,
                         runtime_binding_proved=False, execution_proved=False, coverage_complete=False,
                         edit_permission=False, compiler_permission=False, render_equivalence_proved=False)
                     items += 1
+                if preview_conditional_modern_math_highlights:
+                    modern_math_report = dict(status='UNAVAILABLE', reason=str(error), by_file=[],
+                                              edit_permission=False, compiler_permission=False)
+                    modern_math_previews = dict(status='UNAVAILABLE', reason=str(error), by_file=[],
+                                                edit_permission=False, compiler_permission=False)
+                    items += 2
             require(items <= MAX_REPORT_ITEMS, 'Document inspection report item limit exceeded')
     reference_report = None
     if reference_requested:
@@ -915,6 +935,10 @@ def report_document(root, entrypoint, *, rule_set='core', package_path=None,
         report['conditional_modern_highlight'] = modern_highlight_report
     if modern_highlight_previews is not None:
         report['conditional_modern_highlight_previews'] = modern_highlight_previews
+    if modern_math_report is not None:
+        report['conditional_modern_math_evidence'] = modern_math_report
+    if modern_math_previews is not None:
+        report['conditional_modern_math_previews'] = modern_math_previews
     if modern_highlight_report is not None:
         require(valid_footnote_session(footnote_session), 'Conditional highlight capture changed during inspection')
     if modern_highlight_report is not None or import_obligation_report is not None:
@@ -946,6 +970,8 @@ def main(arguments=None):
                         help='Report the exact modern text-utils highlighted variant (requires --package-path and --footnote-cache-path)')
     parser.add_argument('--preview-conditional-modern-highlights', action='store_true',
                         help='Preview simple modern highlight splits (requires --modern-highlight-evidence)')
+    parser.add_argument('--preview-conditional-modern-math-highlights', action='store_true',
+                        help='Preview reviewed builtin math highlight splits (requires --modern-highlight-evidence)')
     parser.add_argument('--preview-display-gaps', action='store_true',
                         help='Preview independently verified display-gap edits (requires --rule-set pde)')
     parser.add_argument('--preview-standalone-displays', action='store_true',
@@ -998,6 +1024,7 @@ def main(arguments=None):
                                  footnote_punctuation_evidence=args.footnote_punctuation_evidence,
                                  modern_highlight_evidence=args.modern_highlight_evidence,
                                  preview_conditional_modern_highlights=args.preview_conditional_modern_highlights,
+                                 preview_conditional_modern_math_highlights=args.preview_conditional_modern_math_highlights,
                                  preview_display_gaps=args.preview_display_gaps,
                                  preview_standalone_displays=args.preview_standalone_displays,
                                  preview_sequence=args.preview_sequence,
@@ -1184,6 +1211,33 @@ def main(arguments=None):
                       f"{previews['unresolved_reasons_count']} unresolved reasons")
             if previews.get('reason'):
                 print(f"  unresolved: {previews['reason']}")
+            for row in previews['by_file']:
+                print(f"  {row['path']}: {row['verification']}; {len(row['edits'])} edits; "
+                      f"source sha256 {row['baseline_sha256']}; candidate sha256 {row['candidate_sha256']}")
+                if row.get('reason'):
+                    print(f"    unresolved: {row['reason']}")
+                for edit in row['edits']:
+                    print(f"    conditional edit bytes {edit['start']}..{edit['end']}; replacement in JSON")
+            for condition in previews.get('conditions', ()):
+                print(f"  condition: {condition}")
+        if 'conditional_modern_math_previews' in result:
+            previews = result['conditional_modern_math_previews']
+            math = result['conditional_modern_math_evidence']
+            print(f"Conditional modern math previews: {previews['status']}; source-only, no edit or compiler permission")
+            if 'diagnostics_count' in previews:
+                print(f"  {previews['diagnostics_count']} reviewed; {previews['previewed_diagnostics']} previewed; "
+                      f"{previews['unpreviewed_diagnostics']} not previewed; "
+                      f"{previews['withheld_source_count']} sources withheld; "
+                      f"{previews['unresolved_reasons_count']} unresolved reasons")
+            if previews.get('reason'):
+                print(f"  unresolved: {previews['reason']}")
+            for row in math['by_file']:
+                for entry in row.get('unresolved', ()):
+                    print(f"  {row['path']} byte {entry['start']}: unresolved: {entry['reason']}")
+                for reason in row.get('upstream_unresolved', ()):
+                    print(f"  {row['path']}: unresolved: {reason}")
+                for reason in row.get('parse_errors', ()):
+                    print(f"  {row['path']}: parse error: {reason}")
             for row in previews['by_file']:
                 print(f"  {row['path']}: {row['verification']}; {len(row['edits'])} edits; "
                       f"source sha256 {row['baseline_sha256']}; candidate sha256 {row['candidate_sha256']}")

@@ -4,12 +4,13 @@ Only the exact reviewed modern helper evidence is admitted. No original
 source, runtime binding, render equivalence or compiler authority is implied.
 """
 from bisect import bisect_right
+from collections import Counter
 import json
 
 import conditional_modern_highlight as modern
 from document_display import analyze_all as analyze_displays
 from document_gap_preview import _MappedEdits, _scopes
-from document_sequence_preview import _same_findings
+from document_sequence_preview import _same_findings, _FindingMapper, _keys
 from edit_plan import Edit, plan
 import continuation_rules
 import footnote_rules
@@ -38,14 +39,14 @@ MAX_SUBSET_CHECKS = 32
 _OVERLAPPING_FINDING = 'An existing conditional finding lies inside an edit'
 
 
-def _math_signature(tree, root):
+def _math_signature(tree, root, *, allow_reviewed_calls=False):
     nodes, source = tree.nodes, tree.source
     base = nodes[root].start
     order, pending = [], [root]
     while pending:
         index = pending.pop()
         node = nodes[index]
-        if node.kind in _MATH_EXCLUDED:
+        if node.kind in _MATH_EXCLUDED and not (allow_reviewed_calls and node.kind == 'MathCall'):
             return None
         order.append(index)
         pending.extend(reversed(node.children))
@@ -57,7 +58,7 @@ def _math_signature(tree, root):
                  for i in order)
 
 
-def _select(tree, diagnostics):
+def _select(tree, diagnostics, *, proven_math_spans=frozenset()):
     nodes, source = tree.nodes, tree.source
     parents = {child: index for index, node in enumerate(nodes) for child in node.children}
     positions = {child: pos for node in nodes for pos, child in enumerate(node.children)}
@@ -98,7 +99,8 @@ def _select(tree, diagnostics):
         if mark.kind != 'Hash' or mark.end != node.start:
             continue
         equations = [c for c in body.children if nodes[c].kind == 'Equation']
-        signatures = [_math_signature(tree, c) for c in equations]
+        proven_math = (node.start, node.end) in proven_math_spans
+        signatures = [_math_signature(tree, c, allow_reviewed_calls=proven_math) for c in equations]
         if not equations or any(signature is None for signature in signatures):
             continue
         # Text and whitespace are copied byte-for-byte. Math token subtrees
@@ -129,7 +131,8 @@ def _select(tree, diagnostics):
             flush_text(child.start)
             start = len(output)
             output.extend(source[child.start:child.end])
-            spans.append(('equation', start, len(output), _math_signature(tree, child_id)))
+            spans.append(('reviewed-math-equation' if proven_math else 'equation', start, len(output),
+                          _math_signature(tree, child_id, allow_reviewed_calls=proven_math)))
         flush_text(body.end)
         edit = Edit(mark.start, node.end, bytes(output))
         edits.append(edit)
@@ -152,9 +155,9 @@ def _verify_insertions(original, candidate, edits, plans):
         owner = owners[0]
         for kind, begin, end, signature in spans:
             begin, end = start + begin, start + end
-            if kind == 'equation':
+            if kind in ('equation', 'reviewed-math-equation'):
                 found = by_span.get(('Equation', begin, end), ())
-                if len(found) != 1 or parents.get(found[0]) != owner or _math_signature(candidate, found[0]) != signature:
+                if len(found) != 1 or parents.get(found[0]) != owner or _math_signature(candidate, found[0], allow_reviewed_calls=kind == 'reviewed-math-equation') != signature:
                     raise SafetyError('Unwrapped equation syntax or owner changed')
             else:
                 found = by_span.get(('FuncCall', begin + 1, end), ())
@@ -213,8 +216,44 @@ def _verify_insertions(original, candidate, edits, plans):
         matched.add(selected)
 
 
-def _preview_source(evidence, tree, path, diagnostics, records):
-    edits, plans = _select(tree, diagnostics)
+def _same_script_findings_with_moved_equations(before_tree, before, after_tree, after, edits, plans):
+    """Map only script findings inside exactly preserved moved equations."""
+    mapper = _MappedEdits(edits)
+    moved = []
+    for edit, _, _, spans in plans:
+        originals = sorted((n for n in before_tree.nodes if n.kind == 'Equation'
+                            and edit.start < n.start and n.end <= edit.end), key=lambda n: n.start)
+        replacements = [(begin, end) for kind, begin, end, _ in spans
+                        if kind in ('equation', 'reviewed-math-equation')]
+        if len(originals) != len(replacements):
+            raise SafetyError('Cannot map script findings through ambiguous equations')
+        base = mapper.mapped(edit.start)
+        for original, (begin, end) in zip(originals, replacements):
+            if before_tree.source[original.start:original.end] != after_tree.source[base + begin:base + end]:
+                raise SafetyError('Cannot map script findings through changed equation bytes')
+            moved.append((original.start, original.end, base + begin))
+    old_mapper = _FindingMapper(before_tree.source, edits)
+    def mapped_keys(findings):
+        keys = Counter()
+        for finding in findings:
+            position = old_mapper.offset(finding)
+            matches = [(begin, end, target) for begin, end, target in moved if begin <= position < end]
+            if len(matches) > 1:
+                raise SafetyError('Ambiguous equation owning an existing script finding')
+            if matches:
+                begin, _, target = matches[0]
+                position = target + position - begin
+            else:
+                position = old_mapper.mapped(finding)
+            keys[(finding.rule_id, finding.grade, finding.path, position,
+                  finding.explanation, finding.source)] += 1
+        return keys
+    return (mapped_keys(before.diagnostics) == _keys(after_tree.source, after.diagnostics)
+            and mapped_keys(before.suppressed) == _keys(after_tree.source, after.suppressed))
+
+
+def _preview_source(evidence, tree, path, diagnostics, records, *, proven_math_spans=frozenset()):
+    edits, plans = _select(tree, diagnostics, proven_math_spans=proven_math_spans)
     if not edits:
         return None
     empty = dict(path=path, baseline_sha256=digest(tree.source), candidate_sha256=None,
@@ -229,14 +268,42 @@ def _preview_source(evidence, tree, path, diagnostics, records):
         if parsed.nodes[0].errors or _scopes(tree, records, proposal.edits) != _scopes(parsed, records):
             raise SafetyError('Highlight split changed syntax or suppression targets')
         _verify_insertions(tree, parsed, proposal.edits, plans)
+        if proven_math_spans:
+            # Re-run the binding analysis on the actual reparsed candidate.
+            # The structural check above proves imported code and all tokens
+            # outside the selected replacements are unchanged.
+            import document_math_builtin_evidence as math_evidence
+            resolver = math_evidence._MathResolver(parsed, path, math_evidence._engine(evidence._session))
+            resolver.visit(0, resolver.state)
+            mapper = _MappedEdits(proposal.edits)
+            for edit, _, _, spans in plans:
+                base = mapper.mapped(edit.start)
+                for kind, begin, end, _ in spans:
+                    if kind != 'reviewed-math-equation':
+                        continue
+                    matches = [i for i, node in enumerate(parsed.nodes) if node.kind == 'Equation'
+                               and (node.start, node.end) == (base + begin, base + end)]
+                    if len(matches) != 1:
+                        raise SafetyError('Reviewed math candidate equation changed')
+                    pending = [matches[0]]
+                    while pending:
+                        i = pending.pop()
+                        node = parsed.nodes[i]
+                        if node.kind == 'MathCall' and i not in resolver.resolved:
+                            raise SafetyError('Candidate math binding is no longer supported')
+                        pending.extend(node.children)
         before_resolution, after_resolution = resolve(tree, packages=()), resolve(parsed, packages=())
         before_display, after_display = analyze_displays(tree, path, catalog=records), analyze_displays(parsed, path, catalog=records)
         if any(not _same_findings(tree, before_display[rid], parsed, after_display[rid], proposal.edits)
                for rid in before_display):
             raise SafetyError('Highlight split changes display findings')
-        if not _same_findings(tree, analyze_scripts(tree, path, catalog=records, _verify=False, _allow_code_call=True),
-                              parsed, analyze_scripts(parsed, path, catalog=records, _verify=False, _allow_code_call=True),
-                              proposal.edits):
+        before_scripts = analyze_scripts(tree, path, catalog=records, _verify=False, _allow_code_call=True)
+        after_scripts = analyze_scripts(parsed, path, catalog=records, _verify=False, _allow_code_call=True)
+        scripts_match = (_same_script_findings_with_moved_equations(tree, before_scripts, parsed, after_scripts,
+                                                                   proposal.edits, plans)
+                         if proven_math_spans else _same_findings(tree, before_scripts, parsed, after_scripts,
+                                                                 proposal.edits))
+        if not scripts_match:
             raise SafetyError('Highlight split changes script findings')
         notes_before = footnote_rules.analyze_conditional_nested(tree, path, before_resolution, catalog=records)
         notes_after = footnote_rules.analyze_conditional_nested(parsed, path, after_resolution, catalog=records)
@@ -262,11 +329,11 @@ def _preview_source(evidence, tree, path, diagnostics, records):
         return dict(empty, reason=str(error))
 
 
-def _partial_preview(evidence, tree, path, diagnostics, records, original, budget):
+def _partial_preview(evidence, tree, path, diagnostics, records, original, budget, *, proven_math_spans=frozenset()):
     """Retry independent edits, then revalidate their union on the original tree."""
     if original['verification'] != 'withheld' or original.get('reason') != _OVERLAPPING_FINDING:
         return original
-    edits, _ = _select(tree, diagnostics)
+    edits, _ = _select(tree, diagnostics, proven_math_spans=proven_math_spans)
     if len(edits) < 2:
         return original
     if len(edits) > budget[0]:
@@ -274,11 +341,15 @@ def _partial_preview(evidence, tree, path, diagnostics, records, original, budge
     budget[0] -= len(edits)
     by_span = {(item['start'] - 1, item['end']): item for item in diagnostics}
     accepted = []
+    def run_subset(subset):
+        if proven_math_spans:
+            return _preview_source(evidence, tree, path, subset, records, proven_math_spans=proven_math_spans)
+        return _preview_source(evidence, tree, path, subset, records)
     for edit in edits:
         diagnostic = by_span.get((edit.start, edit.end))
         if diagnostic is None:
             return original
-        candidate = _preview_source(evidence, tree, path, [diagnostic], records)
+        candidate = run_subset([diagnostic])
         if candidate is not None and candidate['verification'] != 'withheld':
             accepted.append(diagnostic)
     if not accepted or len(accepted) == len(edits):
@@ -288,7 +359,7 @@ def _partial_preview(evidence, tree, path, diagnostics, records, original, budge
     # generated candidates. This catches interactions among accepted edits and
     # rechecks all existing diagnostics and suppression scopes, including the
     # excluded source. If the union fails, retain the original withheld result.
-    combined = _preview_source(evidence, tree, path, accepted, records)
+    combined = run_subset(accepted)
     if combined is None or combined['verification'] == 'withheld':
         return original
     return combined
@@ -351,3 +422,76 @@ def preview_all(evidence, *, max_items=MAX_PREVIEW_ITEMS, max_bytes=MAX_PREVIEW_
             + len(evidence_encoded.encode('utf-8')) + 2 * evidence_encoded.count('\n') <= max_bytes,
             'Modern highlight preview report budget exceeded')
     return (diagnostics, result) if return_evidence else result
+
+
+MATH_CONDITIONS = CONDITIONS + (
+    'Runtime uses Typst 0.15.1 standard reviewed math elements and the captured import namespaces.',
+    'All nested math calls and arguments retain the verified source bindings and no code side effects.',
+)
+
+
+def preview_reviewed_math_all(evidence, *, max_items=MAX_PREVIEW_ITEMS, max_bytes=MAX_PREVIEW_BYTES,
+                              return_evidence=False):
+    """Explicit source-only previews using independently verified math calls.
+
+    This is not selected by any existing preview or compiler profile.
+    """
+    import document_math_builtin_evidence as math_evidence
+    require(type(evidence) is modern.ModernHighlightAnalyzer and type(return_evidence) is bool
+            and type(max_items) is int and 0 < max_items <= MAX_PREVIEW_ITEMS
+            and type(max_bytes) is int and 0 < max_bytes <= MAX_PREVIEW_BYTES,
+            'Invalid reviewed math preview request')
+    modern_report, math_report = math_evidence.analyze_all(evidence, return_modern=True, max_items=max_items, max_bytes=max_bytes)
+    math_by_path = {row['path']: row for row in math_report['by_file']}
+    records = load_rules()[0]['rules']
+    result = dict(status='CONDITIONAL', by_file=[], conditions=MATH_CONDITIONS, coverage_complete=False,
+                  diagnostics_count=0, previewed_diagnostics=0, unpreviewed_diagnostics=0,
+                  withheld_source_count=0, unresolved_reasons_count=0, report_items=0,
+                  runtime_binding_proved=False, execution_proved=False, render_equivalence_proved=False,
+                  edit_permission=False, compiler_permission=False)
+    items = 10
+    subset_budget = [MAX_SUBSET_CHECKS]
+    for row in modern_report['by_file']:
+        reviewed = math_by_path.get(row['path'])
+        if reviewed is None:
+            continue
+        result['unresolved_reasons_count'] += (len(reviewed['unresolved'])
+                                              + len(reviewed['upstream_unresolved']) + len(reviewed['parse_errors']))
+        spans = frozenset((entry['start'], entry['end']) for entry in reviewed['findings'])
+        selected = [entry for entry in row['diagnostics'] if (entry['start'], entry['end']) in spans]
+        result['diagnostics_count'] += len(selected)
+        items += (1 + len(reviewed['findings']) + len(reviewed['unresolved'])
+                  + len(reviewed['upstream_unresolved']) + len(reviewed['parse_errors'])
+                  + sum(len(x['math_calls']) + len(x['conditions']) for x in reviewed['findings']))
+        require(items + modern_report['report_items'] <= max_items, 'Reviewed math preview report item budget exceeded')
+        if not selected:
+            continue
+        source = evidence._session._context.source_for(row['path'])
+        record = _preview_source(evidence, source.tree, source.path, selected, records, proven_math_spans=spans)
+        if record is None:
+            result['unpreviewed_diagnostics'] += len(selected)
+            continue
+        record = _partial_preview(evidence, source.tree, source.path, selected, records, record,
+                                  subset_budget, proven_math_spans=spans)
+        record['conditions'] = MATH_CONDITIONS
+        if record['verification'] == 'withheld':
+            result['withheld_source_count'] += 1
+            result['unpreviewed_diagnostics'] += len(selected)
+        else:
+            result['previewed_diagnostics'] += len(record['edits'])
+            result['unpreviewed_diagnostics'] += len(selected) - len(record['edits'])
+        items += 1 + len(record['edits']) + len(record['conditions']) + int('reason' in record)
+        require(items + modern_report['report_items'] <= max_items, 'Reviewed math preview report item budget exceeded')
+        result['by_file'].append(record)
+    evidence._check()
+    if result['withheld_source_count'] or result['unpreviewed_diagnostics'] or result['unresolved_reasons_count']:
+        result['status'] = 'INCOMPLETE'
+    result['report_items'] = items
+    # Include the separately returned evidence and nesting whitespace in the
+    # aggregate byte bound even when the caller only requests the preview.
+    def bounded_size(obj):
+        encoded = json.dumps(obj, ensure_ascii=True, sort_keys=True, indent=2)
+        return len(encoded.encode('utf-8')) + 4 * encoded.count('\n') + 64
+    require(sum(bounded_size(x) for x in (modern_report, math_report, result)) <= max_bytes,
+            'Reviewed math preview report byte budget exceeded')
+    return (modern_report, math_report, result) if return_evidence else result

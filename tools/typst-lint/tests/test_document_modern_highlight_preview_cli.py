@@ -36,6 +36,36 @@ class ModernHighlightPreviewCliTests(unittest.TestCase):
         return ('--rule-set', 'pde', '--package-path', str(self.packages),
                 '--footnote-cache-path', str(self.cache), '--modern-highlight-evidence')
 
+    def test_reviewed_math_opt_in_json_text_and_unresolved(self):
+        source = fixtures.IMPORT + (b'#highlighted[Before $cal(frac(x,y))$ after]\n'
+                                    b'#highlighted[Unsafe $cal(unknown(x))$ here]')
+        (self.project / 'main.typ').write_bytes(source)
+        base = self.run_cli(*self.options())
+        self.assertNotIn('conditional_modern_math_previews', base)
+        report = self.run_cli(*self.options(), '--preview-conditional-modern-math-highlights')
+        math = report['conditional_modern_math_evidence']
+        section = report['conditional_modern_math_previews']
+        self.assertEqual(section['status'], 'INCOMPLETE')
+        self.assertEqual(section['previewed_diagnostics'], 1)
+        self.assertTrue(math['by_file'][0]['unresolved'])
+        self.assertFalse(section['edit_permission'] or section['compiler_permission'])
+        text = self.run_cli(*self.options(), '--preview-conditional-modern-math-highlights', format='text')
+        self.assertIn('Conditional modern math previews:', text)
+        self.assertIn('unresolved:', text)
+        self.assertIn('conditional edit bytes', text)
+        self.assertEqual((self.project / 'main.typ').read_bytes(), source)
+
+    def test_reviewed_math_requires_evidence_and_can_coexist_with_existing_option(self):
+        source = fixtures.IMPORT + b'#highlighted[Plain $x$ text]\n#highlighted[Math $cal(X)$ text]'
+        (self.project / 'main.typ').write_bytes(source)
+        missing = self.run_cli('--rule-set', 'pde', '--preview-conditional-modern-math-highlights')
+        self.assertEqual(missing['phase'], 'input')
+        result = self.run_cli(*self.options(), '--preview-conditional-modern-math-highlights',
+                              '--preview-conditional-modern-highlights')
+        self.assertEqual(result['conditional_modern_math_previews']['previewed_diagnostics'], 1)
+        self.assertEqual(result['conditional_modern_highlight_previews']['previewed_diagnostics'], 1)
+        self.assertEqual((self.project / 'main.typ').read_bytes(), source)
+
     def test_preview_is_opt_in_independent_and_preserves_source(self):
         source = fixtures.IMPORT + '#highlighted[한글 $x$ 다음]'.encode()
         (self.project / 'main.typ').write_bytes(source)

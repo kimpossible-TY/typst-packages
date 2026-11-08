@@ -33,3 +33,28 @@ including its companion modern diagnostic evidence. Nothing is applied or
 compiled by this inspection. Highlight removal deliberately changes emphasis
 and may alter smart-quote direction, spacing, line breaking and pagination; a Korean owned Typst
 fixture produced different PDF bytes, which is not a whole-document claim.
+
+`--preview-conditional-modern-math-highlights` is a separate, explicit
+source-only path requiring the same modern evidence. It additionally accepts
+math calls only when every nested call in every equation is one of the
+reviewed Typst 0.15.1 standard elements `cal`, `dot`, `frac`, `frak`,
+`overline`, `tilde`, `op`, `bb`, and `hat`, with no embedded code, ordinary
+function call, label, import, or comment. Local shadowing and mutations are
+tracked; wildcard imports preserve these bindings only when the captured,
+complete namespace excludes the relevant name. Unknown imports, unresolved
+bindings and delayed or dynamic ancestors are withheld. Upstream unresolved
+and suppressed results are preserved in the accompanying math evidence.
+Exact equation structure and ownership are checked after parsing the candidate,
+and its math bindings are analyzed again. Existing script diagnostics inside an
+unchanged moved equation are mapped to its new byte offset and compared again;
+ambiguous ownership or changed suppression targets are withheld. Other
+overlapping diagnostics remain withheld. This is conditional on the runtime
+using the reviewed builtins and captured namespace; it does not prove runtime
+binding, execution, visual equivalence, or grant permission to edit or compile.
+A small owned nested-`cal(frac(...))` example compiled before and after, with
+different 72 dpi renderings; that is not a whole-document comparison.
+
+Both source-preview flags can be requested together. They are separate plans
+against the original captured source; do not concatenate their edits without
+independent combined revalidation. Existing compilation profiles do not select
+this math-call path.

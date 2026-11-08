@@ -156,6 +156,13 @@ is proven, nor permission to change sources. See
 The independent `--preview-conditional-gaps` inspection also offers separate
 source-only footnote-gap candidates before a literal `paragraph-tab` marker or
 direct `figure` call; their bindings, execution and rendering remain conditional.
+With the same evidence, `--preview-conditional-modern-math-highlights` separately
+proposes source-only splits containing a narrow set of verified Typst 0.15.1
+math calls. Shadowed, dynamic, side-effecting, or unresolved calls are withheld;
+runtime binding and render equivalence remain unproved. Its edits are a separate
+plan and do not enter compiler previews. See the
+[modern highlight preview contract](MODERN_HIGHLIGHT_PREVIEW_CONTRACT.md).
+
 With explicit modern highlight evidence, `--preview-conditional-modern-highlights`
 also offers limited independent source splits that leave literal math outside
 highlighting. They are not applied or compiled and can change layout; see the

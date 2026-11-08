@@ -48,6 +48,77 @@ class ModernHighlightPreviewTests(unittest.TestCase):
         self.assertEqual(row['candidate_sha256'], digest(candidate))
         return source, candidate, result
 
+    def test_reviewed_math_preview_is_explicit_and_rechecked(self):
+        source = fixtures.IMPORT + b'#highlighted[Before $cal(frac(x, y))$ after]'
+        session, context = self.fixture.session(source)
+        analyzer = modern.ModernHighlightAnalyzer(session, scoped_callbacks=True)
+        self.assertFalse(preview.preview_all(analyzer)['by_file'])
+        _, math, result = preview.preview_reviewed_math_all(analyzer, return_evidence=True)
+        self.assertEqual(len(math['by_file'][0]['findings']), 1)
+        row, = result['by_file']
+        self.assertEqual(row['verification'], 'conditional-modern-highlight-syntax-directives-and-reanalysis')
+        self.assertEqual(len(row['edits']), 1)
+        edit = row['edits'][0]
+        candidate = plan(source, [Edit(edit['start'], edit['end'], edit['replacement'].encode())]).candidate()
+        self.assertEqual(candidate, fixtures.IMPORT + b'#highlighted[Before ]$cal(frac(x, y))$#highlighted[ after]')
+        self.assertEqual(row['candidate_sha256'], digest(candidate))
+        self.assertFalse(row['edit_permission'] or row['compiler_permission'] or row['render_equivalence_proved'])
+
+    def test_reviewed_math_preserves_existing_script_diagnostics(self):
+        for prefix in (b'', b'// typst-lint: ignore-next core.parenthesized-scripts -- deliberate\n'):
+            with self.subTest(prefix=prefix):
+                source = fixtures.IMPORT + prefix + b'#highlighted[Before $cal(x_1)$ after]'
+                session, _ = self.fixture.session(source)
+                analyzer = modern.ModernHighlightAnalyzer(session, scoped_callbacks=True)
+                result = preview.preview_reviewed_math_all(analyzer)
+                row, = result['by_file']
+                if prefix:
+                    self.assertEqual(row['verification'], 'withheld')
+                    self.assertFalse(row['edits'])
+                    continue
+                self.assertEqual(row['verification'], 'conditional-modern-highlight-syntax-directives-and-reanalysis')
+                edit, = row['edits']
+                candidate = plan(source, [Edit(edit['start'], edit['end'], edit['replacement'].encode())]).candidate()
+                self.assertIn(b'$cal(x_1)$', candidate)
+                before = preview.analyze_scripts(parse(source), 'main.typ', _verify=False, _allow_code_call=True)
+                after = preview.analyze_scripts(parse(candidate), 'main.typ', _verify=False, _allow_code_call=True)
+                self.assertEqual(len(before.diagnostics), 1)
+                self.assertEqual(len(before.diagnostics), len(after.diagnostics))
+                self.assertEqual(len(before.suppressed), len(after.suppressed))
+
+    def test_reviewed_math_low_budget_fails_before_math_analysis(self):
+        import document_math_builtin_evidence as math_evidence
+        source = fixtures.IMPORT + b'#highlighted[Before $cal(X)$ after]'
+        session, _ = self.fixture.session(source)
+        analyzer = modern.ModernHighlightAnalyzer(session, scoped_callbacks=True)
+        with patch.object(math_evidence, '_MathResolver', side_effect=AssertionError('unexpected math scan')):
+            with self.assertRaises(InputError):
+                preview.preview_reviewed_math_all(analyzer, max_items=1)
+
+    def test_reviewed_math_rejects_changed_script_diagnostic(self):
+        source = fixtures.IMPORT + b'#highlighted[Before $cal(x_1)$ after]'
+        session, _ = self.fixture.session(source)
+        analyzer = modern.ModernHighlightAnalyzer(session, scoped_callbacks=True)
+        original = preview.analyze_scripts
+        def drop_candidate_diagnostic(tree, *args, **kwargs):
+            result = original(tree, *args, **kwargs)
+            return replace(result, diagnostics=()) if tree.source != source else result
+        with patch.object(preview, 'analyze_scripts', side_effect=drop_candidate_diagnostic):
+            row, = preview.preview_reviewed_math_all(analyzer)['by_file']
+        self.assertEqual(row['verification'], 'withheld')
+        self.assertFalse(row['edits'])
+        self.assertIn('script findings', row['reason'])
+
+    def test_reviewed_math_shadow_suppression_and_unknown_are_withheld(self):
+        for body in (b'#let cal(x) = panic("shadow")\n#highlighted[text $cal(x)$]',
+                     b'#highlighted[text $cal(unknown(x))$]',
+                     b'// typst-lint: ignore-next pde.text-only-highlight -- known\n#highlighted[text $cal(x)$]'):
+            with self.subTest(body=body):
+                source = fixtures.IMPORT + body
+                session, _ = self.fixture.session(source)
+                analyzer = modern.ModernHighlightAnalyzer(session, scoped_callbacks=True)
+                self.assertFalse(preview.preview_reviewed_math_all(analyzer)['by_file'])
+
     def test_literal_prose_and_math_preserve_tokens_and_unicode_spaces(self):
         cases = ((b'#highlighted[Text $x$ follows.]', b'#highlighted[Text ]$x$#highlighted[ follows.]'),
                  (b'#highlighted()[Text $x$ follows.]', b'#highlighted[Text ]$x$#highlighted[ follows.]'),
