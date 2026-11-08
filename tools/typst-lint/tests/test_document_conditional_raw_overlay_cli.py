@@ -81,8 +81,12 @@ class ConditionalRawOverlayCliTests(unittest.TestCase):
 
     def test_raw_section_counts_against_item_budget(self):
         (self.root / 'main.typ').write_bytes(b'#proof[#annot-cetz((<x>,), cetz, {draw})]')
-        with patch.object(document_cli, 'MAX_REPORT_ITEMS', 10), \
-             patch.object(raw_overlay, 'analyze', wraps=raw_overlay.analyze) as analyzed:
+        report = document_cli.report_document(str(self.root), 'main.typ', rule_set='pde',
+                                              preview_conditional_scoped_calls=True)
+        large = dict(report['conditional_raw_overlays']['by_file'][0])
+        large['diagnostics'] = [{}] * 1001
+        with patch.object(document_cli, 'MAX_REPORT_ITEMS', 1000), \
+             patch.object(raw_overlay, 'analyze', return_value=large) as analyzed:
             with self.assertRaisesRegex(InputError, 'report item limit'):
                 document_cli.report_document(str(self.root), 'main.typ', rule_set='pde',
                                              preview_conditional_scoped_calls=True)

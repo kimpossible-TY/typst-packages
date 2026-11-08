@@ -121,10 +121,20 @@ class DocumentCliTests(unittest.TestCase):
             if isinstance(value, conditional_footnote_binding.FootnoteBinding):
                 self.fail('Over-budget call was serialized')
             return original(value)
-        with patch.object(document_cli, 'MAX_REPORT_ITEMS', 5), patch.object(document_cli, 'asdict', side_effect=guard):
+        analyze = conditional_footnote_binding.ConditionalFootnoteBinding.analyze_all
+        def oversized(session, *, max_items):
+            batch = analyze(session, max_items=max_items)
+            path, first = batch.results[0]
+            return replace(batch, results=((path, replace(first, unresolved=('fixture',) * 1001)),
+                                           *batch.results[1:]))
+        with patch.object(document_cli, 'MAX_REPORT_ITEMS', 1000), \
+             patch.object(document_cli, 'asdict', side_effect=guard), \
+             patch.object(conditional_footnote_binding.ConditionalFootnoteBinding, 'analyze_all',
+                          autospec=True, side_effect=oversized) as batch:
             with self.assertRaisesRegex(InputError, 'report item limit'):
                 document_cli.report_document(str(self.root), 'main.typ', rule_set='pde',
                     package_path=str(packages), footnote_cache_path=str(cache))
+            batch.assert_called_once()
 
     def test_conditional_footnote_punctuation_opt_in_json_text_and_suppression(self):
         packages, cache = self.footnote_roots()
@@ -207,10 +217,16 @@ class DocumentCliTests(unittest.TestCase):
             if isinstance(value, conditional_footnote_punctuation.PunctuationResult):
                 self.fail('Over-budget punctuation result was serialized')
             return original(value)
-        with patch.object(document_cli, 'MAX_REPORT_ITEMS', 15), \
+        analyze = conditional_footnote_punctuation.analyze_all
+        def oversized(session, *, max_items):
+            result = analyze(session, max_items=max_items)
+            path, first = result.results[0]
+            return replace(result, results=((path, replace(first, unresolved=('fixture',) * 1001)),
+                                            *result.results[1:]))
+        with patch.object(document_cli, 'MAX_REPORT_ITEMS', 1000), \
              patch.object(document_cli, 'asdict', side_effect=guard), \
              patch.object(conditional_footnote_punctuation, 'analyze_all',
-                          wraps=conditional_footnote_punctuation.analyze_all) as batch:
+                          side_effect=oversized) as batch:
             with self.assertRaisesRegex(InputError, 'report item limit'):
                 document_cli.report_document(str(self.root), 'main.typ', rule_set='pde',
                     package_path=str(packages), footnote_cache_path=str(cache), footnote_punctuation_evidence=True)

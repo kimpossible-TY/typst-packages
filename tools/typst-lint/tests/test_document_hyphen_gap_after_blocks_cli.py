@@ -76,8 +76,10 @@ class HyphenGapAfterBlocksCliTests(unittest.TestCase):
                     conditions=(), runtime_binding_proved=False, execution_proved=False,
                     render_equivalence_proved=False, edit_permission=False, compiler_permission=False,
                     edits=[dict(start=0, end=0, replacement='\n', rule_id=gap.RULE,
-                                preceding_kind='flowbox', preceding_conditions=('condition',) * 50)])
-        with patch.object(gap, 'preview', return_value=fake), patch.object(document_cli, 'MAX_REPORT_ITEMS', 30):
+                                preceding_kind='flowbox', preceding_conditions=('condition',) * 1001)])
+        with patch.object(gap, 'preview', return_value=fake) as analyzed, \
+             patch.object(document_cli, 'MAX_REPORT_ITEMS', 1000):
             with self.assertRaisesRegex(InputError, 'report item limit'):
                 document_cli.report_document(str(self.root), 'main.typ', rule_set='pde',
                                              preview_conditional_block_marker_gaps=True)
+            analyzed.assert_called_once()

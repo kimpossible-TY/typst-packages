@@ -68,12 +68,14 @@ class ConditionalLocalRawAnnotCliTests(unittest.TestCase):
             result = document_cli.report_document(str(self.root), 'main.typ', rule_set='pde')
         self.assertNotIn('conditional_local_scope_raw_annotations', result)
         fake = dict(path='main.typ', source_sha256=digest(b'No annotations.'), status='PARTIAL',
-                    diagnostics=[], suppressed=[], unresolved=[], conditions=(), wrappers_examined=50,
-                    wrappers_in_dynamic_context=0, lexical_display_calls=50, runtime_binding_proved=False,
+                    diagnostics=[], suppressed=[], unresolved=[], conditions=(), wrappers_examined=1001,
+                    wrappers_in_dynamic_context=0, lexical_display_calls=1001, runtime_binding_proved=False,
                     execution_proved=False, coverage_complete=False, edit_permission=False, compiler_permission=False)
-        with patch.object(local, 'analyze', return_value=fake), patch.object(document_cli, 'MAX_REPORT_ITEMS', 50):
+        with patch.object(local, 'analyze', return_value=fake) as analyzed, \
+             patch.object(document_cli, 'MAX_REPORT_ITEMS', 1000):
             with self.assertRaisesRegex(InputError, 'report item limit'):
                 document_cli.report_document(str(self.root), 'main.typ', rule_set='pde', local_rule_hints=True)
+            analyzed.assert_called_once()
 
     def test_nested_gap_reasons_are_visible_with_bounded_text_output(self):
         source = b'\n'.join([b'#block[Text.#n[X]\n#paragraph_tab\nNext.]'] * 25)
