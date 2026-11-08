@@ -90,6 +90,11 @@ class DocumentPreviewCompileTests(unittest.TestCase):
         with self.assertRaises(SafetyError):
             compiler._workspace_guard(workspace, {allowed, unexpected}, set(), {})
 
+    def test_sandbox_profile_refuses_unrepresentable_paths(self):
+        for path in ('relative', '/tmp/with space', '/tmp/quote"here', '/tmp/new\nline'):
+            with self.subTest(path=path), self.assertRaises(SafetyError):
+                compiler._sandbox_profile(path)
+
     @unittest.skipUnless(os.environ.get('TYPST_LINT_RENDER_TESTS') == '1'
                          and sys.platform == 'darwin' and compiler.SANDBOX.is_file(),
                          'Opt in on macOS with the reviewed Typst compiler')
@@ -127,8 +132,7 @@ class DocumentPreviewCompileTests(unittest.TestCase):
         private = self.root / 'private'
         private.mkdir()
         outside = self.root / 'outside'
-        profile = (f'(version 1)(allow default)(deny network*)(deny file-write*)'
-                   f'(allow file-write* (subpath "{private}"))')
+        profile = compiler._sandbox_profile(private)
         write = subprocess.run([str(compiler.SANDBOX), '-p', profile, '/usr/bin/touch', str(outside)],
                                capture_output=True, timeout=10)
         self.assertNotEqual(write.returncode, 0)

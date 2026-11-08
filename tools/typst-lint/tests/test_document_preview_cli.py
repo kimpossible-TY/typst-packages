@@ -73,6 +73,38 @@ class DocumentPreviewCliTests(unittest.TestCase):
         compile_preview.assert_not_called()
         self.assertEqual((self.project / 'main.typ').read_bytes(), self.source)
 
+    def test_font_drift_after_discovery_refuses_before_preview_compiler(self):
+        fonts = self.project / 'fonts'
+        fonts.mkdir()
+        (fonts / 'sample.otf').write_bytes(b'font')
+        self.value['files'] = [{'root': 'project', 'path': 'fonts/sample.otf', 'role': 'font'}]
+        self.manifest.write_text(json.dumps(self.value), encoding='utf-8')
+        discovered = (b'main.typ\0', (('project', 'main.typ'),),
+                      {('project', 'fonts/sample.otf'): '0' * 64}, '1' * 64)
+        output = io.StringIO()
+        with patch.object(document_preview_cli.document_preview_discover, 'discover', return_value=discovered), \
+             patch.object(document_preview_cli.document_preview_compile, 'compile_preview') as compile_preview, \
+             contextlib.redirect_stdout(output):
+            status = document_preview_cli.main(self.command()[3:] + ['--discover-dependencies', '--format', 'json'])
+        self.assertEqual(status, 2)
+        self.assertIn('Selected fonts changed', json.loads(output.getvalue())['error'])
+        compile_preview.assert_not_called()
+
+    def test_source_drift_after_discovery_refuses_before_compiler_launch(self):
+        self.value['files'] = []
+        self.manifest.write_text(json.dumps(self.value), encoding='utf-8')
+        def changed(*args, **kwargs):
+            (self.project / 'main.typ').write_bytes(self.source + b'changed')
+            return b'main.typ\0', (('project', 'main.typ'),), {}, '1' * 64
+        output = io.StringIO()
+        with patch.object(document_preview_cli.document_preview_discover, 'discover', side_effect=changed), \
+             patch.object(document_preview_cli.document_preview_compile.runtime, '_capture_compiler') as capture, \
+             contextlib.redirect_stdout(output):
+            status = document_preview_cli.main(self.command()[3:] + ['--discover-dependencies', '--format', 'json'])
+        self.assertEqual(status, 2)
+        self.assertIn('absent or differs', json.loads(output.getvalue())['error'])
+        capture.assert_not_called()
+
     @unittest.skipUnless(os.environ.get('TYPST_LINT_RENDER_TESTS') == '1'
                          and sys.platform == 'darwin', 'Opt in on macOS with the reviewed Typst compiler')
     def test_real_preview_reports_success_and_can_stream_pdf(self):
@@ -87,6 +119,21 @@ class DocumentPreviewCliTests(unittest.TestCase):
         self.assertEqual(pdf.returncode, 2, pdf.stderr)
         self.assertTrue(pdf.stdout.startswith(b'%PDF-'))
         self.assertTrue(json.loads(pdf.stderr)['pdf_generated'])
+        self.assertEqual((self.project / 'main.typ').read_bytes(), self.source)
+
+    @unittest.skipUnless(os.environ.get('TYPST_LINT_RENDER_TESTS') == '1'
+                         and sys.platform == 'darwin', 'Opt in on macOS with the reviewed Typst compiler')
+    def test_discovery_fills_an_empty_manifest_without_writing_sources(self):
+        self.value['files'] = []
+        self.manifest.write_text(json.dumps(self.value), encoding='utf-8')
+        run = subprocess.run(self.command('--discover-dependencies', '--format', 'json'),
+                             capture_output=True, timeout=60)
+        self.assertEqual(run.returncode, 2, run.stderr)
+        report = json.loads(run.stdout)
+        self.assertEqual(report['phase'], 'preview')
+        self.assertTrue(report['pdf_generated'] and report['discovery_performed'])
+        self.assertEqual(report['discovery_observed_dependencies'], 1)
+        self.assertEqual(report['resource_count'], 1)
         self.assertEqual((self.project / 'main.typ').read_bytes(), self.source)
 
     @unittest.skipUnless(os.environ.get('TYPST_LINT_RENDER_TESTS') == '1'
@@ -108,13 +155,10 @@ class DocumentPreviewCliTests(unittest.TestCase):
         self.assertIn('lib.typ', report['compiler_diagnostics'])
         self.assertEqual((self.project / 'main.typ').read_bytes(), self.source)
 
-    @unittest.skipUnless(os.environ.get('TYPST_LINT_RENDER_TESTS') == '1'
-                         and sys.platform == 'darwin' and Path('/usr/bin/pgrep').is_file(),
-                         'Opt in on macOS with process inspection available')
-    def test_sigterm_cancels_active_private_compiler_and_preserves_source(self):
+    def _check_sigterm(self, *extra):
         self.source = b'#for n in range(5000) [Line #n.]\nThus $ x^i $\n\nHence.\n'
         (self.project / 'main.typ').write_bytes(self.source)
-        process = subprocess.Popen(self.command('--format', 'json'), stdout=subprocess.PIPE,
+        process = subprocess.Popen(self.command(*extra, '--format', 'json'), stdout=subprocess.PIPE,
                                    stderr=subprocess.PIPE, start_new_session=True)
         child = None
         try:
@@ -125,7 +169,8 @@ class DocumentPreviewCliTests(unittest.TestCase):
                 for value in result.stdout.split():
                     info = subprocess.run(['/bin/ps', '-p', value, '-o', 'command='],
                                           capture_output=True, text=True, timeout=3)
-                    if '/typst-document-preview-' in info.stdout or '/usr/bin/sandbox-exec' in info.stdout:
+                    if ('/typst-document-preview-' in info.stdout or '/typst-document-discovery-' in info.stdout
+                            or '/usr/bin/sandbox-exec' in info.stdout):
                         child = int(value)
                         break
                 if child is not None:
@@ -142,3 +187,15 @@ class DocumentPreviewCliTests(unittest.TestCase):
             if process.poll() is None:
                 process.kill()
                 process.communicate(timeout=10)
+
+    @unittest.skipUnless(os.environ.get('TYPST_LINT_RENDER_TESTS') == '1'
+                         and sys.platform == 'darwin' and Path('/usr/bin/pgrep').is_file(),
+                         'Opt in on macOS with process inspection available')
+    def test_sigterm_cancels_active_private_compiler_and_preserves_source(self):
+        self._check_sigterm()
+
+    @unittest.skipUnless(os.environ.get('TYPST_LINT_RENDER_TESTS') == '1'
+                         and sys.platform == 'darwin' and Path('/usr/bin/pgrep').is_file(),
+                         'Opt in on macOS with process inspection available')
+    def test_sigterm_cancels_active_discovery_and_preserves_source(self):
+        self._check_sigterm('--discover-dependencies')

@@ -65,6 +65,9 @@ class DocumentResourceCaptureTests(unittest.TestCase):
         with self.assertRaises(SafetyError):
             resources.capture(self.roots, [self.req('fonts/sample.otf', 'font'),
                                            self.req('FONTS/other.otf', 'font')])
+        with self.assertRaises(SafetyError):
+            resources.capture({'a' * 65: str(self.root)},
+                              [resources.ResourceRequest('a' * 65, 'image.png', 'resource')])
 
     def test_untyped_or_unselected_roots_and_roles_are_refused(self):
         for request in (resources.ResourceRequest([], 'image.png', 'resource'),

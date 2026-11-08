@@ -181,7 +181,7 @@ def capture(roots, requests, *, allow_apple_asset_fonts=False):
     normalized = {}
     root_names = set()
     for name, raw in roots.items():
-        if (type(name) is not str or not name.isascii() or not name.isidentifier()
+        if (type(name) is not str or len(name) > 64 or not name.isascii() or not name.isidentifier()
                 or type(raw) is not str or len(raw) > MAX_PATH_BYTES or not raw.startswith('/')
                 or '\\' in raw or any(ord(char) < 32 or ord(char) == 127 for char in raw)
                 or str(Path(raw)) != raw or any(p in ('.', '..') for p in raw.split('/'))):

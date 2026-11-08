@@ -42,6 +42,13 @@ class PreviewCompileResult:
     publication_authority: bool = False
 
 
+def _sandbox_profile(base):
+    value = str(base)
+    if not re.fullmatch(r'/[A-Za-z0-9_./-]+', value):
+        raise SafetyError('Temporary preview path cannot be represented safely in sandbox policy')
+    return f'(version 1)(allow default)(deny network*)(deny file-write*)(allow file-write* (subpath "{value}"))'
+
+
 def _mkdir(path):
     """Create only private directories under a newly owned temporary root."""
     pending = []
@@ -84,7 +91,7 @@ def _workspace_guard(base, allowed_files, allowed_dirs, output_limits):
 
 
 def compile_preview(context, records, catalog, snapshot, *, entrypoint, deadline_seconds=120.0,
-                    cancel_event=None):
+                    cancel_event=None, expected_dependencies=None, expected_baseline_sha256=None):
     """Compile baseline and candidate from explicit captured bytes in private.
 
     macOS sandbox-exec denies networking and writes outside the temporary
@@ -100,6 +107,15 @@ def compile_preview(context, records, catalog, snapshot, *, entrypoint, deadline
         raise SafetyError('Preview compiler deadline must be in (0, 120] seconds')
     if cancel_event is not None and type(cancel_event) is not threading.Event:
         raise SafetyError('Preview cancellation requires a threading.Event')
+    if expected_dependencies is not None:
+        if (type(expected_dependencies) is not tuple or len(expected_dependencies) > document_resources.MAX_FILES
+                or any(type(item) is not tuple or len(item) != 2 or any(type(x) is not str for x in item)
+                       for item in expected_dependencies)
+                or len(set(expected_dependencies)) != len(expected_dependencies)):
+            raise SafetyError('Invalid expected preview dependency membership')
+    if expected_baseline_sha256 is not None and (type(expected_baseline_sha256) is not str
+            or re.fullmatch(r'[0-9a-f]{64}', expected_baseline_sha256) is None):
+        raise SafetyError('Invalid expected preview baseline PDF hash')
     def cancelled():
         if cancel_event is not None and cancel_event.is_set():
             raise runtime.CompilerFailure('cancelled', kind=runtime.CompilerFailureKind.CANCELLED)
@@ -145,8 +161,7 @@ def compile_preview(context, records, catalog, snapshot, *, entrypoint, deadline
 
     with tempfile.TemporaryDirectory(prefix='typst-document-preview-') as directory, ExitStack() as stack:
         base = Path(directory).resolve()
-        if not re.fullmatch(r'/[A-Za-z0-9_./-]+', str(base)):
-            raise SafetyError('Temporary preview path cannot be represented safely in sandbox policy')
+        profile = _sandbox_profile(base)
         compiler = base / 'typst'
         runtime._write_private(compiler, compiler_bytes, 0o500)
         _, private_compiler = runtime._capture(compiler, runtime._MAX_EXECUTABLE, executable=True)
@@ -203,7 +218,6 @@ def compile_preview(context, records, catalog, snapshot, *, entrypoint, deadline
                 _workspace_guard(base, allowed_files, allowed_dirs, output_limits)
                 last_check[0] = time.monotonic()
 
-        profile = f'(version 1)(allow default)(deny network*)(deny file-write*)(allow file-write* (subpath "{base}"))'
         probe = runtime._run([str(SANDBOX), '-p', profile, str(compiler), '--version'],
                              purpose='document-preview-version', cwd=base, environment=environment,
                              deadline=time.monotonic() + min(float(deadline_seconds), 10.0),
@@ -232,10 +246,16 @@ def compile_preview(context, records, catalog, snapshot, *, entrypoint, deadline
             pdf_bytes, _ = runtime._capture(pdf, MAX_PDF_BYTES)
             dep_bytes, _ = runtime._capture(deps, MAX_DEPS_BYTES)
             runtime._pdf(pdf_bytes)
+            if (label == 'baseline' and expected_baseline_sha256 is not None
+                    and digest(pdf_bytes) != expected_baseline_sha256):
+                raise SafetyError('Captured baseline PDF differs from dependency discovery')
             comparison = document_dependencies.compare(snapshot, dep_bytes, cwd=str(staged['project']),
                                                        roots={name: str(path) for name, path in staged.items()})
             if comparison.missing:
                 raise SafetyError('Compiler observed resources outside the explicit capture')
+            if (label == 'baseline' and expected_dependencies is not None
+                    and set(comparison.observed) != set(expected_dependencies)):
+                raise SafetyError('Captured baseline dependencies differ from discovery')
             outputs[label] = pdf_bytes, comparison
         if set(outputs['baseline'][1].observed) != set(outputs['candidate'][1].observed):
             raise SafetyError('Candidate compiler dependency membership changed')

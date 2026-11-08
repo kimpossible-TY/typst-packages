@@ -10,6 +10,8 @@ ordinary `typst-style compile` gate into a complete lint/build gate.
 typst-lint preview-compile --root /absolute/project --entrypoint main.typ \
   --manifest /absolute/resources.json --format json
 typst-lint preview-compile --root /absolute/project --entrypoint main.typ \
+  --manifest /absolute/font-seed.json --discover-dependencies --format json
+typst-lint preview-compile --root /absolute/project --entrypoint main.typ \
   --manifest /absolute/resources.json --pdf-stdout > /path/to/new-preview.pdf
 ```
 
@@ -39,6 +41,19 @@ WASM and required font files:
   "allow_apple_asset_fonts": false
 }
 ```
+
+Alternatively, `--discover-dependencies` accepts a seed manifest with explicit
+roots and selected fonts (and optionally other explicit files). It first compiles
+the live baseline read-only in the same network-denied, outside-write-denied
+sandbox, using only the selected font files and embedded fonts. It adds that
+run's observed dependency paths and the literal-include inventory to the file
+list, then captures the resulting resources. Selected font hashes must remain
+unchanged, and the captured baseline must reproduce both the discovery run's
+PDF hash and its observed dependency membership before candidate compilation.
+The seed `files` list may be empty when embedded fonts are sufficient. Discovery
+observes the current execution only; it neither selects system fonts for the
+caller nor proves unexecuted branches, future inputs, network effects or all OS
+reads. Stale explicitly listed files still cause a refusal.
 
 The `project` root must equal `--root`; all root values and the manifest path
 are canonical absolute paths. File paths are canonical relative to their root.

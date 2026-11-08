@@ -5,7 +5,9 @@ from pathlib import Path
 import sys
 
 import closed_core_compile as runtime
+import document_dependencies
 import document_preview_compile
+import document_preview_discover
 import document_resources
 import document_sequence_preview
 import include_context
@@ -24,7 +26,7 @@ def _object(pairs):
     return result
 
 
-def load_manifest(path, root):
+def load_manifest(path, root, *, allow_empty=False):
     """Read one explicit manifest; serialized data grants no capture authority."""
     require(type(path) is str and path.startswith('/') and str(Path(path)) == path,
             'Manifest must be a canonical absolute path')
@@ -39,7 +41,7 @@ def load_manifest(path, root):
     roots, files = data['roots'], data['files']
     require(type(roots) is dict and roots.get('project') == str(root),
             'Manifest project root must equal the selected root')
-    require(type(files) is list and 0 < len(files) <= document_resources.MAX_FILES,
+    require(type(files) is list and (allow_empty or bool(files)) and len(files) <= document_resources.MAX_FILES,
             'Manifest must contain a bounded explicit file list')
     requests = []
     for row in files:
@@ -58,6 +60,8 @@ def main(arguments=None):
     parser.add_argument('--root', required=True, help='Canonical absolute consumer root')
     parser.add_argument('--entrypoint', required=True, help='Canonical project-relative .typ entrypoint')
     parser.add_argument('--manifest', required=True, help='Canonical absolute resource manifest JSON')
+    parser.add_argument('--discover-dependencies', action='store_true',
+                        help='Probe the baseline read-only and add observed dependency paths')
     parser.add_argument('--format', choices=('json', 'text'), default='text')
     parser.add_argument('--pdf-stdout', action='store_true', help='Emit only the candidate PDF to stdout')
     args = parser.parse_args(sys.argv[1:] if arguments is None else arguments)
@@ -74,7 +78,7 @@ def main(arguments=None):
         require(raw_root == str(root), 'Preview root must be canonical and absolute')
         relative(args.entrypoint)
         require(args.entrypoint.endswith('.typ'), 'Preview entrypoint must be a Typst path')
-        roots, requests, allow = load_manifest(args.manifest, root)
+        roots, requests, allow = load_manifest(args.manifest, root, allow_empty=args.discover_dependencies)
         _, source = read_snapshot_file(checked_path(root, args.entrypoint), include_context.MAX_SOURCE_BYTES)
         phase = 'planning'
         context = include_context.load_include_context(root, ((args.entrypoint, source),), budget='book-v1')
@@ -88,11 +92,36 @@ def main(arguments=None):
                 if record['verification'] == 'withheld':
                     raise SafetyError(f"{item.path}: {record['reason']}")
                 records.append(record)
+        observed = None
+        discovery_baseline_sha256 = None
+        font_hashes = {}
+        if args.discover_dependencies:
+            phase = 'discovery'
+            raw_dependencies, observed, font_hashes, discovery_baseline_sha256 = document_preview_discover.discover(
+                context, roots, requests, entrypoint=args.entrypoint,
+                allow_apple_asset_fonts=allow, cancel_event=cancel)
+            selected = {(item.root, item.path): item for item in requests}
+            for root_id, path in observed:
+                role = ('source' if root_id == 'project' and path.endswith('.typ') else
+                        'resource' if root_id == 'project' else 'package')
+                selected.setdefault((root_id, path), document_resources.ResourceRequest(root_id, path, role))
+            for item in context.sources:
+                selected.setdefault(('project', item.path),
+                                    document_resources.ResourceRequest('project', item.path, 'source'))
+            requests = list(selected.values())
         phase = 'capture'
         snapshot = document_resources.capture(roots, requests, allow_apple_asset_fonts=allow)
+        if observed is not None:
+            captured_fonts = {(item.request.root, item.request.path): item.sha256 for item in snapshot.files
+                              if item.request.role == 'font'}
+            require(captured_fonts == font_hashes, 'Selected fonts changed after dependency discovery')
+            comparison = document_dependencies.compare(snapshot, raw_dependencies, cwd=str(root), roots=roots)
+            require(not comparison.missing, 'A discovered dependency is absent from the resource capture')
         phase = 'compile'
         preview = document_preview_compile.compile_preview(context, records, catalog['rules'], snapshot,
-                                                           entrypoint=args.entrypoint, cancel_event=cancel)
+                                                           entrypoint=args.entrypoint, cancel_event=cancel,
+                                                           expected_dependencies=observed,
+                                                           expected_baseline_sha256=discovery_baseline_sha256)
         result = dict(schema=1, tool_version=VERSION, mode='preview-compile', status=2, phase='preview',
                       compiler_invoked=True, pdf_generated=True, source_files_modified=False,
                       publication_authority=False, global_coverage_complete=False,
@@ -103,6 +132,8 @@ def main(arguments=None):
                       pdfs_identical=preview.pdfs_identical, observed_dependencies=preview.dependency_count,
                       unobserved_captured_resources=preview.unobserved_capture_count,
                       system_font_files=preview.system_font_files,
+                      discovery_performed=observed is not None,
+                      discovery_observed_dependencies=len(observed) if observed is not None else None,
                       dependency_closure_proved=False, compiler_sha256=preview.compiler_sha256)
         if cancel is not None and cancel.is_set():
             raise runtime.CompilerFailure('cancelled', kind=runtime.CompilerFailureKind.CANCELLED)
@@ -111,7 +142,7 @@ def main(arguments=None):
             sys.stdout.buffer.flush()
     except (InputError, SafetyError, PackageInputError, OSError, ValueError, runtime.CompilerFailure) as error:
         result = dict(schema=1, tool_version=VERSION, mode='preview-compile', status=2, phase=phase,
-                      compiler_invoked=None if phase == 'compile' else False, pdf_generated=False,
+                      compiler_invoked=None if phase in ('discovery', 'compile') else False, pdf_generated=False,
                       source_files_modified=False, publication_authority=False, error=str(error))
         if isinstance(error, runtime.CompilerFailure) and error.invocation is not None:
             if type(error.invocation.started) is bool:

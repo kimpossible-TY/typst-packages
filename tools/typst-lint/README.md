@@ -152,7 +152,10 @@ can compile the captured baseline and candidate in a private network-denied
 workspace using a caller-supplied resource manifest. It optionally streams the
 candidate PDF to stdout, never changes consumer sources and still exits 2 because
 global rule coverage is incomplete. The ordinary `typst-style compile` gate and
-its source/output transaction requirements are unchanged.
+its source/output transaction requirements are unchanged. Optional
+`--discover-dependencies` derives current dependency paths from a sandboxed
+read-only baseline using the manifest's explicit font selection, and refuses if
+the captured baseline's PDF or observed dependencies differ from that probe.
 
 The ordinary modes above remain read-only. Reports may include AST-backed proposed edits
 with baseline hashes, but label them `partial-not-applicable-transaction`.

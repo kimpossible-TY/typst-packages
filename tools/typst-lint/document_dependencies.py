@@ -46,7 +46,7 @@ def parse(raw, *, cwd, roots):
         raise SafetyError('Explicit dependency roots are required')
     bases = {}
     for name, value in roots.items():
-        if type(name) is not str or not name.isascii() or not name.isidentifier():
+        if type(name) is not str or len(name) > 64 or not name.isascii() or not name.isidentifier():
             raise SafetyError('Dependency root IDs must be ASCII identifiers')
         bases[name] = _absolute(value)
     workdir = _absolute(cwd)
