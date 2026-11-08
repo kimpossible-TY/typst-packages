@@ -19,6 +19,8 @@ typst-lint preview-compile --root /absolute/project --entrypoint main.typ \
   --manifest /absolute/font-seed.json --discover-dependencies --conditional-gaps --conditional-spacers --format json
 typst-lint preview-compile --root /absolute/project --entrypoint main.typ \
   --manifest /absolute/font-seed.json --discover-dependencies --conditional-gaps --conditional-spacers --conditional-facade-footnotes --format json
+typst-lint preview-compile --root /absolute/project --entrypoint main.typ \
+  --manifest /absolute/font-seed.json --discover-dependencies --conditional-modern-highlights --format json
 typst-style compile --preview --root /absolute/project --entrypoint main.typ \
   --manifest /absolute/font-seed.json --discover-dependencies --format json
 typst-style compile --preview --root /absolute/project --entrypoint main.typ \
@@ -26,6 +28,21 @@ typst-style compile --preview --root /absolute/project --entrypoint main.typ \
 typst-lint preview-compile --root /absolute/project --entrypoint main.typ \
   --manifest /absolute/resources.json --pdf-stdout > /path/to/new-preview.pdf
 ```
+
+`--conditional-modern-highlights` selects an exclusive modern text-utils
+highlight preview, rather than the standard or G/P/S source sequence. It cannot
+be combined with another conditional stage, `--withhold-source` or
+`--review-edits`. An issued source/import graph, selected modern helper bytes
+and manifest, package root precedence and unchanged external route sources are
+checked against the captured resources. The candidate map is rederived and
+checked before those exact bytes are written into private workspaces; their
+bytes and the baseline/candidate compiler dependency sets are verified again.
+A lack of proposed edits or inconsistent evidence blocks this profile before preview
+compilation. Unsupported and withheld findings remain visible in the summary;
+the preview does not prove coverage, runtime binding or execution. Splitting
+may change emphasis, smart-quote direction and layout; PDF-byte comparison only
+describes these particular captured runs. Source application and publication
+remain unavailable.
 
 The opt-in `--conditional-gaps` profile appends source-local nested math
 footnote and proof gap stages to the standard sequence. Every step is replayed

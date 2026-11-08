@@ -175,6 +175,8 @@ def main(arguments=None, *, gate=False):
                         help='Also preview conditional proof and nested math-footnote gap edits')
     parser.add_argument('--conditional-continuations', action='store_true',
                         help='Preview conditional prose continuation line joins; rendering equivalence is unproved')
+    parser.add_argument('--conditional-modern-highlights', action='store_true',
+                        help='Preview only conditional modern text-utils highlight splits; rendering may change')
     parser.add_argument('--conditional-adjacent-punctuation', action='store_true',
                         help='Move adjacent prose punctuation across footnotes atomically; rendering may change')
     parser.add_argument('--conditional-punctuation', action='store_true',
@@ -203,6 +205,11 @@ def main(arguments=None, *, gate=False):
             return 2
     if args.review_edits and args.format != 'json' and not args.pdf_stdout:
         parser.error('--review-edits requires --format json or --pdf-stdout')
+    if args.conditional_modern_highlights and (args.conditional_gaps or args.conditional_punctuation
+            or args.conditional_spacers or args.conditional_facade_footnotes or args.conditional_continuations
+            or args.conditional_adjacent_punctuation or args.partial_unsupported_preview
+            or args.partial_unproven_binding_preview or args.withhold_source or args.review_edits):
+        parser.error('--conditional-modern-highlights is an exclusive preview and does not support --review-edits')
     if args.conditional_punctuation and not args.conditional_gaps:
         parser.error('--conditional-punctuation requires --conditional-gaps')
     if args.conditional_spacers and not args.conditional_gaps:
@@ -274,12 +281,12 @@ def main(arguments=None, *, gate=False):
 
         # Preserve the existing fail-before-discovery behavior unless this
         # profile needs a resource-bound facade proof for planning.
-        planned = None if args.conditional_facade_footnotes else plan_records(None)
+        planned = None if args.conditional_facade_footnotes or args.conditional_modern_highlights else plan_records(None)
         footnote_session = None
-        if args.conditional_facade_footnotes:
+        if args.conditional_facade_footnotes or args.conditional_modern_highlights:
             import conditional_footnote_binding
             import namespace_multiroot
-            require('packages' in roots and 'cache' in roots, 'Facade footnotes require package and cache roots')
+            require('packages' in roots and 'cache' in roots, 'Conditional evidence requires package and cache roots')
             namespaces = namespace_multiroot.load_multiroot_capture(roots['packages'], roots['cache'])
             footnote_session = conditional_footnote_binding.ConditionalFootnoteBinding(context, namespaces)
         observed = None
@@ -329,15 +336,25 @@ def main(arguments=None, *, gate=False):
             comparison = document_dependencies.compare(snapshot, raw_dependencies, cwd=str(root), roots=roots)
             require(not comparison.missing, 'A discovered dependency is absent from the resource capture')
         footnote_evidence = None
-        if footnote_session is not None:
+        modern_evidence = None
+        if args.conditional_modern_highlights:
+            import conditional_modern_highlight
+            import document_modern_highlight_evidence
+            analyzer = conditional_modern_highlight.ModernHighlightAnalyzer(footnote_session, scoped_callbacks=True)
+            modern_evidence = document_modern_highlight_evidence.CapturedModernHighlightEvidence(analyzer, snapshot)
+        elif footnote_session is not None:
             import document_footnote_evidence
             footnote_evidence = document_footnote_evidence.PreviewFootnoteEvidence(footnote_session, snapshot)
-        if planned is None:
+        if args.conditional_modern_highlights:
+            records, withheld = None, []
+        elif planned is None:
             phase = 'planning'
             planned = plan_records(footnote_evidence)
-        records, withheld = planned
+        if not args.conditional_modern_highlights:
+            records, withheld = planned
         review = review_sources(context, records, withheld if partial_requested else None) if args.review_edits else None
         phase = 'compile'
+        compile_options = {'modern_highlight_evidence': modern_evidence} if modern_evidence is not None else {}
         preview = document_preview_compile.compile_preview(context, records, catalog['rules'], snapshot,
                                                            entrypoint=args.entrypoint, cancel_event=cancel,
                                                            expected_dependencies=observed,
@@ -349,12 +366,17 @@ def main(arguments=None, *, gate=False):
                                                            partial_unproven_binding=args.partial_unproven_binding_preview,
                                                            explicit_withheld_sources=explicit_paths,
                                                            conditional_continuations=args.conditional_continuations,
-                                                           conditional_adjacent_punctuation=args.conditional_adjacent_punctuation)
+                                                           conditional_adjacent_punctuation=args.conditional_adjacent_punctuation,
+                                                           **compile_options)
+        modern_summary = preview.modern_highlight_evidence if args.conditional_modern_highlights else None
+        planned_sources = modern_summary['source_count'] if modern_summary is not None else len(records)
+        planned_edits = modern_summary['candidate_count'] if modern_summary is not None else sum(
+            len(step['edits']) for record in records for step in record['steps'])
         result = dict(schema=1, tool_version=VERSION, mode='preview-compile', status=2, phase='preview',
                       compiler_invoked=True, pdf_generated=True, source_files_modified=False,
                       publication_authority=False, global_coverage_complete=False,
-                      source_count=len(context.sources), planned_sources=len(records),
-                      planned_edits=sum(len(step['edits']) for record in records for step in record['steps']),
+                      source_count=len(context.sources), planned_sources=planned_sources,
+                      planned_edits=planned_edits,
                       resource_count=len(snapshot.files), catalog_sha256=catalog_hash,
                       baseline_pdf_sha256=preview.baseline_sha256, candidate_pdf_sha256=preview.candidate_sha256,
                       pdfs_identical=preview.pdfs_identical, observed_dependencies=preview.dependency_count,
@@ -363,22 +385,33 @@ def main(arguments=None, *, gate=False):
                       discovery_performed=observed is not None,
                       discovery_observed_dependencies=len(observed) if observed is not None else None,
                       dependency_closure_proved=False, compiler_sha256=preview.compiler_sha256,
-                      sequence_profile=profile,
+                      sequence_profile='modern-highlight-only' if modern_summary is not None else profile,
                       conditional_facade_footnotes=args.conditional_facade_footnotes,
                       conditionally_previewed_rule_ids=(
                           (['pde.proof-trailing-gap', 'pde.footnote-trailing-gap'] if args.conditional_gaps else [])
                           + (['pde.prose-footnote-punctuation'] if args.conditional_punctuation else [])
                           + (['pde.unaligned-footnote-no-spacer'] if args.conditional_spacers else [])
                           + (['pde.continuation-line'] if args.conditional_continuations else [])
-                          + (['pde.prose-footnote-punctuation'] if args.conditional_adjacent_punctuation and not args.conditional_punctuation else [])),
-                      partially_inspected_rule_ids=[document_display.STANDALONE, script_rule.RULE_ID, document_display.RULE_ID],
+                          + (['pde.prose-footnote-punctuation'] if args.conditional_adjacent_punctuation and not args.conditional_punctuation else [])
+                          + (['pde.text-only-highlight'] if modern_summary is not None else [])),
+                      partially_inspected_rule_ids=(['pde.text-only-highlight'] if modern_summary is not None else
+                          [document_display.STANDALONE, script_rule.RULE_ID, document_display.RULE_ID]),
                       uninspected_rule_ids=[rule['id'] for rule in catalog['rules'] if rule['id'] not in
-                                           (document_display.STANDALONE, script_rule.RULE_ID, document_display.RULE_ID)],
+                                           (('pde.text-only-highlight',) if modern_summary is not None else
+                                            (document_display.STANDALONE, script_rule.RULE_ID, document_display.RULE_ID))],
                       source_apply_gate=dict(eligible=False,
                           blockers=['global_rule_coverage_incomplete', 'dependency_closure_unproved',
                                     'live_source_freshness_unproved', 'protected_source_transaction_unavailable']
                                    + ([] if preview.pdfs_identical else ['preview_pdfs_differ'])
-                                   + (['partial_preview_withheld_files'] if withheld else [])))
+                                   + (['modern_highlight_runtime_binding_unproved'] if modern_summary is not None else [])
+                                   + (['modern_highlight_incomplete'] if modern_summary is not None
+                                      and modern_summary['status'] == 'INCOMPLETE' else [])
+                                   + (['partial_preview_withheld_files'] if withheld or (modern_summary is not None
+                                      and modern_summary['withheld_source_count']) else [])))
+        if modern_summary is not None:
+            result['conditional_modern_highlight_preview'] = dict(modern_summary,
+                condition='Runtime helper binding and execution are unproved.',
+                render_effect='Highlight splitting may change emphasis, smart-quote direction, spacing and layout.')
         if partial_requested:
             if args.partial_unsupported_preview:
                 result['partial_unsupported_preview'] = True
@@ -494,6 +527,11 @@ def main(arguments=None, *, gate=False):
         print(f"typst-lint preview-compile: PDF generated; {result['observed_dependencies']} observed dependencies; "
               f"baseline/candidate identical: {result['pdfs_identical']}", file=stream)
         print('Sources were not modified; global rule coverage remains incomplete (exit 2).', file=stream)
+        if 'conditional_modern_highlight_preview' in result:
+            info = result['conditional_modern_highlight_preview']
+            print(f"Conditional modern highlight edits: {info['candidate_count']}; "
+                  f"unpreviewed diagnostics: {info['unpreviewed_diagnostics']}; status: {info['status']}. "
+                  f"{info['condition']} {info['render_effect']}", file=stream)
         if 'conditional_spacer_preview' in result:
             info = result['conditional_spacer_preview']
             print(f"Conditional spacer removals planned: {info['planned_edits']}. {info['policy']} "

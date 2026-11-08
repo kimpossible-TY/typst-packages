@@ -100,6 +100,7 @@ class PreviewCompileResult:
     source_files_modified: bool = False
     dependency_closure_proved: bool = False
     publication_authority: bool = False
+    modern_highlight_evidence: dict | None = field(default=None, repr=False)
 
 
 @dataclass(frozen=True, slots=True)
@@ -167,7 +168,8 @@ def _compile_captured(context, records, catalog, snapshot, *, entrypoint, deadli
                     cancel_event=None, expected_dependencies=None, expected_baseline_sha256=None,
                     profile='standard', starts=None, footnote_evidence=None,
                     partial_unsupported=False, withheld_records=None, partial_unproven_binding=False,
-                    explicit_withheld_sources=(), conditional_continuations=False, conditional_adjacent_punctuation=False, original_only=False):
+                    explicit_withheld_sources=(), conditional_continuations=False, conditional_adjacent_punctuation=False,
+                    original_only=False, modern_highlight_evidence=None):
     """Compile baseline and candidate from explicit captured bytes in private.
 
     macOS sandbox-exec denies networking and writes outside the temporary
@@ -206,7 +208,22 @@ def _compile_captured(context, records, catalog, snapshot, *, entrypoint, deadli
         raise SafetyError('Preview requires explicit project, packages and cache roots')
     if any(len(name) > 64 for name in roots):
         raise SafetyError('Preview resource root ID is too long')
-    if original_only:
+    modern_summary = None
+    if modern_highlight_evidence is not None:
+        import document_modern_highlight_evidence as modern_evidence
+        if (original_only is not False or type(modern_highlight_evidence) is not modern_evidence.CapturedModernHighlightEvidence
+                or modern_highlight_evidence._snapshot is not snapshot
+                or modern_highlight_evidence._analyzer._session._context is not context
+                or records is not None or type(profile) is not str or profile != 'standard' or footnote_evidence is not None
+                or partial_unsupported is not False or partial_unproven_binding is not False
+                or withheld_records is not None or type(explicit_withheld_sources) is not tuple
+                or explicit_withheld_sources or conditional_continuations is not False
+                or conditional_adjacent_punctuation is not False):
+            raise SafetyError('Modern highlight preview requires its own issued capture and exclusive profile')
+        candidates, modern_summary = modern_evidence.stage_candidates(modern_highlight_evidence)
+        if not modern_summary['candidate_count']:
+            raise SafetyError('No verified modern highlight candidate edits')
+    elif original_only:
         candidates = document_resources.stage_original(context, snapshot)
     else:
         candidates = document_resources.stage_document(context, records, catalog, snapshot, profile=profile,
@@ -290,6 +307,8 @@ def _compile_captured(context, records, catalog, snapshot, *, entrypoint, deadli
             deps, deps_fd, deps_identity = runtime._bind_output(workspace / 'dependencies', stack)
             workspaces[label] = (workspace, staged_roots, system_fonts, project_fonts,
                                  pdf, pdf_fd, pdf_identity, deps, deps_fd, deps_identity)
+        if modern_highlight_evidence is not None:
+            modern_evidence._valid(modern_highlight_evidence)
         envbase = base / 'environment'
         _mkdir(envbase)
         for name in ('home', 'cache', 'config', 'data', 'tmp'):
@@ -365,6 +384,8 @@ def _compile_captured(context, records, catalog, snapshot, *, entrypoint, deadli
         runtime._same(SANDBOX, sandbox_evidence, 2 * 1024 * 1024, executable=True)
         include_context.assert_include_context(context)
         document_resources.assert_capture(snapshot)
+        if modern_highlight_evidence is not None:
+            modern_evidence._valid(modern_highlight_evidence)
         check_workspace(force=True)
         cancelled()
         if original_only:
@@ -375,21 +396,23 @@ def _compile_captured(context, records, catalog, snapshot, *, entrypoint, deadli
         return PreviewCompileResult(digest(before), digest(after), before == after,
                                     len(outputs['candidate'][1].observed),
                                     len(outputs['candidate'][1].unobserved), compiler_evidence.sha256,
-                                    len(external_fonts), after)
+                                    len(external_fonts), after, modern_highlight_evidence=modern_summary)
 
 
 def compile_preview(context, records, catalog, snapshot, *, entrypoint, deadline_seconds=120.0,
                     cancel_event=None, expected_dependencies=None, expected_baseline_sha256=None,
                     profile='standard', starts=None, footnote_evidence=None,
                     partial_unsupported=False, withheld_records=None, partial_unproven_binding=False,
-                    explicit_withheld_sources=(), conditional_continuations=False, conditional_adjacent_punctuation=False):
+                    explicit_withheld_sources=(), conditional_continuations=False, conditional_adjacent_punctuation=False,
+                    modern_highlight_evidence=None):
     return _compile_captured(context, records, catalog, snapshot, entrypoint=entrypoint,
         deadline_seconds=deadline_seconds, cancel_event=cancel_event, expected_dependencies=expected_dependencies,
         expected_baseline_sha256=expected_baseline_sha256, profile=profile, starts=starts,
         footnote_evidence=footnote_evidence, partial_unsupported=partial_unsupported,
         withheld_records=withheld_records, partial_unproven_binding=partial_unproven_binding,
         explicit_withheld_sources=explicit_withheld_sources, conditional_continuations=conditional_continuations,
-        conditional_adjacent_punctuation=conditional_adjacent_punctuation)
+        conditional_adjacent_punctuation=conditional_adjacent_punctuation,
+        modern_highlight_evidence=modern_highlight_evidence)
 
 
 def compile_original(context, snapshot, *, entrypoint, deadline_seconds=120.0, cancel_event=None,
