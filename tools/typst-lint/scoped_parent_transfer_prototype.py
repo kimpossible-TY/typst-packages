@@ -33,6 +33,9 @@ CONDITIONS = (
 PREVIEW_CONDITIONS = CONDITIONS + (
     'This independent source-only plan is not a union with other reports; do not merge plans without separate verification.',
 )
+CAPTURE_CONDITIONS = (
+    'The captured helper markub call is checked syntactically; its binding and effects are not proved.',
+)
 
 
 class _Tracer(modern._ModernAnalyzer):
@@ -156,6 +159,53 @@ def _theme_context(tree, context):
               (b'theme.callouts.proposition.border', b'theme.callouts.important.border')):
             return None
     return set(lets)
+def _capturing_mark_let(tree, let):
+    """Recognize one literal-tag child helper; its body remains fully scanned."""
+    n = tree.nodes
+    p = graph.significant(tree, let)
+    if len(p) != 2 or tuple(n[x].kind for x in p) != ('Let', 'Closure'):
+        return None
+    closure = p[1]
+    p = graph.significant(tree, closure)
+    if len(p) != 4 or tuple(n[x].kind for x in p) != ('Ident', 'Params', 'Eq', 'CodeBlock'):
+        return None
+    name = graph.raw(tree, p[0])
+    if name in (b's', b'm', b'mannot-scope', b'local-scope-annotations', b'markub'):
+        return None
+    params = graph.significant(tree, p[1])
+    if (tuple(n[x].kind for x in params) != ('LeftParen', 'Ident', 'RightParen')
+            or graph.raw(tree, params[1]) != b'body'):
+        return None
+    block = graph.significant(tree, p[3])
+    if len(block) != 3 or tuple(n[x].kind for x in block) != ('LeftBrace', 'Code', 'RightBrace'):
+        return None
+    statements = graph.significant(tree, block[1])
+    if (len(statements) != 2 or n[statements[0]].kind != 'SetRule'
+            or graph.raw(tree, statements[0]) != b'set math.equation(numbering: none)'
+            or n[statements[1]].kind != 'FuncCall'):
+        return None
+    call = graph.significant(tree, statements[1])
+    if (len(call) != 2 or n[call[0]].kind != 'Ident' or graph.raw(tree, call[0]) != b'markub'
+            or n[call[1]].kind != 'Args'):
+        return None
+    args = [x for x in graph.significant(tree, call[1])
+            if n[x].kind not in ('LeftParen', 'RightParen', 'Comma')]
+    if len(args) != 3 or n[args[0]].kind != 'Ident' or graph.raw(tree, args[0]) != b'body':
+        return None
+    tag, bracket = (graph.significant(tree, i) if n[i].kind == 'Named' else [] for i in args[1:])
+    if (len(tag) != 3 or graph.raw(tree, tag[0]) != b'tag'
+            or len(bracket) != 3 or graph.raw(tree, bracket[0]) != b'bracket'
+            or graph.raw(tree, bracket[2]) != b'sym.brace.b' or n[tag[2]].kind != 'FuncCall'):
+        return None
+    tagged = graph.significant(tree, tag[2])
+    if (len(tagged) != 2 or graph.raw(tree, tagged[0]) != b'(m.tag)'
+            or n[tagged[1]].kind != 'Args'):
+        return None
+    literal = graph.significant(tree, tagged[1])
+    if (len(literal) != 3 or tuple(n[x].kind for x in literal) != ('LeftParen', 'Str', 'RightParen')
+            or graph.literal_string(tree, literal[1]) is None):
+        return None
+    return dict(let=let, closure=closure, name=name, declaration=p[0])
 
 
 def _root_bindings(tree, path, outer, tracer, remaining):
@@ -272,19 +322,29 @@ def _prove_tree(evidence, tree, path, outer, origin, outer_route, remaining, max
         raise SafetyError('Outer wrapper ownership changed')
     pending, inside, child_by_call = [body], [], {}
     contexts, context_lets = set(), set()
+    captures = []
     while pending:
         i = pending.pop()
         remaining -= 1
         if remaining < 0:
             raise SafetyError('Parent proof work budget exceeded')
         n = nodes[i]
+        if n.kind == 'LetBinding' and i not in context_lets:
+            # Charge declaration bytes before inspecting or copying its spans.
+            remaining -= n.end - n.start
+            if remaining < 0:
+                raise SafetyError('Parent proof work budget exceeded')
+        permitted_let = (_capturing_mark_let(tree, i)
+                         if n.kind == 'LetBinding' and i not in context_lets else None)
+        if permitted_let is not None:
+            captures.append(permitted_let)
         if n.kind == 'Contextual':
             approved = _theme_context(tree, i)
             if approved is None:
                 raise SafetyError('Contextual palette binding is unsupported')
             contexts.add(i)
             context_lets.update(approved)
-        if ((n.kind in _FORBIDDEN and i not in contexts and i not in context_lets)
+        if ((n.kind in _FORBIDDEN and i not in contexts and i not in context_lets and permitted_let is None)
                 or n.errors or (n.kind == 'Binary' and any(
                 nodes[c].kind in _ASSIGNMENTS for c in n.children))):
             raise SafetyError('Outer scope contains dynamic binding or mutation')
@@ -296,8 +356,42 @@ def _prove_tree(evidence, tree, path, outer, origin, outer_route, remaining, max
         pending.extend(n.children)
     if not child_by_call or len(child_by_call) > MAX_PARENTS:
         raise SafetyError('Parent-transfer child count is unsupported')
-    if any(nodes[i].kind == 'Closure' and i not in {c['closure'] for c in child_by_call.values()} for i in inside):
+    if captures:
+        remaining -= (3 * len(inside) + len(tree.source) + len(child_by_call)
+                      + len(captures) * (1 + len(child_by_call)))
+        if remaining < 0:
+            raise SafetyError('Parent proof work budget exceeded')
+    allowed_closures = {c['closure'] for c in child_by_call.values()}
+    allowed_closures.update(c['closure'] for c in captures)
+    if any(nodes[i].kind == 'Closure' and i not in allowed_closures for i in inside):
         raise SafetyError('Unreviewed nested closure')
+    capture_names = {}
+    for capture in captures:
+        i = capture['let']
+        markup = parents.get(i)
+        owner_body = parents.get(markup) if markup is not None else None
+        owners = [c for c in child_by_call.values() if c['body'] == owner_body]
+        if (markup is None or nodes[markup].kind != 'Markup' or len(owners) != 1
+                or capture['name'] in capture_names):
+            raise SafetyError('Captured helper lexical ownership is ambiguous')
+        capture_names[capture['name']] = (capture, owners[0])
+    uses = {name: 0 for name in capture_names}
+    for i in inside if capture_names else ():
+        n = nodes[i]
+        if n.kind not in ('Ident', 'MathIdent') or graph.raw(tree, i) not in capture_names:
+            continue
+        capture, owner = capture_names[graph.raw(tree, i)]
+        if i == capture['declaration']:
+            continue
+        parent = parents.get(i)
+        if (n.kind != 'MathIdent' or parent is None or nodes[parent].kind != 'MathCall'
+                or not graph.significant(tree, parent) or graph.significant(tree, parent)[0] != i
+                or not nodes[owner['body']].start < n.start < n.end < nodes[owner['body']].end
+                or n.start <= nodes[capture['let']].end):
+            raise SafetyError('Captured helper escapes or is shadowed')
+        uses[capture['name']] += 1
+    if any(count == 0 for count in uses.values()):
+        raise SafetyError('Captured helper has no verified use')
     child_ids = {c['parameter'] for c in child_by_call.values()}
     allowed_parent_ids = {c['parent'] for c in child_by_call.values() if c['parent'] is not None}
     if not allowed_parent_ids:
@@ -442,7 +536,9 @@ def _prove_tree(evidence, tree, path, outer, origin, outer_route, remaining, max
                   outer_scope_fields=outer_fields, child_scope_fields=inner_fields,
                   outer_scope_uses_inside_children=outer_inside_child, work_used=max_work - remaining,
                   theme_contexts=len(contexts), theme_selector_route=theme_route,
-                  conditions=CONDITIONS, runtime_binding_proved=False, execution_proved=False,
+                  captured_child_helpers=len(captures),
+                  conditions=CONDITIONS + (CAPTURE_CONDITIONS if captures else ()),
+                  runtime_binding_proved=False, execution_proved=False,
                   coverage_complete=False, render_equivalence_proved=False, edit_permission=False,
                   compiler_permission=False)
     encoded = json.dumps(result, ensure_ascii=False, sort_keys=True, indent=2)
@@ -584,6 +680,7 @@ def _preview_selected(evidence, path, highlight_starts, *, max_work=MAX_PREVIEW_
             or parent_proof['child_scope_fields'] != after_proof['child_scope_fields']
             or parent_proof['outer_scope_uses_inside_children'] != after_proof['outer_scope_uses_inside_children']
             or parent_proof['theme_contexts'] != after_proof['theme_contexts']
+            or parent_proof['captured_child_helpers'] != after_proof['captured_child_helpers']
             or len(parent_proof['parents']) != len(after_proof['parents'])):
         raise SafetyError('Candidate parent/child lexical identities changed')
     expected_theme_route = [dict(step, source_sha256=digest(candidate)) if step['path'] == path else step
@@ -660,7 +757,8 @@ def _preview_selected(evidence, path, highlight_starts, *, max_work=MAX_PREVIEW_
                   verified_child_scopes=len(parent_proof['parents']),
                   outer_scope_uses_inside_children=parent_proof['outer_scope_uses_inside_children'],
                   edits=[dict(start=e.start, end=e.end, replacement=e.replacement.decode('utf-8'), rule_id=preview.RULE)
-                         for e in edits], conditions=PREVIEW_CONDITIONS,
+                         for e in edits], conditions=PREVIEW_CONDITIONS +
+                  (CAPTURE_CONDITIONS if parent_proof['captured_child_helpers'] else ()),
                   independent_source_only=True, composition_proved=False,
                   runtime_binding_proved=False, execution_proved=False, coverage_complete=False,
                   render_equivalence_proved=False, edit_permission=False, compiler_permission=False)

@@ -125,6 +125,72 @@ class ParentTransferPrototypeTests(unittest.TestCase):
         analyzer = modern.ModernHighlightAnalyzer(session, scoped_callbacks=True)
         with self.assertRaisesRegex(SafetyError, 'Theme selector root binding is unresolved'):
             proof.analyze_one(analyzer, 'main.typ', start)
+    def test_literal_tag_captured_child_helper_is_checked(self):
+        body = (b'#local-tag-scope(s => [#mannot-scope(m => [\n'
+                b'#let markchild(body) = { set math.equation(numbering: none)\n'
+                b'markub(body, tag: (m.tag)("x"), bracket: sym.brace.b) }\n'
+                b'$markchild(x)$], parent: s, name: "one")\n'
+                b'#highlighted[See #(s.ref)("a") $x$ end.]])')
+        source, analyzer, diagnostics = self.issue(body)
+        start = diagnostics[0]['start']
+        proof_result = proof.analyze_one(analyzer, 'main.typ', start)
+        self.assertEqual(proof_result['captured_child_helpers'], 1)
+        self.assertEqual(proof_result['child_scope_fields']['tag'], 1)
+        result = proof.preview_one(analyzer, 'main.typ', start)
+        self.assertEqual(len(result['edits']), 1)
+        self.assertFalse(result['execution_proved'] or result['render_equivalence_proved'])
+        self.assertEqual((self.fixture.fixture.project / 'main.typ').read_bytes(), source)
+        with self.assertRaisesRegex(SafetyError, 'budget'):
+            proof.analyze_one(analyzer, 'main.typ', start, max_work=proof_result['work_used'] - 1)
+        self.assertEqual(proof.preview_one(analyzer, 'main.typ', start, max_work=result['work_used']), result)
+        with self.assertRaisesRegex(SafetyError, 'budget'):
+            proof.preview_one(analyzer, 'main.typ', start, max_work=result['work_used'] - 1)
+        original = proof._prove_tree
+        def tamper(*args, **kwargs):
+            checked = original(*args, **kwargs)
+            if kwargs.get('graph_override') is not None:
+                checked['captured_child_helpers'] = 0
+            return checked
+        with patch.object(proof, '_prove_tree', side_effect=tamper):
+            with self.assertRaisesRegex(SafetyError, 'lexical identities changed'):
+                proof.preview_one(analyzer, 'main.typ', start)
+
+    def test_captured_child_helper_escape_shadow_dynamic_tag_and_tampering_refused(self):
+        template = (b'#local-tag-scope(s => [#mannot-scope(m => [\n'
+                    b'#let markchild(body) = { set math.equation(numbering: none)\n'
+                    b'markub(body, tag: (m.tag)("x"), bracket: sym.brace.b) }\n'
+                    b'$markchild(x)$%s], parent: s, name: "one")\n'
+                    b'#highlighted[See #(s.ref)("a") $x$ end.]])')
+        bad = (template % b'#unknown(markchild)',
+               (template % b'').replace(b'(m.tag)("x")', b'(m.tag)(compute())'),
+               (template % b'').replace(b'markchild(body)', b'markchild(m)'),
+               (template % b'').replace(b'markub(body,', b'markub(m,'),
+               (template % b'').replace(b'$markchild(x)$', b'#unknown(markchild)'),
+               (template % b'').replace(b'$markchild(x)$', b'$markchild(#m)$'),
+               (template % b'').replace(b'$markchild(x)$', b'#let m = 1\n$markchild(x)$'),
+               (template % b'').replace(b'$markchild(x)$', b'#(m.tag = x => x)\n$markchild(x)$'),
+               (template % b'').replace(b'markchild(body)', b'mannot-scope(body)'))
+        for body in bad:
+            with self.subTest(body=body):
+                _, analyzer, diagnostics = self.issue(body)
+                if diagnostics:
+                    with self.assertRaises((InputError, SafetyError)):
+                        proof.analyze_one(analyzer, 'main.typ', diagnostics[0]['start'])
+
+    def test_many_captured_helpers_are_charged_and_bounded(self):
+        declarations = b''.join(
+            (b'#let f%d(body) = { set math.equation(numbering: none)\n'
+             b'markub(body, tag: (m.tag)("x"), bracket: sym.brace.b) }\n'
+             b'$f%d(x)$\n') % (i, i) for i in range(24))
+        body = (b'#local-tag-scope(s => [#mannot-scope(m => [\n' + declarations
+                + b'], parent: s, name: "one")\n#highlighted[See #(s.ref)("a") $x$ end.]])')
+        _, analyzer, diagnostics = self.issue(body)
+        start = diagnostics[0]['start']
+        result = proof.analyze_one(analyzer, 'main.typ', start)
+        self.assertEqual(result['captured_child_helpers'], 24)
+        self.assertEqual(proof.analyze_one(analyzer, 'main.typ', start, max_work=result['work_used']), result)
+        with self.assertRaisesRegex(SafetyError, 'budget'):
+            proof.analyze_one(analyzer, 'main.typ', start, max_work=result['work_used'] - 1)
 
     def test_direct_facade_route_and_outer_s_inside_child(self):
         body = (b'#local-tag-scope(s => [\n'

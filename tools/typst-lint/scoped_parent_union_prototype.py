@@ -45,6 +45,8 @@ def preview_union(evidence, path, starts, *, max_work=MAX_WORK, max_bytes=MAX_BY
                                      max_work=min(remaining, parent.MAX_PREVIEW_WORK))
             remaining -= row['work_used']
             result['baseline'].append(row)
+            if parent.CAPTURE_CONDITIONS[0] in row['conditions']:
+                result['conditions'] = CONDITIONS + parent.CAPTURE_CONDITIONS
         if remaining <= 0:
             raise SafetyError('Parent union work budget exceeded')
         union = parent._preview_selected(evidence, path, tuple(starts),
@@ -58,7 +60,9 @@ def preview_union(evidence, path, starts, *, max_work=MAX_WORK, max_bytes=MAX_BY
         if len({row['baseline_sha256'] for row in result['baseline'] + [union]}) != 1:
             raise SafetyError('Union and baseline captured sources differ')
         union['verification'] = 'conditional-parent-union-source-only'
-        union['conditions'] = CONDITIONS
+        conditions = CONDITIONS + tuple(c for c in union['conditions'] if c in parent.CAPTURE_CONDITIONS)
+        union['conditions'] = conditions
+        result['conditions'] = conditions
         union['source_union_revalidated'] = True
         result['union'] = union
         result['source_union_revalidated'] = True

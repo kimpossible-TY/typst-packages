@@ -192,7 +192,11 @@ captured `theme-from-text-fill()` route and non-shadowing local colors from
 `theme.callouts.proposition.border` or `theme.callouts.important.border`.
 The entire context body remains visible to the scope scanner. The selector
 route and bindings are replayed on the candidate; other contextual declarations
-and captured local functions remain unsupported.
+remain unsupported. A direct child-scope local function with the exact reviewed
+literal-tag `markub` call shape can capture `m` if its uses are direct math
+calls in that same child after the declaration. Its full body remains scanned
+and the ownership is replayed on the candidate. The `markub` binding and effects
+are not proved. Other captured local functions remain unsupported.
 
 `--preview-conditional-modern-parent-reference PATH START` instead requires
 the combined preview and offers one independent source-only proposal. It

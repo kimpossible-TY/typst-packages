@@ -41,6 +41,35 @@ class ParentUnionTests(unittest.TestCase):
         self.assertFalse(result['composition_proved'] or result['edit_permission'] or result['compiler_permission'])
         self.assertEqual((self.fixture.fixture.fixture.project / 'main.typ').read_bytes(), source)
 
+    def test_union_reports_captured_helper_binding_condition(self):
+        body = (b'#local-tag-scope(s => [#mannot-scope(m => [\n'
+                b'#let markchild(body) = { set math.equation(numbering: none)\n'
+                b'markub(body, tag: (m.tag)("x"), bracket: sym.brace.b) }\n'
+                b'$markchild(x)$], parent: s, name: "one")\n'
+                b'#highlighted[One #(s.ref)("a") $x$ end.]\n'
+                b'#highlighted[Two #(s.ref)("b") $y$ end.]])')
+        _, analyzer, diagnostics = self.fixture.issue(body)
+        result = union.preview_union(analyzer, 'main.typ', tuple(d['start'] for d in diagnostics))
+        self.assertEqual(result['status'], 'CONDITIONAL', result)
+        for row in [result, result['union'], *result['baseline']]:
+            self.assertIn(parent.CAPTURE_CONDITIONS[0], row['conditions'])
+        encoded = json.dumps(result, ensure_ascii=False, sort_keys=True, indent=2)
+        byte_limit = len(encoded.encode('utf-8')) + 2 * encoded.count('\n')
+        starts = tuple(d['start'] for d in diagnostics)
+        self.assertEqual(union.preview_union(analyzer, 'main.typ', starts, max_bytes=byte_limit), result)
+        with self.assertRaisesRegex(InputError, 'byte budget'):
+            union.preview_union(analyzer, 'main.typ', starts, max_bytes=byte_limit - 1)
+        original = parent._preview_selected
+        def refuse(evidence, path, offsets, **kwargs):
+            if len(offsets) > 1:
+                raise SafetyError('forced union refusal')
+            return original(evidence, path, offsets, **kwargs)
+        with patch.object(parent, '_preview_selected', side_effect=refuse):
+            withheld = union.preview_union(analyzer, 'main.typ', tuple(d['start'] for d in diagnostics))
+        self.assertEqual(withheld['status'], 'INCOMPLETE')
+        self.assertEqual(len(withheld['baseline']), 2)
+        self.assertIn(parent.CAPTURE_CONDITIONS[0], withheld['conditions'])
+
     def test_union_failure_preserves_both_baselines(self):
         _, analyzer, starts = self.issue()
         original = parent._preview_selected

@@ -244,7 +244,10 @@ not a runtime binding, execution or editing certificate.
 
 The inspection also admits a narrow contextual palette setup with a captured
 reviewed `theme-from-text-fill` binding and literal `theme.callouts` border
-field reads. Other contextual bindings and captured functions remain withheld.
+field reads. A child callback may also contain a narrowly recognized local
+`markub` wrapper capturing `m` for one literal tag, with direct math-call uses
+in that same child. The wrapper's `markub` binding and effects are not proved;
+other contextual bindings and captured functions remain withheld.
 
 With the combined preview enabled, `--preview-conditional-modern-parent-reference
 PATH START` can instead offer one independent source-only split involving a
