@@ -32,7 +32,7 @@ class ConditionalRawAnnotCliTests(unittest.TestCase):
 
     def test_opt_in_json_text_suppression_and_independent_counts(self):
         main = (b'#include "child.typ"\n#import "styles.typ": *\n'
-                b'#proof[$x$\n#annot(<x>, pos: top)[Note.]\n]')
+                b'#proof[$ x #annot(<in>, [inside]) $\n#annot(<x>, pos: top)[Note.]\n]')
         child = (b'#proof[\n// typst-lint: ignore-next core.annotation-in-display -- intentional\n'
                  b'#annot(<y>, dx: 1pt)[Other.]\n]')
         (self.root / 'main.typ').write_bytes(main)
@@ -48,6 +48,8 @@ class ConditionalRawAnnotCliTests(unittest.TestCase):
         self.assertFalse(section['edit_permission'] or section['compiler_permission'] or section['coverage_complete'])
         self.assertFalse(result['applied_fixes'] or result['compiler_invoked'])
         rows = {row['path']: row for row in section['by_file']}
+        self.assertEqual(rows['main.typ']['lexical_display_calls'], 1)
+        self.assertEqual(rows['child.typ']['lexical_display_calls'], 0)
         for path, source, key in (('main.typ', main, 'diagnostics'), ('child.typ', child, 'suppressed')):
             row = rows[path]
             finding, = row[key]
@@ -61,7 +63,7 @@ class ConditionalRawAnnotCliTests(unittest.TestCase):
         self.assertFalse(any(row['diagnostics'] for row in result['conditional_raw_overlays']['by_file']))
         text = self.run_cli('--rule-set', 'pde', '--preview-conditional-scoped-calls', format='text')
         for phrase in ('Conditional raw annotations:', 'hint main.typ:', 'suppressed child.typ:',
-                       'source sha256', 'condition:', 'no edit or compiler permission'):
+                       '1 direct lexical display calls', 'source sha256', 'condition:', 'no edit or compiler permission'):
             self.assertIn(phrase, text)
         self.assertEqual((self.root / 'main.typ').read_bytes(), main)
         self.assertEqual((self.root / 'child.typ').read_bytes(), child)
@@ -96,6 +98,13 @@ class ConditionalRawAnnotCliTests(unittest.TestCase):
                 document_cli.report_document(str(self.root), 'main.typ', rule_set='pde',
                                              preview_conditional_scoped_calls=True)
             analyzed.assert_called_once()
+        large['diagnostics'] = []
+        large['lexical_display_calls'] = 1001
+        with patch.object(document_cli, 'MAX_REPORT_ITEMS', 1000), \
+             patch.object(raw_annot, 'analyze', return_value=large):
+            with self.assertRaisesRegex(InputError, 'report item limit'):
+                document_cli.report_document(str(self.root), 'main.typ', rule_set='pde',
+                                             preview_conditional_scoped_calls=True)
 
 
 if __name__ == '__main__':

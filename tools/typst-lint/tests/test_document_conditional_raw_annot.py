@@ -32,14 +32,52 @@ class ConditionalRawAnnotTests(unittest.TestCase):
         self.assertNotIn('edits', result)
 
     def test_display_deferred_and_dynamic_contexts_are_not_reported(self):
-        cases = (b'$ x ' + self.call + b' $', b'#let f(x) = [' + self.call + b']',
-                 b'#for x in (1,) [' + self.call + b']', b'#if true [' + self.call + b']',
+        display = check.analyze(b'$ x ' + self.call + b' $', 'main.typ')
+        self.assertEqual(display['lexical_display_calls'], 1)
+        self.assertFalse(display['diagnostics'] or display['unresolved'])
+        cases = (b'#let f(x) = [' + self.call + b']', b'#for x in (1,) [' + self.call + b']',
+                 b'#if true [' + self.call + b']',
                  b'#context [' + self.call + b']', b'#let x = [' + self.call + b']')
         for source in cases:
             with self.subTest(source=source):
                 result = check.analyze(source, 'main.typ')
                 self.assertFalse(result['diagnostics'])
                 self.assertTrue(result['unresolved'])
+                self.assertEqual(result['lexical_display_calls'], 0)
+
+    def test_display_count_requires_direct_valid_unshadowed_call(self):
+        cases = (b'$x #other(annot(<x>, [note])) $',
+                 b'$x #annot(<x>) $',
+                 b'$x #annot(<x>, unexpected: 1)[note] $',
+                 b'$x #annot(<x>, ..args)[note] $',
+                 b'$x #annot(<x>, [note])$',  # inline equation
+                 b'#let annot = none\n$ x #annot(<x>, [note]) $',
+                 b'$ x #(() => annot(<x>, [note])) $')
+        for source in cases:
+            with self.subTest(source=source):
+                result = check.analyze(source, 'main.typ')
+                self.assertEqual(result['lexical_display_calls'], 0, result)
+                self.assertFalse(result['diagnostics'])
+                self.assertTrue(result['unresolved'], result)
+
+    def test_display_count_does_not_hide_suppressed_or_outside_findings(self):
+        source = (b'$ x #annot(<x>, [inside]) $\n'
+                  b'// typst-lint: ignore-next core.annotation-in-display -- intentional\n'
+                  b'#annot(<y>, [suppressed])\n#annot(<z>, [outside])')
+        result = check.analyze(source, 'main.typ')
+        self.assertEqual((result['lexical_display_calls'], len(result['diagnostics']),
+                          len(result['suppressed'])), (1, 1, 1))
+        self.assertFalse(result['unresolved'])
+
+    def test_deferred_display_is_only_a_lexical_count(self):
+        for source in (b'#let f() = [$ x #annot(<x>, [inside]) $]',
+                       b'#other([$ x #annot(<x>, [inside]) $])'):
+            with self.subTest(source=source):
+                result = check.analyze(source, 'main.typ')
+                self.assertEqual(result['lexical_display_calls'], 1)
+                self.assertFalse(result['diagnostics'] or result['unresolved'])
+                self.assertFalse(result['execution_proved'] or result['runtime_binding_proved']
+                                 or result['coverage_complete'] or result['compiler_permission'])
 
     def test_equation_constructor_content_is_unresolved_without_binding_guess(self):
         for callee in (b'math.equation', b'equation', b'(math.equation)', b'other.equation'):

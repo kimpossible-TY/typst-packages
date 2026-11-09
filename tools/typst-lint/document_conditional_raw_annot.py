@@ -21,6 +21,7 @@ CONDITIONS = (
     'The enclosing literal source content and this call actually execute and render as expected.',
     'No enclosing wrapper or show rule places the call inside a display equation at runtime.',
     'Runtime sources, imports, package selection and initialization match the intended snapshot.',
+    'The display count describes direct lexical placement only, not runtime execution or display ownership.',
 )
 _ASSIGNMENTS = frozenset(('Eq', 'PlusEq', 'HyphEq', 'StarEq', 'SlashEq'))
 _OPTIONS = frozenset(('pos', 'dx', 'dy', 'leader', 'leader-stroke', 'leader-tip', 'leader-toe',
@@ -157,7 +158,8 @@ def _analyze(source, path, *, catalog=None, captured_tree=None):
         raise InputError('Missing or invalid annotation rule metadata')
     result = dict(path=path, source_sha256=digest(source), status='PARTIAL', diagnostics=[],
                   suppressed=[], unresolved=[], conditions=CONDITIONS, runtime_binding_proved=False,
-                  execution_proved=False, coverage_complete=False, edit_permission=False, compiler_permission=False)
+                  execution_proved=False, coverage_complete=False, edit_permission=False, compiler_permission=False,
+                  lexical_display_calls=0)
     try:
         tree = parse(source) if captured_tree is None else captured_tree
     except (AdapterError, OSError, ValueError) as error:
@@ -182,6 +184,17 @@ def _analyze(source, path, *, catalog=None, captured_tree=None):
                 or nodes[parts[1]].kind != 'Args'):
             continue
         parent = parents.get(index)
+        if parent is not None and nodes[parent].kind == 'Math':
+            siblings = nodes[parent].children
+            position = positions[index]
+            mark = nodes[siblings[position - 1]] if position else None
+            equation = parents.get(parent)
+            if (equation is not None and nodes[equation].kind == 'Equation'
+                    and nodes[equation].display is True and mark is not None
+                    and mark.kind == 'Hash' and mark.end == node.start
+                    and _arguments(tree, parts[1])):
+                result['lexical_display_calls'] += 1
+                continue
         if parent is None or nodes[parent].kind != 'Markup':
             result['unresolved'].append(f'Raw annot call is not direct markup at byte {node.start}')
             continue

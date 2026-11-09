@@ -1,5 +1,8 @@
 """Conditional raw annotation reports in captured original compilation."""
 import json
+import os
+import subprocess
+import sys
 from unittest.mock import patch
 import unittest
 
@@ -26,6 +29,8 @@ class RawAnnotationCompileTests(fixtures.OriginalCompileScopedRawHintsTests):
         second = lint['conditional_mannot_scope_raw_annotations']
         third = lint['conditional_local_scope_raw_annotations']
         self.assertEqual((first['diagnostics_count'], first['suppressed_count']), (1, 1))
+        self.assertEqual(first['lexical_display_calls'], 1)
+        self.assertEqual(first['by_file'][0]['lexical_display_calls'], 1)
         self.assertEqual((second['diagnostics_count'], second['lexical_display_calls']), (1, 1))
         self.assertEqual(third['diagnostics_count'], 1)
         self.assertEqual(len({x['diagnostics'][0]['start'] for x in (first, second, third)}), 3)
@@ -124,7 +129,57 @@ class RawAnnotationCompileTests(fixtures.OriginalCompileScopedRawHintsTests):
             status, _, report, compiler = self.run_mock(source, *flags)
             self.assertEqual(status, 2, report)
             compiler.assert_not_called()
+
+    def test_forged_display_counts_are_rejected_before_compile(self):
+        source = b'$ x #annot(<x>, [inside]) $'
+        flags = ('--lint-document', '--rule-set', 'pde', '--lint-local-hints')
+        status, _, report, _ = self.run_mock(source, *flags)
+        self.assertEqual(status, 0, report)
+        self.assertEqual(report['lint']['conditional_raw_annotations']['lexical_display_calls'], 1)
+        original = direct._analyze_captured_tree
+        for count in (0, 2, -1, True):
+            def forged(tree, path, **kw):
+                value = original(tree, path, **kw)
+                value['lexical_display_calls'] = count
+                return value
+            with self.subTest(count=count), patch.object(direct, '_analyze_captured_tree', side_effect=forged):
+                status, pdf, report, compiler = self.run_mock(source, *flags)
+                self.assertEqual(status, 2, report)
+                self.assertEqual(pdf, b'')
+                compiler.assert_not_called()
         with patch.object(cli, '_LINT_ITEM_LIMIT', 1):
             status, _, report, compiler = self.run_mock(source, *flags)
             self.assertEqual(status, 2, report)
             compiler.assert_not_called()
+        with patch.object(cli, '_LINT_REPORT_BYTES', 100):
+            status, _, report, compiler = self.run_mock(source, *flags)
+            self.assertEqual(status, 2, report)
+            compiler.assert_not_called()
+
+    def test_display_ownership_work_is_bounded(self):
+        from syntax_client import parse
+        from typst_lint import InputError
+        tree = parse(b'$ x #annot(<x>, [inside]) $')
+        with self.assertRaisesRegex(InputError, 'ownership work limit'):
+            cli._direct_raw_display_count(tree, max_work=len(tree.nodes) - 1)
+        self.assertEqual(cli._direct_raw_display_count(tree, max_work=len(tree.nodes)), (1, len(tree.nodes)))
+
+    @unittest.skipUnless(os.environ.get('TYPST_LINT_RENDER_TESTS') == '1' and sys.platform == 'darwin',
+                         'Opt in on macOS with reviewed Typst')
+    def test_real_compiler_reports_lexical_display_and_outside_separately(self):
+        source = (b'#import "helpers.typ": *\n'
+                  b'$ x #annot(<x>, [inside]) $\n#annot(<y>, [outside])')
+        (self.f.project / 'main.typ').write_bytes(source)
+        (self.f.project / 'helpers.typ').write_bytes(b'#let annot(target, note) = note\n')
+        self.f.value['files'].append(dict(root='project', path='helpers.typ', role='resource'))
+        self.f.manifest.write_text(json.dumps(self.f.value), encoding='utf-8')
+        command = [str(fixtures.TOOL / 'typst-style'), 'compile', '--compile-original',
+                   *self.command('--lint-document', '--rule-set', 'pde', '--lint-local-hints')]
+        run = subprocess.run(command, capture_output=True, timeout=60)
+        report = json.loads(run.stderr)
+        self.assertEqual(run.returncode, 0, report)
+        self.assertTrue(run.stdout.startswith(b'%PDF-'))
+        section = report['lint']['conditional_raw_annotations']
+        self.assertEqual((section['lexical_display_calls'], section['diagnostics_count']), (1, 1))
+        self.assertFalse(section['execution_proved'] or section['coverage_complete'])
+        self.assertEqual((self.f.project / 'main.typ').read_bytes(), source)

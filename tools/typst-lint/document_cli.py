@@ -771,7 +771,8 @@ def report_document(root, entrypoint, *, rule_set='core', package_path=None,
                 conditional_raw_overlays.append(raw_overlay)
                 raw_annot = analyze_raw_annot(item.source, item.path, catalog=catalog['rules'])
                 items += (1 + len(raw_annot['diagnostics']) + len(raw_annot['suppressed'])
-                          + len(raw_annot['conditions']) + len(raw_annot['unresolved']))
+                          + len(raw_annot['conditions']) + len(raw_annot['unresolved'])
+                          + raw_annot['lexical_display_calls'])
                 require(items <= MAX_REPORT_ITEMS, 'Document inspection report item limit exceeded')
                 conditional_raw_annotations.append(raw_annot)
                 mannot_scope = analyze_mannot_scope(item.source, item.path, catalog=catalog['rules'])
@@ -1917,7 +1918,8 @@ def main(arguments=None):
             print('Conditional raw annotations: diagnostic-only, no edit or compiler permission')
             for row in raw_annotations['by_file']:
                 print(f"  {row['path']}: {row['status']}; {len(row['diagnostics'])} hints; "
-                      f"{len(row['suppressed'])} suppressed; source sha256 {row['source_sha256']}")
+                      f"{len(row['suppressed'])} suppressed; {row['lexical_display_calls']} direct lexical "
+                      f"display calls; source sha256 {row['source_sha256']}")
                 for label, entries in (('hint', row['diagnostics']), ('suppressed', row['suppressed'])):
                     for entry in entries:
                         print(f"    {label} {entry['path']}:{entry['line']}:{entry['column']}: "
