@@ -174,3 +174,27 @@ freshness, authorize editing or compilation, or establish execution, label
 resolution, side effects, styles or rendering. Do not merge it with another
 source's union, footnote plans, or other reports without revalidation. Math and
 a scoped reference in the same highlight remain unsupported.
+
+## Parent scope transfer and reference preview
+
+`--inspect-scoped-parent-transfer PATH START` requires modern highlight
+evidence and reports one selected callback's conditional parent/child source
+identity proof. The exact scoped-annotations and mannot namespace artifacts,
+facade routes, root wrapper and lexical ownership are replayed. Parent scope
+`s` and child scope `m` uses are checked throughout every admitted child
+body; helper values may only be used in exact `tag` or `ref` direct calls with
+one literal string. Unsupported bindings, dynamic code, escapes and work
+exhaustion withhold the proof. `PATH` and `START` must match the same issued
+modern highlight diagnostic.
+
+`--preview-conditional-modern-parent-reference PATH START` instead requires
+the combined preview and offers one independent source-only proposal. It
+reparses the candidate and replays all parent/child identities and routes on a
+derived graph whose selected source has changed and whose import bytes are
+unchanged. It also rechecks syntax, suppressions and other rule findings. The
+proof and preview options are mutually exclusive. The plan is against captured
+bytes; it is not a union with other plans. Do not merge it with combined,
+scoped/math union, footnote or other plans without separate verification.
+Current filesystem freshness, runtime binding or execution, side effects,
+reference targets, rendered output, writes and compilation remain unproved.
+The full report item/byte limit and independent bounded proof work apply.

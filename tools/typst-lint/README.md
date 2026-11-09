@@ -235,6 +235,23 @@ union verification. Runtime callback execution, binding, side effects, styles,
 rendering, source writes and compilation are not proved. This option handles one
 location per inspection; the overall report item and byte limits still apply.
 
+For one issued modern highlight diagnostic, `--inspect-scoped-parent-transfer
+PATH START` inspects its reviewed root callback and reports conditional source
+routes for strictly recognized child scope calls and `parent: s` transfers. It
+tracks literal `s` and `m` helper calls throughout the child bodies. Use the
+project-relative diagnostic `path` and its `start` byte offset. This proof is
+not a runtime binding, execution or editing certificate.
+
+With the combined preview enabled, `--preview-conditional-modern-parent-reference
+PATH START` can instead offer one independent source-only split involving a
+literal outer `s.ref` in that callback. It replays parent/child routes on the
+candidate and withholds unsupported or dynamic scope uses. Do not merge the
+plan with combined, union, footnote or other plans without separate union
+verification. Neither option proves current filesystem state, execution, side
+effects, reference targets, rendering or permission to edit or compile.
+Parent inspection and parent preview cannot be requested together. Work and
+whole-report item/byte limits apply.
+
 `--preview-conditional-modern-scoped-union PATH START` adds a separately
 verified per-source union of the existing combined plan and selected reviewed
 callback math sites. Repeat the option for up to four diagnostic locations in

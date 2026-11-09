@@ -53,6 +53,8 @@ def report_document(root, entrypoint, *, rule_set='core', package_path=None,
                     preview_conditional_modern_literal_footnotes=False,
                     preview_conditional_modern_scoped_math=None,
                     preview_conditional_modern_scoped_union=None,
+                    inspect_scoped_parent_transfer=None,
+                    preview_conditional_modern_parent_reference=None,
                     reference_package_path=None, reference_facade=None, reference_cache_path=None,
                     reference_calls=False, reference_arguments=False, reference_catalog=None):
     """Inspect retained source bytes without reading consumer configuration.
@@ -171,6 +173,21 @@ def report_document(root, entrypoint, *, rule_set='core', package_path=None,
         require(len(grouped) <= 2 and all(len(v) == len(set(v)) for v in grouped.values()),
                 'Scoped union allows at most two sources and no duplicate locations')
         scoped_union_targets = tuple((path, tuple(starts)) for path, starts in grouped.items())
+    require(inspect_scoped_parent_transfer is None or preview_conditional_modern_parent_reference is None,
+            'Parent transfer inspection and preview cannot be requested together')
+    parent_location = None
+    parent_preview = preview_conditional_modern_parent_reference is not None
+    parent_request = preview_conditional_modern_parent_reference if parent_preview else inspect_scoped_parent_transfer
+    if parent_request is not None:
+        require(modern_highlight_evidence and (not parent_preview or preview_conditional_modern_combined_highlights)
+                and type(parent_request) in (tuple, list) and len(parent_request) == 2,
+                'Parent transfer requires modern evidence, PATH START, and combined highlights for preview')
+        path, start = parent_request
+        require(type(path) is str and len(path.encode('utf-8')) <= include_context.MAX_PATH_BYTES
+                and type(start) in (str, int) and type(start) is not bool and str(start).isascii()
+                and str(start).isdigit() and len(str(start)) <= 12,
+                'Parent transfer START must be a nonnegative source byte offset')
+        parent_location = (path, int(start))
     reference_requested = (reference_package_path is not None or reference_facade is not None
                            or reference_cache_path is not None)
     require(type(reference_calls) is bool and (not reference_calls or reference_requested),
@@ -279,6 +296,7 @@ def report_document(root, entrypoint, *, rule_set='core', package_path=None,
     modern_literal_footnote_previews = None
     modern_scoped_math_preview = None
     modern_scoped_union_previews = None
+    parent_transfer_result = None
     modern_math_report = None
     modern_math_previews = None
     if footnote_cache_path is not None:
@@ -368,6 +386,26 @@ def report_document(root, entrypoint, *, rule_set='core', package_path=None,
                             render_equivalence_proved=False, edit_permission=False, compiler_permission=False)
                     items += (1 + len(modern_scoped_math_preview['edits']) + len(modern_scoped_math_preview['conditions'])
                               + int('reason' in modern_scoped_math_preview))
+                if parent_location is not None:
+                    import scoped_parent_transfer_prototype as parent_scope
+                    try:
+                        parent_transfer_result = (parent_scope.preview_one(modern_analyzer, *parent_location)
+                            if parent_preview else parent_scope.analyze_one(modern_analyzer, *parent_location))
+                    except ValueError as error:
+                        ModernHighlightAnalyzer._check(modern_analyzer)
+                        parent_transfer_result = dict(path=parent_location[0], start=parent_location[1],
+                            status='WITHHELD', verification='withheld', reason=str(error), parents=[], edits=[],
+                            conditions=(parent_scope.PREVIEW_CONDITIONS if parent_preview else parent_scope.CONDITIONS),
+                            independent_source_only=parent_preview, composition_proved=False,
+                            runtime_binding_proved=False, execution_proved=False,
+                            coverage_complete=False, render_equivalence_proved=False,
+                            edit_permission=False, compiler_permission=False)
+                    items += (1 + len(parent_transfer_result.get('conditions', ()))
+                              + len(parent_transfer_result.get('edits', ()))
+                              + int('reason' in parent_transfer_result)
+                              + len(parent_transfer_result.get('outer_scope_fields', {}))
+                              + len(parent_transfer_result.get('child_scope_fields', {}))
+                              + sum(1 + len(row['route']) for row in parent_transfer_result.get('parents', ())))
                 items += modern_highlight_report['report_items']
             except ModernVariantUnavailable as error:
                 modern_highlight_report = dict(status='UNAVAILABLE', reason=str(error), by_file=[],
@@ -408,6 +446,12 @@ def report_document(root, entrypoint, *, rule_set='core', package_path=None,
                     items += 1
                 if scoped_union_targets is not None:
                     modern_scoped_union_previews = dict(status='UNAVAILABLE', reason=str(error), unions=[],
+                        runtime_binding_proved=False, execution_proved=False, coverage_complete=False,
+                        edit_permission=False, compiler_permission=False, render_equivalence_proved=False)
+                    items += 1
+                if parent_location is not None:
+                    parent_transfer_result = dict(path=parent_location[0], start=parent_location[1],
+                        status='UNAVAILABLE', verification='withheld', reason=str(error), parents=[], edits=[],
                         runtime_binding_proved=False, execution_proved=False, coverage_complete=False,
                         edit_permission=False, compiler_permission=False, render_equivalence_proved=False)
                     items += 1
@@ -1102,6 +1146,9 @@ def report_document(root, entrypoint, *, rule_set='core', package_path=None,
         report['conditional_modern_scoped_math_preview'] = modern_scoped_math_preview
     if modern_scoped_union_previews is not None:
         report['conditional_modern_scoped_union_previews'] = modern_scoped_union_previews
+    if parent_transfer_result is not None:
+        key = ('conditional_modern_parent_reference_preview' if parent_preview else 'conditional_scoped_parent_transfer')
+        report[key] = parent_transfer_result
     if modern_math_report is not None:
         report['conditional_modern_math_evidence'] = modern_math_report
     if modern_math_previews is not None:
@@ -1171,6 +1218,10 @@ def main(arguments=None):
                         help='Capture an explicit resource manifest for conditional CeTZ annotation hints (requires scoped-call previews and both namespace roots)')
     parser.add_argument('--inspect-scoped-parent-patterns', action='store_true',
                         help='Inventory nested scoped-parent source patterns (requires --modern-highlight-evidence)')
+    parser.add_argument('--inspect-scoped-parent-transfer', nargs=2, metavar=('PATH', 'START'),
+                        help='Inspect parent/child scope identities at one diagnostic location (requires modern evidence)')
+    parser.add_argument('--preview-conditional-modern-parent-reference', nargs=2, metavar=('PATH', 'START'),
+                        help='Preview one independent parent-scoped reference plan; do not merge plans (requires combined highlights)')
     parser.add_argument('--preview-conditional-modern-highlights', action='store_true',
                         help='Preview simple modern highlight splits (requires --modern-highlight-evidence)')
     parser.add_argument('--preview-conditional-modern-scoped-references', action='store_true',
@@ -1239,6 +1290,8 @@ def main(arguments=None):
                                  cetz_annotation_manifest=args.cetz_annotation_manifest,
                                  preview_conditional_modern_highlights=args.preview_conditional_modern_highlights,
                                  inspect_scoped_parent_patterns=args.inspect_scoped_parent_patterns,
+                                 inspect_scoped_parent_transfer=args.inspect_scoped_parent_transfer,
+                                 preview_conditional_modern_parent_reference=args.preview_conditional_modern_parent_reference,
                                  preview_conditional_modern_scoped_references=args.preview_conditional_modern_scoped_references,
                                  preview_conditional_modern_math_highlights=args.preview_conditional_modern_math_highlights,
                                  preview_conditional_modern_combined_highlights=args.preview_conditional_modern_combined_highlights,
@@ -1477,6 +1530,18 @@ def main(arguments=None):
                     print(f"    conditional edit bytes {edit['start']}..{edit['end']}; replacement in JSON")
             for condition in previews.get('conditions', ()):
                 print(f"  condition: {condition}")
+        if 'conditional_scoped_parent_transfer' in result:
+            row = result['conditional_scoped_parent_transfer']
+            count = sum(item['parent_transfer'] for item in row.get('parents', ()))
+            print(f"Conditional parent scope evidence: {row['status']}; {count} transfers; no execution or edit permission")
+            if row.get('reason'):
+                print(f"  withheld: {row['reason']}")
+        if 'conditional_modern_parent_reference_preview' in result:
+            row = result['conditional_modern_parent_reference_preview']
+            print(f"Conditional parent reference preview: {row['verification']}; independent source-only plan")
+            print('  Do not merge with other plans; execution, side effects and rendering are not proved.')
+            if row.get('reason'):
+                print(f"  withheld: {row['reason']}")
         if 'conditional_modern_scoped_union_previews' in result:
             section = result['conditional_modern_scoped_union_previews']
             print(f"Conditional scoped/math union previews: {section['status']}; independent per-source plans")
