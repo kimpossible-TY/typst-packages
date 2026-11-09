@@ -57,6 +57,7 @@ def report_document(root, entrypoint, *, rule_set='core', package_path=None,
                     inspect_scoped_parent_transfer=None,
                     preview_conditional_modern_parent_reference=None,
                     preview_conditional_modern_parent_union=None,
+                    attest_parent_mannot=False,
                     reference_package_path=None, reference_facade=None, reference_cache_path=None,
                     reference_calls=False, reference_arguments=False, reference_catalog=None):
     """Inspect retained source bytes without reading consumer configuration.
@@ -181,6 +182,8 @@ def report_document(root, entrypoint, *, rule_set='core', package_path=None,
             'Parent transfer inspection and preview cannot be requested together')
     parent_location = None
     parent_preview = preview_conditional_modern_parent_reference is not None
+    require(type(attest_parent_mannot) is bool and (not attest_parent_mannot or parent_preview),
+            'Mannot binding evidence requires a parent reference preview')
     parent_request = preview_conditional_modern_parent_reference if parent_preview else inspect_scoped_parent_transfer
     if parent_request is not None:
         require(modern_highlight_evidence and (not parent_preview or preview_conditional_modern_combined_highlights)
@@ -325,12 +328,14 @@ def report_document(root, entrypoint, *, rule_set='core', package_path=None,
     modern_scoped_union_previews = None
     parent_transfer_result = None
     parent_union_result = None
+    parent_mannot_result = None
     modern_math_report = None
     modern_math_previews = None
     if footnote_cache_path is not None:
         from conditional_footnote_binding import ConditionalFootnoteBinding, _valid as valid_footnote_session
         from namespace_multiroot import load_multiroot_capture
-        footnote_roots = load_multiroot_capture(package_path, footnote_cache_path)
+        footnote_roots = load_multiroot_capture(package_path, footnote_cache_path,
+                                               capture_mannot_artifacts=attest_parent_mannot)
         footnote_session = ConditionalFootnoteBinding(captured, footnote_roots)
         footnote_report = dict(package_path=footnote_roots.roots[0], cache_path=footnote_roots.roots[1],
                                by_file=[], edit_permission=False, compiler_permission=False)
@@ -417,8 +422,13 @@ def report_document(root, entrypoint, *, rule_set='core', package_path=None,
                 if parent_location is not None:
                     import scoped_parent_transfer_prototype as parent_scope
                     try:
-                        parent_transfer_result = (parent_scope.preview_one(modern_analyzer, *parent_location)
-                            if parent_preview else parent_scope.analyze_one(modern_analyzer, *parent_location))
+                        if attest_parent_mannot:
+                            import scoped_parent_mannot_evidence as mannot_evidence
+                            parent_transfer_result, parent_mannot_result = mannot_evidence.preview_with_evidence(
+                                modern_analyzer, *parent_location)
+                        else:
+                            parent_transfer_result = (parent_scope.preview_one(modern_analyzer, *parent_location)
+                                if parent_preview else parent_scope.analyze_one(modern_analyzer, *parent_location))
                     except ValueError as error:
                         ModernHighlightAnalyzer._check(modern_analyzer)
                         parent_transfer_result = dict(path=parent_location[0], start=parent_location[1],
@@ -428,12 +438,22 @@ def report_document(root, entrypoint, *, rule_set='core', package_path=None,
                             runtime_binding_proved=False, execution_proved=False,
                             coverage_complete=False, render_equivalence_proved=False,
                             edit_permission=False, compiler_permission=False)
+                        if attest_parent_mannot:
+                            parent_mannot_result = dict(path=parent_location[0], start=parent_location[1],
+                                status='WITHHELD', reason=str(error), conditions=mannot_evidence.CONDITIONS,
+                                runtime_binding_proved=False, execution_proved=False, coverage_complete=False,
+                                render_equivalence_proved=False, edit_permission=False, compiler_permission=False)
                     items += (1 + len(parent_transfer_result.get('conditions', ()))
                               + len(parent_transfer_result.get('edits', ()))
                               + int('reason' in parent_transfer_result)
                               + len(parent_transfer_result.get('outer_scope_fields', {}))
                               + len(parent_transfer_result.get('child_scope_fields', {}))
                               + sum(1 + len(row['route']) for row in parent_transfer_result.get('parents', ())))
+                    if parent_mannot_result is not None:
+                        items += (1 + len(parent_mannot_result['conditions'])
+                                  + len(parent_mannot_result.get('route', ()))
+                                  + len(parent_mannot_result.get('artifacts', ()))
+                                  + int('reason' in parent_mannot_result))
                 if parent_union_target is not None:
                     import scoped_parent_union_prototype as parent_union
                     parent_union_result = parent_union.preview_union(modern_analyzer, *parent_union_target)
@@ -492,6 +512,12 @@ def report_document(root, entrypoint, *, rule_set='core', package_path=None,
                         runtime_binding_proved=False, execution_proved=False, coverage_complete=False,
                         edit_permission=False, compiler_permission=False, render_equivalence_proved=False)
                     items += 1
+                    if attest_parent_mannot:
+                        parent_mannot_result = dict(path=parent_location[0], start=parent_location[1],
+                            status='UNAVAILABLE', reason=str(error), conditions=(),
+                            runtime_binding_proved=False, execution_proved=False, coverage_complete=False,
+                            render_equivalence_proved=False, edit_permission=False, compiler_permission=False)
+                        items += 1
                 if parent_union_target is not None:
                     parent_union_result = dict(path=parent_union_target[0], status='UNAVAILABLE',
                         reason=str(error), baseline=[], union=None, source_union_revalidated=False,
@@ -1195,6 +1221,8 @@ def report_document(root, entrypoint, *, rule_set='core', package_path=None,
     if parent_transfer_result is not None:
         key = ('conditional_modern_parent_reference_preview' if parent_preview else 'conditional_scoped_parent_transfer')
         report[key] = parent_transfer_result
+    if parent_mannot_result is not None:
+        report['conditional_parent_mannot_binding'] = parent_mannot_result
     if parent_union_result is not None:
         report['conditional_modern_parent_union'] = parent_union_result
     if modern_math_report is not None:
@@ -1272,6 +1300,8 @@ def main(arguments=None):
                         help='Inspect parent/child scope identities at one diagnostic location (requires modern evidence)')
     parser.add_argument('--preview-conditional-modern-parent-reference', nargs=2, metavar=('PATH', 'START'),
                         help='Preview one independent parent-scoped reference plan; do not merge plans (requires combined highlights)')
+    parser.add_argument('--attest-parent-mannot', action='store_true',
+                        help='Inspect selected mannot source binding for the parent preview; runtime and rendering remain unproved')
     parser.add_argument('--preview-conditional-modern-parent-union', nargs=2, action='append', metavar=('PATH', 'START'),
                         help='Revalidate two to four parent reference sites as one source-only plan (requires combined highlights)')
     parser.add_argument('--preview-conditional-modern-highlights', action='store_true',
@@ -1345,6 +1375,7 @@ def main(arguments=None):
                                  inspect_capitalization_review=args.inspect_capitalization_review,
                                  inspect_scoped_parent_transfer=args.inspect_scoped_parent_transfer,
                                  preview_conditional_modern_parent_reference=args.preview_conditional_modern_parent_reference,
+                                 attest_parent_mannot=args.attest_parent_mannot,
                                  preview_conditional_modern_parent_union=args.preview_conditional_modern_parent_union,
                                  preview_conditional_modern_scoped_references=args.preview_conditional_modern_scoped_references,
                                  preview_conditional_modern_math_highlights=args.preview_conditional_modern_math_highlights,
@@ -1607,6 +1638,11 @@ def main(arguments=None):
             row = result['conditional_modern_parent_reference_preview']
             print(f"Conditional parent reference preview: {row['verification']}; independent source-only plan")
             print('  Do not merge with other plans; execution, side effects and rendering are not proved.')
+            if row.get('reason'):
+                print(f"  withheld: {row['reason']}")
+        if 'conditional_parent_mannot_binding' in result:
+            row = result['conditional_parent_mannot_binding']
+            print(f"Conditional parent mannot source binding: {row['status']}; runtime and effects are not proved")
             if row.get('reason'):
                 print(f"  withheld: {row['reason']}")
         if 'conditional_modern_scoped_union_previews' in result:

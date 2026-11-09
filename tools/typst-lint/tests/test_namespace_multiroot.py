@@ -46,6 +46,79 @@ class MultiRootNamespaceTests(unittest.TestCase):
     def capture(self):
         return multi.load_multiroot_capture(self.package, self.cache)
 
+    def install_mannot_definitions(self, root=None):
+        root = self.cache if root is None else root
+        relative = Path('preview/mannot/0.4.0/src')
+        source = FIXTURES / 'marker-bounds-packages' / relative
+        for name in ('mark.typ', 'util.typ'):
+            shutil.copyfile(source / name, root / relative / name)
+
+    def test_opt_in_definitions_share_selected_root_and_preserve_default(self):
+        self.install_mannot_definitions()
+        baseline = self.capture()
+        capture = multi.load_multiroot_capture(self.package, self.cache, capture_mannot_artifacts=True)
+        self.assertTrue(multi.verify_multiroot_capture(capture))
+        self.assertEqual(capture.packages, baseline.packages)
+        self.assertEqual(capture.selections, baseline.selections)
+        self.assertEqual(capture.evidence, baseline.evidence)
+        self.assertEqual([x.relative_path for x in capture.mannot_artifacts], ['src/mark.typ', 'src/util.typ'])
+        self.assertFalse(baseline.mannot_artifacts)
+        self.assertTrue(all(x.source_identity.startswith(str(self.cache)) for x in capture.mannot_artifacts))
+        self.assertFalse(multi.verify_multiroot_capture(replace(capture)))
+
+    def test_mannot_definition_refusal_never_falls_back(self):
+        self.install_mannot_definitions()
+        relative = Path('preview/mannot/0.4.0')
+        first = self.package / relative
+        shutil.copytree(self.cache / relative, first)
+        for mode in ('missing', 'changed'):
+            with self.subTest(mode=mode):
+                self.install_mannot_definitions(self.package)
+                target = first / 'src/mark.typ'
+                if mode == 'missing':
+                    target.unlink()
+                else:
+                    target.write_bytes(target.read_bytes() + b'\n')
+                result = multi.load_multiroot_capture(self.package, self.cache, capture_mannot_artifacts=True)
+                self.assertEqual(next(x.root_index for x in result.selections if x.import_path == multi.MANNOT), 0)
+                self.assertFalse(result.mannot_artifacts)
+                self.assertTrue(multi.verify_multiroot_capture(result))
+
+    def test_mannot_definition_link_and_budget_withhold_only_optional_artifacts(self):
+        self.install_mannot_definitions()
+        target = self.cache / 'preview/mannot/0.4.0/src/mark.typ'
+        old = target.read_bytes()
+        target.unlink()
+        other = self.base / 'outside.typ'
+        other.write_bytes(old)
+        target.symlink_to(other)
+        self.assertEqual(multi.load_multiroot_capture(self.package, self.cache,
+            capture_mannot_artifacts=True).mannot_status, 'UNSUPPORTED')
+        target.unlink()
+        os.link(other, target)
+        self.assertEqual(multi.load_multiroot_capture(self.package, self.cache,
+            capture_mannot_artifacts=True).mannot_status, 'UNSUPPORTED')
+        target.unlink()
+        target.write_bytes(old)
+        with patch.object(multi, 'MAX_MANNOT_ARTIFACT_BYTES', 1024):
+            self.assertEqual(multi.load_multiroot_capture(self.package, self.cache,
+                capture_mannot_artifacts=True).mannot_status, 'UNSUPPORTED')
+
+    def test_mannot_definition_changed_during_capture_rejects_the_snapshot(self):
+        self.install_mannot_definitions()
+        target = self.cache / 'preview/mannot/0.4.0/src/mark.typ'
+        original = _Snapshot.verify
+        changed = False
+        def mutate(snapshot):
+            nonlocal changed
+            if snapshot.root == self.cache and not changed:
+                changed = True
+                target.write_bytes(target.read_bytes() + b'\n')
+            return original(snapshot)
+        with patch.object(_Snapshot, 'verify', mutate), self.assertRaises(PackageInputError):
+            multi.load_multiroot_capture(self.package, self.cache, capture_mannot_artifacts=True)
+        self.assertTrue(changed)
+
     def test_explicit_roots_complete_cross_root_wildcard_dependencies(self):
         capture = self.capture()
         self.assertTrue(multi.verify_multiroot_capture(capture))

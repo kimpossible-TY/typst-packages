@@ -9,11 +9,17 @@ proof of the compiler's eventual package selection.
 from contextlib import ExitStack
 from dataclasses import astuple, dataclass
 import os
+import stat
 import weakref
 
 import namespace_packages as namespace
 from package_loader import (MAX_MANIFEST_BYTES, MAX_SOURCE_BYTES, PackageEvidence,
                             PackageInputError, PackageUnavailable, _Snapshot)
+from package_artifacts import MANNOT, MANNOT_ARTIFACTS
+
+MAX_MANNOT_ARTIFACT_BYTES = 64 * 1024
+_MANNOT_DEFINITIONS = tuple(item for item in MANNOT_ARTIFACTS
+                            if item[0] in ('src/mark.typ', 'src/util.typ'))
 
 
 @dataclass(frozen=True, slots=True)
@@ -22,12 +28,21 @@ class RootSelection:
     root_index: int | None
 
 
+@dataclass(frozen=True, slots=True)
+class MannotArtifact:
+    relative_path: str
+    source_identity: str
+    source: bytes
+
+
 @dataclass(frozen=True, slots=True, weakref_slot=True)
 class MultiRootCapture:
     roots: tuple[str, str]
     packages: tuple
     unavailable: tuple[PackageUnavailable, ...]
     selections: tuple[RootSelection, ...]
+    mannot_artifacts: tuple[MannotArtifact, ...] = ()
+    mannot_status: str = 'UNREQUESTED'
 
     @property
     def evidence(self):
@@ -42,7 +57,8 @@ def _signature(capture):
     return (capture.roots,
             tuple((type(item), astuple(item)) for item in capture.packages),
             tuple(astuple(item) for item in capture.unavailable),
-            tuple(astuple(item) for item in capture.selections))
+            tuple(astuple(item) for item in capture.selections),
+            tuple((type(item), astuple(item)) for item in capture.mannot_artifacts), capture.mannot_status)
 
 
 def _issue(capture):
@@ -72,7 +88,10 @@ def verify_multiroot_capture(capture):
                        for root in capture.roots)
                 or capture.roots[0] == capture.roots[1]
                 or type(capture.packages) is not tuple or type(capture.unavailable) is not tuple
-                or type(capture.selections) is not tuple):
+                or type(capture.selections) is not tuple or type(capture.mannot_artifacts) is not tuple
+                or capture.mannot_status not in ('UNREQUESTED', 'AVAILABLE', 'MISSING', 'UNREVIEWED', 'UNSUPPORTED')):
+            return False
+        if bool(capture.mannot_artifacts) != (capture.mannot_status == 'AVAILABLE'):
             return False
         contracts = {item.import_path: item for item in namespace._CONTRACTS}
         if (len(capture.selections) != len(contracts)
@@ -119,6 +138,22 @@ def verify_multiroot_capture(capture):
                     or type(item.reason) is not str or not item.reason):
                 return False
             seen.add(item.import_path)
+        if capture.mannot_artifacts:
+            root_index = selected.get(MANNOT)
+            if (root_index is None or MANNOT not in available
+                    or len(capture.mannot_artifacts) != len(_MANNOT_DEFINITIONS)):
+                return False
+            artifact_total = 0
+            for item, (relative, expected) in zip(capture.mannot_artifacts, _MANNOT_DEFINITIONS):
+                if (type(item) is not MannotArtifact or type(item.source) is not bytes
+                        or item.relative_path != relative
+                        or item.source_identity != str(namespace._canonical_root(capture.roots[root_index])
+                            / 'preview/mannot/0.4.0' / relative)
+                        or namespace._digest(item.source) != expected):
+                    return False
+                artifact_total += len(item.source)
+            if artifact_total > MAX_MANNOT_ARTIFACT_BYTES:
+                return False
         return (total <= namespace.MAX_NAMESPACE_BYTES and seen == set(contracts)
                 and all(set(contracts[path].dependencies) <= available for path in available))
     except (AttributeError, KeyError, TypeError, ValueError, OSError, RecursionError):
@@ -129,14 +164,18 @@ def _directory_change_signature(info):
     return (info.st_dev, info.st_ino, info.st_mode, info.st_mtime_ns, info.st_ctime_ns)
 
 
-def load_multiroot_capture(package_path, cache_path):
+def load_multiroot_capture(package_path, cache_path, *, capture_mannot_artifacts=False):
     """Capture fixed reviewed packages from explicit package then cache roots."""
+    if type(capture_mannot_artifacts) is not bool:
+        raise PackageInputError('Invalid supplemental artifact request')
     roots = tuple(namespace._canonical_root(path) for path in (package_path, cache_path))
     if roots[0] == roots[1]:
         raise PackageInputError('Package and cache roots must be distinct')
     packages, unavailable, selected = {}, {}, {}
     total = files = 0
     missing = []
+    mannot_artifacts = ()
+    mannot_status = 'MISSING' if capture_mannot_artifacts else 'UNREQUESTED'
     try:
         with ExitStack() as stack:
             snapshots = tuple(stack.enter_context(_Snapshot(root)) for root in roots)
@@ -225,6 +264,34 @@ def load_multiroot_capture(package_path, cache_path):
                 packages[contract.import_path] = namespace.NamespacePackage(
                     namespace._evidence(roots[index], contract, manifest, source), manifest, source,
                     contract.exports, namespace._origins(contract))
+                if capture_mannot_artifacts and contract.import_path == MANNOT:
+                    # The selected entrypoint is src/lib.typ: retain that same
+                    # opened directory and never search the other root.
+                    artifacts, artifact_total = [], 0
+                    for relative, expected in _MANNOT_DEFINITIONS:
+                        name = relative.split('/')[-1]
+                        if not exists(directory, name):
+                            artifacts = []
+                            break
+                        info = os.stat(name, dir_fd=directory.fd, follow_symlinks=False)
+                        if (not stat.S_ISREG(info.st_mode) or info.st_nlink != 1
+                                or info.st_size < 0 or info.st_size > MAX_MANNOT_ARTIFACT_BYTES
+                                or artifact_total + info.st_size > MAX_MANNOT_ARTIFACT_BYTES):
+                            mannot_status = 'UNSUPPORTED'
+                            artifacts = []
+                            break
+                        data = snapshot.read(directory, name, MAX_MANNOT_ARTIFACT_BYTES)
+                        artifact_total += len(data)
+                        if artifact_total > MAX_MANNOT_ARTIFACT_BYTES:
+                            raise PackageInputError('Mannot artifact snapshot exceeds its fixed budget')
+                        if namespace._digest(data) != expected:
+                            mannot_status = 'UNREVIEWED'
+                            artifacts = []
+                            break
+                        artifacts.append(MannotArtifact(relative, str(directory.path / name), data))
+                    if len(artifacts) == len(_MANNOT_DEFINITIONS):
+                        mannot_artifacts = tuple(artifacts)
+                        mannot_status = 'AVAILABLE'
             for snapshot in snapshots:
                 snapshot.verify()
             for directory, name, expected in missing:
@@ -251,7 +318,8 @@ def load_multiroot_capture(package_path, cache_path):
     capture = MultiRootCapture(tuple(map(str, roots)),
         tuple(packages[c.import_path] for c in namespace._CONTRACTS if c.import_path in packages),
         tuple(unavailable[c.import_path] for c in namespace._CONTRACTS if c.import_path in unavailable),
-        tuple(RootSelection(c.import_path, selected[c.import_path]) for c in namespace._CONTRACTS))
+        tuple(RootSelection(c.import_path, selected[c.import_path]) for c in namespace._CONTRACTS),
+        mannot_artifacts, mannot_status)
     _issue(capture)
     if not verify_multiroot_capture(capture):
         raise PackageInputError('Internal multi-root namespace capture failed verification')

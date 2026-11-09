@@ -270,6 +270,17 @@ effects, reference targets, rendering or permission to edit or compile.
 Parent inspection and parent preview cannot be requested together. Work and
 whole-report item/byte limits apply.
 
+With a parent reference preview, `--attest-parent-mannot` additionally captures
+the fixed reviewed mannot `src/mark.typ` and `src/util.typ` from the selected
+package root and reports a separate conditional source binding route for direct
+wildcard imports. The candidate route is replayed; unsupported, shadowed or
+missing evidence is withheld without changing the parent plan. The report does
+not prove runtime package selection or initialization, transitive dependencies,
+effects, execution, rendering, permission to edit, or compilation.
+The optional capture has a separate fixed two-file, 64 KiB combined limit.
+Initially missing, changed, linked or oversized optional files withhold that
+evidence; a capture that changes while being read rejects the whole report.
+
 For two to four issued parent-reference diagnostics in the same captured
 source and the same reviewed callback, repeat
 `--preview-conditional-modern-parent-union PATH START` with the combined

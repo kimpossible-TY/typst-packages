@@ -210,6 +210,23 @@ Current filesystem freshness, runtime binding or execution, side effects,
 reference targets, rendered output, writes and compilation remain unproved.
 The full report item/byte limit and independent bounded proof work apply.
 
+`--attest-parent-mannot` adds a separate conditional source binding report to
+a requested parent reference preview. It reads the reviewed `src/mark.typ` and
+`src/util.typ` from the selected root during the same no-follow multi-root
+snapshot. It independently replays the direct wildcard `markub` route on both
+the original and the reparsed candidate, and withholds absent, changed,
+shadowed or unresolved evidence. Withholding this extra report preserves the
+parent plan when the report itself fits the output budget. The bytes, route and
+source hashes do not prove runtime selection or initialization, transitive
+imports, execution, side effects or rendering.
+The supplemental snapshot has a separate two-file and 64 KiB combined budget;
+the prior namespace limits remain unchanged. Files initially missing, altered,
+linked or oversized withhold only the supplemental evidence. A race or change
+while capturing files rejects the report because capture integrity is unknown.
+The parent plan has its existing independent budget. The extra evidence reserves
+conservative upper bounds before its analyzer replays and charges those bounds
+to its separate work budget.
+
 ## Multi-site parent reference union
 
 `--preview-conditional-modern-parent-union PATH START` is repeatable for two

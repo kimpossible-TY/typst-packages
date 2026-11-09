@@ -61,6 +61,7 @@
 ## 읽을 때 주의할 점
 
 - parent scope 독립 소스 검사에서는 검토된 `theme-from-text-fill()` 바인딩과 지정된 palette 필드만 읽는 제한된 `context` 지역 선언을 확인한다. child `m`을 캡처하는 제한된 리터럴 태그 함수와 같은 child의 직접 수식 호출도 확인한다. 해당 `markub`의 바인딩·효과와 다른 지역 선언·closure, 실행과 렌더는 증명하지 않는다.
+- `--attest-parent-mannot`은 parent 단일 후보에 선택 root의 검토된 `mark.typ`·`util.typ`와 직접 wildcard `markub`의 조건부 소스 경로를 별도 확인한다. 실행 시 package 선택·초기화, 전이 의존성·효과와 렌더는 여전히 미증명이다.
 - 단일 소스 수정안의 상세 전제와 사용자 문서에 쓰기를 허용하는 별도 경로는 [README](README.md)와 [수정 정책](../../openspec/changes/typst-style-linter/fix-policy.md)을 확인한다. 수정 정책은 목표이므로 구현의 `진단`을 `제안`으로 해석하지 않는다.
 - 각주 이름이 명시적으로 다른 값이나 import 별칭에 바인딩되면 관련 수정안은 보류한다. 바인딩을 확인하지 못한 wildcard 문맥의 조건부 진단은 실제 builtin 바인딩을 증명하지 않는다.
 - 문서 분석의 기본 세 규칙도 일부 문법과 문맥만 검사한다. L/P/R 힌트 및 독립 소스 미리보기는 원본에 적용할 권한이 없다. `inspect-document --preview-conditional-spacers`는 렌더 검증이 없는 별도 소스 후보이고, S 결합 컴파일은 별도로 선택한다. 격리된 0pt·8pt 사례와 단위 시험은 통과했으나 런타임 바인딩이나 렌더 동일성을 보장하지 않는다.
