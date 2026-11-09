@@ -74,6 +74,14 @@ class ScopedReferencePreviewTests(unittest.TestCase):
                          or row['edit_permission'] or row['compiler_permission'])
         self.assertEqual((self.fixture.project / 'main.typ').read_bytes(), source)
 
+    def test_double_dot_in_scoped_callback_remains_unproved(self):
+        body = b'#local-tag-scope(s => [#highlighted[See #(s.ref)("one") $dot.double(x)$ after.]])'
+        source, _, analyzer, _ = self.run_source(body)
+        result = preview.preview_all(analyzer, allow_scoped_references=True, reviewed_math=True)
+        self.assertFalse(any(row['edits'] for row in result['by_file']))
+        self.assertEqual(result['unpreviewed_diagnostics'], 1)
+        self.assertEqual((self.fixture.project / 'main.typ').read_bytes(), source)
+
     def test_shadow_mutation_dynamic_calls_and_dictionary_escape_are_refused(self):
         bodies = (
             b'#let s = (ref: x => x)\n#highlighted[See #(s.ref)("one") $x$]',

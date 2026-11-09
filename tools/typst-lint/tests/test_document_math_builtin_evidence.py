@@ -91,6 +91,43 @@ class MathBuiltinEvidenceTests(unittest.TestCase):
             with self.subTest(call=call, prefix=prefix):
                 self.assertFalse(self.analyze(prefix + call)['findings'])
 
+    def test_exact_builtin_double_dot_is_conditional_and_shadowing_is_refused(self):
+        call = b'#highlighted[Text $dot.double(x)$ text]'
+        result = self.analyze(call)
+        self.assertEqual(len(result['findings']), 1)
+        self.assertFalse(result['findings'][0]['runtime_binding_proved'])
+        self.assertFalse(result['findings'][0]['render_equivalence_proved'])
+        (self.project / 'shadow.typ').write_bytes(b'#let dot = (double: x => panic("shadow"))\n')
+        cases = (
+            b'#let dot = (double: x => panic("shadow"))\n' + call,
+            b'#import "shadow.typ": dot\n' + call,
+            b'#import "shadow.typ": dot as borrowed\n#let dot = borrowed\n' + call,
+            b'#let borrowed = math.dot\n#let dot = borrowed\n' + call,
+            b'#import "missing.typ": *\n' + call,
+            b'#import "shadow.typ": *\n' + call,
+            b'#import "shadow.typ": *\n' + IMPORT + call,
+            b'#let dot = (double: x => x)\n#(dot.double = x => panic("shadow"))\n' + call,
+            b'#let f(dot) = [' + call + b']',
+            b'#if true [' + call + b']',
+            b'#highlighted[Text $dot.triple(x)$ text]',
+            b'#highlighted[Text $other.double(x)$ text]',
+            b'#highlighted[Text $dot.double(#panic("side effect"))$ text]',
+            b'#highlighted[Text $dot.double(unknown(x))$ text]',
+        )
+        for case in cases:
+            with self.subTest(case=case):
+                self.assertFalse(self.analyze(case)['findings'])
+
+    @unittest.skipUnless(shutil.which('typst'), 'Requires Typst')
+    def test_pinned_typst_double_dot_is_symbol_called_as_accent(self):
+        if not subprocess.check_output(['typst', '--version'], text=True).startswith('typst 0.15.1 '):
+            self.skipTest('Evidence pins Typst 0.15.1')
+        symbol = subprocess.check_output(['typst', 'eval', 'type(math.dot.double)'], text=True)
+        accent = subprocess.check_output(['typst', 'eval', 'repr($dot.double(x)$)'], text=True)
+        self.assertEqual(symbol.strip(), '"symbol"')
+        self.assertIn('accent(base:', accent)
+        self.assertIn('308', accent)
+
     def test_alias_shadow_and_limits(self):
         (self.project / 'shadow.typ').write_bytes(b'#let replacement(x) = x\n')
         self.assertFalse(self.analyze(b'#import "shadow.typ": replacement as cal\n' + CALL)['findings'])

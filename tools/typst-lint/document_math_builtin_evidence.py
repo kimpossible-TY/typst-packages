@@ -89,6 +89,18 @@ class _MathResolver(_Resolver):
                     and self.facts[index].binding == Binding('builtin-math', self.text(parts[0]))
                     and not self.facts[index].deferred):
                 self.resolved.add(index)
+            # Typst 0.15.1 exposes the reviewed double-dot accent as a symbol
+            # variant; only the exact field on the unshadowed builtin is known.
+            elif len(parts) == 2 and self.nodes[parts[0]].kind == 'MathFieldAccess':
+                field = parts[0]
+                segments = self.sig(field)
+                if (self.text(field) == 'dot.double' and len(segments) == 3
+                        and self.nodes[segments[0]].kind == 'MathIdent'
+                        and self.nodes[segments[1]].kind == 'Dot'
+                        and self.nodes[segments[2]].kind == 'MathIdent'
+                        and self.facts[segments[0]].binding == Binding('builtin-math', 'dot')
+                        and not self.facts[index].deferred):
+                    self.resolved.add(index)
         return value
 
 
@@ -168,7 +180,7 @@ def _analyze_report(analyzer, path, report):
             findings.append(dict(path=path, start=finding['start'], end=finding['end'],
                                  math_calls=[tree.nodes[i].start for i in sorted(calls)],
                                  source_sha256=report['source_sha256'],
-                                 conditions=['Typst 0.15.1 uses its standard built-in math elements.',
+                                 conditions=['Typst 0.15.1 uses its standard built-in math names and reviewed symbol variants.',
                                              'The captured imports and helper are selected at runtime.'],
                                  runtime_binding_proved=False, execution_proved=False,
                                  edit_permission=False, compiler_permission=False,

@@ -70,9 +70,10 @@ fixture produced different PDF bytes, which is not a whole-document claim.
 `--preview-conditional-modern-math-highlights` is a separate, explicit
 source-only path requiring the same modern evidence. It additionally accepts
 math calls only when every nested call in every equation is one of the
-reviewed Typst 0.15.1 standard elements `cal`, `dot`, `frac`, `frak`,
-`overline`, `tilde`, `op`, `bb`, and `hat`, with no embedded code, ordinary
-function call, label, import, or comment. Local shadowing and mutations are
+reviewed Typst 0.15.1 standard math names `cal`, `dot`, `frac`, `frak`,
+`overline`, `tilde`, `op`, `bb`, and `hat`, or the exact unshadowed
+`dot.double` symbol variant, with no embedded code, ordinary function call,
+label, import, or comment. Other fields and variants remain unsupported. Local shadowing and mutations are
 tracked; wildcard imports preserve these bindings only when the captured,
 complete namespace excludes the relevant name. Unknown imports, unresolved
 bindings and delayed or dynamic ancestors are withheld. Upstream unresolved

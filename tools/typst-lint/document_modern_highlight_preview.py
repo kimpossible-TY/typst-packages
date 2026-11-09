@@ -619,7 +619,7 @@ def preview_all(evidence, *, max_items=MAX_PREVIEW_ITEMS, max_bytes=MAX_PREVIEW_
 
 
 MATH_CONDITIONS = CONDITIONS + (
-    'Runtime uses Typst 0.15.1 standard reviewed math elements and the captured import namespaces.',
+    'Runtime uses Typst 0.15.1 standard reviewed math names and symbol variants and the captured import namespaces.',
     'All nested math calls and arguments retain the verified source bindings and no code side effects.',
 )
 

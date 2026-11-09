@@ -64,6 +64,33 @@ class ModernHighlightPreviewTests(unittest.TestCase):
         self.assertEqual(row['candidate_sha256'], digest(candidate))
         self.assertFalse(row['edit_permission'] or row['compiler_permission'] or row['render_equivalence_proved'])
 
+    def test_reviewed_double_dot_preserves_exact_equation_and_authority(self):
+        source = fixtures.IMPORT + b'#highlighted[Before $dot.double(x)$ after]'
+        session, _ = self.fixture.session(source)
+        analyzer = modern.ModernHighlightAnalyzer(session, scoped_callbacks=True)
+        self.assertFalse(preview.preview_all(analyzer)['by_file'])
+        result = preview.preview_reviewed_math_all(analyzer)
+        row, = result['by_file']
+        edit, = row['edits']
+        candidate = plan(source, [Edit(edit['start'], edit['end'], edit['replacement'].encode())]).candidate()
+        self.assertEqual(candidate, fixtures.IMPORT + b'#highlighted[Before ]$dot.double(x)$#highlighted[ after]')
+        self.assertTrue(any('symbol variants' in condition for condition in row['conditions']))
+        self.assertFalse(row['runtime_binding_proved'] or row['render_equivalence_proved']
+                         or row['edit_permission'] or row['compiler_permission'])
+        self.assertEqual((self.project / 'main.typ').read_bytes(), source)
+
+    def test_reviewed_double_dot_candidate_tampering_is_withheld(self):
+        source = fixtures.IMPORT + b'#highlighted[Before $dot.double(x)$ after]'
+        session, _ = self.fixture.session(source)
+        analyzer = modern.ModernHighlightAnalyzer(session, scoped_callbacks=True)
+        original_parse = preview.parse
+        def tamper(data, *args, **kwargs):
+            return original_parse(data.replace(b'dot.double(x)', b'dot.triple(x)'), *args, **kwargs)
+        with patch.object(preview, 'parse', side_effect=tamper):
+            row, = preview.preview_reviewed_math_all(analyzer)['by_file']
+        self.assertEqual(row['verification'], 'withheld')
+        self.assertFalse(row['edits'])
+
     def test_builtin_block_preview_retains_runtime_conditions(self):
         _, candidate, result = self.candidate(b'#block(sticky: true)[#highlighted[Text $x$]]')
         self.assertIn(b'#block(sticky: true)[#highlighted[Text ]$x$]', candidate)
