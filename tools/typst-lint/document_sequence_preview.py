@@ -43,7 +43,8 @@ def _profile(value):
 
 
 def _verification(profile, conditional_continuations, conditional_adjacent_punctuation=False,
-                  conditional_deferred_footnotes=False, conditional_capitalization=False, conditional_prose_markers=False):
+                  conditional_deferred_footnotes=False, conditional_capitalization=False, conditional_prose_markers=False,
+                  aligned_spacer_target=None):
     base = _VERIFICATIONS[profile]
     if conditional_continuations:
         base += '-conditional-continuation-reanalysis'
@@ -55,6 +56,8 @@ def _verification(profile, conditional_continuations, conditional_adjacent_punct
         base += '-conditional-capitalization-reanalysis'
     if conditional_prose_markers:
         base += '-conditional-prose-markers-reanalysis'
+    if aligned_spacer_target is not None:
+        base += '-conditional-aligned-spacer-reanalysis'
     return base
 
 
@@ -214,7 +217,8 @@ def _preserve_unresolved_paragraph_boundaries(before, after, path, catalog, edit
 
 def preview(tree, path, catalog, *, profile=_STANDARD, footnote_evidence=None, classify_deferred=False,
             classify_unproven_binding=False, conditional_continuations=False, conditional_capitalization=False, conditional_prose_markers=False,
-            conditional_adjacent_punctuation=False, conditional_deferred_footnotes=False):
+            conditional_adjacent_punctuation=False, conditional_deferred_footnotes=False,
+            aligned_spacer_target=None):
     """Return hash-chained edits or a withheld result for this source."""
     _profile(profile)
     if (type(conditional_continuations) is not bool or type(conditional_capitalization) is not bool
@@ -227,12 +231,17 @@ def preview(tree, path, catalog, *, profile=_STANDARD, footnote_evidence=None, c
         raise InputError('Deferred classification must be an explicit Boolean')
     if type(classify_unproven_binding) is not bool or (classify_unproven_binding and not classify_deferred):
         raise InputError('Unproven binding classification requires explicit partial preview')
+    if (aligned_spacer_target is not None and
+            (type(aligned_spacer_target) is not str or not aligned_spacer_target or footnote_evidence is None
+             or profile not in (_SPACERS, _PUNCTUATION_SPACERS))):
+        raise InputError('Aligned spacer selection requires a path and captured facade spacer evidence')
     baseline = tree.source
     current = tree
     steps = []
     deferred_unproved = False
     source_binding_unproved = False
     checked_import_tree = None
+    aligned_withheld = None
 
     def eligible_source_binding(tree, call_id, evidence):
         """Only exact calls in files whose literal imports have captured origins."""
@@ -825,6 +834,26 @@ def preview(tree, path, catalog, *, profile=_STANDARD, footnote_evidence=None, c
                     if deferred_calls:
                         step['conditional_deferred_footnote_calls'] = sorted(deferred_calls)
                     steps.append(step)
+        if aligned_spacer_target == path:
+            import document_composed_aligned_spacer as aligned
+            before_tree = current
+            try:
+                selected = aligned.compose(before_tree, path, catalog, footnote_evidence)
+            except aligned.AlignedSpacerWithheld as error:
+                aligned_withheld = str(error)
+                selected = None
+            if selected is not None:
+                step, proposed_tree = selected
+                inserted = tuple(Edit(row['start'], row['end'], row['replacement'].encode('utf-8'))
+                                 for row in step['edits'])
+                try:
+                    _preserve_unresolved_paragraph_boundaries(before_tree, proposed_tree, path, catalog, inserted)
+                except SafetyError as error:
+                    aligned.binding.footnotes._valid(footnote_evidence)
+                    aligned_withheld = str(error)
+                else:
+                    current = proposed_tree
+                    steps.append(step)
         if profile != _STANDARD and b'#footnote' in current.source and b'#paragraph_tab' in current.source:
             import document_composed_prose_footnote_gap as prose_gap
             selected = prose_gap.preview(current, path, catalog)
@@ -1061,11 +1090,13 @@ def preview(tree, path, catalog, *, profile=_STANDARD, footnote_evidence=None, c
                         reason='A footnote in a deferred closure has no proven binding',
                         reason_code='unsupported-deferred-footnote-binding',
                         rule_id=footnote_rules.UNALIGNED)
-        if not steps:
+        if not steps and aligned_withheld is None:
             return None
         result = dict(path=path, baseline_sha256=digest(baseline), candidate_sha256=digest(current.source),
                       verification=_verification(profile, conditional_continuations, conditional_adjacent_punctuation,
-                                                 conditional_deferred_footnotes, conditional_capitalization, conditional_prose_markers), steps=steps,
+                                                 conditional_deferred_footnotes, conditional_capitalization,
+                                                 conditional_prose_markers,
+                                                 aligned_spacer_target if path == aligned_spacer_target else None), steps=steps,
                       unresolved_display_contexts={rid: len(value.skips) for rid, value in final_displays.items()})
         if profile != _STANDARD or conditional_continuations or conditional_capitalization or conditional_prose_markers or conditional_adjacent_punctuation:
             result.update(profile=profile, runtime_binding_proved=False, render_equivalence_proved=False,
@@ -1080,6 +1111,10 @@ def preview(tree, path, catalog, *, profile=_STANDARD, footnote_evidence=None, c
             result['conditional_adjacent_punctuation'] = True
         if conditional_deferred_footnotes:
             result['conditional_deferred_footnotes'] = True
+        if path == aligned_spacer_target:
+            result['aligned_spacer_target'] = aligned_spacer_target
+        if aligned_withheld is not None:
+            result['aligned_spacer_withheld'] = aligned_withheld
         return result
     except (InputError, SafetyError, OSError, ValueError, RecursionError) as error:
         return dict(path=path, baseline_sha256=digest(baseline), candidate_sha256=None,
@@ -1099,7 +1134,7 @@ def _same_data(expected, supplied):
 
 
 def replay(tree, path, catalog, record, *, profile=_STANDARD, footnote_evidence=None, conditional_continuations=False, conditional_capitalization=False, conditional_prose_markers=False,
-           conditional_adjacent_punctuation=False, conditional_deferred_footnotes=False):
+           conditional_adjacent_punctuation=False, conditional_deferred_footnotes=False, aligned_spacer_target=None):
     """Recompute and replay a sequence in memory for a downstream consumer.
 
     Serialized plans are data, not authority: reject stale or altered records and
@@ -1109,18 +1144,23 @@ def replay(tree, path, catalog, record, *, profile=_STANDARD, footnote_evidence=
     expected = preview(tree, path, catalog, profile=profile, footnote_evidence=footnote_evidence,
                        conditional_continuations=conditional_continuations, conditional_capitalization=conditional_capitalization, conditional_prose_markers=conditional_prose_markers,
                        conditional_adjacent_punctuation=conditional_adjacent_punctuation,
-                       conditional_deferred_footnotes=conditional_deferred_footnotes)
+                       conditional_deferred_footnotes=conditional_deferred_footnotes,
+                       aligned_spacer_target=aligned_spacer_target)
     return _replay_expected(tree, record, expected, profile=profile, conditional_continuations=conditional_continuations, conditional_capitalization=conditional_capitalization, conditional_prose_markers=conditional_prose_markers,
                             conditional_adjacent_punctuation=conditional_adjacent_punctuation,
-                            conditional_deferred_footnotes=conditional_deferred_footnotes)
+                            conditional_deferred_footnotes=conditional_deferred_footnotes,
+                            aligned_spacer_target=aligned_spacer_target)
 
 
 def _replay_expected(tree, record, expected, *, profile=_STANDARD, conditional_continuations=False, conditional_capitalization=False, conditional_prose_markers=False,
-                     conditional_adjacent_punctuation=False, conditional_deferred_footnotes=False):
+                     conditional_adjacent_punctuation=False, conditional_deferred_footnotes=False,
+                     aligned_spacer_target=None):
     _profile(profile)
     if (type(record) is not dict or expected is None or not _same_data(expected, record)
             or expected['verification'] != _verification(profile, conditional_continuations,
-                conditional_adjacent_punctuation, conditional_deferred_footnotes, conditional_capitalization, conditional_prose_markers)):
+                conditional_adjacent_punctuation, conditional_deferred_footnotes, conditional_capitalization,
+                conditional_prose_markers,
+                aligned_spacer_target if record.get('path') == aligned_spacer_target else None)):
         raise SafetyError('Sequence is stale, altered, incomplete or withheld')
     current = tree.source
     for step in record['steps']:
@@ -1139,13 +1179,15 @@ def _replay_expected(tree, record, expected, *, profile=_STANDARD, conditional_c
     return current
 
 
-def _final_conditional_footnote_calls(tree, record):
+def _final_conditional_footnote_calls(tree, record, *, field='conditional_footnote_calls'):
     """Map validated stage-local calls through later edits to final offsets.
 
     Caller must first rederive/validate the whole record. A later edit that
     touches any part of a call is refused rather than guessing its identity.
     """
-    if not any(step.get('conditional_footnote_calls') for step in record['steps']):
+    if field not in ('conditional_footnote_calls', 'conditional_aligned_spacer_calls'):
+        raise SafetyError('Invalid conditional footnote anchor field')
+    if not any(step.get(field) for step in record['steps']):
         return ()
     import import_graph
     current, active = tree.source, []
@@ -1171,7 +1213,7 @@ def _final_conditional_footnote_calls(tree, record):
             if current[start:end] != raw:
                 raise SafetyError('A conditional footnote call changed during offset mapping')
         active = moved
-        offsets = step.get('conditional_footnote_calls', ())
+        offsets = step.get(field, ())
         if offsets:
             parsed = parse(current, tree.mode)
             calls = {}
@@ -1238,7 +1280,7 @@ def validate_explicit_withheld(context, paths):
 def replay_document(context, records, catalog, *, profile=_STANDARD, footnote_evidence=None,
                     partial_unsupported=False, withheld_records=None, partial_unproven_binding=False,
                     explicit_withheld_sources=(), conditional_continuations=False, conditional_capitalization=False, conditional_prose_markers=False, conditional_adjacent_punctuation=False,
-                    conditional_deferred_footnotes=False):
+                    conditional_deferred_footnotes=False, aligned_spacer_target=None):
     """Derive an immutable in-memory source map from one issued include capture.
 
     Every captured source must have exactly its current sequence record or no
@@ -1261,6 +1303,10 @@ def replay_document(context, records, catalog, *, profile=_STANDARD, footnote_ev
     if withheld_records is None:
         withheld_records = []
     include_context.assert_include_context(context)
+    if (aligned_spacer_target is not None and (type(aligned_spacer_target) is not str
+            or aligned_spacer_target not in {source.path for source in context.sources}
+            or footnote_evidence is None or profile not in (_SPACERS, _PUNCTUATION_SPACERS))):
+        raise SafetyError('Aligned spacer selection is outside the captured evidence')
     explicit = validate_explicit_withheld(context, explicit_withheld_sources)
     if (type(withheld_records) is not list or len(withheld_records) > len(context.sources)
             or (withheld_records and not partial_unsupported and not explicit)):
@@ -1300,7 +1346,8 @@ def replay_document(context, records, catalog, *, profile=_STANDARD, footnote_ev
                            classify_unproven_binding=partial_unproven_binding,
                            conditional_continuations=conditional_continuations, conditional_capitalization=conditional_capitalization, conditional_prose_markers=conditional_prose_markers,
                            conditional_adjacent_punctuation=conditional_adjacent_punctuation,
-                           conditional_deferred_footnotes=conditional_deferred_footnotes)
+                           conditional_deferred_footnotes=conditional_deferred_footnotes,
+                           aligned_spacer_target=aligned_spacer_target)
         if excluded is not None:
             if (not partial_unsupported or expected is None or expected.get('verification') != 'withheld'
                     or expected.get('reason_code') not in (('unsupported-deferred-footnote-binding',
@@ -1315,7 +1362,8 @@ def replay_document(context, records, catalog, *, profile=_STANDARD, footnote_ev
             candidates[source.path] = _replay_expected(source.tree, record, expected, profile=profile,
                                                        conditional_continuations=conditional_continuations, conditional_capitalization=conditional_capitalization, conditional_prose_markers=conditional_prose_markers,
                                                        conditional_adjacent_punctuation=conditional_adjacent_punctuation,
-                                                       conditional_deferred_footnotes=conditional_deferred_footnotes)
+                                                       conditional_deferred_footnotes=conditional_deferred_footnotes,
+                                                       aligned_spacer_target=aligned_spacer_target)
     conditional_calls = {record['path']: _final_conditional_footnote_calls(
                          context.source_for(record['path']).tree, record) for record in records}
     conditional_calls = {path: offsets for path, offsets in conditional_calls.items() if offsets}
@@ -1326,5 +1374,14 @@ def replay_document(context, records, catalog, *, profile=_STANDARD, footnote_ev
         options = {'allow_deferred': True} if conditional_deferred_footnotes else {}
         document_footnote_evidence.PreviewFootnoteEvidence.validate_staged_facades(
             footnote_evidence, candidates, conditional_calls, **options)
+    aligned_calls = {record['path']: _final_conditional_footnote_calls(
+        context.source_for(record['path']).tree, record, field='conditional_aligned_spacer_calls') for record in records}
+    aligned_calls = {path: offsets for path, offsets in aligned_calls.items() if offsets}
+    if aligned_calls:
+        import document_aligned_spacer_binding as aligned_binding
+        if set(aligned_calls) != {aligned_spacer_target}:
+            raise SafetyError('Aligned spacer call belongs to an unselected source')
+        for path, offsets in aligned_calls.items():
+            aligned_binding.SpacerBindingProof.issue(footnote_evidence, path, candidates[path], offsets, require_inserted=True)
     include_context.assert_include_context(context)
     return MappingProxyType(candidates)

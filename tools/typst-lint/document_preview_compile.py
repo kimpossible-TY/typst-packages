@@ -179,7 +179,7 @@ def _compile_captured(context, records, catalog, snapshot, *, entrypoint, deadli
                     original_only=False, modern_highlight_evidence=None,
                     composed_modern_evidence=None, sequence_facade_evidence=False,
                     conditional_deferred_footnotes=False, composed_reviewed_math=False,
-                    composed_references=False, phase_timings=None):
+                    composed_references=False, phase_timings=None, aligned_spacer_target=None):
     """Compile baseline and candidate from explicit captured bytes in private.
 
     macOS sandbox-exec denies networking and writes outside the temporary
@@ -202,6 +202,11 @@ def _compile_captured(context, records, catalog, snapshot, *, entrypoint, deadli
     if (type(composed_references) is not bool or (composed_references
             and (not composed_reviewed_math or composed_modern_evidence is None))):
         raise SafetyError('Composed references require reviewed math and a composed modern preview')
+    if aligned_spacer_target is not None and original_only:
+        raise SafetyError('Aligned spacer selection cannot be used for original-only compilation')
+    if aligned_spacer_target is not None and (composed_modern_evidence is not None
+                                               or modern_highlight_evidence is not None):
+        raise SafetyError('Aligned spacer selection cannot be combined with modern highlights')
     if expected_dependencies is not None:
         if (type(expected_dependencies) is not tuple or len(expected_dependencies) > document_resources.MAX_FILES
                 or any(type(item) is not tuple or len(item) != 2 or any(type(x) is not str for x in item)
@@ -261,7 +266,7 @@ def _compile_captured(context, records, catalog, snapshot, *, entrypoint, deadli
                 or withheld_records is not None or type(explicit_withheld_sources) is not tuple
                 or explicit_withheld_sources or conditional_continuations is not False or conditional_capitalization is not False or conditional_prose_markers is not False
                 or conditional_adjacent_punctuation is not False
-                or conditional_deferred_footnotes is not False):
+                or conditional_deferred_footnotes is not False or aligned_spacer_target is not None):
             raise SafetyError('Modern highlight preview requires its own issued capture and exclusive profile')
         candidates, modern_summary = modern_evidence.stage_candidates(modern_highlight_evidence)
         if not modern_summary['candidate_count']:
@@ -278,7 +283,8 @@ def _compile_captured(context, records, catalog, snapshot, *, entrypoint, deadli
                                                        explicit_withheld_sources=explicit_withheld_sources,
                                                        conditional_continuations=conditional_continuations, conditional_capitalization=conditional_capitalization, conditional_prose_markers=conditional_prose_markers,
                                                        conditional_adjacent_punctuation=conditional_adjacent_punctuation,
-                                                       conditional_deferred_footnotes=conditional_deferred_footnotes)
+                                                       conditional_deferred_footnotes=conditional_deferred_footnotes,
+                                                       aligned_spacer_target=aligned_spacer_target)
         if phase_timings is not None:
             phase_timings['replay_and_intermediate_seconds'] = time.monotonic() - started
     cancelled()
@@ -466,7 +472,8 @@ def compile_preview(context, records, catalog, snapshot, *, entrypoint, deadline
                     explicit_withheld_sources=(), conditional_continuations=False, conditional_capitalization=False, conditional_prose_markers=False, conditional_adjacent_punctuation=False,
                     modern_highlight_evidence=None, composed_modern_evidence=None,
                     sequence_facade_evidence=False, conditional_deferred_footnotes=False,
-                    composed_reviewed_math=False, composed_references=False, phase_timings=None):
+                    composed_reviewed_math=False, composed_references=False, phase_timings=None,
+                    aligned_spacer_target=None):
     extra = {'composed_references': True} if composed_references is True else {}
     if type(composed_references) is not bool:
         raise SafetyError('Composed references selection must be Boolean')
@@ -481,7 +488,7 @@ def compile_preview(context, records, catalog, snapshot, *, entrypoint, deadline
         composed_modern_evidence=composed_modern_evidence,
         sequence_facade_evidence=sequence_facade_evidence,
         conditional_deferred_footnotes=conditional_deferred_footnotes, composed_reviewed_math=composed_reviewed_math,
-        phase_timings=phase_timings, **extra)
+        phase_timings=phase_timings, aligned_spacer_target=aligned_spacer_target, **extra)
 
 
 def compile_original(context, snapshot, *, entrypoint, deadline_seconds=120.0, cancel_event=None,

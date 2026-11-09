@@ -350,6 +350,17 @@ punctuation moves independently from moves whose footnote has preceding spaces.
 Each adjacent move has inseparable insertion and deletion edits; its source-only
 proposal does not establish binding, rendering equivalence or write permission.
 
+In `preview-compile`, `--conditional-aligned-spacer PROJECT_RELATIVE_PATH`
+adds one selected source's aligned-footnote spacer insertions to the G/S
+sequence and requires `--conditional-facade-footnotes`. Captured bindings,
+candidate tokens and final facade routes are replayed; unavailable optional
+evidence retains earlier stages. The insertion needs its own explicit opt-in;
+its required `--conditional-facade-footnotes` profile also requires and enables
+the separately selected `--conditional-spacers` unaligned removal stage. It
+cannot yet be combined with either modern-highlight preview
+mode. Runtime execution and rendering remain unproved and the spacer may alter
+visible content or layout.
+
 This route captures literal relative includes with the fixed `book-v1` budget
 (64 source files and 400,000 syntax nodes), retains separate repeated include
 occurrences, and checks math scripts once per captured source. This document route

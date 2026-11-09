@@ -89,6 +89,19 @@ def spacer_preview_summary(records):
                          'a difference to this rule or establish general visual equivalence.'))
 
 
+def aligned_spacer_preview_summary(records, target):
+    rows = [record for record in (records or ()) if record['path'] == target]
+    edits = sum(len(step['edits']) for row in rows for step in row['steps']
+                if step['rule_id'] == 'pde.aligned-footnote-spacer')
+    withheld = next((row['aligned_spacer_withheld'] for row in rows
+                     if 'aligned_spacer_withheld' in row), None)
+    return dict(path=target, planned_edits=edits, withheld_reason=withheld,
+                condition='Captured spacer and footnote bindings remain conditional on runtime selection and execution.',
+                render_effect='The inserted spacer may change visible content or layout.',
+                runtime_binding_proved=False, execution_proved=False, render_equivalence_proved=False,
+                source_apply_authority=False, compiler_permission=False)
+
+
 def continuation_preview_summary(records):
     return dict(planned_edits=sum(len(step['edits']) for record in records for step in record['steps']
                                   if step['rule_id'] == 'pde.continuation-line'),
@@ -218,6 +231,8 @@ def main(arguments=None, *, gate=False):
                         help='Also preview conditional unaligned footnote spacer removal; visible content or layout may change (requires --conditional-gaps)')
     parser.add_argument('--conditional-facade-footnotes', action='store_true',
                         help='Use captured facade namespaces for spacer footnotes (requires --conditional-spacers)')
+    parser.add_argument('--conditional-aligned-spacer', metavar='PROJECT_RELATIVE_PATH',
+                        help='Compose aligned-footnote spacer insertion in one source (requires facade and unaligned spacer options); rendering may change')
     parser.add_argument('--conditional-deferred-footnotes', action='store_true',
                         help='Also use conditional closure-capture evidence for spacer footnotes (requires --conditional-facade-footnotes; execution and runtime binding remain unproved)')
     parser.add_argument('--partial-unsupported-preview', action='store_true',
@@ -247,7 +262,7 @@ def main(arguments=None, *, gate=False):
     if args.compose_highlight_references and not args.compose_reviewed_math_highlights:
         parser.error('--compose-highlight-references requires --compose-reviewed-math-highlights')
     if args.conditional_modern_highlights and (args.conditional_gaps or args.conditional_punctuation
-            or args.conditional_spacers or args.conditional_facade_footnotes or args.conditional_continuations or args.conditional_capitalization or args.conditional_prose_markers
+            or args.conditional_spacers or args.conditional_facade_footnotes or args.conditional_aligned_spacer or args.conditional_continuations or args.conditional_capitalization or args.conditional_prose_markers
             or args.conditional_adjacent_punctuation or args.conditional_deferred_footnotes or args.partial_unsupported_preview
             or args.partial_unproven_binding_preview or args.withhold_source or args.review_edits
             or args.compose_modern_highlights):
@@ -260,6 +275,10 @@ def main(arguments=None, *, gate=False):
         parser.error('--conditional-spacers requires --conditional-gaps')
     if args.conditional_facade_footnotes and not args.conditional_spacers:
         parser.error('--conditional-facade-footnotes requires --conditional-spacers')
+    if args.conditional_aligned_spacer is not None and not args.conditional_facade_footnotes:
+        parser.error('--conditional-aligned-spacer requires --conditional-facade-footnotes')
+    if args.conditional_aligned_spacer is not None and args.compose_modern_highlights:
+        parser.error('--conditional-aligned-spacer cannot yet be combined with --compose-modern-highlights')
     if args.conditional_deferred_footnotes and not args.conditional_facade_footnotes:
         parser.error('--conditional-deferred-footnotes requires --conditional-facade-footnotes')
     if args.partial_unsupported_preview and not args.conditional_spacers:
@@ -301,6 +320,10 @@ def main(arguments=None, *, gate=False):
         catalog, catalog_hash = load_rules()
         explicit_paths = tuple(args.withhold_source)
         explicit = document_sequence_preview.validate_explicit_withheld(context, explicit_paths)
+        if args.conditional_aligned_spacer is not None:
+            document_sequence_preview.validate_explicit_withheld(context, (args.conditional_aligned_spacer,))
+            if args.conditional_aligned_spacer in explicit:
+                raise SafetyError('Aligned spacer source is explicitly withheld')
         def plan_records(evidence):
             records, withheld = [], []
             for item in context.sources:
@@ -315,7 +338,8 @@ def main(arguments=None, *, gate=False):
                                                            classify_unproven_binding=args.partial_unproven_binding_preview,
                                                            conditional_continuations=args.conditional_continuations, conditional_capitalization=args.conditional_capitalization, conditional_prose_markers=args.conditional_prose_markers,
                                                            conditional_adjacent_punctuation=args.conditional_adjacent_punctuation,
-                                                           conditional_deferred_footnotes=args.conditional_deferred_footnotes)
+                                                           conditional_deferred_footnotes=args.conditional_deferred_footnotes,
+                                                           aligned_spacer_target=args.conditional_aligned_spacer)
                 if record is not None:
                     if record['verification'] == 'withheld':
                         if (args.partial_unsupported_preview and
@@ -437,6 +461,7 @@ def main(arguments=None, *, gate=False):
                                                            conditional_continuations=args.conditional_continuations, conditional_capitalization=args.conditional_capitalization, conditional_prose_markers=args.conditional_prose_markers,
                                                            conditional_adjacent_punctuation=args.conditional_adjacent_punctuation,
                                                            conditional_deferred_footnotes=args.conditional_deferred_footnotes,
+                                                           aligned_spacer_target=args.conditional_aligned_spacer,
                                                            **compile_options)
         modern_summary = preview.modern_highlight_evidence if (args.conditional_modern_highlights
                                                               or args.compose_modern_highlights) else None
@@ -463,6 +488,7 @@ def main(arguments=None, *, gate=False):
                           (['pde.proof-trailing-gap', 'pde.footnote-trailing-gap', 'pde.paragraph-marker-gap'] if args.conditional_gaps else [])
                           + (['pde.prose-footnote-punctuation'] if args.conditional_punctuation else [])
                           + (['pde.unaligned-footnote-no-spacer'] if args.conditional_spacers else [])
+                          + (['pde.aligned-footnote-spacer'] if args.conditional_aligned_spacer is not None else [])
                           + (['pde.continuation-line'] if args.conditional_continuations else [])
                           + (['pde.paragraph-capitalization'] if args.conditional_capitalization else [])
                           + (['pde.prose-paragraph-marker'] if args.conditional_prose_markers else [])
@@ -503,6 +529,9 @@ def main(arguments=None, *, gate=False):
             result['withheld_sources'] = describe_withheld(withheld, catalog['rules'])
         if args.conditional_spacers:
             result['conditional_spacer_preview'] = spacer_preview_summary(records)
+        if args.conditional_aligned_spacer is not None:
+            result['conditional_aligned_spacer_preview'] = aligned_spacer_preview_summary(
+                records, args.conditional_aligned_spacer)
         if args.conditional_deferred_footnotes:
             result['conditional_deferred_footnote_preview'] = dict(
                 proved_calls=sum(len(step.get('conditional_deferred_footnote_calls', ()))
@@ -554,6 +583,9 @@ def main(arguments=None, *, gate=False):
                 'partial_preview_withheld_files', 'no_verified_candidate_edits'])
             if args.conditional_spacers:
                 result['conditional_spacer_preview'] = spacer_preview_summary([])
+            if args.conditional_aligned_spacer is not None:
+                result['conditional_aligned_spacer_preview'] = aligned_spacer_preview_summary(
+                    [], args.conditional_aligned_spacer)
             if args.conditional_deferred_footnotes:
                 result['conditional_deferred_footnote_preview'] = dict(proved_calls=0,
                     condition='Static closure-capture evidence is conditional; runtime binding and execution are unproved.',
@@ -656,6 +688,12 @@ def main(arguments=None, *, gate=False):
             info = result['conditional_spacer_preview']
             print(f"Conditional spacer removals planned: {info['planned_edits']}. {info['policy']} "
                   f"{info['eligibility']} {info['render_effect']} {info['pdf_attribution']}", file=stream)
+        if 'conditional_aligned_spacer_preview' in result:
+            info = result['conditional_aligned_spacer_preview']
+            print(f"Conditional aligned spacers planned: {info['planned_edits']} in {info['path']}. "
+                  f"{info['condition']} {info['render_effect']}", file=stream)
+            if info['withheld_reason']:
+                print(f"  withheld: {info['withheld_reason']}", file=stream)
         if 'conditional_deferred_footnote_preview' in result:
             info = result['conditional_deferred_footnote_preview']
             print(f"Conditional deferred footnote calls: {info['proved_calls']}. {info['condition']} "
@@ -680,6 +718,12 @@ def main(arguments=None, *, gate=False):
             info = result['conditional_spacer_preview']
             print(f"Conditional spacer removals planned: {info['planned_edits']}. {info['policy']} "
                   f"{info['eligibility']} {info['render_effect']} {info['pdf_attribution']}", file=stream)
+        if 'conditional_aligned_spacer_preview' in result:
+            info = result['conditional_aligned_spacer_preview']
+            print(f"Conditional aligned spacers planned: {info['planned_edits']} in {info['path']}. "
+                  f"{info['condition']} {info['render_effect']}", file=stream)
+            if info['withheld_reason']:
+                print(f"  withheld: {info['withheld_reason']}", file=stream)
         if 'conditional_deferred_footnote_preview' in result:
             info = result['conditional_deferred_footnote_preview']
             print(f"Conditional deferred footnote calls: {info['proved_calls']}. {info['condition']} "

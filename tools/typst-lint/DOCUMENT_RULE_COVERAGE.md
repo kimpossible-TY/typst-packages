@@ -49,7 +49,7 @@
 | `pde.proof-trailing-gap` | 제안 | L | G | 알려진 proof helper와 제한된 경계; G는 조건부 후보다. |
 | `pde.footnote-trailing-gap` | 제안 | L | G | G 결합 컴파일은 중첩 수식 각주와 기존 `paragraph_tab`·`paragraph-tab`, 직접 display 또는 리터럴 `#figure` 앞의 제한된 산문 각주 후보를 조건부 지원한다. 산문 후보는 `#parbreak()`를 삽입하며 helper·marker·figure 바인딩, 실행과 렌더는 미증명이다. 복잡도 사전 한도 또는 다른 근거가 불충분하면 기존 계획만 유지한다. figure와 `paragraph-tab` 후보가 함께 있는 파일에서는 두 단계 모두 보류한다. |
 | `pde.prose-footnote-punctuation` | 제안 | L | P, 선택형 | 각주 앞 공백 제거와 각주 뒤 문장부호 이동은 독립 조건부 미리보기다. 이동은 앞에 수평 공백이 있는 경우와 바로 붙은 경우가 별도이며 후자의 삽입·삭제는 분리할 수 없다. P 결합 컴파일은 공백 제거를 포함하며, 인접 구두점 이동은 별도 선택 시 쌍을 재검증한다. |
-| `pde.aligned-footnote-spacer` | 제안 | L, 독립 미리보기 | — | 독립 미리보기는 제한된 정렬 수식 각주에 spacer 삽입을 제안한다. 실제 바인딩과 실행은 조건부이며 렌더가 달라질 수 있다. |
+| `pde.aligned-footnote-spacer` | 제안 | L, 독립 미리보기 | 선택형 | `--conditional-aligned-spacer`는 한 소스에서 캡처된 facade·각주·spacer 바인딩을 조건부 확인해 G/S에 삽입을 결합한다. modern 강조 미리보기와는 동시 선택할 수 없다. 실행은 조건부이며 렌더가 달라질 수 있다. |
 | `pde.unaligned-footnote-no-spacer` | 제안 | L | S | 기존 명세대로 제한된 비정렬 수식 각주 앞 spacer를 제거하는 조건부 후보. 별도 `--conditional-deferred-footnotes`는 검토된 closure의 호출 경로와 캡처를 추가로 확인한다. 런타임 바인딩과 실행은 미증명이며 실제 렌더는 달라질 수 있다. |
 | `pde.prose-footnote-no-spacer` | 제안 | L, 독립 미리보기 | — | 독립 미리보기는 중첩 산문에서 기존 구두점에 밀착된 리터럴 spacer와 수평 공백만 제거한다. 실제 바인딩과 실행은 조건부이며 렌더가 달라질 수 있다. |
 | `pde.standalone-display` | 제안 | 기본 | 기본 | 파서가 확인한 display와 제한된 직접 문장·라벨. |

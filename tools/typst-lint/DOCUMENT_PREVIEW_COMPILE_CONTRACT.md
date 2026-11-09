@@ -125,6 +125,22 @@ compiled privately; PDF differences are reported and may be intentional under
 the selected style policy. They do not authorize applying edits. This stage does
 not claim complete inspection, and the rule remains in `uninspected_rule_ids`.
 
+`--conditional-aligned-spacer PROJECT_RELATIVE_PATH` additionally selects one
+captured source and requires `--conditional-facade-footnotes`, which in turn
+requires the explicitly selected `--conditional-spacers` unaligned removal
+stage. The extra option inserts `#dots_space ` before narrowly supported
+aligned-display footnotes,
+after checking conditional spacer and footnote namespace bindings against the
+captured resources. Exact insertion bytes, diagnostics, suppressions and source
+hashes are replayed; final footnote/spacer anchors and facade bytes are rechecked
+after the sequence. An unavailable optional binding leaves earlier sequence
+stages intact and reports the withheld reason. It cannot currently be combined
+with either modern-highlight preview mode; the CLI refuses that combination
+before capture or compilation. Local scans and namespace replays have separate
+fixed budgets; issued-capture integrity checks keep their existing resource
+limits. The spacer may alter visible content or layout; runtime execution, visual
+equivalence, complete coverage and edit authority remain unproved.
+
 The separate `--conditional-continuations` selection can be used with the
 standard profile or any existing G/P/S profile. It previews bounded, literal
 prose continuation joins after the other selected stages. Each source newline
