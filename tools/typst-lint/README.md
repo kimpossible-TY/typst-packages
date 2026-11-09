@@ -1693,3 +1693,12 @@ the remaining rule contracts; validate protected writer/editor transactions and
 broader compiler resources and general output publication; then verify
 CI/watch/Tinymist adapters. AGENTS.md
 or a shell wrapper alone cannot claim native editor enforcement.
+
+선택적 `preview-compile --conditional-capitalization`은 지원하는 두 문단 마커 뒤의
+명세상 영문 소문자 시작을 결합 소스 미리보기에 포함한다. 마커 이름의 실행 시
+바인딩, 영문 산문 여부와 실행은 조건이며, 수정된 내용이 표시되면 실제 문자가 바뀐다.
+작업량 한도, 이름 가림이나 미확인 소유권 때문에 후보를 별도 사유 없이 생략할 수 있다.
+보고된 편집 수는 전체 검사 완료 또는 생략 건수를 뜻하지 않는다. 원본 쓰기는 허용하지
+않으며 결합 PDF 비교는 각 규칙의 효과를 따로 입증하지 않는다. 본문 첫 marker는
+단독 선택 시 소유권 미확인으로 보류될 수 있으며, `--conditional-gaps`로 앞선
+지원 경계를 정리한 경우에만 뒤의 대문자 후보가 제안될 수 있다.

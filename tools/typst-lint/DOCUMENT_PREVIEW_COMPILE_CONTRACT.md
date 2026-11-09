@@ -396,3 +396,22 @@ preview runs. The compiler's dependency list is not exhaustive OS-read tracing,
 and a successful preview does not establish future dynamic paths, complete rule
 coverage, a source-write transaction, or publication authority. System libraries
 and the operating system remain trusted runtime components.
+
+## Conditional capitalization preview
+
+`--conditional-capitalization` explicitly adds limited nested paragraph initial
+capitalization candidates to the replayed source plan. It is opt-in and leaves
+the default plan unchanged. The two supported marker spellings are analyzed
+separately from the current intermediate source. Selected ASCII initial bytes,
+suppression ownership, other diagnostics, candidate syntax, stages and source
+hashes are rechecked. Explicit local marker shadowing, unresolved ownership and
+conservative work limits may withhold candidates while preserving other stages.
+Those omissions may be silent: the summary reports selected edits, not the
+number or reasons withheld, and zero edits does not prove complete coverage.
+The marker binding, language, actual execution and rendered result remain
+unproved. These edits can visibly change text, do not authorize source writes,
+and a combined PDF comparison cannot attribute a change to this rule alone.
+For the first marker immediately inside a content block, the standalone option
+can withhold capitalization on unresolved ownership. The earlier explicitly
+selected `--conditional-gaps` stage can resolve the narrow supported opening
+boundary, after which capitalization may be selected.
