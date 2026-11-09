@@ -152,3 +152,25 @@ verification. A scoped reference and a math call inside the same highlight
 remain unsupported. Actual callback execution, binding, side effects, styles,
 rendering, source edits and compilation are not proved. A bounded single
 location and the whole inspection item and byte limits apply.
+
+## Per-source scoped/math union
+
+`--preview-conditional-modern-scoped-union PATH START` requires the combined
+preview flag and can be repeated for up to four issued diagnostic locations
+in at most two sources. Each `PATH` and `START` must come from the same issued
+modern highlight diagnostic. For each source, the tool independently replays
+the source evidence and existing combined plan, requires a single exact issued
+callback for all included edits, and checks that each replacement matches its
+separately proved plan. It reparses the entire union and rechecks ownership,
+the ordered scoped references, callback math binding, syntax, suppressions and
+other rule findings. Scope work is bounded and shared across the batch. If a
+union is unsupported or exhausts that budget, it is withheld while the
+original combined report is retained; aggregate report limit errors fail the
+inspection.
+
+Every union is an independent conditional source-only plan for captured bytes.
+It does not replace the original combined report, prove current filesystem
+freshness, authorize editing or compilation, or establish execution, label
+resolution, side effects, styles or rendering. Do not merge it with another
+source's union, footnote plans, or other reports without revalidation. Math and
+a scoped reference in the same highlight remain unsupported.

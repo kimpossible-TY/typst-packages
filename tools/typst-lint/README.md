@@ -230,6 +230,20 @@ union verification. Runtime callback execution, binding, side effects, styles,
 rendering, source writes and compilation are not proved. This option handles one
 location per inspection; the overall report item and byte limits still apply.
 
+`--preview-conditional-modern-scoped-union PATH START` adds a separately
+verified per-source union of the existing combined plan and selected reviewed
+callback math sites. Repeat the option for up to four diagnostic locations in
+at most two sources; each `PATH` and `START` must come from the same issued
+modern highlight diagnostic. A union requires all included sites to share one
+reviewed callback and is withheld on unsupported scope, binding, work budget,
+syntax or diagnostic changes. The existing combined report is retained.
+
+Each union is a conditional source-only plan. Do not merge it with other plans
+or with a union for another source without separate verification. It does not
+authorize changes or compilation and does not prove current filesystem state,
+callback execution, side effects, reference resolution, styles or rendering.
+Overall item and byte limits apply to the complete inspection.
+
 For one source-only plan containing separate supported reviewed-math and scoped
 reference highlight splits, select `--preview-conditional-modern-combined-highlights`
 with `--modern-highlight-evidence`. It includes direct reference previews and

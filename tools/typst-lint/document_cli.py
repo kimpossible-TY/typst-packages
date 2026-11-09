@@ -52,6 +52,7 @@ def report_document(root, entrypoint, *, rule_set='core', package_path=None,
                     preview_conditional_modern_combined_highlights=False,
                     preview_conditional_modern_literal_footnotes=False,
                     preview_conditional_modern_scoped_math=None,
+                    preview_conditional_modern_scoped_union=None,
                     reference_package_path=None, reference_facade=None, reference_cache_path=None,
                     reference_calls=False, reference_arguments=False, reference_catalog=None):
     """Inspect retained source bytes without reading consumer configuration.
@@ -151,6 +152,25 @@ def report_document(root, entrypoint, *, rule_set='core', package_path=None,
                 and str(scoped_start).isdigit() and len(str(scoped_start)) <= 12,
                 'Scoped math START must be a nonnegative source byte offset')
         scoped_math_location = (scoped_path, int(scoped_start))
+    scoped_union_targets = None
+    if preview_conditional_modern_scoped_union is not None:
+        require(preview_conditional_modern_combined_highlights
+                and type(preview_conditional_modern_scoped_union) in (tuple, list)
+                and 0 < len(preview_conditional_modern_scoped_union) <= 4,
+                'Scoped union preview requires combined highlights and up to four PATH START pairs')
+        grouped = {}
+        for pair in preview_conditional_modern_scoped_union:
+            require(type(pair) in (tuple, list) and len(pair) == 2,
+                    'Each scoped union target requires PATH START')
+            path, start = pair
+            require(type(path) is str and len(path.encode('utf-8')) <= include_context.MAX_PATH_BYTES
+                    and type(start) in (str, int) and type(start) is not bool and str(start).isascii()
+                    and str(start).isdigit() and len(str(start)) <= 12,
+                    'Scoped union START must be a nonnegative source byte offset')
+            grouped.setdefault(path, []).append(int(start))
+        require(len(grouped) <= 2 and all(len(v) == len(set(v)) for v in grouped.values()),
+                'Scoped union allows at most two sources and no duplicate locations')
+        scoped_union_targets = tuple((path, tuple(starts)) for path, starts in grouped.items())
     reference_requested = (reference_package_path is not None or reference_facade is not None
                            or reference_cache_path is not None)
     require(type(reference_calls) is bool and (not reference_calls or reference_requested),
@@ -258,6 +278,7 @@ def report_document(root, entrypoint, *, rule_set='core', package_path=None,
     modern_combined_previews = None
     modern_literal_footnote_previews = None
     modern_scoped_math_preview = None
+    modern_scoped_union_previews = None
     modern_math_report = None
     modern_math_previews = None
     if footnote_cache_path is not None:
@@ -314,14 +335,21 @@ def report_document(root, entrypoint, *, rule_set='core', package_path=None,
                     modern_highlight_report = repeated_report
                     items += modern_highlight_previews['report_items']
                 if preview_conditional_modern_combined_highlights:
-                    from document_modern_highlight_preview import preview_all as preview_combined_highlights
-                    repeated_report, modern_combined_previews = preview_combined_highlights(
-                        modern_analyzer, max_items=MAX_REPORT_ITEMS - items, return_evidence=True,
-                        allow_direct_references=True, allow_scoped_references=True, reviewed_math=True)
+                    if scoped_union_targets is None:
+                        from document_modern_highlight_preview import preview_all as preview_combined_highlights
+                        repeated_report, modern_combined_previews = preview_combined_highlights(
+                            modern_analyzer, max_items=MAX_REPORT_ITEMS - items, return_evidence=True,
+                            allow_direct_references=True, allow_scoped_references=True, reviewed_math=True)
+                        items += modern_combined_previews['report_items']
+                    else:
+                        from scoped_math_union_prototype import preview_batch as preview_scoped_union
+                        repeated_report, modern_combined_previews, modern_scoped_union_previews = preview_scoped_union(
+                            modern_analyzer, scoped_union_targets, max_items=MAX_REPORT_ITEMS - items,
+                            return_evidence=True)
+                        items += modern_scoped_union_previews['report_items'] - repeated_report['report_items']
                     if modern_highlight_report is not None:
                         require(modern_highlight_report == repeated_report, 'Modern highlight evidence changed between previews')
                     modern_highlight_report = repeated_report
-                    items += modern_combined_previews['report_items']
                 if preview_conditional_modern_literal_footnotes:
                     from document_literal_footnote_preview import preview_all as preview_literal_footnotes
                     repeated_report, modern_literal_footnote_previews = preview_literal_footnotes(
@@ -375,6 +403,11 @@ def report_document(root, entrypoint, *, rule_set='core', package_path=None,
                 if scoped_math_location is not None:
                     modern_scoped_math_preview = dict(path=scoped_math_location[0], start=scoped_math_location[1],
                         verification='withheld', reason=str(error), edits=[], conditions=(),
+                        runtime_binding_proved=False, execution_proved=False, coverage_complete=False,
+                        edit_permission=False, compiler_permission=False, render_equivalence_proved=False)
+                    items += 1
+                if scoped_union_targets is not None:
+                    modern_scoped_union_previews = dict(status='UNAVAILABLE', reason=str(error), unions=[],
                         runtime_binding_proved=False, execution_proved=False, coverage_complete=False,
                         edit_permission=False, compiler_permission=False, render_equivalence_proved=False)
                     items += 1
@@ -1067,6 +1100,8 @@ def report_document(root, entrypoint, *, rule_set='core', package_path=None,
         report['conditional_modern_literal_footnote_previews'] = modern_literal_footnote_previews
     if modern_scoped_math_preview is not None:
         report['conditional_modern_scoped_math_preview'] = modern_scoped_math_preview
+    if modern_scoped_union_previews is not None:
+        report['conditional_modern_scoped_union_previews'] = modern_scoped_union_previews
     if modern_math_report is not None:
         report['conditional_modern_math_evidence'] = modern_math_report
     if modern_math_previews is not None:
@@ -1148,6 +1183,8 @@ def main(arguments=None):
                         help='Preview independent literal footnote highlight plans; do not merge with other plans (requires combined highlights)')
     parser.add_argument('--preview-conditional-modern-scoped-math', nargs=2, metavar=('PATH', 'START'),
                         help='Preview one independent callback math plan at diagnostic byte offset; do not merge with other plans (requires combined highlights)')
+    parser.add_argument('--preview-conditional-modern-scoped-union', nargs=2, action='append', metavar=('PATH', 'START'),
+                        help='Preview a separately verified per-source scoped/math union; repeat up to four locations (requires combined highlights)')
     parser.add_argument('--preview-display-gaps', action='store_true',
                         help='Preview independently verified display-gap edits (requires --rule-set pde)')
     parser.add_argument('--preview-standalone-displays', action='store_true',
@@ -1207,6 +1244,7 @@ def main(arguments=None):
                                  preview_conditional_modern_combined_highlights=args.preview_conditional_modern_combined_highlights,
                                  preview_conditional_modern_literal_footnotes=args.preview_conditional_modern_literal_footnotes,
                                  preview_conditional_modern_scoped_math=args.preview_conditional_modern_scoped_math,
+                                 preview_conditional_modern_scoped_union=args.preview_conditional_modern_scoped_union,
                                  preview_display_gaps=args.preview_display_gaps,
                                  preview_standalone_displays=args.preview_standalone_displays,
                                  preview_sequence=args.preview_sequence,
@@ -1439,6 +1477,14 @@ def main(arguments=None):
                     print(f"    conditional edit bytes {edit['start']}..{edit['end']}; replacement in JSON")
             for condition in previews.get('conditions', ()):
                 print(f"  condition: {condition}")
+        if 'conditional_modern_scoped_union_previews' in result:
+            section = result['conditional_modern_scoped_union_previews']
+            print(f"Conditional scoped/math union previews: {section['status']}; independent per-source plans")
+            print('  Do not merge with other plans; runtime execution and rendering are not proved.')
+            for row in section['unions']:
+                print(f"  {row['path']}: {row['verification']}; {len(row['edits'])} edits")
+                if row.get('reason'):
+                    print(f"    withheld: {row['reason']}")
         if 'conditional_modern_scoped_math_preview' in result:
             row = result['conditional_modern_scoped_math_preview']
             print(f"Conditional callback math preview: {row['verification']}; independent source-only plan")
