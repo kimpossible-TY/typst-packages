@@ -878,7 +878,7 @@ def preview(tree, path, catalog, *, profile=_STANDARD, footnote_evidence=None, c
                 steps.append(selected)
         if profile != _STANDARD and b'#footnote' in current.source:
             import document_composed_prose_block_gap as block_gap
-            for kind in ('display', 'figure'):
+            for kind in ('display', 'figure', 'hyphen'):
                 before = current
                 selected = block_gap.preview(before, path, catalog, kind)
                 if selected is None:

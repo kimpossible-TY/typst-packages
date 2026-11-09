@@ -1,4 +1,4 @@
-"""Conditional composition of prose-footnote breaks before displays or figures.
+"""Conditional composition of prose-footnote breaks before displays, figures or hyphenated markers.
 
 No runtime binding, execution, render equivalence, or source-write authority is
 implied. Complex or ambiguous sources retain their existing sequence unchanged.
@@ -16,10 +16,11 @@ from typst_lint import SafetyError, digest
 
 
 def _prove(tree, path, catalog, kind):
-    if kind not in ('display', 'figure'):
+    if kind not in ('display', 'figure', 'hyphen'):
         raise SafetyError('Invalid conditional prose block selection')
     if (b'#footnote' not in tree.source or (kind == 'display' and b'$' not in tree.source)
-            or (kind == 'figure' and b'#figure' not in tree.source) or not budget._within_budget(tree)):
+            or (kind == 'figure' and b'#figure' not in tree.source)
+            or (kind == 'hyphen' and b'#paragraph-tab' not in tree.source) or not budget._within_budget(tree)):
         return None
     boundaries = paragraph_rules.analyze_conditional_nested_gap(tree, path, catalog=catalog)
     if any(reason.startswith(paragraph_rules.NESTED_GAP_UNRESOLVED) for reason in boundaries.skips):
@@ -31,7 +32,8 @@ def _prove(tree, path, catalog, kind):
     expected, targets = selection[:2]
     # The existing extra proof covers figures and hyphenated markers together.
     # Do not select or compose either on a mixed source without a separate proof.
-    if kind == 'figure' and any(item != 'figure' for item in selection[2]):
+    expected_kind = 'figure' if kind == 'figure' else 'hyphenated-paragraph-marker'
+    if kind != 'display' and any(item != expected_kind for item in selection[2]):
         return None
     if not expected:
         return None
@@ -57,12 +59,13 @@ def _prove(tree, path, catalog, kind):
         raise SafetyError('Conditional prose block source proof is invalid')
     expected_rows = [dict(start=e.start, end=e.end, replacement=e.replacement.decode('ascii'), rule_id=source.RULE)
                      for e in expected]
-    if kind == 'figure':
-        # Retain the literal figure-specific runtime condition in every row.
+    if kind != 'display':
+        # Retain the literal target-specific runtime condition in every row.
         for row in expected_rows:
-            row.update(following_kind='figure', following_conditions=[
-                'The literal figure binding is the intended block-producing figure and '
-                'the preceding prose owns the intended paragraph boundary.'])
+            row.update(following_kind=expected_kind, following_conditions=(
+                ['The literal figure binding is the intended block-producing figure and '
+                 'the preceding prose owns the intended paragraph boundary.'] if kind == 'figure' else
+                ['The literal paragraph-tab binding and paragraph show rule are the intended ones.']))
     if (not _same_data(proof.get('edits'), expected_rows)
             or proof.get('baseline_sha256') != digest(tree.source)
             or proof.get('candidate_sha256') != digest(candidate)):

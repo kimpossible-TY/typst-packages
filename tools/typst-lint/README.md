@@ -516,9 +516,10 @@ stages in that preview. The prose-footnote stage is limited to direct footnotes
 followed by an existing standalone `paragraph_tab` and inserts `#parbreak()`;
 the footnote, parbreak and marker bindings, the paragraph show rule and execution
 remain conditions, and the inserted break can change rendering. Direct displays
-and literal `#figure` calls are also supported as separate, revalidated stages;
-figure binding and block behavior remain conditions. A source containing both
-figure and `paragraph-tab` candidates keeps the figure stage unselected. A conservative
+literal `#figure` calls and standalone `paragraph-tab` markers are also supported
+as separate, revalidated stages; figure and marker binding and block behavior
+remain conditions. A source containing both figure and `paragraph-tab` candidates
+keeps both stages unselected. A conservative
 per-source preflight may omit this optional stage on complex inputs. Other
 prose-footnote forms are not composed by these stages.
 The marker stage only handles a first marker immediately after a literal content

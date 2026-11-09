@@ -175,7 +175,7 @@ def main(arguments=None, *, gate=False):
     parser.add_argument('--phase-timings', action='store_true',
                         help='Include non-overlapping, single-run monotonic phase durations in JSON; null means incomplete or not applicable. Argument errors and early PDF stream refusals produce no timings (requires --format json or --pdf-stdout)')
     parser.add_argument('--conditional-gaps', action='store_true',
-                        help='Also preview conditional proof, selected nested math/prose-footnote (marker, display or figure) and paragraph-marker gap edits')
+                        help='Also preview conditional proof, selected nested math/prose-footnote (including both marker names, display or figure) and paragraph-marker gap edits')
     parser.add_argument('--conditional-continuations', action='store_true',
                         help='Preview conditional prose continuation line joins; rendering equivalence is unproved')
     parser.add_argument('--conditional-modern-highlights', action='store_true',
