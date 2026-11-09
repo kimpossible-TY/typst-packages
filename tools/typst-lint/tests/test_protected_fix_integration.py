@@ -29,7 +29,7 @@ import protected_fix
 from protected_fix import (CORE_RULE_IDS, ProtectedCoreError, ProtectedCoreFix,
                            REVIEWED_CATALOG_SHA256)
 import script_rule
-from syntax_client import EXECUTABLE, parse
+from syntax_client import DEBUG_EXECUTABLE, RELEASE_EXECUTABLE, EXECUTABLE, parse
 import transactions
 from transactions import (GraphSnapshot, OfflineExclusive,
                           ProtectedTransaction, RecoveryRequired,
@@ -210,35 +210,155 @@ class ProtectedFixIntegrationTests(unittest.TestCase):
         real_replay = ProtectedCoreFix._independent_replay
         real_io_open = io.open
         real_stat, real_lstat, real_access = os.stat, os.lstat, os.access
+        real_os_open, real_read, real_pipe = os.open, os.read, os.pipe
+        real_popen = subprocess.Popen
         calls = []
         original_backend = protected_fix.analyze_script
-        trusted_metadata = frozenset((EXECUTABLE, *EXECUTABLE.parents))
+        # Both fixed profile directories are checked for selection drift. Only
+        # the selected executable and its exact directory chain may be opened.
+        trusted_metadata = frozenset((EXECUTABLE, *EXECUTABLE.parents,
+                                      DEBUG_EXECUTABLE.parent, RELEASE_EXECUTABLE.parent))
+        trusted_directories = frozenset((TOOL, TOOL / 'syntax-adapter',
+                                         TOOL / 'syntax-adapter/target', EXECUTABLE.parent))
+        binary_flags = os.O_RDONLY | getattr(os, 'O_CLOEXEC', 0) | getattr(os, 'O_NOFOLLOW', 0)
+        directory_flags = binary_flags | getattr(os, 'O_DIRECTORY', 0)
+        executable_stat = real_stat(EXECUTABLE, follow_symlinks=False)
+        executable_identity = (executable_stat.st_dev, executable_stat.st_ino)
+        trusted_pipes = {}
+        creating_parser = False
+
+        def trusted_pipe(fd):
+            if type(fd) is not int or fd not in trusted_pipes:
+                return False
+            info = os.fstat(fd)
+            return stat.S_ISFIFO(info.st_mode) and (info.st_dev, info.st_ino) == trusted_pipes[fd]
+
+        def parser_pipe():
+            if not creating_parser:
+                raise AssertionError('analyzer pipe outside parser subprocess')
+            ends = real_pipe()
+            for fd in ends:
+                info = os.fstat(fd)
+                if not stat.S_ISFIFO(info.st_mode):
+                    os.close(ends[0])
+                    os.close(ends[1])
+                    raise AssertionError('parser subprocess pipe is not a FIFO')
+                trusted_pipes[fd] = (info.st_dev, info.st_ino)
+            return ends
+
+        def parser_popen(argv, *args, **kwargs):
+            nonlocal creating_parser
+            if (creating_parser or type(argv) is not list or len(argv) != 2
+                    or argv[0] != str(EXECUTABLE) or argv[1] not in ('markup', 'code', 'math')
+                    or args or set(kwargs) != {'stdin', 'stdout', 'stderr'}
+                    or kwargs.get('stdin') != subprocess.PIPE
+                    or kwargs.get('stdout') != subprocess.PIPE or kwargs.get('stderr') != subprocess.PIPE):
+                raise AssertionError('analyzer subprocess outside trusted parser')
+            creating_parser = True
+            try:
+                return real_popen(argv, *args, **kwargs)
+            finally:
+                creating_parser = False
 
         def pipe_open(file, *args, **kwargs):
             # subprocess wraps its own already-open anonymous pipe descriptors.
             # Allowing arbitrary integer descriptors would hide graph reads.
-            if type(file) is int and stat.S_ISFIFO(os.fstat(file).st_mode):
+            if trusted_pipe(file):
                 return real_io_open(file, *args, **kwargs)
             raise AssertionError(f'analyzer byte read outside parser pipes: {file!r}')
 
         def metadata(operation):
             def checked(path, *args, **kwargs):
-                if type(path) is int or Path(os.fsdecode(path)) not in trusted_metadata:
+                # The debug fallback must probe the exact absent release
+                # candidate without following links on every selection check.
+                # This permits neither following it nor opening its bytes.
+                release_probe = (type(path) is not int and operation is real_stat
+                                 and EXECUTABLE != RELEASE_EXECUTABLE
+                                 and Path(os.fsdecode(path)) == RELEASE_EXECUTABLE
+                                 and not args and kwargs == {'follow_symlinks': False})
+                if (type(path) is int or (Path(os.fsdecode(path)) not in trusted_metadata
+                                          and not release_probe)):
                     raise AssertionError(f'analyzer metadata read outside trusted parser: {path!r}')
                 return operation(path, *args, **kwargs)
             return checked
 
+        def parser_open(path, flags, *args, **kwargs):
+            if type(path) is int or args or kwargs:
+                raise AssertionError(f'analyzer open outside trusted parser: {path!r}')
+            selected = Path(os.fsdecode(path))
+            if not ((selected == EXECUTABLE and flags == binary_flags)
+                    or (selected in trusted_directories and flags == directory_flags)):
+                raise AssertionError(f'analyzer open outside trusted parser: {path!r}')
+            return real_os_open(path, flags)
+
+        def parser_read(fd, count):
+            info = os.fstat(fd)
+            if (not trusted_pipe(fd)
+                    and not (stat.S_ISREG(info.st_mode)
+                             and (info.st_dev, info.st_ino) == executable_identity)):
+                raise AssertionError('analyzer read outside parser pipes or selected binary')
+            return real_read(fd, count)
+
         def read_tripwire():
+            trusted_pipes.clear()
             stack = ExitStack()
             stack.enter_context(mock.patch('builtins.open', side_effect=pipe_open))
             stack.enter_context(mock.patch.object(io, 'open', side_effect=pipe_open))
-            stack.enter_context(mock.patch.object(os, 'open', side_effect=AssertionError('analyzer os.open')))
+            stack.enter_context(mock.patch.object(os, 'open', side_effect=parser_open))
+            stack.enter_context(mock.patch.object(os, 'read', side_effect=parser_read))
+            stack.enter_context(mock.patch.object(os, 'pipe', side_effect=parser_pipe))
+            stack.enter_context(mock.patch.object(subprocess, 'Popen', side_effect=parser_popen))
             stack.enter_context(mock.patch.object(os, 'stat', side_effect=metadata(real_stat)))
             stack.enter_context(mock.patch.object(os, 'lstat', side_effect=metadata(real_lstat)))
             stack.enter_context(mock.patch.object(os, 'access', side_effect=metadata(real_access)))
             stack.enter_context(mock.patch.object(script_rule, 'load_rules',
                                                  side_effect=AssertionError('script catalog reread')))
             return stack
+
+        unrelated_fd = real_os_open(self.f.unrelated, os.O_RDONLY)
+        unrelated_pipe = real_pipe()
+        try:
+            with read_tripwire():
+                # A sibling in a trusted directory is not itself trusted.
+                for path in (self.f.source, self.f.config, self.f.catalog, self.f.unrelated,
+                             EXECUTABLE.parent / 'not-the-adapter',
+                             DEBUG_EXECUTABLE if EXECUTABLE == RELEASE_EXECUTABLE else RELEASE_EXECUTABLE):
+                    with self.subTest(refused_path=path), self.assertRaises(AssertionError):
+                        os.open(path, binary_flags)
+                    with self.subTest(refused_metadata=path), self.assertRaises(AssertionError):
+                        os.stat(path)
+                with self.assertRaises(AssertionError):
+                    os.open(EXECUTABLE, os.O_WRONLY)
+                with self.assertRaises(AssertionError):
+                    os.open(EXECUTABLE, binary_flags | os.O_CREAT)
+                if getattr(os, 'O_NOFOLLOW', 0):
+                    with self.assertRaises(AssertionError):
+                        os.open(EXECUTABLE, binary_flags & ~os.O_NOFOLLOW)
+                if getattr(os, 'O_DIRECTORY', 0):
+                    with self.assertRaises(AssertionError):
+                        os.open(EXECUTABLE.parent, binary_flags)
+                if EXECUTABLE != RELEASE_EXECUTABLE:
+                    # Only the non-following existence probe is needed for
+                    # debug fallback; the test still forbids opening it.
+                    with self.assertRaises(FileNotFoundError):
+                        os.stat(RELEASE_EXECUTABLE, follow_symlinks=False)
+                with self.assertRaises(AssertionError):
+                    os.read(unrelated_fd, 1)
+                with self.assertRaises(AssertionError):
+                    os.read(unrelated_pipe[0], 0)
+                with self.assertRaises(AssertionError):
+                    io.open(unrelated_pipe[0], 'rb', closefd=False)
+                with self.assertRaises(AssertionError):
+                    os.pipe()
+                with self.assertRaises(AssertionError):
+                    subprocess.Popen([sys.executable, '-c', 'pass'])
+                with self.assertRaises(AssertionError):
+                    subprocess.Popen([str(EXECUTABLE), 'markup'], stdin=subprocess.PIPE,
+                                     stdout=subprocess.PIPE, stderr=subprocess.PIPE, shell=True)
+        finally:
+            os.close(unrelated_fd)
+            os.close(unrelated_pipe[0])
+            os.close(unrelated_pipe[1])
 
         def inspect_backend(*args, **kwargs):
             catalog = kwargs.get('catalog')
