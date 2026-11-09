@@ -215,6 +215,21 @@ footnote numbering, rendered output, source writes and compilation remain
 unproved. Work and report limits still apply; exceeding a report limit rejects
 the inspection rather than returning a partial combined report.
 
+Use `--preview-conditional-modern-scoped-math PATH START` with the combined
+preview option to inspect one diagnostic in a narrowly reviewed root callback.
+`PATH` must be the project-relative `path` from an issued modern highlight
+diagnostic, and `START` must be that diagnostic's `start` byte offset. The callback
+must use the exact captured scoped-annotations package and a plain `s` body
+without nested closures, imports, assignments, control flow, show rules or
+local bindings. The selected equation must use reviewed math names. Math calls
+and scoped references in the same highlight remain unsupported.
+
+The resulting plan is independent and based on the original captured source.
+Do not merge it with the combined preview or other plans without a separate
+union verification. Runtime callback execution, binding, side effects, styles,
+rendering, source writes and compilation are not proved. This option handles one
+location per inspection; the overall report item and byte limits still apply.
+
 For one source-only plan containing separate supported reviewed-math and scoped
 reference highlight splits, select `--preview-conditional-modern-combined-highlights`
 with `--modern-highlight-evidence`. It includes direct reference previews and

@@ -132,3 +132,23 @@ exhaustion fails the whole inspection. A single retained call in source does
 not prove how often it executes. Runtime binding, side effects, custom show
 rules, reference resolution, footnote numbering, rendered output, source
 writes and compilation are not proved or authorized.
+
+## One reviewed callback math location
+
+`--preview-conditional-modern-scoped-math PATH START` requires the combined
+preview flag. `PATH` is the exact project-relative path and `START` is the
+`start` byte offset from the same issued modern highlight diagnostic. It
+independently replays issued modern evidence, verifies the
+exact captured scoped-annotations package and callback provenance route, and
+accepts only one root wrapper with a direct literal `s` callback. Its entire
+body must contain no nested closures, local bindings, imports/includes,
+assignments, conditionals, loops, context or show rules. Only captured reviewed
+builtin math calls with no executable equation code can be proposed; source
+syntax, bindings and other rule findings are rechecked on the candidate.
+
+The resulting plan uses the original source and is not a union with the
+combined or literal-footnote plan. Do not merge plans without independent union
+verification. A scoped reference and a math call inside the same highlight
+remain unsupported. Actual callback execution, binding, side effects, styles,
+rendering, source edits and compilation are not proved. A bounded single
+location and the whole inspection item and byte limits apply.

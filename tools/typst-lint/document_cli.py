@@ -51,6 +51,7 @@ def report_document(root, entrypoint, *, rule_set='core', package_path=None,
                     preview_conditional_modern_math_highlights=False,
                     preview_conditional_modern_combined_highlights=False,
                     preview_conditional_modern_literal_footnotes=False,
+                    preview_conditional_modern_scoped_math=None,
                     reference_package_path=None, reference_facade=None, reference_cache_path=None,
                     reference_calls=False, reference_arguments=False, reference_catalog=None):
     """Inspect retained source bytes without reading consumer configuration.
@@ -138,6 +139,18 @@ def report_document(root, entrypoint, *, rule_set='core', package_path=None,
     require(type(preview_conditional_modern_literal_footnotes) is bool
             and (not preview_conditional_modern_literal_footnotes or preview_conditional_modern_combined_highlights),
             'Literal footnote highlight previews require --preview-conditional-modern-combined-highlights')
+    scoped_math_location = None
+    if preview_conditional_modern_scoped_math is not None:
+        require(preview_conditional_modern_combined_highlights
+                and type(preview_conditional_modern_scoped_math) in (tuple, list)
+                and len(preview_conditional_modern_scoped_math) == 2,
+                'Scoped math preview requires combined highlights and PATH START')
+        scoped_path, scoped_start = preview_conditional_modern_scoped_math
+        require(type(scoped_path) is str and type(scoped_start) in (str, int)
+                and type(scoped_start) is not bool and str(scoped_start).isascii()
+                and str(scoped_start).isdigit() and len(str(scoped_start)) <= 12,
+                'Scoped math START must be a nonnegative source byte offset')
+        scoped_math_location = (scoped_path, int(scoped_start))
     reference_requested = (reference_package_path is not None or reference_facade is not None
                            or reference_cache_path is not None)
     require(type(reference_calls) is bool and (not reference_calls or reference_requested),
@@ -244,6 +257,7 @@ def report_document(root, entrypoint, *, rule_set='core', package_path=None,
     modern_highlight_previews = None
     modern_combined_previews = None
     modern_literal_footnote_previews = None
+    modern_scoped_math_preview = None
     modern_math_report = None
     modern_math_previews = None
     if footnote_cache_path is not None:
@@ -314,6 +328,18 @@ def report_document(root, entrypoint, *, rule_set='core', package_path=None,
                         modern_analyzer, max_items=MAX_REPORT_ITEMS - items, return_evidence=True)
                     require(modern_highlight_report == repeated_report, 'Modern highlight evidence changed between previews')
                     items += modern_literal_footnote_previews['report_items']
+                if scoped_math_location is not None:
+                    import scoped_math_capture_prototype as scoped_math
+                    try:
+                        modern_scoped_math_preview = scoped_math.preview_one(modern_analyzer, *scoped_math_location)
+                    except ValueError as error:
+                        ModernHighlightAnalyzer._check(modern_analyzer)
+                        modern_scoped_math_preview = dict(path=scoped_math_location[0], start=scoped_math_location[1],
+                            verification='withheld', reason=str(error), edits=[], conditions=scoped_math.CONDITIONS,
+                            runtime_binding_proved=False, execution_proved=False, coverage_complete=False,
+                            render_equivalence_proved=False, edit_permission=False, compiler_permission=False)
+                    items += (1 + len(modern_scoped_math_preview['edits']) + len(modern_scoped_math_preview['conditions'])
+                              + int('reason' in modern_scoped_math_preview))
                 items += modern_highlight_report['report_items']
             except ModernVariantUnavailable as error:
                 modern_highlight_report = dict(status='UNAVAILABLE', reason=str(error), by_file=[],
@@ -343,6 +369,12 @@ def report_document(root, entrypoint, *, rule_set='core', package_path=None,
                     items += 1
                 if preview_conditional_modern_literal_footnotes:
                     modern_literal_footnote_previews = dict(status='UNAVAILABLE', reason=str(error), plans=[], withheld=[],
+                        runtime_binding_proved=False, execution_proved=False, coverage_complete=False,
+                        edit_permission=False, compiler_permission=False, render_equivalence_proved=False)
+                    items += 1
+                if scoped_math_location is not None:
+                    modern_scoped_math_preview = dict(path=scoped_math_location[0], start=scoped_math_location[1],
+                        verification='withheld', reason=str(error), edits=[], conditions=(),
                         runtime_binding_proved=False, execution_proved=False, coverage_complete=False,
                         edit_permission=False, compiler_permission=False, render_equivalence_proved=False)
                     items += 1
@@ -1033,6 +1065,8 @@ def report_document(root, entrypoint, *, rule_set='core', package_path=None,
         report['conditional_modern_combined_previews'] = modern_combined_previews
     if modern_literal_footnote_previews is not None:
         report['conditional_modern_literal_footnote_previews'] = modern_literal_footnote_previews
+    if modern_scoped_math_preview is not None:
+        report['conditional_modern_scoped_math_preview'] = modern_scoped_math_preview
     if modern_math_report is not None:
         report['conditional_modern_math_evidence'] = modern_math_report
     if modern_math_previews is not None:
@@ -1112,6 +1146,8 @@ def main(arguments=None):
                         help='Combine separate supported reviewed-math and scoped-reference highlight edits per source (requires --modern-highlight-evidence)')
     parser.add_argument('--preview-conditional-modern-literal-footnotes', action='store_true',
                         help='Preview independent literal footnote highlight plans; do not merge with other plans (requires combined highlights)')
+    parser.add_argument('--preview-conditional-modern-scoped-math', nargs=2, metavar=('PATH', 'START'),
+                        help='Preview one independent callback math plan at diagnostic byte offset; do not merge with other plans (requires combined highlights)')
     parser.add_argument('--preview-display-gaps', action='store_true',
                         help='Preview independently verified display-gap edits (requires --rule-set pde)')
     parser.add_argument('--preview-standalone-displays', action='store_true',
@@ -1170,6 +1206,7 @@ def main(arguments=None):
                                  preview_conditional_modern_math_highlights=args.preview_conditional_modern_math_highlights,
                                  preview_conditional_modern_combined_highlights=args.preview_conditional_modern_combined_highlights,
                                  preview_conditional_modern_literal_footnotes=args.preview_conditional_modern_literal_footnotes,
+                                 preview_conditional_modern_scoped_math=args.preview_conditional_modern_scoped_math,
                                  preview_display_gaps=args.preview_display_gaps,
                                  preview_standalone_displays=args.preview_standalone_displays,
                                  preview_sequence=args.preview_sequence,
@@ -1402,6 +1439,13 @@ def main(arguments=None):
                     print(f"    conditional edit bytes {edit['start']}..{edit['end']}; replacement in JSON")
             for condition in previews.get('conditions', ()):
                 print(f"  condition: {condition}")
+        if 'conditional_modern_scoped_math_preview' in result:
+            row = result['conditional_modern_scoped_math_preview']
+            print(f"Conditional callback math preview: {row['verification']}; independent source-only plan")
+            print('  Do not merge this plan with other previews; execution, side effects and rendering are not proved.')
+            print(f"  {row['path']}: {len(row['edits'])} edits")
+            if row.get('reason'):
+                print(f"    withheld: {row['reason']}")
         if 'conditional_modern_literal_footnote_previews' in result:
             previews = result['conditional_modern_literal_footnote_previews']
             print(f"Conditional literal footnote highlight previews: {previews['status']}; independent source-only plans")
