@@ -198,3 +198,15 @@ scoped/math union, footnote or other plans without separate verification.
 Current filesystem freshness, runtime binding or execution, side effects,
 reference targets, rendered output, writes and compilation remain unproved.
 The full report item/byte limit and independent bounded proof work apply.
+
+## Multi-site parent reference union
+
+`--preview-conditional-modern-parent-union PATH START` is repeatable for two
+to four distinct issued locations from one source and reviewed callback. It
+independently reissues each original-source single plan and verifies the full
+union against the same capture, including final candidate scope routes,
+ownership, existing diagnostics and suppressions. Failed union verification
+returns completed individual plans; a report byte or item limit failure rejects
+the whole inspection. The combined, footnote and independent parent reports
+remain separate. No cross-report composition, current filesystem freshness,
+execution, rendering, write or compiler authority is established.

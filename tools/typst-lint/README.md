@@ -252,6 +252,21 @@ effects, reference targets, rendering or permission to edit or compile.
 Parent inspection and parent preview cannot be requested together. Work and
 whole-report item/byte limits apply.
 
+For two to four issued parent-reference diagnostics in the same captured
+source and the same reviewed callback, repeat
+`--preview-conditional-modern-parent-union PATH START` with the combined
+preview enabled. Each `PATH` and byte-offset `START` must come from its issued
+modern highlight diagnostic. The output keeps independently reissued single
+plans and offers their union only after reparsing and rechecking scope routes,
+suppression targets and existing diagnostics together. The combined, footnote
+and individual parent reports are preserved. A withheld union retains completed
+single plans; report budget exhaustion rejects the complete inspection.
+
+This plan covers captured source bytes only. It does not verify current files,
+runtime binding or execution, layout or rendering, and it grants no edit or
+compiler permission. Do not merge it with other plans without independently
+revalidating their union.
+
 `--preview-conditional-modern-scoped-union PATH START` adds a separately
 verified per-source union of the existing combined plan and selected reviewed
 callback math sites. Repeat the option for up to four diagnostic locations in

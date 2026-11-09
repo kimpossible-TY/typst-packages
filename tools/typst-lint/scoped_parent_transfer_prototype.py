@@ -387,9 +387,10 @@ def _prove_tree(evidence, tree, path, outer, origin, outer_route, remaining, max
 
 def _verification_cost(original, candidate, edit, mapper):
     """Upper-bound duplicate-span matching and child comparisons."""
+    edits = edit if type(edit) is tuple else (edit,)
     old, new = {}, {}
     for node in original.nodes:
-        if node.start == node.end or (edit.start < node.end and node.start < edit.end):
+        if node.start == node.end or any(item.start < node.end and node.start < item.end for item in edits):
             continue
         key = (node.kind, mapper.mapped(node.start), mapper.mapped(node.end))
         count, degree, byte_work = old.get(key, (0, 0, 0))
@@ -404,8 +405,8 @@ def _verification_cost(original, candidate, edit, mapper):
                for b, db in (new.get(key, (0, 0)),))
 
 
-def preview_one(evidence, path, highlight_start, *, max_work=MAX_PREVIEW_WORK, max_bytes=MAX_BYTES):
-    """Experimental independent candidate; never merged or applied."""
+def _preview_selected(evidence, path, highlight_starts, *, max_work=MAX_PREVIEW_WORK, max_bytes=MAX_BYTES):
+    """Revalidate a bounded set of same-callback edits against one source."""
     import document_modern_highlight_preview as preview
     from document_gap_preview import _MappedEdits
     from edit_plan import plan
@@ -414,7 +415,10 @@ def preview_one(evidence, path, highlight_start, *, max_work=MAX_PREVIEW_WORK, m
 
     require(type(max_work) is int and 0 < max_work <= MAX_PREVIEW_WORK
             and type(max_bytes) is int and 0 < max_bytes <= MAX_BYTES, 'Invalid parent preview budget')
-    parent_proof = analyze_one(evidence, path, highlight_start, max_work=min(max_work, MAX_WORK), max_bytes=max_bytes)
+    require(type(highlight_starts) is tuple and 0 < len(highlight_starts) <= 4
+            and all(type(value) is int and value >= 0 for value in highlight_starts)
+            and len(set(highlight_starts)) == len(highlight_starts), 'Invalid parent highlight locations')
+    parent_proof = analyze_one(evidence, path, highlight_starts[0], max_work=min(max_work, MAX_WORK), max_bytes=max_bytes)
     remaining = max_work - parent_proof['work_used']
     source = evidence._session._context.source_for(path)
     tree, nodes = source.tree, source.tree.nodes
@@ -428,27 +432,39 @@ def preview_one(evidence, path, highlight_start, *, max_work=MAX_PREVIEW_WORK, m
     remaining -= 64 * len(nodes) + len(tree.source)
     if remaining <= 0:
         raise SafetyError('Parent preview work budget exceeded')
-    matches = [d for d in issued['diagnostics'] if d['start'] == highlight_start]
-    if len(matches) != 1:
-        raise InputError('No unique issued highlight diagnostic at this location')
-    diagnostic = matches[0]
-    callback = diagnostic['callback_context'][0]
-    original_refs = frozenset((n.start, n.end) for i, n in enumerate(nodes)
-        if n.kind == 'FuncCall' and diagnostic['start'] <= n.start < n.end <= diagnostic['end']
-        and scoped._reference(tree, i, 's'))
-    if not original_refs:
-        raise SafetyError('No literal outer scoped reference is selected')
-    # Parent/child scope bodies are not opaque: every such call must lie wholly
-    # outside the selected replacement and be preserved structurally below.
-    edit_start, edit_end = diagnostic['start'] - 1, diagnostic['end']
-    if any(row['call_start'] < edit_end and edit_start < row['call_end'] for row in parent_proof['parents']):
-        raise SafetyError('Selected highlight overlaps a parent-scope call')
-    edits, plans = preview._select(tree, [diagnostic], allow_direct_references=True,
-                                   proven_scoped_references=original_refs)
-    if len(edits) != 1:
+    selected = []
+    for start in highlight_starts:
+        matches = [d for d in issued['diagnostics'] if d['start'] == start]
+        if len(matches) != 1:
+            raise InputError('No unique issued highlight diagnostic at this location')
+        selected.append(matches[0])
+    contexts = [d.get('callback_context') or () for d in selected]
+    if any(len(value) != 1 or value[0] != contexts[0][0] for value in contexts):
+        raise SafetyError('Selected highlights do not share one issued callback')
+    diagnostic = selected[0]
+    callback = contexts[0][0]
+    route = diagnostic['content_context'][callback['content_context_index']]
+    if any(d['content_context'][callback['content_context_index']] != route for d in selected):
+        raise SafetyError('Selected highlights do not share one wrapper route')
+    original_refs = set()
+    for diagnostic_item in selected:
+        refs = {(n.start, n.end) for i, n in enumerate(nodes)
+                if n.kind == 'FuncCall' and diagnostic_item['start'] <= n.start < n.end <= diagnostic_item['end']
+                and scoped._reference(tree, i, 's')}
+        if not refs:
+            raise SafetyError('No literal outer scoped reference is selected')
+        original_refs.update(refs)
+        edit_start, edit_end = diagnostic_item['start'] - 1, diagnostic_item['end']
+        if any(row['call_start'] < edit_end and edit_start < row['call_end'] for row in parent_proof['parents']):
+            raise SafetyError('Selected highlight overlaps a parent-scope call')
+    edits, plans = preview._select(tree, selected, allow_direct_references=True,
+                                   proven_scoped_references=frozenset(original_refs))
+    if len(edits) != len(selected):
         raise SafetyError('Highlight with a literal outer reference is unsupported')
+    ordered = sorted(zip(edits, plans), key=lambda value: (value[0].start, value[0].end))
+    edits, plans = tuple(x[0] for x in ordered), tuple(x[1] for x in ordered)
     proposal = plan(tree.source, edits)
-    if proposal.deferred or len(proposal.edits) != 1:
+    if proposal.deferred or len(proposal.edits) != len(edits):
         raise SafetyError('Candidate highlight edits conflict')
     candidate = proposal.candidate()
     parsed = parse(candidate, tree.mode)
@@ -458,7 +474,7 @@ def preview_one(evidence, path, highlight_start, *, max_work=MAX_PREVIEW_WORK, m
         raise SafetyError('Parent preview work budget exceeded')
     # `_verify_insertions` may compare several AST nodes sharing one span;
     # charge a conservative matching/child upper bound before invoking it.
-    remaining -= _verification_cost(tree, parsed, edits[0], mapper)
+    remaining -= _verification_cost(tree, parsed, edits, mapper)
     if remaining <= 0:
         raise SafetyError('Parent preview work budget exceeded')
     records = load_rules()[0]['rules']
@@ -584,3 +600,8 @@ def preview_one(evidence, path, highlight_start, *, max_work=MAX_PREVIEW_WORK, m
     if total_bytes > max_bytes:
         raise SafetyError('Parent preview report byte budget exceeded')
     return result
+
+
+def preview_one(evidence, path, highlight_start, *, max_work=MAX_PREVIEW_WORK, max_bytes=MAX_BYTES):
+    """Return an independent single-site plan without applying it."""
+    return _preview_selected(evidence, path, (highlight_start,), max_work=max_work, max_bytes=max_bytes)

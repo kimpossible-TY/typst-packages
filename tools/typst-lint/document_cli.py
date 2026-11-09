@@ -55,6 +55,7 @@ def report_document(root, entrypoint, *, rule_set='core', package_path=None,
                     preview_conditional_modern_scoped_union=None,
                     inspect_scoped_parent_transfer=None,
                     preview_conditional_modern_parent_reference=None,
+                    preview_conditional_modern_parent_union=None,
                     reference_package_path=None, reference_facade=None, reference_cache_path=None,
                     reference_calls=False, reference_arguments=False, reference_catalog=None):
     """Inspect retained source bytes without reading consumer configuration.
@@ -188,6 +189,23 @@ def report_document(root, entrypoint, *, rule_set='core', package_path=None,
                 and str(start).isdigit() and len(str(start)) <= 12,
                 'Parent transfer START must be a nonnegative source byte offset')
         parent_location = (path, int(start))
+    parent_union_target = None
+    if preview_conditional_modern_parent_union is not None:
+        values = preview_conditional_modern_parent_union
+        require(preview_conditional_modern_combined_highlights and type(values) in (tuple, list)
+                and 2 <= len(values) <= 4, 'Parent union requires combined highlights and two to four PATH START pairs')
+        pairs = []
+        for value in values:
+            require(type(value) in (tuple, list) and len(value) == 2, 'Parent union requires PATH START pairs')
+            target_path, target_start = value
+            require(type(target_path) is str and len(target_path.encode('utf-8')) <= include_context.MAX_PATH_BYTES
+                    and type(target_start) in (str, int) and type(target_start) is not bool
+                    and str(target_start).isascii() and str(target_start).isdigit()
+                    and len(str(target_start)) <= 12, 'Invalid parent union path or source byte offset')
+            pairs.append((target_path, int(target_start)))
+        require(len({p for p, _ in pairs}) == 1 and len({offset for _, offset in pairs}) == len(pairs),
+                'Parent union requires one source and distinct locations')
+        parent_union_target = (pairs[0][0], tuple(offset for _, offset in pairs))
     reference_requested = (reference_package_path is not None or reference_facade is not None
                            or reference_cache_path is not None)
     require(type(reference_calls) is bool and (not reference_calls or reference_requested),
@@ -297,6 +315,7 @@ def report_document(root, entrypoint, *, rule_set='core', package_path=None,
     modern_scoped_math_preview = None
     modern_scoped_union_previews = None
     parent_transfer_result = None
+    parent_union_result = None
     modern_math_report = None
     modern_math_previews = None
     if footnote_cache_path is not None:
@@ -406,6 +425,15 @@ def report_document(root, entrypoint, *, rule_set='core', package_path=None,
                               + len(parent_transfer_result.get('outer_scope_fields', {}))
                               + len(parent_transfer_result.get('child_scope_fields', {}))
                               + sum(1 + len(row['route']) for row in parent_transfer_result.get('parents', ())))
+                if parent_union_target is not None:
+                    import scoped_parent_union_prototype as parent_union
+                    parent_union_result = parent_union.preview_union(modern_analyzer, *parent_union_target)
+                    items += (1 + len(parent_union_result['conditions']) + int('reason' in parent_union_result)
+                              + sum(1 + len(row['conditions']) + len(row['edits'])
+                                    for row in parent_union_result['baseline']))
+                    if parent_union_result['union'] is not None:
+                        items += (1 + len(parent_union_result['union']['conditions'])
+                                  + len(parent_union_result['union']['edits']))
                 items += modern_highlight_report['report_items']
             except ModernVariantUnavailable as error:
                 modern_highlight_report = dict(status='UNAVAILABLE', reason=str(error), by_file=[],
@@ -454,6 +482,13 @@ def report_document(root, entrypoint, *, rule_set='core', package_path=None,
                         status='UNAVAILABLE', verification='withheld', reason=str(error), parents=[], edits=[],
                         runtime_binding_proved=False, execution_proved=False, coverage_complete=False,
                         edit_permission=False, compiler_permission=False, render_equivalence_proved=False)
+                    items += 1
+                if parent_union_target is not None:
+                    parent_union_result = dict(path=parent_union_target[0], status='UNAVAILABLE',
+                        reason=str(error), baseline=[], union=None, source_union_revalidated=False,
+                        composition_proved=False, runtime_binding_proved=False, execution_proved=False,
+                        coverage_complete=False, render_equivalence_proved=False, edit_permission=False,
+                        compiler_permission=False)
                     items += 1
             require(items <= MAX_REPORT_ITEMS, 'Document inspection report item limit exceeded')
     reference_report = None
@@ -1149,6 +1184,8 @@ def report_document(root, entrypoint, *, rule_set='core', package_path=None,
     if parent_transfer_result is not None:
         key = ('conditional_modern_parent_reference_preview' if parent_preview else 'conditional_scoped_parent_transfer')
         report[key] = parent_transfer_result
+    if parent_union_result is not None:
+        report['conditional_modern_parent_union'] = parent_union_result
     if modern_math_report is not None:
         report['conditional_modern_math_evidence'] = modern_math_report
     if modern_math_previews is not None:
@@ -1222,6 +1259,8 @@ def main(arguments=None):
                         help='Inspect parent/child scope identities at one diagnostic location (requires modern evidence)')
     parser.add_argument('--preview-conditional-modern-parent-reference', nargs=2, metavar=('PATH', 'START'),
                         help='Preview one independent parent-scoped reference plan; do not merge plans (requires combined highlights)')
+    parser.add_argument('--preview-conditional-modern-parent-union', nargs=2, action='append', metavar=('PATH', 'START'),
+                        help='Revalidate two to four parent reference sites as one source-only plan (requires combined highlights)')
     parser.add_argument('--preview-conditional-modern-highlights', action='store_true',
                         help='Preview simple modern highlight splits (requires --modern-highlight-evidence)')
     parser.add_argument('--preview-conditional-modern-scoped-references', action='store_true',
@@ -1292,6 +1331,7 @@ def main(arguments=None):
                                  inspect_scoped_parent_patterns=args.inspect_scoped_parent_patterns,
                                  inspect_scoped_parent_transfer=args.inspect_scoped_parent_transfer,
                                  preview_conditional_modern_parent_reference=args.preview_conditional_modern_parent_reference,
+                                 preview_conditional_modern_parent_union=args.preview_conditional_modern_parent_union,
                                  preview_conditional_modern_scoped_references=args.preview_conditional_modern_scoped_references,
                                  preview_conditional_modern_math_highlights=args.preview_conditional_modern_math_highlights,
                                  preview_conditional_modern_combined_highlights=args.preview_conditional_modern_combined_highlights,
@@ -1530,6 +1570,13 @@ def main(arguments=None):
                     print(f"    conditional edit bytes {edit['start']}..{edit['end']}; replacement in JSON")
             for condition in previews.get('conditions', ()):
                 print(f"  condition: {condition}")
+        if 'conditional_modern_parent_union' in result:
+            row = result['conditional_modern_parent_union']
+            count = len(row['union']['edits']) if row.get('union') else 0
+            print(f"Conditional parent union: {row['status']}; {count} edits; source-only")
+            print('  Do not merge with other plans; execution, side effects and rendering are not proved.')
+            if row.get('reason'):
+                print(f"  withheld: {row['reason']}")
         if 'conditional_scoped_parent_transfer' in result:
             row = result['conditional_scoped_parent_transfer']
             count = sum(item['parent_transfer'] for item in row.get('parents', ()))
