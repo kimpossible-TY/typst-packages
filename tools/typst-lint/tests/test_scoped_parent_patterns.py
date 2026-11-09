@@ -26,6 +26,15 @@ class ScopedParentBlockerTests(unittest.TestCase):
     def issue(self, body):
         return self.fixture.run_source(body)
 
+    def existing_report_at_exact_budget(self, options, minimum):
+        """Check both sides of this fixture's explicitly counted boundary."""
+        root = str(self.fixture.fixture.project)
+        with patch.object(document_cli, 'MAX_REPORT_ITEMS', minimum - 1):
+            with self.assertRaisesRegex(InputError, 'Document inspection report item limit exceeded'):
+                document_cli.report_document(root, 'main.typ', **options)
+        with patch.object(document_cli, 'MAX_REPORT_ITEMS', minimum):
+            return document_cli.report_document(root, 'main.typ', **options)
+
     def test_source_locations_explain_unverified_calls_and_wrapper(self):
         body = (b'#local-tag-scope(s => [\n'
                 b'#local-scope-annotations(m => [#annot((m.tag)("x"))], parent:s,name:"child")\n'
@@ -101,8 +110,9 @@ class ScopedParentBlockerTests(unittest.TestCase):
                     footnote_cache_path=str(self.fixture.fixture.cache), modern_highlight_evidence=True,
                     preview_conditional_modern_highlights=True, preview_conditional_modern_scoped_references=True,
                     preview_conditional_scoped_calls=True)
-        with patch.object(document_cli, 'MAX_REPORT_ITEMS', 92):
-            off = document_cli.report_document(str(self.fixture.fixture.project), 'main.typ', **opts)
+        minimum = 93  # Previously 92, before the extra raw annotation condition.
+        off = self.existing_report_at_exact_budget(opts, minimum)
+        with patch.object(document_cli, 'MAX_REPORT_ITEMS', minimum):
             on = document_cli.report_document(str(self.fixture.fixture.project), 'main.typ',
                                               inspect_scoped_parent_patterns=True, **opts)
         inventory = on.pop('scoped_parent_patterns')
@@ -121,8 +131,9 @@ class ScopedParentBlockerTests(unittest.TestCase):
                     footnote_cache_path=str(self.fixture.fixture.cache), modern_highlight_evidence=True,
                     preview_conditional_modern_highlights=True, preview_conditional_modern_scoped_references=True,
                     preview_conditional_scoped_calls=True)
-        with patch.object(document_cli, 'MAX_REPORT_ITEMS', 65):
-            off = document_cli.report_document(str(self.fixture.fixture.project), 'main.typ', **opts)
+        minimum = 66  # Previously 65 for the unavailable package variant.
+        off = self.existing_report_at_exact_budget(opts, minimum)
+        with patch.object(document_cli, 'MAX_REPORT_ITEMS', minimum):
             on = document_cli.report_document(str(self.fixture.fixture.project), 'main.typ',
                                               inspect_scoped_parent_patterns=True, **opts)
         inventory = on.pop('scoped_parent_patterns')
