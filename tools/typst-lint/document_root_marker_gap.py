@@ -1,4 +1,4 @@
-"""Conditional root marker-gap hints after a literal heading or display.
+"""Conditional root marker-gap hints after a heading, display or literal call.
 
 This recognizes source syntax only. Marker binding, execution and rendering
 remain unproved, and no source edit or compilation permission is granted.
@@ -16,6 +16,27 @@ from typst_lint import Diagnostic, InputError, load_rules
 
 _NAME = 'paragraph_tab'
 _ASSIGNMENTS = frozenset(('Eq', 'PlusEq', 'HyphEq', 'StarEq', 'SlashEq'))
+_CONTENT_CALLS = frozenset((b'block', b'definition', b'flowbox'))
+
+
+def _direct_content_call(tree, children, position):
+    """A named, block-shaped #name[...] sibling without dynamic arguments."""
+    if position < 1:
+        return False
+    nodes = tree.nodes
+    call = nodes[children[position]]
+    hash_node = nodes[children[position - 1]]
+    if call.kind != 'FuncCall' or hash_node.kind != 'Hash' or hash_node.end != call.start:
+        return False
+    parts = import_graph.significant(tree, children[position])
+    if len(parts) != 2 or nodes[parts[0]].kind != 'Ident' or nodes[parts[1]].kind != 'Args':
+        return False
+    callee = nodes[parts[0]]
+    if tree.source[callee.start:callee.end] not in _CONTENT_CALLS:
+        return False
+    args = import_graph.significant(tree, parts[1])
+    return (len(args) == 1 and nodes[args[0]].kind == 'ContentBlock'
+            and nodes[args[0]].end == call.end)
 
 
 def _explicit_shadow(tree):
@@ -111,7 +132,8 @@ def analyze(tree, path, *, catalog=None):
                     or owner.kind != 'Equation' or owner.display is not True):
                 continue
             prior = owner
-        if not (prior.kind == 'Heading' or prior.kind == 'Equation' and prior.display is True):
+        if not (prior.kind == 'Heading' or prior.kind == 'Equation' and prior.display is True
+                or _direct_content_call(tree, children, prior_pos)):
             continue
         # Keep target analysis separate; this path only admits following prose.
         following = position + 1

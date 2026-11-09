@@ -25,10 +25,13 @@ class RootMarkerGapTests(unittest.TestCase):
         self.assertFalse(result.edits)
         return result
 
-    def test_direct_root_heading_display_and_labeled_display(self):
+    def test_direct_root_heading_display_and_literal_content_call(self):
         cases = (b'= Heading\n#paragraph_tab\nText.',
                  b'$ x $\n#paragraph_tab\nText.',
                  b'$ x $ <eq>\n#paragraph_tab\nText.',
+                 b'#definition[Statement.]\n#paragraph_tab\nText.',
+                 b'#flowbox[Statement.]\n#paragraph_tab\nText.',
+                 b'#block[Statement.]\n#paragraph_tab\nText.',
                  '= 제목\r\n  #paragraph_tab\r\nText.'.encode())
         for source in cases:
             with self.subTest(source=source):
@@ -44,7 +47,16 @@ class RootMarkerGapTests(unittest.TestCase):
         cases = (b'= Heading\n\n#paragraph_tab\nText.',
                  b'$ x $\n\n#paragraph_tab\nText.',
                  b'$x$\n#paragraph_tab\nText.',  # inline math
-                 b'#block[Text.]\n#paragraph_tab\nText.',
+                 b'#block(breakable: false)[Text.]\n#paragraph_tab\nText.',
+                 b'#flowbox()[Text.]\n#paragraph_tab\nText.',
+                 b'#block(dynamic)[Text.]\n#paragraph_tab\nText.',
+                 b'#ns.block[Text.]\n#paragraph_tab\nText.',
+                 b'#block[Text.] <label>\n#paragraph_tab\nText.',
+                 b'#block[Text.] // comment\n#paragraph_tab\nText.',
+                 b'#block[Text.]\n// comment\n#paragraph_tab\nText.',
+                 b'#block[Text.]\n\n#paragraph_tab\nText.',
+                 b'#block[#definition[Text.]\n#paragraph_tab\nText.]',
+                 b'`#block[Text.]\n#paragraph_tab\nText.`',
                  b'#box[$ x $]\n#paragraph_tab\nText.',
                  b'#block[= Heading\n#paragraph_tab\nText.]',
                  b'$ x $\n#paragraph_tab\n$ y $',
@@ -89,12 +101,20 @@ class RootMarkerGapTests(unittest.TestCase):
                        b'#paragraph_tab\nText.')
         self.assertFalse(self.analyze(intervening).diagnostics)
 
+    def test_root_literal_block_does_not_duplicate_local_hint(self):
+        source = b'#block[Inside.]\n#paragraph_tab\nOutside.'
+        _, values = document_local_rules.analyze(parse(source), 'fixture.typ', load_rules()[0]['rules'])
+        result = values['pde.paragraph-marker-gap']
+        self.assertEqual(len(result.diagnostics), 1)
+        self.assertFalse(result.edits)
+
     def test_malformed_source_is_not_diagnosed(self):
         result = root_gap.analyze(parse(b'= Heading\n#paragraph_tab\n#let x = ('), 'fixture.typ')
         self.assertFalse(result.diagnostics or result.edits)
 
     def test_cli_hint_is_opt_in_and_does_not_modify_source(self):
-        source = b'= Heading\n#paragraph_tab\nText.\n\n$ x $ <eq>\n#paragraph_tab\nMore.'
+        source = (b'= Heading\n#paragraph_tab\nText.\n\n$ x $ <eq>\n#paragraph_tab\nMore.\n\n'
+                  b'#definition[Statement.]\r\n#paragraph_tab\r\nNext.')
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory).resolve()
             entry = root / 'main.typ'
@@ -113,7 +133,7 @@ class RootMarkerGapTests(unittest.TestCase):
             hints = hinted['local_rule_hints']
             matches = [row for row in hints['diagnostics']
                        if row['rule_id'] == 'pde.paragraph-marker-gap']
-            self.assertEqual([row['line'] for row in matches], [2, 6])
+            self.assertEqual([row['line'] for row in matches], [2, 6, 10])
             self.assertFalse(hinted['applied_fixes'] or hinted['compiler_invoked'])
             self.assertEqual(entry.read_bytes(), source)
 
