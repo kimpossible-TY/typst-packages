@@ -105,6 +105,7 @@ inspection route:
 /path/to/typst-packages/tools/typst-lint/typst-lint inspect-document --root /absolute/project --entrypoint main.typ --rule-set pde --preview-conditional-punctuation --format json
 /path/to/typst-packages/tools/typst-lint/typst-lint inspect-document --root /absolute/project --entrypoint main.typ --rule-set pde --preview-conditional-spacers --format json
 /path/to/typst-packages/tools/typst-lint/typst-lint inspect-document --root /absolute/project --entrypoint main.typ --rule-set pde --preview-conditional-scoped-calls --format json
+/path/to/typst-packages/tools/typst-lint/typst-lint inspect-document --root /absolute/project --entrypoint main.typ --rule-set pde --package-path /absolute/captured-packages --footnote-cache-path /absolute/captured-cache --preview-conditional-scoped-calls --cetz-annotation-manifest /absolute/resources.json --format json
 /path/to/typst-packages/tools/typst-lint/typst-lint inspect-document --root /absolute/project --entrypoint main.typ --rule-set pde --preview-conditional-continuations --format json
 /path/to/typst-packages/tools/typst-lint/typst-lint inspect-document --root /absolute/project --entrypoint main.typ --rule-set pde --preview-conditional-capitalization --format json
 /path/to/typst-packages/tools/typst-lint/typst-lint inspect-document --root /absolute/project --entrypoint main.typ --rule-set pde --preview-conditional-paragraph-gaps --format json
@@ -142,6 +143,15 @@ lexically inside displays and conditionally reports calls outside them, includin
 wrappers in deferred outer contexts. Runtime bindings, execution and display
 ownership remain unproved; hints can duplicate the independent raw annotation
 section and never authorize edits or compilation.
+
+The opt-in `--cetz-annotation-manifest` adds a separate conditional report for
+supported detached scoped annotations containing a captured CeTZ draw wildcard.
+It requires both explicit namespace roots and `--preview-conditional-scoped-calls`.
+The manifest uses the [document resource capture format](DOCUMENT_RESOURCE_CAPTURE_CONTRACT.md),
+and its project, packages and cache roots must match the selected roots. The
+command analyzes the included sources and captures all explicitly listed resources,
+so this option adds time and memory use. It does not execute callbacks, compile,
+apply edits, or prove runtime bindings, transitive effects or complete coverage.
 
 The separately selected `--modern-highlight-evidence` uses both explicit package
 roots and recognizes only the reviewed main-c161707 `text-utils` 0.1.2 source

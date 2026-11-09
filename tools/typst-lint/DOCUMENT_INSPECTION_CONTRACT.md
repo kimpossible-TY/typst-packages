@@ -149,6 +149,21 @@ unresolved context; they include bounded deferred outer contexts, but withhold
 calls whose arguments may mutate or expose the scoped receiver. The separate
 original-compile `--lint-local-hints` summary includes bounded samples. They
 do not produce edits or complete rule coverage.
+
+The additional `--cetz-annotation-manifest /absolute/resources.json` option
+requires `--preview-conditional-scoped-calls`, `--package-path` and
+`--footnote-cache-path`. It captures the explicit bounded resource manifest,
+requires its project, packages and cache roots to match the selected roots, and
+reports supported CeTZ draw wildcard candidates separately in
+`conditional_cetz_detached_annotations`. Source bytes, selected CeTZ namespace,
+and reviewed `draw.typ`, `shapes.typ` and `styling.typ` hashes are checked.
+Only `line`, `bezier-through` and `set-style` calls are selected. Runtime
+bindings, callback execution, display ownership and transitive function effects
+remain conditions; no edit or compiler authority is granted. Other dynamic
+contexts and calls are unresolved, and this does not establish full rule
+coverage. The option runs the normal included-source analysis and additionally
+captures the selected resources, increasing time and memory use. Invalid or
+changed evidence and exceeded item, work or serialized-byte budgets fail closed.
 The separate `conditional_raw_overlays` report covers a narrow direct
 `annot-cetz` spelling outside displays. Its helper identity and execution are
 likewise conditional; alias/shadow and unsupported contexts are withheld.

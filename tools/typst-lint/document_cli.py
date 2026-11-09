@@ -44,6 +44,7 @@ def report_document(root, entrypoint, *, rule_set='core', package_path=None,
                     footnote_cache_path=None,
                     footnote_punctuation_evidence=False,
                     modern_highlight_evidence=False,
+                    cetz_annotation_manifest=None,
                     preview_conditional_modern_highlights=False,
                     preview_conditional_modern_math_highlights=False,
                     reference_package_path=None, reference_facade=None, reference_cache_path=None,
@@ -109,6 +110,9 @@ def report_document(root, entrypoint, *, rule_set='core', package_path=None,
     require(type(modern_highlight_evidence) is bool
             and (not modern_highlight_evidence or footnote_cache_path is not None),
             'Modern highlight evidence requires --rule-set pde, --package-path and --footnote-cache-path')
+    require(cetz_annotation_manifest is None or (type(cetz_annotation_manifest) is str
+            and preview_conditional_scoped_calls and footnote_cache_path is not None),
+            'CeTZ annotation manifest requires --preview-conditional-scoped-calls, --package-path and --footnote-cache-path')
     require(type(preview_conditional_modern_highlights) is bool
             and (not preview_conditional_modern_highlights or modern_highlight_evidence),
             'Modern highlight previews require --modern-highlight-evidence')
@@ -783,6 +787,39 @@ def report_document(root, entrypoint, *, rule_set='core', package_path=None,
                     coverage['independent_preview_candidate_sha256'] = (standalone_preview['candidate_sha256']
                                                                          if standalone_preview else None)
                 files.append(coverage)
+    cetz_annotations = None
+    if cetz_annotation_manifest is not None:
+        from document_preview_cli import load_manifest
+        import document_resources
+        from document_footnote_evidence import PreviewFootnoteEvidence, _valid as valid_preview_evidence
+        import document_cetz_detached_annotations as cetz_detached
+        roots, requests, allow = load_manifest(cetz_annotation_manifest, root)
+        require(roots.get('packages') == footnote_roots.roots[0]
+                and roots.get('cache') == footnote_roots.roots[1],
+                'Manifest package and cache roots must match the selected namespace roots')
+        snapshot = document_resources.capture(roots, requests, allow_apple_asset_fonts=allow)
+        proof = PreviewFootnoteEvidence(footnote_session, snapshot)
+        prefix = 'Callback or annotation argument effects are unsupported at byte '
+        candidates = [row for row in conditional_detached_annotations
+                      if any(reason.startswith(prefix) for reason in row['unresolved'])]
+        by_path = {item.path: item for item in captured.sources}
+        work = sum(len(by_path[row['path']].tree.nodes)
+                   * sum(reason.startswith(prefix) for reason in row['unresolved']) for row in candidates)
+        require(work <= cetz_detached.MAX_NODE_WORK, 'CeTZ scoped annotation total work limit exceeded')
+        inspected = []
+        for row in candidates:
+            finding = cetz_detached.analyze(proof, row['path'], catalog=catalog['rules'])
+            items += (1 + len(finding['diagnostics']) + len(finding['suppressed'])
+                      + len(finding['unresolved']) + len(finding['conditions']))
+            require(items <= MAX_REPORT_ITEMS, 'Document inspection report item limit exceeded')
+            inspected.append(finding)
+        valid_preview_evidence(proof)
+        cetz_annotations = dict(by_file=inspected, captured_sources=len(captured.sources),
+                                candidate_sources=len(candidates), status='PARTIAL',
+                                runtime_binding_proved=False, execution_proved=False,
+                                coverage_complete=False, edit_permission=False, compiler_permission=False)
+        require(len(json.dumps(cetz_annotations, ensure_ascii=False).encode('utf-8')) <= MAX_MODERN_REPORT_BYTES,
+                'CeTZ scoped annotation report size limit exceeded')
     findings.sort(key=lambda row: (row['path'], row['line'], row['column'], row['rule_id']))
     suppressed.sort(key=lambda row: (row['path'], row['line'], row['column'], row['rule_id']))
     conditional_findings.sort(key=lambda row: (row['path'], row['line'], row['column']))
@@ -868,6 +905,8 @@ def report_document(root, entrypoint, *, rule_set='core', package_path=None,
             scope='independent-source-pattern-not-composed-or-render-verified')
         report['conditional_detached_annotations'] = dict(by_file=conditional_detached_annotations,
             edit_permission=False, compiler_permission=False, coverage_complete=False)
+        if cetz_annotations is not None:
+            report['conditional_cetz_detached_annotations'] = cetz_annotations
         report['conditional_raw_overlays'] = dict(by_file=conditional_raw_overlays,
             edit_permission=False, compiler_permission=False, coverage_complete=False)
         report['conditional_raw_annotations'] = dict(by_file=conditional_raw_annotations,
@@ -942,7 +981,8 @@ def report_document(root, entrypoint, *, rule_set='core', package_path=None,
         report['conditional_modern_math_previews'] = modern_math_previews
     if modern_highlight_report is not None:
         require(valid_footnote_session(footnote_session), 'Conditional highlight capture changed during inspection')
-    if modern_highlight_report is not None or import_obligation_report is not None:
+    if (modern_highlight_report is not None or import_obligation_report is not None
+            or cetz_annotations is not None):
         require(len(json.dumps(report, ensure_ascii=False, sort_keys=True, indent=2).encode('utf-8'))
                 <= MAX_MODERN_REPORT_BYTES,
                 'Document inspection report byte limit exceeded')
@@ -969,6 +1009,8 @@ def main(arguments=None):
                         help='Report separately sourced conditional prose footnote punctuation hints (requires --footnote-cache-path)')
     parser.add_argument('--modern-highlight-evidence', action='store_true',
                         help='Report the exact modern text-utils highlighted variant (requires --package-path and --footnote-cache-path)')
+    parser.add_argument('--cetz-annotation-manifest',
+                        help='Capture an explicit resource manifest for conditional CeTZ annotation hints (requires scoped-call previews and both namespace roots)')
     parser.add_argument('--preview-conditional-modern-highlights', action='store_true',
                         help='Preview simple modern highlight splits (requires --modern-highlight-evidence)')
     parser.add_argument('--preview-conditional-modern-math-highlights', action='store_true',
@@ -1024,6 +1066,7 @@ def main(arguments=None):
                                  footnote_cache_path=args.footnote_cache_path,
                                  footnote_punctuation_evidence=args.footnote_punctuation_evidence,
                                  modern_highlight_evidence=args.modern_highlight_evidence,
+                                 cetz_annotation_manifest=args.cetz_annotation_manifest,
                                  preview_conditional_modern_highlights=args.preview_conditional_modern_highlights,
                                  preview_conditional_modern_math_highlights=args.preview_conditional_modern_math_highlights,
                                  preview_display_gaps=args.preview_display_gaps,
@@ -1400,6 +1443,20 @@ def main(arguments=None):
                     print(f"  {row['path']}: unresolved: {reason}")
             if detached['by_file']:
                 for condition in detached['by_file'][0]['conditions']:
+                    print(f"  condition: {condition}")
+        if 'conditional_cetz_detached_annotations' in result:
+            cetz = result['conditional_cetz_detached_annotations']
+            print('Conditional captured CeTZ annotations: diagnostic-only, no edit or compiler permission')
+            for row in cetz['by_file']:
+                print(f"  {row['path']}: {row['status']}; source sha256 {row['source_sha256']}")
+                for label, entries in (('hint', row['diagnostics']), ('suppressed', row['suppressed'])):
+                    for entry in entries:
+                        print(f"    {label} {entry['path']}:{entry['line']}:{entry['column']}: "
+                              f"{entry['rule_id']}: {entry['explanation']}")
+                for reason in row['unresolved']:
+                    print(f"    unresolved: {reason}")
+            if cetz['by_file']:
+                for condition in cetz['by_file'][0]['conditions']:
                     print(f"  condition: {condition}")
         if 'conditional_raw_overlays' in result:
             raw_overlays = result['conditional_raw_overlays']
