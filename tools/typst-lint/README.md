@@ -203,6 +203,18 @@ remain withheld. The work budget is shared across the batch; exhaustion explicit
 the scoped portion while independently preserving eligible existing proposals. Execution, rendered equivalence, source writes and compiler
 permission are not proved. This option does not enable composed compilation.
 
+With `--preview-conditional-modern-literal-footnotes` and the combined preview
+option, inspection also reports independent source-only candidates for root
+literal `#footnote[...]` calls inside a modern highlight. Each plan is against
+the original captured source and is checked independently. **Do not merge
+these plans with each other or with the combined preview**: their union has not
+been revalidated. The check preserves one literal source call and its verified
+syntax and captured binding, not its runtime execution count. Dynamic or
+unresolved code is withheld. Actual execution, reference and custom show rules,
+footnote numbering, rendered output, source writes and compilation remain
+unproved. Work and report limits still apply; exceeding a report limit rejects
+the inspection rather than returning a partial combined report.
+
 For one source-only plan containing separate supported reviewed-math and scoped
 reference highlight splits, select `--preview-conditional-modern-combined-highlights`
 with `--modern-highlight-evidence`. It includes direct reference previews and

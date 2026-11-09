@@ -110,3 +110,25 @@ whole inspection; if exceeded the inspection fails rather than returning a
 partial report. Preservation of existing report sections applies to successful
 inspections. Runtime binding, label resolution, execution, rendering,
 source edits, publication and compiler permission remain unproved.
+
+## Independent literal footnote plans
+
+`--preview-conditional-modern-literal-footnotes` additionally requires the
+combined preview option. It returns separate plans, each against the original
+captured source; neither these plans nor edits from other reports may be merged
+without independent union verification. Only one direct root builtin
+`#footnote[literal content]` in a root highlighted call is considered. Its
+issued captured binding, source hash, exact source bytes, subtree, owner and
+single occurrence are rechecked after the candidate is reparsed. Nested
+equations within the preserved footnote and equations moved outside the
+highlight have separate ownership maps. Existing active and suppressed script
+and footnote diagnostics are reanalyzed, and changed suppression targets or
+other overlapping diagnostics withhold that plan.
+
+Dynamic code, unproved bindings, other call forms and unsupported content
+withhold the affected plan. Report item/byte and per-batch work limits apply.
+Successful reports preserve the existing combined plan; global report-budget
+exhaustion fails the whole inspection. A single retained call in source does
+not prove how often it executes. Runtime binding, side effects, custom show
+rules, reference resolution, footnote numbering, rendered output, source
+writes and compilation are not proved or authorized.

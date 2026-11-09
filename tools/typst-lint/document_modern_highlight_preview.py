@@ -75,7 +75,7 @@ def _prose_signature(tree, index):
 
 
 def _select(tree, diagnostics, *, proven_math_spans=frozenset(), allow_direct_references=False,
-            proven_scoped_references=frozenset()):
+            proven_scoped_references=frozenset(), proven_literal_footnotes=frozenset()):
     nodes, source = tree.nodes, tree.source
     parents = {child: index for index, node in enumerate(nodes) for child in node.children}
     positions = {child: pos for node in nodes for pos, child in enumerate(node.children)}
@@ -113,15 +113,16 @@ def _select(tree, diagnostics, *, proven_math_spans=frozenset(), allow_direct_re
             continue
         # A scoped reference is an inseparable Hash + proven call. All other
         # executable markup remains outside this opt-in source-only route.
+        proven_calls = proven_scoped_references | proven_literal_footnotes
         for pos, child in enumerate(children):
             if child.kind in supported:
                 continue
             if child.kind == 'Hash' and pos + 1 < len(children):
                 following = children[pos + 1]
-                if following.kind == 'FuncCall' and child.end == following.start and (following.start, following.end) in proven_scoped_references:
+                if following.kind == 'FuncCall' and child.end == following.start and (following.start, following.end) in proven_calls:
                     continue
             if child.kind == 'FuncCall' and pos and children[pos - 1].kind == 'Hash':
-                if children[pos - 1].end == child.start and (child.start, child.end) in proven_scoped_references:
+                if children[pos - 1].end == child.start and (child.start, child.end) in proven_calls:
                     continue
             break
         else:
