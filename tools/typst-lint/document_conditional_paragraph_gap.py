@@ -35,7 +35,7 @@ def preview(tree, path, *, catalog=None):
     try:
         if tree.mode != 'markup' or tree.nodes[0].errors:
             raise SafetyError('Requires well-formed markup source')
-        before = paragraph_rules.analyze_conditional_nested_gap(tree, path, catalog=records)
+        before = paragraph_rules.analyze_conditional_nested_gap(tree, path, catalog=records, _allow_first_content=True)
         unresolved = tuple(reason for reason in before.skips
                            if reason.startswith(paragraph_rules.NESTED_GAP_UNRESOLVED))
         if unresolved:
@@ -60,7 +60,7 @@ def preview(tree, path, *, catalog=None):
         if (parsed.nodes[0].errors or _syntax_signature(tree) != _syntax_signature(parsed)
                 or _scopes(tree, records, proposal.edits) != _scopes(parsed, records)):
             raise SafetyError('Marker gap preview changed non-whitespace syntax or suppression targets')
-        after = paragraph_rules.analyze_conditional_nested_gap(parsed, path, catalog=records)
+        after = paragraph_rules.analyze_conditional_nested_gap(parsed, path, catalog=records, _allow_first_content=True)
         if (after.diagnostics or after.parse_errors
                 or _keys(source, before.suppressed, proposal.edits) != _keys(candidate, after.suppressed)):
             raise SafetyError('Marker gap preview changed suppressed findings or did not converge')

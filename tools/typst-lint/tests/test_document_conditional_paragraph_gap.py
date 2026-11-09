@@ -76,15 +76,53 @@ class ConditionalParagraphGapTests(unittest.TestCase):
                 result = self.preview(source)
                 self.assertTrue(result is None or not result['edits'], result)
 
-    def test_first_content_marker_has_unresolved_preceding_ownership(self):
-        for source in (b'#block[\n#paragraph_tab\nNext.]',
-                       b'Text outside.\n#block[\n#paragraph_tab\nNext.]'):
+    def test_first_content_marker_gets_conditional_blank_line(self):
+        for newline in (b'\n', b'\r\n'):
+            for outside in (b'', b'Text outside.' + newline):
+                source = outside + b'#block[' + newline + b'  #paragraph_tab' + newline + b'Next.]'
+                with self.subTest(source=source):
+                    hints = paragraph_rules.analyze_conditional_nested_gap(parse(source), 'main.typ', _allow_first_content=True)
+                    self.assertEqual(len(hints.diagnostics), 1)
+                    self.assertFalse(any(reason.startswith(paragraph_rules.NESTED_GAP_UNRESOLVED)
+                                         for reason in hints.skips))
+                    result, candidate = self.candidate(source)
+                    self.assertEqual(len(result['edits']), 1)
+                    self.assertEqual(candidate, source.replace(b'#block[' + newline,
+                                                              b'#block[' + newline + newline))
+
+    def test_first_marker_stays_unresolved_in_composed_compile_path(self):
+        import document_sequence_preview as sequence
+        from typst_lint import load_rules
+        source = b'#block[\n#paragraph_tab\nThis holds#footnote[Reason.].]'
+        tree = parse(source)
+        baseline = paragraph_rules.analyze_conditional_nested_gap(tree, 'main.typ')
+        self.assertTrue(any(reason.startswith(paragraph_rules.NESTED_GAP_UNRESOLVED)
+                            for reason in baseline.skips))
+        result, _ = self.candidate(source)
+        self.assertEqual(len(result['edits']), 1)
+        record = sequence.preview(tree, 'main.typ', load_rules()[0]['rules'],
+                                  conditional_adjacent_punctuation=True)
+        self.assertEqual(record['verification'], 'withheld')
+        self.assertFalse(record['steps'])
+
+    def test_first_marker_suppression_and_unknown_binding_remain_conditional(self):
+        suppressed = (b'// typst-lint: ignore-next pde.paragraph-marker-gap -- intentional\n'
+                      b'#block[\n#paragraph_tab\nNext.]')
+        hints = paragraph_rules.analyze_conditional_nested_gap(parse(suppressed), 'main.typ', _allow_first_content=True)
+        self.assertFalse(hints.diagnostics)
+        self.assertEqual(len(hints.suppressed), 1)
+        self.assertIsNone(self.preview(suppressed))
+        shadow = b'#let paragraph_tab = []\n#block[\n#paragraph_tab\nNext.]'
+        result, _ = self.candidate(shadow)
+        self.assertFalse(result['runtime_binding_proved'] or result['execution_proved'])
+        self.assertTrue(any('resolves' in condition for condition in result['conditions']))
+
+    def test_first_marker_with_comment_or_dynamic_prefix_stays_unproved(self):
+        cases = (b'#block[\n// ordinary comment\n#paragraph_tab\nNext.]',
+                 b'#block[\n#unknown()\n#paragraph_tab\nNext.]',
+                 b'#block[\n#let paragraph_tab = []\n#paragraph_tab\nNext.]')
+        for source in cases:
             with self.subTest(source=source):
-                tree = parse(source)
-                hints = paragraph_rules.analyze_conditional_nested_gap(tree, 'main.typ')
-                self.assertFalse(hints.diagnostics)
-                self.assertTrue(any(reason.startswith(paragraph_rules.NESTED_GAP_UNRESOLVED)
-                                    for reason in hints.skips))
                 result = self.preview(source)
                 self.assertEqual(result['verification'], 'withheld')
                 self.assertFalse(result['edits'])
@@ -127,7 +165,7 @@ class ConditionalParagraphGapTests(unittest.TestCase):
             self.assertEqual(len(rows), 1)
             reasons = [reason for reason in rows[0]['reasons']
                        if reason.startswith(paragraph_rules.NESTED_GAP_UNRESOLVED)]
-            self.assertEqual(len(reasons), 2)
+            self.assertEqual(len(reasons), 1)
             preview, = report['conditional_paragraph_gap_previews']['by_file']
             self.assertEqual(preview['verification'], 'withheld')
             self.assertEqual(preview['edits'], [])
@@ -176,7 +214,9 @@ class ConditionalParagraphGapTests(unittest.TestCase):
                          'Opt in with Typst and pdftoppm')
     def test_first_nested_marker_blank_line_does_not_separate_outer_prose(self):
         source = b'#let paragraph_tab = h(1em)\nText outside.\n#block[\n#paragraph_tab\nNext.]'
-        changed = source.replace(b'#block[\n#paragraph_tab', b'#block[\n\n#paragraph_tab')
+        if not subprocess.check_output(['typst', '--version'], text=True).startswith('typst 0.15.1 '):
+            self.skipTest('Fixture pins Typst 0.15.1')
+        _, changed = self.candidate(source)
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)
             images = []

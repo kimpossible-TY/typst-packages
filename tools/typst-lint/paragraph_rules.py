@@ -39,13 +39,15 @@ def _diagnostic(source, path, rule, start, explanation):
     return Diagnostic(rule['id'], rule['grade'], path, line, column, explanation, rule['source'])
 
 
-def analyze_conditional_nested_gap(tree, path, *, catalog=None):
+def analyze_conditional_nested_gap(tree, path, *, catalog=None, _allow_first_content=False):
     """Find standalone marker-shaped tokens in nested literal markup only.
 
     These are source patterns: the identifier's binding, execution and prose
     ownership are not established.  No repair is proposed, and callers must not
     interpret an empty result as coverage of arbitrary rendered content.
     """
+    if type(_allow_first_content) is not bool:
+        raise InputError('First-content marker selection must be boolean')
     source, nodes = tree.source, tree.nodes
     if nodes[0].errors:
         errors = tuple((n.start, n.end) for n in nodes if n.kind == 'Error')
@@ -105,9 +107,17 @@ def analyze_conditional_nested_gap(tree, path, *, catalog=None):
             while prior >= 0 and nodes[children[prior]].kind in ('Space', 'Parbreak', 'LineComment', 'BlockComment'):
                 prior -= 1
             previous_node = nodes[children[prior]] if prior >= 0 else None
-            if (previous_node is None or previous_node.kind != 'Text'
+            # The opening of a literal content block is not a blank source
+            # line. Admit only a first marker directly after that opening and
+            # one LF/CRLF, with no intervening comments or executable syntax.
+            # Its binding and execution remain conditional like other hints.
+            owner = parents.get(body_id)
+            first_in_block = (_allow_first_content and previous_node is None and owner is not None
+                              and nodes[owner].kind == 'ContentBlock'
+                              and re.fullmatch(rb'\r?\n[ \t]*', source[body.start:start]) is not None)
+            if (not first_in_block and (previous_node is None or previous_node.kind != 'Text'
                     or not any(char.isalnum() for char in
-                               source[previous_node.start:previous_node.end].decode('utf-8'))):
+                               source[previous_node.start:previous_node.end].decode('utf-8')))):
                 if not ignored:
                     unresolved.append(NESTED_GAP_UNRESOLVED + str(start))
                 continue

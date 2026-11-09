@@ -94,11 +94,15 @@ source writes or compiler authority follow.
 
 The independent `--rule-set pde --preview-conditional-paragraph-gaps` option
 proposes an LF or CRLF blank line before a narrowly recognized nested standalone
-paragraph marker. Exact edits, suppression ownership, non-whitespace syntax and
-other supported source findings are rechecked; marker binding and prose execution
+paragraph marker, including the first marker immediately after a literal content
+block opening followed only by one LF/CRLF and indentation. Intervening comments
+or executable code remain unsupported. Exact edits, suppression ownership,
+non-whitespace syntax and other supported source findings are rechecked; marker binding and prose execution
 remain conditional. Adding a blank line can change rendered output: an isolated
 owned Typst fixture produced different PDFs. The proposal is not applied or
 composed and does not authorize compilation or establish whole-document coverage.
+The existing composed compiler path still treats that first-marker boundary as
+unresolved; explicitly requested local hints may contain the additional diagnosis.
 The independent `conditional_hyphen_marker_gap_previews` section covers root and
 nested literal `#paragraph-tab` source hints under the same option. It preserves
 the corresponding suppressed and other conditional findings. A preceding

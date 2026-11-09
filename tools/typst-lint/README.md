@@ -181,6 +181,14 @@ background from equations while retaining it on the surrounding prose. The
 helper also wraps equations in boxes, so a split can change equation width,
 line height, pagination or other visible layout; inspect the rendered result.
 
+The source-only `--preview-conditional-paragraph-gaps` inspection also covers
+a first `#paragraph_tab` after a literal content-block opening when only one
+LF/CRLF and indentation precede it. The opening is not a blank source line.
+Intervening comments or executable syntax remain unproved. Marker binding,
+execution and rendered layout are conditional; this independent plan does not
+authorize writes or compilation. The existing composed compiler path still
+withholds this boundary, though explicitly requested local hints may report it.
+
 The independent `--preview-conditional-gaps` inspection also offers separate
 source-only footnote-gap candidates before a literal `paragraph-tab` marker or
 direct `figure` call; their bindings, execution and rendering remain conditional.
