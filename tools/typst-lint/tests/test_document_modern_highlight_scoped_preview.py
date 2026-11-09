@@ -61,6 +61,19 @@ class ScopedReferencePreviewTests(unittest.TestCase):
         self.assertFalse(preview.preview_all(analyzer)['by_file'])
         self.assertEqual((self.fixture.project / 'main.typ').read_bytes(), source)
 
+    def test_scoped_reference_and_simple_script_remain_conditional(self):
+        body = b'#local-tag-scope(s => [#highlighted[See #(s.ref)("one") and $x_1$ after.]])'
+        source, _, _, result = self.run_source(body)
+        row, = result['by_file']
+        self.assertEqual(row['verification'], 'conditional-modern-highlight-syntax-directives-and-reanalysis')
+        edit, = row['edits']
+        candidate = plan(source, [Edit(edit['start'], edit['end'], edit['replacement'].encode())]).candidate()
+        self.assertIn(b'#(s.ref)("one")', candidate)
+        self.assertIn(b'$x_1$', candidate)
+        self.assertFalse(row['runtime_binding_proved'] or row['render_equivalence_proved']
+                         or row['edit_permission'] or row['compiler_permission'])
+        self.assertEqual((self.fixture.project / 'main.typ').read_bytes(), source)
+
     def test_shadow_mutation_dynamic_calls_and_dictionary_escape_are_refused(self):
         bodies = (
             b'#let s = (ref: x => x)\n#highlighted[See #(s.ref)("one") $x$]',
@@ -138,7 +151,7 @@ class ScopedReferencePreviewTests(unittest.TestCase):
         self.assertFalse(row['edits'])
 
     def test_budget_fallback_preserves_baseline_partial_subset_and_conflicts(self):
-        body = (b'#highlighted[Bad $x_1$ end.]\n#highlighted[Good $x$ end.]\n'
+        body = (b'#highlighted[Bad $ x $ end.]\n#highlighted[Good $x$ end.]\n'
                 b'#highlighted[More $y$ end.]\n'
                 b'#local-tag-scope(s => [#highlighted[See #(s.ref)("one") $z$]])')
         _, _, analyzer, _ = self.run_source(body)
@@ -189,7 +202,7 @@ class ScopedReferencePreviewTests(unittest.TestCase):
         self.assertEqual(result['status'], 'INCOMPLETE')
 
     def test_subset_recheck_budget_propagates_and_preserves_baseline(self):
-        body = (b'#highlighted[Bad $x_1$ end.]\n#highlighted[Good $x$ end.]\n'
+        body = (b'#highlighted[Bad $ x $ end.]\n#highlighted[Good $x$ end.]\n'
                 b'#local-tag-scope(s => [#highlighted[See #(s.ref)("one") $z$]])')
         _, _, analyzer, _ = self.run_source(body)
         baseline = preview.preview_all(analyzer)
@@ -209,7 +222,7 @@ class ScopedReferencePreviewTests(unittest.TestCase):
         self.assertEqual(result['status'], 'INCOMPLETE')
 
     def test_combined_subset_budget_reason_is_not_lost(self):
-        body = (b'#highlighted[Bad $x_1$ end.]\n#highlighted[Good $x$ end.]\n'
+        body = (b'#highlighted[Bad $ x $ end.]\n#highlighted[Good $x$ end.]\n'
                 b'#highlighted[More $y$ end.]\n'
                 b'#local-tag-scope(s => [#highlighted[See #(s.ref)("one") $z$]])')
         _, _, analyzer, _ = self.run_source(body)

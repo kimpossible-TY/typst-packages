@@ -90,7 +90,7 @@ class ModernHighlightCompileTests(unittest.TestCase):
                          and sys.platform == 'darwin' and compiler.SANDBOX.is_file(),
                          'Opt in on macOS with the pinned Typst compiler')
     def test_partial_candidates_keep_unpreviewed_gate_blocker(self):
-        source = fixtures.fixtures.IMPORT + (b'#highlighted[Bad $x_1$ end.]\n'
+        source = fixtures.fixtures.IMPORT + (b'#highlighted[Bad $ x $ end.]\n'
                                              b'#highlighted[Good $x$ end.]')
         _, _, snapshot, _ = self.fixture.issue(source)
         manifest = self.project.parent / 'modern-manifest.json'

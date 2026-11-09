@@ -183,7 +183,7 @@ class CapturedModernHighlightTests(unittest.TestCase):
         self.assertEqual((result['source_count'], result['candidate_count']), (1, 1))
 
     def test_unselected_and_unsupported_diagnostics_remain_incomplete(self):
-        source = fixtures.IMPORT + (b'#highlighted[Bad $x_1$ end.]\n'
+        source = fixtures.IMPORT + (b'#highlighted[Bad $ x $ end.]\n'
                                     b'#highlighted[Good $x$ end.]')
         proof, analyzer, _, staged = self.issue(source)
         candidate = self.candidate_map(analyzer, staged)

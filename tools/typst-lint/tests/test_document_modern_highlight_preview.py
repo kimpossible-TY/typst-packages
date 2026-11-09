@@ -245,11 +245,113 @@ class ModernHighlightPreviewTests(unittest.TestCase):
         self.assertEqual(row['verification'], 'withheld')
         self.assertFalse(row['edits'])
 
+    def test_simple_equations_preserve_script_diagnostics_across_splits(self):
+        cases = (
+            (b'#highlighted[Before $x_1$ after.]', 1, 1),
+            (b'#highlighted[Before $x_1^2$ and $y_2 + z^3$ after.]', 4, 1),
+            ('#highlighted[한글 $x_1$ after.]\n#highlighted[é $z^2$ end.]'.encode(), 2, 2),
+        )
+        for body, count, edit_count in cases:
+            with self.subTest(body=body):
+                source, candidate, result = self.candidate(body)
+                self.assertEqual(result['previewed_diagnostics'], edit_count)
+                before = preview.analyze_scripts(parse(source), 'main.typ', _verify=False, _allow_code_call=True)
+                after = preview.analyze_scripts(parse(candidate), 'main.typ', _verify=False, _allow_code_call=True)
+                self.assertEqual((len(before.diagnostics), len(after.diagnostics)), (count, count))
+                self.assertEqual(len(before.suppressed), len(after.suppressed))
+                old_tree, new_tree = parse(source), parse(candidate)
+                for old, new in zip(before.diagnostics, after.diagnostics):
+                    old_pos = preview._FindingMapper(source, ()).offset(old)
+                    new_pos = preview._FindingMapper(candidate, ()).offset(new)
+                    old_equation, = (n for n in old_tree.nodes if n.kind == 'Equation' and n.start <= old_pos < n.end)
+                    new_equation, = (n for n in new_tree.nodes if n.kind == 'Equation' and n.start <= new_pos < n.end)
+                    self.assertEqual(old_pos - old_equation.start, new_pos - new_equation.start)
+                    self.assertEqual((old.rule_id, old.grade, old.explanation, old.source),
+                                     (new.rule_id, new.grade, new.explanation, new.source))
+                for equation in (b'$x_1$', b'$x_1^2$', b'$y_2 + z^3$', b'$z^2$'):
+                    if equation in source:
+                        self.assertEqual(source.count(equation), candidate.count(equation))
+                self.assertEqual((self.project / 'main.typ').read_bytes(), source)
+
+    def test_simple_equation_script_suppression_and_tampering_are_withheld(self):
+        body = (b'// typst-lint: ignore-next core.parenthesized-scripts -- deliberate\n'
+                b'#highlighted[Before $x_1$ after.]')
+        _, _, _, result = self.proposal(body)
+        row, = result['by_file']
+        self.assertEqual(row['verification'], 'withheld')
+        self.assertIn('suppression targets', row['reason'])
+        self.assertFalse(row['edits'])
+
+        source = fixtures.IMPORT + b'#highlighted[Before $x_1$ after.]'
+        session, _ = self.fixture.session(source)
+        analyzer = modern.ModernHighlightAnalyzer(session, scoped_callbacks=True)
+        original_parse = preview.parse
+        def tamper_candidate(data, *args, **kwargs):
+            return original_parse(data.replace(b'$x_1$', b'$y_1$'), *args, **kwargs)
+        with patch.object(preview, 'parse', side_effect=tamper_candidate):
+            row, = preview.preview_all(analyzer)['by_file']
+        self.assertEqual(row['verification'], 'withheld')
+        self.assertFalse(row['edits'])
+
+        original_scripts = preview.analyze_scripts
+        def drop_candidate_diagnostic(tree, *args, **kwargs):
+            result = original_scripts(tree, *args, **kwargs)
+            return replace(result, diagnostics=()) if tree.source != source else result
+        with patch.object(preview, 'analyze_scripts', side_effect=drop_candidate_diagnostic):
+            row, = preview.preview_all(analyzer)['by_file']
+        self.assertEqual(row['verification'], 'withheld')
+        self.assertIn('script findings', row['reason'])
+        self.assertFalse(row['edits'])
+
+    def test_nested_and_ambiguous_equation_ownership_is_not_proposed(self):
+        nested = b'#highlighted[Text $ #([nested $x_1$]) $ end.]'
+        source, _, _, result = self.proposal(nested)
+        equations = [n for n in parse(source).nodes if n.kind == 'Equation']
+        self.assertEqual(len(equations), 2)
+        self.assertLess(equations[0].start, equations[1].start)
+        self.assertLess(equations[1].end, equations[0].end)
+        self.assertFalse(any(row['edits'] for row in result['by_file']))
+        self.assertEqual(result['unpreviewed_diagnostics'], 1)
+
+        source, context, evidence, _ = self.proposal(b'#highlighted[Before $x_1$ after.]')
+        tree = context.source_for('main.typ').tree
+        diagnostics = evidence.analyze(tree, 'main.typ')['diagnostics']
+        edits, plans = preview._select(tree, diagnostics)
+        candidate = parse(plan(source, edits).candidate())
+        old = preview.analyze_scripts(tree, 'main.typ', _verify=False, _allow_code_call=True)
+        new = preview.analyze_scripts(candidate, 'main.typ', _verify=False, _allow_code_call=True)
+        equation, = (n for n in tree.nodes if n.kind == 'Equation')
+        ambiguous = replace(tree, nodes=tree.nodes + (equation,))
+        with self.assertRaisesRegex(SafetyError, 'ambiguous equations'):
+            preview._same_script_findings_with_moved_equations(ambiguous, old, candidate, new, edits, plans)
+
+    def test_many_edits_index_equations_with_one_tree_scan(self):
+        body = b''.join(b'Ordinary text.\n#highlighted[Before $x_1$ after.]\n' for _ in range(40))
+        source, context, evidence, _ = self.proposal(body)
+        tree = context.source_for('main.typ').tree
+        diagnostics = evidence.analyze(tree, 'main.typ')['diagnostics']
+        edits, plans = preview._select(tree, diagnostics)
+        self.assertEqual(len(edits), 40)
+        candidate = parse(plan(source, edits).candidate())
+        old = preview.analyze_scripts(tree, 'main.typ', _verify=False, _allow_code_call=True)
+        new = preview.analyze_scripts(candidate, 'main.typ', _verify=False, _allow_code_call=True)
+        class CountedNodes:
+            def __init__(self, nodes):
+                self.nodes, self.visits = nodes, 0
+            def __iter__(self):
+                for node in self.nodes:
+                    self.visits += 1
+                    yield node
+        counted = CountedNodes(tree.nodes)
+        self.assertTrue(preview._same_script_findings_with_moved_equations(
+            replace(tree, nodes=counted), old, candidate, new, edits, plans))
+        self.assertEqual(counted.visits, len(tree.nodes))
+
     def test_subset_keeps_conflicting_finding_and_rechecks_combination(self):
-        body = (b'#highlighted[Bad $x_1$ end.]\n'
+        body = (b'#highlighted[Bad $ x $ end.]\n'
                 b'#highlighted[Good $x$ end.]\n#highlighted()[More $y$ end.]')
         source, candidate, result = self.candidate(body)
-        self.assertIn(b'#highlighted[Bad $x_1$ end.]', candidate)
+        self.assertIn(b'#highlighted[Bad $ x $ end.]', candidate)
         self.assertIn(b'#highlighted[Good ]$x$#highlighted[ end.]', candidate)
         self.assertIn(b'#highlighted[More ]$y$#highlighted[ end.]', candidate)
         self.assertEqual((result['diagnostics_count'], result['previewed_diagnostics'],
@@ -272,7 +374,7 @@ class ModernHighlightPreviewTests(unittest.TestCase):
         self.assertFalse(row['edits'])
 
     def test_subset_work_is_bounded_and_suppression_is_not_retargeted(self):
-        body = (b'#highlighted[Bad $x_1$ end.]\n'
+        body = (b'#highlighted[Bad $ x $ end.]\n'
                 b'#highlighted[Good $x$ end.]\n#highlighted[More $y$ end.]')
         with patch.object(preview, 'MAX_SUBSET_CHECKS', 2):
             _, _, _, result = self.proposal(body)
@@ -292,7 +394,7 @@ class ModernHighlightPreviewTests(unittest.TestCase):
     def test_owned_partial_subset_renders_before_and_after(self):
         if not subprocess.check_output(['typst', '--version'], text=True).startswith('typst 0.15.1 '):
             self.skipTest('Fixture comparison pins Typst 0.15.1')
-        body = (b'#highlighted[Bad $x_1$ end.]\n'
+        body = (b'#highlighted[Bad $ x $ end.]\n'
                 b'#highlighted[Good $x$ end.]\n#highlighted[More $y$ end.]')
         source, candidate, result = self.candidate(body)
         self.assertEqual(result['previewed_diagnostics'], 2)

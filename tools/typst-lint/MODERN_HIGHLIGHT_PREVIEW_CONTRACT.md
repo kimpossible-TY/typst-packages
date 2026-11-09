@@ -23,7 +23,10 @@ Each equation is copied unchanged outside highlighting; nonempty prose segments
 are individually highlighted and whitespace bytes are preserved. Each file's
 edits are independent of other preview plans. Reparse checks equation and
 generated prose ownership, untouched syntax, suppression scopes and supported
-cross-rule diagnostics. When an existing finding falls inside a proposed edit,
+cross-rule diagnostics. Existing script diagnostics inside an unchanged moved
+equation are mapped to their new offsets and rechecked; ambiguous equation
+ownership or changed suppression targets are withheld. When another existing
+finding falls inside a proposed edit,
 the tool can check edits individually, exclude failed edits, and revalidate the
 combined subset against the original file, including excluded findings and
 suppression targets. Any other mismatch or failed combined check withholds the

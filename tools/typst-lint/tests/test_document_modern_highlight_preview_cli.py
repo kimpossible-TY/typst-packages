@@ -117,7 +117,7 @@ class ModernHighlightPreviewCliTests(unittest.TestCase):
         self.assertEqual((self.project / 'main.typ').read_bytes(), source)
 
     def test_partial_preview_reports_unpreviewed_conflicting_finding(self):
-        source = fixtures.IMPORT + (b'#highlighted[Bad $x_1$ end.]\n'
+        source = fixtures.IMPORT + (b'#highlighted[Bad $ x $ end.]\n'
                                     b'#highlighted[Good $x$ end.]')
         (self.project / 'main.typ').write_bytes(source)
         report = self.run_cli(*self.options(), '--preview-conditional-modern-highlights')
@@ -128,7 +128,7 @@ class ModernHighlightPreviewCliTests(unittest.TestCase):
         row, = section['by_file']
         edit, = row['edits']
         candidate = plan(source, [Edit(edit['start'], edit['end'], edit['replacement'].encode())]).candidate()
-        self.assertIn(b'#highlighted[Bad $x_1$ end.]', candidate)
+        self.assertIn(b'#highlighted[Bad $ x $ end.]', candidate)
         self.assertIn(b'#highlighted[Good ]$x$#highlighted[ end.]', candidate)
         self.assertEqual((self.project / 'main.typ').read_bytes(), source)
 

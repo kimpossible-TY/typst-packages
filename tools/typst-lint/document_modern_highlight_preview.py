@@ -261,9 +261,13 @@ def _same_script_findings_with_moved_equations(before_tree, before, after_tree, 
     """Map only script findings inside exactly preserved moved equations."""
     mapper = _MappedEdits(edits)
     moved = []
+    # Index once rather than rescanning the entire tree for each selected edit.
+    equations = sorted((n for n in before_tree.nodes if n.kind == 'Equation'), key=lambda n: n.start)
+    equation_starts = [n.start for n in equations]
     for edit, _, _, spans in plans:
-        originals = sorted((n for n in before_tree.nodes if n.kind == 'Equation'
-                            and edit.start < n.start and n.end <= edit.end), key=lambda n: n.start)
+        lo = bisect_right(equation_starts, edit.start)
+        hi = bisect_right(equation_starts, edit.end)
+        originals = [n for n in equations[lo:hi] if n.end <= edit.end]
         replacements = [(begin, end) for kind, begin, end, _ in spans
                         if kind in ('equation', 'reviewed-math-equation')]
         if len(originals) != len(replacements):
@@ -368,10 +372,12 @@ def _preview_source(evidence, tree, path, diagnostics, records, *, proven_math_s
             raise SafetyError('Highlight split changes display findings')
         before_scripts = analyze_scripts(tree, path, catalog=records, _verify=False, _allow_code_call=True)
         after_scripts = analyze_scripts(parsed, path, catalog=records, _verify=False, _allow_code_call=True)
-        scripts_match = (_same_script_findings_with_moved_equations(tree, before_scripts, parsed, after_scripts,
-                                                                   proposal.edits, plans)
-                         if proven_math_spans else _same_findings(tree, before_scripts, parsed, after_scripts,
-                                                                 proposal.edits))
+        # The selected equations are already re-parsed and checked byte-for-byte
+        # above, regardless of whether their math calls needed extra evidence.
+        # Map script findings only within those exact moved equations; all other
+        # locations must still survive the ordinary edit-offset mapping.
+        scripts_match = _same_script_findings_with_moved_equations(
+            tree, before_scripts, parsed, after_scripts, proposal.edits, plans)
         if not scripts_match:
             raise SafetyError('Highlight split changes script findings')
         notes_before = footnote_rules.analyze_conditional_nested(tree, path, before_resolution, catalog=records)
