@@ -19,7 +19,7 @@ from typst_lint import InputError, SafetyError, digest
 
 
 def stage(proof, records, *, profile='standard', partial_unsupported=False, withheld_records=None,
-          partial_unproven_binding=False, explicit_withheld_sources=(), conditional_continuations=False, conditional_capitalization=False,
+          partial_unproven_binding=False, explicit_withheld_sources=(), conditional_continuations=False, conditional_capitalization=False, conditional_prose_markers=False,
           conditional_adjacent_punctuation=False, sequence_facade_evidence=False,
           conditional_deferred_footnotes=False, reviewed_math=False, composed_references=False, phase_timings=None):
     """Derive both stages from issued inputs; never trust a caller's candidate."""
@@ -39,7 +39,7 @@ def stage(proof, records, *, profile='standard', partial_unsupported=False, with
     started = time.monotonic() if phase_timings is not None else None
     view = intermediate.derive(proof, stable_records, profile=profile, partial_unsupported=partial_unsupported,
         withheld_records=stable_withheld, partial_unproven_binding=partial_unproven_binding,
-        explicit_withheld_sources=explicit_withheld_sources, conditional_continuations=conditional_continuations, conditional_capitalization=conditional_capitalization,
+        explicit_withheld_sources=explicit_withheld_sources, conditional_continuations=conditional_continuations, conditional_capitalization=conditional_capitalization, conditional_prose_markers=conditional_prose_markers,
         conditional_adjacent_punctuation=conditional_adjacent_punctuation,
         sequence_facade_evidence=sequence_facade_evidence,
         conditional_deferred_footnotes=conditional_deferred_footnotes)
@@ -183,7 +183,7 @@ def stage(proof, records, *, profile='standard', partial_unsupported=False, with
         fallback, fallback_report, fallback_view = stage(proof, records, profile=profile,
             partial_unsupported=partial_unsupported, withheld_records=withheld_records,
             partial_unproven_binding=partial_unproven_binding, explicit_withheld_sources=explicit_withheld_sources,
-            conditional_continuations=conditional_continuations, conditional_capitalization=conditional_capitalization,
+            conditional_continuations=conditional_continuations, conditional_capitalization=conditional_capitalization, conditional_prose_markers=conditional_prose_markers,
             conditional_adjacent_punctuation=conditional_adjacent_punctuation,
             sequence_facade_evidence=sequence_facade_evidence,
             conditional_deferred_footnotes=conditional_deferred_footnotes,

@@ -415,3 +415,19 @@ For the first marker immediately inside a content block, the standalone option
 can withhold capitalization on unresolved ownership. The earlier explicitly
 selected `--conditional-gaps` stage can resolve the narrow supported opening
 boundary, after which capitalization may be selected.
+
+
+## Conditional prose paragraph markers
+
+`--conditional-prose-markers` explicitly adds a restricted source-only marker
+insertion stage to the replayed candidate. The default plan is unchanged. Only
+selected unsuppressed literal prose boundaries with ASCII-uppercase target text
+are considered; source/candidate syntax, insertion site ownership, unrelated
+diagnostics and suppression scopes are independently rechecked. Known local
+marker shadows, unresolved ownership or conservative work limits can omit
+candidates without reporting their individual reasons; the edit count is not a
+coverage assessment. Binding, paragraph show rules and execution remain
+unproved. An unavailable marker at runtime can make candidate compilation fail.
+Inserting the marker can visibly change indentation and pagination.
+The option grants no authority to modify the consumer source. PDF comparison is
+of all selected stages and does not attribute rendering differences to a rule.

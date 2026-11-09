@@ -107,6 +107,16 @@ def capitalization_preview_summary(records):
                 source_apply_authority=False)
 
 
+def prose_marker_preview_summary(records):
+    return dict(planned_edits=sum(len(step['edits']) for record in records for step in record['steps']
+                                  if step['rule_id'] == 'pde.prose-paragraph-marker'),
+                eligibility='Only selected literal prose boundaries are considered; runtime marker binding, show rules and execution are unproved. Budget, shadow or unresolved ownership may silently omit candidates; this is not a coverage assessment.',
+                render_effect='Inserting the marker may change indentation and pagination; an unavailable runtime marker can make candidate compilation fail.',
+                pdf_attribution='PDF comparison includes all selected stages and does not isolate this rule.',
+                runtime_binding_proved=False, execution_proved=False, render_equivalence_proved=False,
+                source_apply_authority=False)
+
+
 def adjacent_punctuation_summary(records):
     steps = [step for record in records for step in record['steps'] if step.get('atomic_edits') is True
              and step['rule_id'] == 'pde.prose-footnote-punctuation']
@@ -186,6 +196,8 @@ def main(arguments=None, *, gate=False):
                         help='Include non-overlapping, single-run monotonic phase durations in JSON; null means incomplete or not applicable. Argument errors and early PDF stream refusals produce no timings (requires --format json or --pdf-stdout)')
     parser.add_argument('--conditional-gaps', action='store_true',
                         help='Also preview conditional proof, selected nested math/prose-footnote (including both marker names, display or figure) and paragraph-marker gap edits')
+    parser.add_argument('--conditional-prose-markers', action='store_true',
+                        help='Preview conditional prose paragraph marker insertions; indentation may change')
     parser.add_argument('--conditional-capitalization', action='store_true',
                         help='Preview conditional paragraph capitalization; visible text may change')
     parser.add_argument('--conditional-continuations', action='store_true',
@@ -235,7 +247,7 @@ def main(arguments=None, *, gate=False):
     if args.compose_highlight_references and not args.compose_reviewed_math_highlights:
         parser.error('--compose-highlight-references requires --compose-reviewed-math-highlights')
     if args.conditional_modern_highlights and (args.conditional_gaps or args.conditional_punctuation
-            or args.conditional_spacers or args.conditional_facade_footnotes or args.conditional_continuations or args.conditional_capitalization
+            or args.conditional_spacers or args.conditional_facade_footnotes or args.conditional_continuations or args.conditional_capitalization or args.conditional_prose_markers
             or args.conditional_adjacent_punctuation or args.conditional_deferred_footnotes or args.partial_unsupported_preview
             or args.partial_unproven_binding_preview or args.withhold_source or args.review_edits
             or args.compose_modern_highlights):
@@ -301,7 +313,7 @@ def main(arguments=None, *, gate=False):
                                                            footnote_evidence=evidence,
                                                            classify_deferred=args.partial_unsupported_preview,
                                                            classify_unproven_binding=args.partial_unproven_binding_preview,
-                                                           conditional_continuations=args.conditional_continuations, conditional_capitalization=args.conditional_capitalization,
+                                                           conditional_continuations=args.conditional_continuations, conditional_capitalization=args.conditional_capitalization, conditional_prose_markers=args.conditional_prose_markers,
                                                            conditional_adjacent_punctuation=args.conditional_adjacent_punctuation,
                                                            conditional_deferred_footnotes=args.conditional_deferred_footnotes)
                 if record is not None:
@@ -422,7 +434,7 @@ def main(arguments=None, *, gate=False):
                                                            withheld_records=withheld if partial_requested else None,
                                                            partial_unproven_binding=args.partial_unproven_binding_preview,
                                                            explicit_withheld_sources=explicit_paths,
-                                                           conditional_continuations=args.conditional_continuations, conditional_capitalization=args.conditional_capitalization,
+                                                           conditional_continuations=args.conditional_continuations, conditional_capitalization=args.conditional_capitalization, conditional_prose_markers=args.conditional_prose_markers,
                                                            conditional_adjacent_punctuation=args.conditional_adjacent_punctuation,
                                                            conditional_deferred_footnotes=args.conditional_deferred_footnotes,
                                                            **compile_options)
@@ -453,6 +465,7 @@ def main(arguments=None, *, gate=False):
                           + (['pde.unaligned-footnote-no-spacer'] if args.conditional_spacers else [])
                           + (['pde.continuation-line'] if args.conditional_continuations else [])
                           + (['pde.paragraph-capitalization'] if args.conditional_capitalization else [])
+                          + (['pde.prose-paragraph-marker'] if args.conditional_prose_markers else [])
                           + (['pde.prose-footnote-punctuation'] if args.conditional_adjacent_punctuation and not args.conditional_punctuation else [])
                           + (['pde.text-only-highlight'] if modern_summary is not None else [])),
                       partially_inspected_rule_ids=(['pde.text-only-highlight'] if args.conditional_modern_highlights else
@@ -497,6 +510,8 @@ def main(arguments=None, *, gate=False):
                 condition='Static closure-capture evidence is conditional; runtime binding and execution are unproved.',
                 render_effect='Spacer removal may alter visible content or layout.',
                 runtime_binding_proved=False, execution_proved=False, source_apply_authority=False)
+        if args.conditional_prose_markers:
+            result['conditional_prose_marker_preview'] = prose_marker_preview_summary(records)
         if args.conditional_capitalization:
             result['conditional_capitalization_preview'] = capitalization_preview_summary(records)
         if args.conditional_continuations:
@@ -544,6 +559,8 @@ def main(arguments=None, *, gate=False):
                     condition='Static closure-capture evidence is conditional; runtime binding and execution are unproved.',
                     render_effect='Spacer removal may alter visible content or layout.',
                     runtime_binding_proved=False, execution_proved=False, source_apply_authority=False)
+            if args.conditional_prose_markers:
+                result['conditional_prose_marker_preview'] = prose_marker_preview_summary([])
             if args.conditional_capitalization:
                 result['conditional_capitalization_preview'] = capitalization_preview_summary([])
             if args.conditional_continuations:

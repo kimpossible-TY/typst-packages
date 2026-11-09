@@ -284,7 +284,7 @@ def stage_original(context, snapshot, *, project_root='project'):
 
 def stage_document(context, records, catalog, snapshot, *, project_root='project', profile='standard',
                    footnote_evidence=None, partial_unsupported=False, withheld_records=None,
-                   partial_unproven_binding=False, explicit_withheld_sources=(), conditional_continuations=False, conditional_capitalization=False,
+                   partial_unproven_binding=False, explicit_withheld_sources=(), conditional_continuations=False, conditional_capitalization=False, conditional_prose_markers=False,
                    conditional_adjacent_punctuation=False, conditional_deferred_footnotes=False):
     """Bind verified source candidates to explicit captured resource bytes.
 
@@ -314,7 +314,7 @@ def stage_document(context, records, catalog, snapshot, *, project_root='project
                                  partial_unsupported=partial_unsupported, withheld_records=withheld_records,
                                  partial_unproven_binding=partial_unproven_binding,
                                  explicit_withheld_sources=explicit_withheld_sources,
-                                 conditional_continuations=conditional_continuations, conditional_capitalization=conditional_capitalization,
+                                 conditional_continuations=conditional_continuations, conditional_capitalization=conditional_capitalization, conditional_prose_markers=conditional_prose_markers,
                                  conditional_adjacent_punctuation=conditional_adjacent_punctuation,
                                  conditional_deferred_footnotes=conditional_deferred_footnotes)
     staged = {(item.request.root, item.request.path):

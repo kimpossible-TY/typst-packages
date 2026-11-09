@@ -323,7 +323,7 @@ def assert_intermediate(value):
 
 
 def derive(proof, records, *, profile='standard', partial_unsupported=False, withheld_records=None,
-           partial_unproven_binding=False, explicit_withheld_sources=(), conditional_continuations=False, conditional_capitalization=False,
+           partial_unproven_binding=False, explicit_withheld_sources=(), conditional_continuations=False, conditional_capitalization=False, conditional_prose_markers=False,
            conditional_adjacent_punctuation=False, sequence_facade_evidence=True,
            conditional_deferred_footnotes=False):
     """Recompute/replay source sequences and issue a restricted in-memory view."""
@@ -346,7 +346,7 @@ def derive(proof, records, *, profile='standard', partial_unsupported=False, wit
         footnote_evidence=proof if sequence_facade_evidence else None,
         partial_unsupported=partial_unsupported, withheld_records=stable_withheld,
         partial_unproven_binding=partial_unproven_binding, explicit_withheld_sources=explicit_withheld_sources,
-        conditional_continuations=conditional_continuations, conditional_capitalization=conditional_capitalization,
+        conditional_continuations=conditional_continuations, conditional_capitalization=conditional_capitalization, conditional_prose_markers=conditional_prose_markers,
         conditional_adjacent_punctuation=conditional_adjacent_punctuation,
         conditional_deferred_footnotes=conditional_deferred_footnotes)
     context = _derived_include(baseline, candidates,

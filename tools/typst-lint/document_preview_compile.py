@@ -175,7 +175,7 @@ def _compile_captured(context, records, catalog, snapshot, *, entrypoint, deadli
                     cancel_event=None, expected_dependencies=None, expected_baseline_sha256=None,
                     profile='standard', starts=None, footnote_evidence=None,
                     partial_unsupported=False, withheld_records=None, partial_unproven_binding=False,
-                    explicit_withheld_sources=(), conditional_continuations=False, conditional_capitalization=False, conditional_adjacent_punctuation=False,
+                    explicit_withheld_sources=(), conditional_continuations=False, conditional_capitalization=False, conditional_prose_markers=False, conditional_adjacent_punctuation=False,
                     original_only=False, modern_highlight_evidence=None,
                     composed_modern_evidence=None, sequence_facade_evidence=False,
                     conditional_deferred_footnotes=False, composed_reviewed_math=False,
@@ -242,7 +242,7 @@ def _compile_captured(context, records, catalog, snapshot, *, entrypoint, deadli
         candidates, modern_summary, composed_view = composed_modern.stage(composed_modern_evidence, records,
             profile=profile, partial_unsupported=partial_unsupported, withheld_records=withheld_records,
             partial_unproven_binding=partial_unproven_binding, explicit_withheld_sources=explicit_withheld_sources,
-            conditional_continuations=conditional_continuations, conditional_capitalization=conditional_capitalization,
+            conditional_continuations=conditional_continuations, conditional_capitalization=conditional_capitalization, conditional_prose_markers=conditional_prose_markers,
             conditional_adjacent_punctuation=conditional_adjacent_punctuation,
             sequence_facade_evidence=sequence_facade_evidence,
             conditional_deferred_footnotes=conditional_deferred_footnotes,
@@ -259,7 +259,7 @@ def _compile_captured(context, records, catalog, snapshot, *, entrypoint, deadli
                 or records is not None or type(profile) is not str or profile != 'standard' or footnote_evidence is not None
                 or partial_unsupported is not False or partial_unproven_binding is not False
                 or withheld_records is not None or type(explicit_withheld_sources) is not tuple
-                or explicit_withheld_sources or conditional_continuations is not False or conditional_capitalization is not False
+                or explicit_withheld_sources or conditional_continuations is not False or conditional_capitalization is not False or conditional_prose_markers is not False
                 or conditional_adjacent_punctuation is not False
                 or conditional_deferred_footnotes is not False):
             raise SafetyError('Modern highlight preview requires its own issued capture and exclusive profile')
@@ -276,7 +276,7 @@ def _compile_captured(context, records, catalog, snapshot, *, entrypoint, deadli
                                                        withheld_records=withheld_records,
                                                        partial_unproven_binding=partial_unproven_binding,
                                                        explicit_withheld_sources=explicit_withheld_sources,
-                                                       conditional_continuations=conditional_continuations, conditional_capitalization=conditional_capitalization,
+                                                       conditional_continuations=conditional_continuations, conditional_capitalization=conditional_capitalization, conditional_prose_markers=conditional_prose_markers,
                                                        conditional_adjacent_punctuation=conditional_adjacent_punctuation,
                                                        conditional_deferred_footnotes=conditional_deferred_footnotes)
         if phase_timings is not None:
@@ -463,7 +463,7 @@ def compile_preview(context, records, catalog, snapshot, *, entrypoint, deadline
                     cancel_event=None, expected_dependencies=None, expected_baseline_sha256=None,
                     profile='standard', starts=None, footnote_evidence=None,
                     partial_unsupported=False, withheld_records=None, partial_unproven_binding=False,
-                    explicit_withheld_sources=(), conditional_continuations=False, conditional_capitalization=False, conditional_adjacent_punctuation=False,
+                    explicit_withheld_sources=(), conditional_continuations=False, conditional_capitalization=False, conditional_prose_markers=False, conditional_adjacent_punctuation=False,
                     modern_highlight_evidence=None, composed_modern_evidence=None,
                     sequence_facade_evidence=False, conditional_deferred_footnotes=False,
                     composed_reviewed_math=False, composed_references=False, phase_timings=None):
@@ -475,7 +475,7 @@ def compile_preview(context, records, catalog, snapshot, *, entrypoint, deadline
         expected_baseline_sha256=expected_baseline_sha256, profile=profile, starts=starts,
         footnote_evidence=footnote_evidence, partial_unsupported=partial_unsupported,
         withheld_records=withheld_records, partial_unproven_binding=partial_unproven_binding,
-        explicit_withheld_sources=explicit_withheld_sources, conditional_continuations=conditional_continuations, conditional_capitalization=conditional_capitalization,
+        explicit_withheld_sources=explicit_withheld_sources, conditional_continuations=conditional_continuations, conditional_capitalization=conditional_capitalization, conditional_prose_markers=conditional_prose_markers,
         conditional_adjacent_punctuation=conditional_adjacent_punctuation,
         modern_highlight_evidence=modern_highlight_evidence,
         composed_modern_evidence=composed_modern_evidence,

@@ -1702,3 +1702,10 @@ or a shell wrapper alone cannot claim native editor enforcement.
 않으며 결합 PDF 비교는 각 규칙의 효과를 따로 입증하지 않는다. 본문 첫 marker는
 단독 선택 시 소유권 미확인으로 보류될 수 있으며, `--conditional-gaps`로 앞선
 지원 경계를 정리한 경우에만 뒤의 대문자 후보가 제안될 수 있다.
+
+선택적 `preview-compile --conditional-prose-markers`는 제한된 리터럴 산문 경계의
+빠진 `#paragraph_tab`을 결합 후보에 삽입한다. 마커와 show의 실제 바인딩 및
+실행은 확인되지 않았고 들여쓰기나 페이지 배치가 바뀔 수 있다. 실행 시 마커가
+정의되지 않으면 후보 컴파일이 실패할 수 있다. 이름 가림,
+미확인 소유권 또는 작업량 한도로 후보가 별도 사유 없이 생략될 수 있으며,
+편집 건수는 전체 검사 완료를 뜻하지 않는다. 원본 파일 쓰기 권한은 없다.
