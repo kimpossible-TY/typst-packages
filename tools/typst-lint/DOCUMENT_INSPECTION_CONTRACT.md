@@ -101,8 +101,16 @@ non-whitespace syntax and other supported source findings are rechecked; marker 
 remain conditional. Adding a blank line can change rendered output: an isolated
 owned Typst fixture produced different PDFs. The proposal is not applied or
 composed and does not authorize compilation or establish whole-document coverage.
-The existing composed compiler path still treats that first-marker boundary as
-unresolved; explicitly requested local hints may contain the additional diagnosis.
+The independent path also admits a standalone direct `#block[...]` or
+`#block(breakable: false)[...]` immediately followed by exactly one LF/CRLF and
+a standalone marker in the same markup body. Explicit source-level `block`
+declarations, parameters, imports or assignments anywhere in the file withhold
+this case. The builtin binding and absence of shadowing/show effects at runtime
+are separate conditions; the candidate is not evidence of execution or render
+identity. Other call options, aliases, labels and comments remain unsupported.
+The existing composed compiler path still treats these first-marker and block
+boundaries as unresolved; explicitly requested local hints may contain the
+additional diagnosis.
 The independent `conditional_hyphen_marker_gap_previews` section covers root and
 nested literal `#paragraph-tab` source hints under the same option. It preserves
 the corresponding suppressed and other conditional findings. A preceding

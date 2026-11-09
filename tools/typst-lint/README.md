@@ -186,8 +186,13 @@ a first `#paragraph_tab` after a literal content-block opening when only one
 LF/CRLF and indentation precede it. The opening is not a blank source line.
 Intervening comments or executable syntax remain unproved. Marker binding,
 execution and rendered layout are conditional; this independent plan does not
-authorize writes or compilation. The existing composed compiler path still
-withholds this boundary, though explicitly requested local hints may report it.
+authorize writes or compilation. The same source-only inspection accepts a
+direct standalone `#block[...]` or `#block(breakable: false)[...]` immediately
+before the marker, provided there is no explicit source-level `block` shadow
+anywhere in the file. The builtin selection and show effects remain conditions;
+comments, labels, aliases and dynamic options are withheld. The existing
+composed compiler path still withholds these boundaries, though explicitly
+requested local hints may report them.
 
 The independent `--preview-conditional-gaps` inspection also offers separate
 source-only footnote-gap candidates before a literal `paragraph-tab` marker or

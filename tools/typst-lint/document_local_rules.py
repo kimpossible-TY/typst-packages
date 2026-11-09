@@ -37,7 +37,7 @@ def analyze(tree, path, catalog):
     resolution = resolve(tree, packages=())
     results = paragraphs(tree, path, resolution, catalog=catalog)
     results[MARKER_GAP] = _merge_conditional(
-        results[MARKER_GAP], analyze_conditional_nested_gap(tree, path, catalog=catalog, _allow_first_content=True))
+        results[MARKER_GAP], analyze_conditional_nested_gap(tree, path, catalog=catalog, _allow_first_content=True, _allow_direct_block=True))
     results[CAPITALIZATION] = _merge_conditional(
         results[CAPITALIZATION], analyze_conditional_nested_capitalization(tree, path, catalog=catalog))
     results[MARKER_TARGET] = _merge_conditional(

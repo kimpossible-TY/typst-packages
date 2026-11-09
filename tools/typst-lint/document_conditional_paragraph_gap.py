@@ -23,6 +23,9 @@ CONDITIONS = (
     'The surrounding literal content executes as the intended prose paragraph.',
     'The added blank source line may change rendering; equivalence is not proved.',
 )
+BLOCK_CONDITION = (
+    "The preceding standalone block resolves to Typst's intended builtin at runtime; shadowing and show rules are not proved absent.",
+)
 
 
 def preview(tree, path, *, catalog=None):
@@ -35,7 +38,11 @@ def preview(tree, path, *, catalog=None):
     try:
         if tree.mode != 'markup' or tree.nodes[0].errors:
             raise SafetyError('Requires well-formed markup source')
-        before = paragraph_rules.analyze_conditional_nested_gap(tree, path, catalog=records, _allow_first_content=True)
+        block_markers = []
+        before = paragraph_rules.analyze_conditional_nested_gap(tree, path, catalog=records,
+            _allow_first_content=True, _allow_direct_block=True, _block_markers=block_markers)
+        if block_markers:
+            empty['conditions'] = CONDITIONS + BLOCK_CONDITION
         unresolved = tuple(reason for reason in before.skips
                            if reason.startswith(paragraph_rules.NESTED_GAP_UNRESOLVED))
         if unresolved:
@@ -60,7 +67,7 @@ def preview(tree, path, *, catalog=None):
         if (parsed.nodes[0].errors or _syntax_signature(tree) != _syntax_signature(parsed)
                 or _scopes(tree, records, proposal.edits) != _scopes(parsed, records)):
             raise SafetyError('Marker gap preview changed non-whitespace syntax or suppression targets')
-        after = paragraph_rules.analyze_conditional_nested_gap(parsed, path, catalog=records, _allow_first_content=True)
+        after = paragraph_rules.analyze_conditional_nested_gap(parsed, path, catalog=records, _allow_first_content=True, _allow_direct_block=True)
         if (after.diagnostics or after.parse_errors
                 or _keys(source, before.suppressed, proposal.edits) != _keys(candidate, after.suppressed)):
             raise SafetyError('Marker gap preview changed suppressed findings or did not converge')

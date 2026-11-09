@@ -41,7 +41,7 @@
 | --- | --- | --- | --- | --- |
 | `pde.import-order` | 제안 | L | — | 명시적 import 그래프와 순수한 리터럴 모듈에서만 안전한 순서 변경. |
 | `pde.no-redundant-facade-import` | 제안 | — | — | facade와 원래 바인딩의 동일성이 그래프로 증명된 중복 import. |
-| `pde.paragraph-marker-gap` | 제안 | L, P, 독립 미리보기 | — | 문서 조건부 힌트와 독립 소스 후보는 같은 본문의 선행 리터럴 산문 또는 content block 열림 직후 LF/CRLF와 들여쓰기만 있는 첫 marker를 지원한다. 앞에 주석·호출·강조·라벨 등이 있으면 미확인으로 보고 해당 파일의 중첩 후보를 보류한다. 기존 결합 컴파일 분석은 첫 marker를 계속 미확인으로 처리한다. 별도 pagebreak·flowbox 후보에도 바인딩 조건이 적용되며 렌더가 달라질 수 있고 바인딩과 실행은 미증명이다. |
+| `pde.paragraph-marker-gap` | 제안 | L, P, 독립 미리보기 | — | 문서 조건부 힌트와 독립 소스 후보는 같은 본문의 선행 리터럴 산문 또는 content block 열림 직후 LF/CRLF와 들여쓰기만 있는 첫 marker를 지원한다. 별도 제한된 동일 본문 안에서 단독 `#block[...]` 또는 리터럴 `#block(breakable: false)[...]` 직후 한 줄바꿈인 경우도 조건부로 지원한다. 명시적 block 이름 가림이 파일 어디에든 있거나, 주석·동적 옵션·다른 호출·강조·라벨 등이 있으면 미확인으로 보고 보류한다. 기존 결합 컴파일 분석은 첫 marker 및 block 뒤 경계를 계속 미확인으로 처리한다. 별도 pagebreak·flowbox 후보에도 바인딩 조건이 적용되며 렌더가 달라질 수 있고 바인딩과 실행은 미증명이다. |
 | `pde.paragraph-marker-target` | 제안 | L | — | 직접 중첩 본문의 제목·display 앞 marker를 조건부 진단하며 `paragraph-tab`도 별도로 포함한다. 바인딩·실행·본문 소유권은 미확인이다. |
 | `pde.prose-paragraph-marker` | 제안 | L, 독립 미리보기 | — | 독립 미리보기는 기존의 제한된 리터럴 문단 경계에서 ASCII 대문자로 시작하는 산문 앞에만 마커 삽입을 제안한다. 마커·show 바인딩과 실행은 조건부다. |
 | `pde.continuation-line` | 제안 | L, 독립 미리보기 | 선택형 | 제한된 직접 리터럴 문장·어휘와 경계만. `--preview-conditional-continuations`는 소스 줄바꿈을 공백으로 바꾸는 독립 후보를 제안하며, 컴파일 미리보기의 별도 `--conditional-continuations`는 이 후보를 결합해 재검증한다. 실행 문맥과 렌더 동등성은 미증명이다. |

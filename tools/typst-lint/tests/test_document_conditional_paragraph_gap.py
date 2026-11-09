@@ -76,6 +76,104 @@ class ConditionalParagraphGapTests(unittest.TestCase):
                 result = self.preview(source)
                 self.assertTrue(result is None or not result['edits'], result)
 
+    def test_standalone_block_then_marker_gets_conditional_blank_line(self):
+        for newline in (b'\n', b'\r\n'):
+            for block in (b'#block[Proof.]', b'#block(breakable: false)[Proof.]'):
+                source = b'#block[Before.' + newline + newline + block + newline + b'  #paragraph_tab' + newline + b'Next.]'
+                with self.subTest(source=source):
+                    tree = parse(source)
+                    old = paragraph_rules.analyze_conditional_nested_gap(tree, 'main.typ')
+                    self.assertTrue(any(x.startswith(paragraph_rules.NESTED_GAP_UNRESOLVED) for x in old.skips))
+                    result, candidate = self.candidate(source)
+                    self.assertEqual(len(result['edits']), 1)
+                    self.assertEqual(candidate, source.replace(block + newline, block + newline + newline))
+                    self.assertTrue(any('preceding standalone block' in x for x in result['conditions']))
+                    self.assertFalse(result['runtime_binding_proved'] or result['execution_proved'])
+
+    def test_explicit_block_shadow_and_directive_are_withheld(self):
+        prefix_cases = (b'#let block(body, ..args) = body\n', b'#let block = none\n',
+                        b'#import "other.typ": f as block\n', b'#(block = none)\n')
+        for prefix in prefix_cases:
+            source = prefix + b'#outer[Before.\n\n#block(breakable: false)[Proof.]\n#paragraph_tab\nNext.]'
+            with self.subTest(prefix=prefix):
+                result = self.preview(source)
+                self.assertEqual(result['verification'], 'withheld', result)
+                self.assertFalse(result['edits'])
+        for source in (b'#f(block => [Before.\n\n#block[Proof.]\n#paragraph_tab\nNext.])',
+                       b'#for block in (x => x,) [\n#block[Proof.]\n#paragraph_tab\nNext.]',
+                       b'#for (i, block) in ((1, none),) [\n#block[Proof.]\n#paragraph_tab\nNext.]'):
+            with self.subTest(source=source):
+                result = self.preview(source)
+                self.assertEqual(result['verification'], 'withheld')
+                self.assertFalse(result['edits'])
+        suppressed = (b'// typst-lint: ignore-next pde.paragraph-marker-gap -- intentional\n'
+                      b'#block[Before.\n\n#block[Proof.]\n#paragraph_tab\nNext.]')
+        hints = paragraph_rules.analyze_conditional_nested_gap(parse(suppressed), 'main.typ',
+                    _allow_first_content=True, _allow_direct_block=True)
+        self.assertFalse(hints.diagnostics)
+        self.assertEqual(len(hints.suppressed), 1)
+        self.assertIsNone(self.preview(suppressed))
+
+    def test_nested_default_parameter_shadow_screen(self):
+        value = b'0'
+        for _ in range(16):
+            value = b'(a: ' + value + b') => 0'
+        tree = parse(b'#let f = ' + value)
+        self.assertFalse(paragraph_rules._explicit_block_shadow(tree))
+        value = b'block'
+        for _ in range(16):
+            value = b'(a: ' + value + b') => 0'
+        tree = parse(b'#let f = ' + value)
+        self.assertTrue(paragraph_rules._explicit_block_shadow(tree))
+
+    def test_block_dynamic_options_comments_aliases_and_attached_labels_withhold(self):
+        blocks = (b'#block(breakable: flag)[Proof.]', b'#block(breakable: true)[Proof.]',
+                  b'#block(breakable: false, inset: 1pt)[Proof.]', b'#block(/*comment*/breakable: false)[Proof.]',
+                  b'#other[Proof.]', b'#block[Proof.] <label>', b'#block[Proof.] // comment',
+                  b'Inline #block[Proof.]')
+        for block in blocks:
+            source = b'#block[Before.\n\n' + block + b'\n#paragraph_tab\nNext.]'
+            with self.subTest(block=block):
+                result = self.preview(source)
+                self.assertEqual(result['verification'], 'withheld', result)
+                self.assertFalse(result['edits'])
+
+    def test_block_gap_is_not_composed_into_compiler_path(self):
+        import document_sequence_preview as sequence
+        from typst_lint import load_rules
+        source = (b'#block[Before.\n\n#block[Proof.]\n#paragraph_tab\n'
+                  b'This holds#footnote[Reason.].]')
+        tree = parse(source)
+        result, _ = self.candidate(source)
+        self.assertEqual(len(result['edits']), 1)
+        record = sequence.preview(tree, 'main.typ', load_rules()[0]['rules'],
+                                  conditional_adjacent_punctuation=True)
+        self.assertEqual(record['verification'], 'withheld')
+        self.assertFalse(record['steps'])
+
+    @unittest.skipUnless(os.environ.get('TYPST_LINT_RENDER_TESTS') == '1'
+                         and shutil.which('typst') and shutil.which('pdftoppm'),
+                         'Opt in with Typst and pdftoppm')
+    def test_standalone_block_then_marker_owned_fixture_raster(self):
+        if not subprocess.check_output(['typst', '--version'], text=True).startswith('typst 0.15.1 '):
+            self.skipTest('Fixture pins Typst 0.15.1')
+        source = (b'#let paragraph_tab = "\\u{F000}"\n#show regex("\\u{F000}"): h(1.5em)\n'
+                  b'#block[Before.\n\n#block(breakable: false)[Proof.]\n#paragraph_tab\nAfter.]')
+        _, candidate = self.candidate(source)
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            images = []
+            for name, data in (('before', source), ('after', candidate)):
+                src, pdf = root / (name + '.typ'), root / (name + '.pdf')
+                src.write_bytes(data)
+                subprocess.run(['typst', 'compile', '--root', str(root), '--creation-timestamp', '0',
+                                str(src), str(pdf)], capture_output=True, timeout=30, check=True)
+                subprocess.run(['pdftoppm', '-f', '1', '-l', '1', '-r', '72', '-png', '-singlefile',
+                                str(pdf), str(root / name)], capture_output=True, timeout=30, check=True)
+                images.append((root / (name + '.png')).read_bytes())
+            self.assertEqual(images[0], images[1])
+            self.assertEqual((root / 'before.typ').read_bytes(), source)
+
     def test_first_content_marker_gets_conditional_blank_line(self):
         for newline in (b'\n', b'\r\n'):
             for outside in (b'', b'Text outside.' + newline):

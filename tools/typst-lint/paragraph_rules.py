@@ -39,15 +39,86 @@ def _diagnostic(source, path, rule, start, explanation):
     return Diagnostic(rule['id'], rule['grade'], path, line, column, explanation, rule['source'])
 
 
-def analyze_conditional_nested_gap(tree, path, *, catalog=None, _allow_first_content=False):
+def _explicit_block_shadow(tree):
+    """Conservatively screen bindings in one AST walk, without proving builtin.
+
+    Wildcard imports, inherited context and runtime selection remain explicit
+    conditions. Binding-shaped subtrees are marked once, including parameters
+    with nested defaults, so they are never recursively rescanned.
+    """
+    nodes, source = tree.nodes, tree.source
+    trivia = frozenset(('Space', 'Parbreak', 'LineComment', 'BlockComment'))
+    marked = set()
+    pending = [(0, False)]
+    while pending:
+        i, marked_ancestor = pending.pop()
+        node = nodes[i]
+        marked_ancestor = marked_ancestor or i in marked or node.kind == 'ModuleImport'
+        if marked_ancestor and node.kind == 'Ident' and source[node.start:node.end] == b'block':
+            return True
+        if node.kind in ('LetBinding', 'ForLoop'):
+            parts = [x for x in node.children if nodes[x].kind not in trivia]
+            if len(parts) >= 2:
+                target = parts[1]
+                if node.kind == 'LetBinding' and nodes[target].kind == 'Closure':
+                    head = [x for x in nodes[target].children if nodes[x].kind not in trivia]
+                    if head:
+                        marked.add(head[0])
+                else:
+                    marked.add(target)
+        elif node.kind == 'Closure':
+            marked.update(x for x in node.children if nodes[x].kind == 'Params')
+        elif node.kind in ('Binary', 'DestructAssignment'):
+            children = [x for x in node.children if nodes[x].kind not in trivia]
+            if (children and (node.kind == 'DestructAssignment' or any(nodes[x].kind in
+                    ('Eq', 'PlusEq', 'HyphEq', 'StarEq', 'SlashEq') for x in children))):
+                marked.add(children[0])
+        pending.extend((child, marked_ancestor) for child in reversed(node.children))
+    return False
+
+
+def _direct_literal_block_before(tree, siblings, prior, marker_start):
+    """Recognize one standalone direct block with no executable options."""
+    nodes, source = tree.nodes, tree.source
+    if prior < 1:
+        return False
+    call, mark = nodes[siblings[prior]], nodes[siblings[prior - 1]]
+    if (call.kind != 'FuncCall' or mark.kind != 'Hash' or mark.end != call.start
+            or re.fullmatch(rb'\r?\n[ \t]*', source[call.end:marker_start]) is None):
+        return False
+    line_start = source.rfind(b'\n', 0, mark.start) + 1
+    if source[line_start:mark.start].strip(b' \t'):
+        return False
+    trivia = frozenset(('Space', 'Parbreak', 'LineComment', 'BlockComment'))
+    parts = [i for i in call.children if nodes[i].kind not in trivia]
+    if (len(parts) != 2 or nodes[parts[0]].kind != 'Ident'
+            or source[nodes[parts[0]].start:nodes[parts[0]].end] != b'block'
+            or nodes[parts[1]].kind != 'Args'):
+        return False
+    args = [i for i in nodes[parts[1]].children if nodes[i].kind not in trivia]
+    kinds = tuple(nodes[i].kind for i in args)
+    if kinds == ('ContentBlock',):
+        body = nodes[args[0]]
+        return body.start == nodes[parts[0]].end and body.end == call.end
+    if kinds != ('LeftParen', 'Named', 'RightParen', 'ContentBlock'):
+        return False
+    body = nodes[args[-1]]
+    head = source[nodes[parts[0]].end:body.start]
+    return (body.end == call.end and re.fullmatch(
+        rb'\([ \t]*breakable[ \t]*:[ \t]*false[ \t]*\)', head) is not None)
+
+
+def analyze_conditional_nested_gap(tree, path, *, catalog=None, _allow_first_content=False,
+                                   _allow_direct_block=False, _block_markers=None):
     """Find standalone marker-shaped tokens in nested literal markup only.
 
     These are source patterns: the identifier's binding, execution and prose
     ownership are not established.  No repair is proposed, and callers must not
     interpret an empty result as coverage of arbitrary rendered content.
     """
-    if type(_allow_first_content) is not bool:
-        raise InputError('First-content marker selection must be boolean')
+    if (type(_allow_first_content) is not bool or type(_allow_direct_block) is not bool
+            or (_block_markers is not None and type(_block_markers) is not list)):
+        raise InputError('Invalid conditional marker selection')
     source, nodes = tree.source, tree.nodes
     if nodes[0].errors:
         errors = tuple((n.start, n.end) for n in nodes if n.kind == 'Error')
@@ -72,6 +143,7 @@ def analyze_conditional_nested_gap(tree, path, *, catalog=None, _allow_first_con
                                                    or nodes[parent].kind in _CONDITIONAL_EXCLUDED)
     newlines = [index for index, byte in enumerate(source) if byte == 10]
     findings, suppressed, unresolved = [], [], []
+    block_shadowed = None
     for body_id, body in enumerate(nodes):
         if body_id == 0 or body.kind != 'Markup' or excluded[body_id]:
             continue
@@ -115,7 +187,13 @@ def analyze_conditional_nested_gap(tree, path, *, catalog=None, _allow_first_con
             first_in_block = (_allow_first_content and previous_node is None and owner is not None
                               and nodes[owner].kind == 'ContentBlock'
                               and re.fullmatch(rb'\r?\n[ \t]*', source[body.start:start]) is not None)
-            if (not first_in_block and (previous_node is None or previous_node.kind != 'Text'
+            direct_block = (_allow_direct_block and previous_node is not None
+                            and _direct_literal_block_before(tree, children, prior, start))
+            if direct_block:
+                if block_shadowed is None:
+                    block_shadowed = _explicit_block_shadow(tree)
+                direct_block = not block_shadowed
+            if (not first_in_block and not direct_block and (previous_node is None or previous_node.kind != 'Text'
                     or not any(char.isalnum() for char in
                                source[previous_node.start:previous_node.end].decode('utf-8')))):
                 if not ignored:
@@ -123,9 +201,13 @@ def analyze_conditional_nested_gap(tree, path, *, catalog=None, _allow_first_con
                 continue
             column = len(source[line_start:start].decode('utf-8')) + 1
             rule = selected[0]
-            finding = Diagnostic(MARKER_GAP, rule['grade'], path, line_index + 1, column,
-                'Conditional source hint: if this standalone name is the paragraph marker, place a blank source line before it.',
-                rule['source'])
+            message = ('Conditional source hint: if this standalone name is the paragraph marker, '
+                       'place a blank source line before it.')
+            if direct_block:
+                message += ' The preceding block call must resolve to the intended builtin.'
+                if not ignored and _block_markers is not None:
+                    _block_markers.append(start)
+            finding = Diagnostic(MARKER_GAP, rule['grade'], path, line_index + 1, column, message, rule['source'])
             (suppressed if ignored else findings).append(finding)
     return ParagraphResult(tuple(findings), (),
         ('Nested source pattern only; marker binding, execution, prose ownership and rendering are unproved.',
