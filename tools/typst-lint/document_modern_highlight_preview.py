@@ -31,6 +31,10 @@ CONDITIONS = (
     'Any recorded builtin block wrapper resolves to Typst\'s builtin at runtime; inherited or ambient bindings are not proved absent.',
     'Splitting highlighting can change emphasis, smart-quote direction, spacing and page layout; PDF equivalence is not proved.',
 )
+SCOPED_REFERENCE_CONDITION = (
+    'Captured scoped-reference callback bindings and literal calls remain unchanged; runtime selection, label resolution and rendering are not proved.',
+    'No executed expression mutates the captured scope binding or its dictionary before each reference.',
+)
 REFERENCE_CONDITION = (
     'Reference resolution and custom reference show rules may change rendering; equivalence is not proved.',
 )
@@ -70,7 +74,8 @@ def _prose_signature(tree, index):
         for child in node.children))
 
 
-def _select(tree, diagnostics, *, proven_math_spans=frozenset(), allow_direct_references=False):
+def _select(tree, diagnostics, *, proven_math_spans=frozenset(), allow_direct_references=False,
+            proven_scoped_references=frozenset()):
     nodes, source = tree.nodes, tree.source
     parents = {child: index for index, node in enumerate(nodes) for child in node.children}
     positions = {child: pos for node in nodes for pos, child in enumerate(node.children)}
@@ -104,7 +109,24 @@ def _select(tree, diagnostics, *, proven_math_spans=frozenset(), allow_direct_re
         children = [nodes[c] for c in body.children]
         supported = ('Text', 'Space', 'SmartQuote', 'Equation', 'Ref') if allow_direct_references else (
             'Text', 'Space', 'SmartQuote', 'Equation')
-        if not children or any(c.kind not in supported for c in children):
+        if not children:
+            continue
+        # A scoped reference is an inseparable Hash + proven call. All other
+        # executable markup remains outside this opt-in source-only route.
+        for pos, child in enumerate(children):
+            if child.kind in supported:
+                continue
+            if child.kind == 'Hash' and pos + 1 < len(children):
+                following = children[pos + 1]
+                if following.kind == 'FuncCall' and child.end == following.start and (following.start, following.end) in proven_scoped_references:
+                    continue
+            if child.kind == 'FuncCall' and pos and children[pos - 1].kind == 'Hash':
+                if children[pos - 1].end == child.start and (child.start, child.end) in proven_scoped_references:
+                    continue
+            break
+        else:
+            child = None
+        if child is not None:
             continue
         # A literal @label is a single reference marker. An explicit
         # supplement can contain arbitrary executable code and is withheld.
@@ -272,14 +294,25 @@ def _same_script_findings_with_moved_equations(before_tree, before, after_tree, 
 
 
 def _preview_source(evidence, tree, path, diagnostics, records, *, proven_math_spans=frozenset(),
-                    allow_direct_references=False):
-    edits, plans = _select(tree, diagnostics, proven_math_spans=proven_math_spans,
-                           allow_direct_references=allow_direct_references)
-    if not edits:
-        return None
+                    allow_direct_references=False, allow_scoped_references=False, scoped_budget=None, scoped_capture=None):
     empty = dict(path=path, baseline_sha256=digest(tree.source), candidate_sha256=None,
                  verification='withheld', conditions=CONDITIONS, edits=[], edit_permission=False,
                  compiler_permission=False, runtime_binding_proved=False, render_equivalence_proved=False)
+    scoped = {}
+    if allow_scoped_references and scoped_capture is not None:
+        import scoped_reference_preview
+        try:
+            for diagnostic in diagnostics:
+                refs = scoped_capture.selected(diagnostic, budget=scoped_budget)
+                if refs:
+                    scoped[(diagnostic['start'], diagnostic['end'])] = refs
+        except scoped_reference_preview.ScopedReferenceBudgetExceeded as error:
+            return dict(empty, reason=str(error))
+    proven = frozenset(span for refs in scoped.values() for span in refs)
+    edits, plans = _select(tree, diagnostics, proven_math_spans=proven_math_spans,
+                           allow_direct_references=allow_direct_references, proven_scoped_references=proven)
+    if not edits:
+        return None
     try:
         proposal = plan(tree.source, edits)
         if proposal.deferred or len(proposal.edits) != len(edits):
@@ -289,6 +322,21 @@ def _preview_source(evidence, tree, path, diagnostics, records, *, proven_math_s
         if parsed.nodes[0].errors or _scopes(tree, records, proposal.edits) != _scopes(parsed, records):
             raise SafetyError('Highlight split changed syntax or suppression targets')
         _verify_insertions(tree, parsed, proposal.edits, plans)
+        if scoped:
+            # Recheck callback parameter ownership on the actual candidate and
+            # require identical ordered reference calls in every affected scope.
+            mapper = _MappedEdits(proposal.edits)
+            for diagnostic in diagnostics:
+                before = scoped.get((diagnostic['start'], diagnostic['end']))
+                if not before:
+                    continue
+                callback = diagnostic['callback_context'][-1]
+                bounds = (mapper.mapped(callback['body_start']), mapper.mapped(callback['body_end']))
+                after = scoped_reference_preview._scope(parsed, diagnostic, override=bounds, budget=scoped_budget)
+                def values(source, spans):
+                    return tuple(source[start:end] for start, end in sorted(spans))
+                if values(tree.source, before) != values(parsed.source, after):
+                    raise SafetyError('Scoped reference binding, order or call count changed')
         if proven_math_spans:
             # Re-run the binding analysis on the actual reparsed candidate.
             # The structural check above proves imported code and all tokens
@@ -351,12 +399,22 @@ def _preview_source(evidence, tree, path, diagnostics, records, *, proven_math_s
 
 
 def _partial_preview(evidence, tree, path, diagnostics, records, original, budget, *, proven_math_spans=frozenset(),
-                     allow_direct_references=False):
+                     allow_direct_references=False, allow_scoped_references=False, scoped_budget=None, scoped_capture=None):
     """Retry independent edits, then revalidate their union on the original tree."""
     if original['verification'] != 'withheld' or original.get('reason') != _OVERLAPPING_FINDING:
         return original
+    if allow_scoped_references:
+        import scoped_reference_preview
+    if allow_scoped_references and scoped_capture is not None:
+        try:
+            proven = frozenset(span for diagnostic in diagnostics
+                               for span in scoped_capture.selected(diagnostic, budget=scoped_budget))
+        except scoped_reference_preview.ScopedReferenceBudgetExceeded as error:
+            return dict(original, reason=str(error))
+    else:
+        proven = frozenset()
     edits, _ = _select(tree, diagnostics, proven_math_spans=proven_math_spans,
-                       allow_direct_references=allow_direct_references)
+                       allow_direct_references=allow_direct_references, proven_scoped_references=proven)
     if len(edits) < 2:
         return original
     if len(edits) > budget[0]:
@@ -365,6 +423,10 @@ def _partial_preview(evidence, tree, path, diagnostics, records, original, budge
     by_span = {(item['start'] - 1, item['end']): item for item in diagnostics}
     accepted = []
     def run_subset(subset):
+        if allow_scoped_references:
+            return _preview_source(evidence, tree, path, subset, records, proven_math_spans=proven_math_spans,
+                                   allow_direct_references=allow_direct_references, allow_scoped_references=True,
+                                   scoped_budget=scoped_budget, scoped_capture=scoped_capture)
         if allow_direct_references:
             return _preview_source(evidence, tree, path, subset, records, proven_math_spans=proven_math_spans,
                                    allow_direct_references=True)
@@ -376,6 +438,9 @@ def _partial_preview(evidence, tree, path, diagnostics, records, original, budge
         if diagnostic is None:
             return original
         candidate = run_subset([diagnostic])
+        if (allow_scoped_references and candidate is not None
+                and candidate.get('reason') == scoped_reference_preview.BUDGET_REASON):
+            return dict(original, reason=scoped_reference_preview.BUDGET_REASON)
         if candidate is not None and candidate['verification'] != 'withheld':
             accepted.append(diagnostic)
     if not accepted or len(accepted) == len(edits):
@@ -386,17 +451,20 @@ def _partial_preview(evidence, tree, path, diagnostics, records, original, budge
     # rechecks all existing diagnostics and suppression scopes, including the
     # excluded source. If the union fails, retain the original withheld result.
     combined = run_subset(accepted)
+    if (allow_scoped_references and combined is not None
+            and combined.get('reason') == scoped_reference_preview.BUDGET_REASON):
+        return dict(original, reason=scoped_reference_preview.BUDGET_REASON)
     if combined is None or combined['verification'] == 'withheld':
         return original
     return combined
 
 
 def preview_all(evidence, *, max_items=MAX_PREVIEW_ITEMS, max_bytes=MAX_PREVIEW_BYTES, return_evidence=False,
-                allow_direct_references=False, reviewed_math=False):
+                allow_direct_references=False, reviewed_math=False, allow_scoped_references=False):
     """Recompute pinned evidence and return an all-or-nothing source-only batch."""
     if type(evidence) is not modern.ModernHighlightAnalyzer:
         raise InputError('Issued modern highlight evidence is required')
-    require(type(return_evidence) is bool and type(allow_direct_references) is bool and type(reviewed_math) is bool
+    require(type(return_evidence) is bool and type(allow_direct_references) is bool and type(reviewed_math) is bool and type(allow_scoped_references) is bool
             and type(max_items) is int and 0 < max_items <= MAX_PREVIEW_ITEMS
             and type(max_bytes) is int and 0 < max_bytes <= MAX_PREVIEW_BYTES,
             'Invalid modern highlight preview budget')
@@ -417,10 +485,15 @@ def preview_all(evidence, *, max_items=MAX_PREVIEW_ITEMS, max_bytes=MAX_PREVIEW_
                   edit_permission=False, compiler_permission=False)
     if allow_direct_references:
         result['conditions'] += REFERENCE_CONDITION
+    if allow_scoped_references:
+        result['conditions'] += SCOPED_REFERENCE_CONDITION
+        result['scoped_reference_withheld_source_count'] = 0
     if reviewed_math:
         result['conditions'] = MATH_CONDITIONS
         if allow_direct_references:
             result['conditions'] += REFERENCE_CONDITION
+        if allow_scoped_references:
+            result['conditions'] += SCOPED_REFERENCE_CONDITION
         result['reviewed_math'] = True
     encoded = json.dumps(result, ensure_ascii=False, sort_keys=True, indent=2)
     evidence_encoded = json.dumps(diagnostics, ensure_ascii=False, sort_keys=True, indent=2)
@@ -437,6 +510,12 @@ def preview_all(evidence, *, max_items=MAX_PREVIEW_ITEMS, max_bytes=MAX_PREVIEW_
     require(items + diagnostics['report_items'] <= max_items and size <= max_bytes,
             'Modern highlight preview report budget exceeded')
     subset_budget = [MAX_SUBSET_CHECKS]
+    if allow_scoped_references:
+        import scoped_reference_preview
+        scoped_budget = [scoped_reference_preview.MAX_SCOPE_WORK]
+        fallback_budget = [MAX_SUBSET_CHECKS]
+    else:
+        scoped_budget = None
     for row in diagnostics['by_file']:
         result['diagnostics_count'] += len(row['diagnostics'])
         result['unresolved_reasons_count'] += len(row['unresolved'])
@@ -446,7 +525,25 @@ def preview_all(evidence, *, max_items=MAX_PREVIEW_ITEMS, max_bytes=MAX_PREVIEW_
         reviewed = math_by_path.get(row['path'])
         spans = (frozenset((entry['start'], entry['end']) for entry in reviewed['findings'])
                  if reviewed is not None else frozenset())
-        if reviewed_math:
+        scoped_capture, scope_error = None, None
+        if allow_scoped_references and any(b'.ref)' in source.tree.source[d['start']:d['end']]
+                                           for d in row['diagnostics']):
+            try:
+                scoped_capture = scoped_reference_preview.CapturedScopedReferences(
+                    evidence, source.tree, source.path, budget=scoped_budget)
+            except (InputError, ValueError) as error:
+                scope_error = str(error)
+        if scope_error:
+            record = dict(path=source.path, baseline_sha256=digest(source.tree.source), candidate_sha256=None,
+                          verification='withheld', conditions=CONDITIONS, edits=[], reason=scope_error,
+                          edit_permission=False, compiler_permission=False, runtime_binding_proved=False,
+                          render_equivalence_proved=False)
+        elif allow_scoped_references:
+            record = _preview_source(evidence, source.tree, source.path, row['diagnostics'], records,
+                                     proven_math_spans=spans, allow_direct_references=allow_direct_references,
+                                     allow_scoped_references=True, scoped_budget=scoped_budget,
+                                     scoped_capture=scoped_capture)
+        elif reviewed_math:
             record = _preview_source(evidence, source.tree, source.path, row['diagnostics'], records,
                                      proven_math_spans=spans, allow_direct_references=allow_direct_references)
         elif allow_direct_references:
@@ -454,15 +551,39 @@ def preview_all(evidence, *, max_items=MAX_PREVIEW_ITEMS, max_bytes=MAX_PREVIEW_
                                      allow_direct_references=True)
         else:
             record = _preview_source(evidence, source.tree, source.path, row['diagnostics'], records)
+        if record is not None:
+            record = _partial_preview(evidence, source.tree, source.path, row['diagnostics'], records, record, subset_budget,
+                                      proven_math_spans=spans, allow_direct_references=allow_direct_references,
+                                      allow_scoped_references=allow_scoped_references, scoped_budget=scoped_budget,
+                                      scoped_capture=scoped_capture)
+        # Exhausting this optional proof must not discard the original source
+        # preview. Recompute that plan independently, with a separate bounded
+        # subset budget; retain the scoped refusal in the returned record.
+        if (allow_scoped_references and record is not None
+                and record.get('reason') == scoped_reference_preview.BUDGET_REASON):
+            reason = record['reason']
+            record = _preview_source(evidence, source.tree, source.path, row['diagnostics'], records,
+                                     proven_math_spans=spans, allow_direct_references=allow_direct_references)
+            if record is not None:
+                record = _partial_preview(evidence, source.tree, source.path, row['diagnostics'], records, record,
+                                          fallback_budget, proven_math_spans=spans,
+                                          allow_direct_references=allow_direct_references)
+            else:
+                record = dict(path=source.path, baseline_sha256=digest(source.tree.source), candidate_sha256=None,
+                              verification='withheld', conditions=CONDITIONS, edits=[], reason=reason,
+                              edit_permission=False, compiler_permission=False, runtime_binding_proved=False,
+                              render_equivalence_proved=False)
+            record['scoped_reference_withheld'] = dict(status='WITHHELD', reason=reason)
+            result['scoped_reference_withheld_source_count'] += 1
         if record is None:
             result['unpreviewed_diagnostics'] += len(row['diagnostics'])
             continue
-        record = _partial_preview(evidence, source.tree, source.path, row['diagnostics'], records, record, subset_budget,
-                                  proven_math_spans=spans, allow_direct_references=allow_direct_references)
         if reviewed_math:
             record['conditions'] = MATH_CONDITIONS
         if allow_direct_references:
             record['conditions'] += REFERENCE_CONDITION
+        if allow_scoped_references:
+            record['conditions'] += SCOPED_REFERENCE_CONDITION
         if record['verification'] == 'withheld':
             result['withheld_source_count'] += 1
             result['unpreviewed_diagnostics'] += len(row['diagnostics'])
@@ -471,12 +592,14 @@ def preview_all(evidence, *, max_items=MAX_PREVIEW_ITEMS, max_bytes=MAX_PREVIEW_
             result['unpreviewed_diagnostics'] += len(row['diagnostics']) - len(record['edits'])
         encoded = json.dumps(record, ensure_ascii=False, sort_keys=True, indent=2)
         size += len(encoded.encode('utf-8')) + 6 * encoded.count('\n') + (8 if result['by_file'] else 12)
-        items += 1 + len(record['edits']) + len(record['conditions']) + int('reason' in record)
+        items += (1 + len(record['edits']) + len(record['conditions']) + int('reason' in record)
+                  + 2 * int('scoped_reference_withheld' in record))
         require(items + diagnostics['report_items'] <= max_items and size <= max_bytes,
                 'Modern highlight preview report budget exceeded')
         result['by_file'].append(record)
     evidence._check()
-    if result['withheld_source_count'] or result['unpreviewed_diagnostics'] or result['unresolved_reasons_count']:
+    if (result['withheld_source_count'] or result['unpreviewed_diagnostics'] or result['unresolved_reasons_count']
+            or result.get('scoped_reference_withheld_source_count', 0)):
         result['status'] = 'INCOMPLETE'
     result['report_items'] = items
     # Updating the count can increase its JSON width; count final serialized

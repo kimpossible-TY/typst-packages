@@ -12,7 +12,7 @@ Only an unsuppressed proven source route to a direct no-option literal
 `#highlighted[...]` or `#highlighted()[...]` with ordinary text, whitespace,
 smart-quote tokens, simple direct `@label` references, and inline or display equations can be proposed. The latter requires exactly
 empty adjacent parentheses; whitespace or comments inside them are not removed.
-Reference supplements and embedded calls are not selected; reference syntax and
+Reference supplements and embedded calls are not selected by default; reference syntax and
 its highlight ownership are rechecked after parsing. User-defined reference show
 rules and runtime reference resolution are not proved and may alter rendering.
 This reference extension applies only to the source-only inspection option;
@@ -31,6 +31,31 @@ entire file. To bound work, at most 32 individual fallback checks are made per
 batch; exceeding that budget withholds the source with an explicit reason.
 The summary's unpreviewed count includes excluded findings, and the batch is
 `INCOMPLETE` when findings remain unpreviewed.
+
+An additional explicit `--preview-conditional-modern-scoped-references` option
+requires `--preview-conditional-modern-highlights` and its modern evidence
+options. It accepts exactly `#(parameter.ref)("literal")` in a source-proven
+callback from the exact reviewed `@local/scoped-annotations:0.3.0` wrapper.
+The selected parameter must be used only in reviewed direct field access within
+the callback; shadowing, assignments, imports/includes, dictionary escapes,
+unknown fields and dynamic arguments are withheld. Nested recognized callbacks
+use their own innermost parameter; an unrecognized callback is not admitted.
+Each source's diagnostic is independently reissued once and checked against an
+immutable capture; altered findings do not authorize a proposal. After splitting,
+the tool reparses and checks the ordered calls and their highlighted ownership,
+as well as the ordinary suppression and cross-rule checks described above.
+A batch-wide budget of 2,000,000 charged AST work units covers diagnostic
+replay, scope traversal and candidate rechecking. On exhaustion, the scoped
+portion is explicitly withheld, the batch is incomplete, and the original
+non-scoped proposals for that source are independently recomputed and
+revalidated. A separate fallback budget allows at most 32 more subset checks
+per batch, in addition to the 32 ordinary scoped-profile subset checks; it does
+not suppress existing refusals, conflicts, or suppression directives. The successful reference route remains conditional on the
+captured package's runtime selection, successful callback execution, unchanged
+scope value and label resolution. User `show ref` rules and layout may change
+rendering. This is source-only: it proves neither execution nor PDF equivalence,
+and grants no source-write, compilation or publication authority. The existing
+composed compiler profiles do not select this option.
 
 The JSON section contains exact byte offsets and replacement text, which can
 include document content. The batch has a shared item and serialized-byte limit

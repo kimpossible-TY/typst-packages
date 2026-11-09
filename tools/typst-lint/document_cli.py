@@ -46,6 +46,7 @@ def report_document(root, entrypoint, *, rule_set='core', package_path=None,
                     modern_highlight_evidence=False,
                     cetz_annotation_manifest=None,
                     preview_conditional_modern_highlights=False,
+                    preview_conditional_modern_scoped_references=False,
                     preview_conditional_modern_math_highlights=False,
                     reference_package_path=None, reference_facade=None, reference_cache_path=None,
                     reference_calls=False, reference_arguments=False, reference_catalog=None):
@@ -116,6 +117,9 @@ def report_document(root, entrypoint, *, rule_set='core', package_path=None,
     require(type(preview_conditional_modern_highlights) is bool
             and (not preview_conditional_modern_highlights or modern_highlight_evidence),
             'Modern highlight previews require --modern-highlight-evidence')
+    require(type(preview_conditional_modern_scoped_references) is bool
+            and (not preview_conditional_modern_scoped_references or preview_conditional_modern_highlights),
+            'Scoped reference previews require --preview-conditional-modern-highlights')
     require(type(preview_conditional_modern_math_highlights) is bool
             and (not preview_conditional_modern_math_highlights or modern_highlight_evidence),
             'Modern math highlight previews require --modern-highlight-evidence')
@@ -270,7 +274,8 @@ def report_document(root, entrypoint, *, rule_set='core', package_path=None,
                     from document_modern_highlight_preview import preview_all as preview_modern_highlights
                     repeated_report, modern_highlight_previews = preview_modern_highlights(
                         modern_analyzer, max_items=MAX_REPORT_ITEMS - items, return_evidence=True,
-                        allow_direct_references=True)
+                        allow_direct_references=True,
+                        allow_scoped_references=preview_conditional_modern_scoped_references)
                     if modern_highlight_report is not None:
                         require(modern_highlight_report == repeated_report, 'Modern highlight evidence changed between previews')
                     modern_highlight_report = repeated_report
@@ -1013,6 +1018,8 @@ def main(arguments=None):
                         help='Capture an explicit resource manifest for conditional CeTZ annotation hints (requires scoped-call previews and both namespace roots)')
     parser.add_argument('--preview-conditional-modern-highlights', action='store_true',
                         help='Preview simple modern highlight splits (requires --modern-highlight-evidence)')
+    parser.add_argument('--preview-conditional-modern-scoped-references', action='store_true',
+                        help='Opt in to source-only scoped reference highlight splits (requires --preview-conditional-modern-highlights)')
     parser.add_argument('--preview-conditional-modern-math-highlights', action='store_true',
                         help='Preview reviewed builtin math highlight splits (requires --modern-highlight-evidence)')
     parser.add_argument('--preview-display-gaps', action='store_true',
@@ -1068,6 +1075,7 @@ def main(arguments=None):
                                  modern_highlight_evidence=args.modern_highlight_evidence,
                                  cetz_annotation_manifest=args.cetz_annotation_manifest,
                                  preview_conditional_modern_highlights=args.preview_conditional_modern_highlights,
+                                 preview_conditional_modern_scoped_references=args.preview_conditional_modern_scoped_references,
                                  preview_conditional_modern_math_highlights=args.preview_conditional_modern_math_highlights,
                                  preview_display_gaps=args.preview_display_gaps,
                                  preview_standalone_displays=args.preview_standalone_displays,

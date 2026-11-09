@@ -181,6 +181,15 @@ reference extension does not change compiler preview selection. These proposals
 are not applied or compiled and can change layout; see the
 [modern highlight preview contract](MODERN_HIGHLIGHT_PREVIEW_CONTRACT.md).
 
+Add `--preview-conditional-modern-scoped-references` to the same inspection
+command to opt in to a bounded source-only subset of `#(s.ref)("literal")`
+inside the exact captured scoped wrapper. It requires
+`--preview-conditional-modern-highlights` and its evidence options. Shadowing,
+mutation, unresolved imports, unsupported receiver uses and dynamic arguments
+remain withheld. The work budget is shared across the batch; exhaustion explicitly withholds
+the scoped portion while independently preserving eligible existing proposals. Execution, rendered equivalence, source writes and compiler
+permission are not proved. This option does not enable composed compilation.
+
 The `--preview-conditional-punctuation` inspection reports adjacent trailing
 punctuation moves independently from moves whose footnote has preceding spaces.
 Each adjacent move has inseparable insertion and deletion edits; its source-only

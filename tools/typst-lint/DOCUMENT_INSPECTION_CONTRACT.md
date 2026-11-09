@@ -193,6 +193,12 @@ is required, runtime binding remains conditional, and splitting math from
 highlight can change rendered emphasis and layout. See
 [the preview contract](MODERN_HIGHLIGHT_PREVIEW_CONTRACT.md) for exclusions and
 the shared report budget. The inspection does not apply or compile these edits.
+An additional `--preview-conditional-modern-scoped-references` opt-in requires
+the modern highlight preview option and admits a narrowly verified scoped
+reference shape. Its shared AST budget withholds the scoped portion on exhaustion,
+while independently revalidating existing proposals; runtime binding, execution,
+visual equivalence and modification permission remain
+unproved. See the same contract for accepted receiver and argument shapes.
 
 JSON includes:
 
