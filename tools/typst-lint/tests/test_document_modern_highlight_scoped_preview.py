@@ -135,6 +135,44 @@ class ScopedReferencePreviewTests(unittest.TestCase):
         self.assertFalse(captured.selected(forged, budget=[scoped.MAX_SCOPE_WORK]))
         self.assertFalse(scoped.selected(analyzer, tree, forged))
 
+    def test_scoped_subset_exhaustion_does_not_starve_later_file(self):
+        import include_context
+        import namespace_multiroot
+        import conditional_footnote_binding as binding
+        a = (fixtures.IMPORT + SCOPE + b'#highlighted[Bad $ x $ end.]\n'
+             b'#highlighted[Good $x$ end.]\n#local-tag-scope(s => ['
+             b'#highlighted[One #(s.ref)("one") $x$ end.] '
+             b'#highlighted[Two #(s.ref)("two") $y$ end.]])')
+        b = fixtures.IMPORT + SCOPE + b'#highlighted[Bad $ x $ end.]\n#highlighted[Good $x$ end.]'
+        for name, source in (('a.typ', a), ('b.typ', b)):
+            (self.fixture.project / name).write_bytes(source)
+        context = include_context.load_include_context(self.fixture.project, (('a.typ', a), ('b.typ', b)))
+        session = binding.ConditionalFootnoteBinding(context, namespace_multiroot.load_multiroot_capture(
+            self.fixture.packages, self.fixture.cache))
+        analyzer = modern.ModernHighlightAnalyzer(session, scoped_callbacks=True)
+        original = scoped._scope
+        def costly(tree, diagnostic, *, override=None, budget=None):
+            # Reproduce the failure boundary; this is not a measured AST cost.
+            scoped._charge(budget, 100_000)
+            return original(tree, diagnostic, override=override, budget=[scoped.MAX_SCOPE_WORK])
+        # These reduced limits are test fixtures, not the production limits.
+        with patch.object(scoped, 'MAX_SCOPE_WORK', 600_000), patch.object(preview, 'MAX_SUBSET_CHECKS', 4), \
+                patch.object(scoped, '_scope', side_effect=costly):
+            baseline = preview.preview_all(analyzer)
+            result = preview.preview_all(analyzer, allow_scoped_references=True)
+        rows = {row['path']: row for row in result['by_file']}
+        baseline_rows = {row['path']: row for row in baseline['by_file']}
+        for name, source in (('a.typ', a), ('b.typ', b)):
+            row, baseline_row = rows[name], baseline_rows[name]
+            edit, = baseline_row['edits']
+            self.assertEqual(source[edit['start']:edit['end']], b'#highlighted[Good $x$ end.]')
+            self.assertIn(edit, row['edits'])
+        for field in ('verification', 'candidate_sha256', 'edits'):
+            self.assertEqual(rows['b.typ'][field], baseline_rows['b.typ'][field])
+        self.assertNotEqual(rows['b.typ']['verification'], 'withheld')
+        self.assertEqual((self.fixture.project / 'a.typ').read_bytes(), a)
+        self.assertEqual((self.fixture.project / 'b.typ').read_bytes(), b)
+
     def test_changed_candidate_reference_is_withheld(self):
         body = b'#local-tag-scope(s => [#highlighted[See #(s.ref)("one") $x$]])'
         original = scoped._scope
