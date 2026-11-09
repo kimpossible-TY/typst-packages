@@ -457,6 +457,10 @@ marker-target hints cover directly following headings or display math. These hin
 retain exclusions for unrelated math, code, raw text, headings and list structures.
 Common resolver refusals are reported once per source. These rules remain in
 `coverage.uninspected` because the document context has not been established.
+When cancellation call sites remain unresolved, text output summarizes their
+deferred and unresolved categories across captured unique source files, not
+include occurrences; the counts are not violations or proof of execution. JSON
+retains each source position and the existing report budgets.
 The separate `conditional_local_scope_raw_annotations` section counts raw
 `annot` calls lexically inside displays in supported literal
 `local-scope-annotations` callbacks and reports outside patterns as conditional

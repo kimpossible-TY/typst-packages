@@ -17,12 +17,20 @@ from typst_lint import InputError, digest, load_rules
 RULE = 'core.annotation-in-display'
 NAME = 'annot-cetz'
 CONDITIONS = (
-    'This direct call resolves to the reviewed raw annot-cetz helper at runtime.',
+    'This direct call resolves to the reviewed raw annot-cetz helper at runtime; a lexical display count '
+    'alone does not prove runtime ownership or execution.',
     'The enclosing literal source content and this call actually execute and render as expected.',
-    'No enclosing wrapper or show rule places the call inside a display equation at runtime.',
+    'For outside-display diagnostics only, no enclosing wrapper or show rule places the call inside '
+    'a display equation at runtime.',
     'Runtime imports, package selection and initialization match the intended source context.',
 )
 _ASSIGNMENTS = frozenset(('Eq', 'PlusEq', 'HyphEq', 'StarEq', 'SlashEq'))
+
+
+def _arguments(tree, args_index):
+    args = [child for child in import_graph.significant(tree, args_index)
+            if tree.nodes[child].kind not in ('LeftParen', 'RightParen', 'Comma')]
+    return len(args) == 3 and all(tree.nodes[child].kind not in ('Named', 'Spread') for child in args)
 
 
 def _explicit_shadow(tree):
@@ -109,7 +117,8 @@ def _analyze(source, path, *, catalog=None, captured_tree=None):
         raise InputError('Missing or invalid annotation rule metadata')
     result = dict(path=path, source_sha256=digest(source), status='PARTIAL', diagnostics=[],
                   suppressed=[], unresolved=[], conditions=CONDITIONS, runtime_binding_proved=False,
-                  execution_proved=False, coverage_complete=False, edit_permission=False, compiler_permission=False)
+                  execution_proved=False, coverage_complete=False, edit_permission=False, compiler_permission=False,
+                  lexical_display_calls=0)
     try:
         tree = parse(source) if captured_tree is None else captured_tree
     except (AdapterError, OSError, ValueError) as error:
@@ -134,6 +143,17 @@ def _analyze(source, path, *, catalog=None, captured_tree=None):
                 or nodes[parts[1]].kind != 'Args'):
             continue
         parent = parents.get(index)
+        if parent is not None and nodes[parent].kind == 'Math':
+            siblings = nodes[parent].children
+            position = positions[index]
+            mark = nodes[siblings[position - 1]] if position else None
+            equation = parents.get(parent)
+            if (equation is not None and nodes[equation].kind == 'Equation'
+                    and nodes[equation].display is True and mark is not None
+                    and mark.kind == 'Hash' and mark.end == node.start
+                    and _arguments(tree, parts[1])):
+                result['lexical_display_calls'] += 1
+                continue
         if parent is None or nodes[parent].kind != 'Markup':
             result['unresolved'].append(f'Overlay call is not direct markup at byte {node.start}')
             continue
@@ -150,9 +170,7 @@ def _analyze(source, path, *, catalog=None, captured_tree=None):
         if ancestor is not None:
             result['unresolved'].append(f'Overlay display ownership or execution is unsupported at byte {node.start}')
             continue
-        args = [child for child in import_graph.significant(tree, parts[1])
-                if nodes[child].kind not in ('LeftParen', 'RightParen', 'Comma')]
-        if len(args) != 3 or any(nodes[child].kind in ('Named', 'Spread') for child in args):
+        if not _arguments(tree, parts[1]):
             result['unresolved'].append(f'Overlay arguments are unsupported at byte {node.start}')
             continue
         line = bisect_right(newlines, mark.start) + 1

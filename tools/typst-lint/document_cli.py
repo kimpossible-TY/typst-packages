@@ -766,7 +766,8 @@ def report_document(root, entrypoint, *, rule_set='core', package_path=None,
                 conditional_detached_annotations.append(detached)
                 raw_overlay = analyze_raw_overlay(item.source, item.path, catalog=catalog['rules'])
                 items += (1 + len(raw_overlay['diagnostics']) + len(raw_overlay['suppressed'])
-                          + len(raw_overlay['conditions']) + len(raw_overlay['unresolved']))
+                          + len(raw_overlay['conditions']) + len(raw_overlay['unresolved'])
+                          + raw_overlay['lexical_display_calls'])
                 require(items <= MAX_REPORT_ITEMS, 'Document inspection report item limit exceeded')
                 conditional_raw_overlays.append(raw_overlay)
                 raw_annot = analyze_raw_annot(item.source, item.path, catalog=catalog['rules'])
@@ -1473,6 +1474,18 @@ def main(arguments=None):
             for finding in result['local_rule_hints']['diagnostics']:
                 print(f"{finding['path']}:{finding['line']}:{finding['column']}: "
                       f"source-local conditional {finding['rule_id']}: {finding['explanation']}")
+            from cancel_rules import RULE_ID as CANCEL_RULE, DEFERRED_REASON, UNRESOLVED_REASON
+            cancel_reasons = (reason for row in result['local_rule_hints']['coverage']
+                              if row['rule_id'] == CANCEL_RULE for reason in row['reasons'])
+            deferred = unresolved = 0
+            for reason in cancel_reasons:
+                deferred += reason.startswith(DEFERRED_REASON)
+                unresolved += reason.startswith(UNRESOLVED_REASON)
+            if deferred or unresolved:
+                print(f'Cancellation coverage is incomplete across captured unique source files: '
+                      f'{deferred} deferred/dynamic and '
+                      f'{unresolved} unresolved/shadowed mathematical call sites; these are not '
+                      'violation counts and execution is unproved. See JSON for source positions.')
             from paragraph_rules import NESTED_GAP_UNRESOLVED
             unresolved_gaps = [(row['path'], reason) for row in result['local_rule_hints']['coverage']
                                if row['rule_id'] == 'pde.paragraph-marker-gap'
@@ -1903,7 +1916,8 @@ def main(arguments=None):
             print('Conditional raw overlays: diagnostic-only, no edit or compiler permission')
             for row in raw_overlays['by_file']:
                 print(f"  {row['path']}: {row['status']}; {len(row['diagnostics'])} hints; "
-                      f"{len(row['suppressed'])} suppressed; source sha256 {row['source_sha256']}")
+                      f"{len(row['suppressed'])} suppressed; {row['lexical_display_calls']} direct lexical "
+                      f"display calls; source sha256 {row['source_sha256']}")
                 for label, entries in (('hint', row['diagnostics']), ('suppressed', row['suppressed'])):
                     for entry in entries:
                         print(f"    {label} {entry['path']}:{entry['line']}:{entry['column']}: "

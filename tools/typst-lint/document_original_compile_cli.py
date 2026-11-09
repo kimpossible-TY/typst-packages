@@ -235,14 +235,15 @@ def _direct_raw_positions(tree, *, max_work, overlay=False):
     return positions, work
 
 
-def _direct_raw_display_count(tree, *, max_work):
+def _direct_raw_display_count(tree, *, max_work, overlay=False):
     """Verify only direct escaped calls in a lexical display equation."""
     from document_conditional_raw_annot import _arguments, _explicit_shadow
+    import document_conditional_raw_overlay as overlay_module
     from document_conditional_scoped_calls import _parts, _text
     nodes = tree.nodes
     work = len(nodes)
     require(work <= max_work, 'Raw annotation ownership work limit exceeded')
-    if _explicit_shadow(tree):
+    if (overlay_module._explicit_shadow(tree) if overlay else _explicit_shadow(tree)):
         return 0, work
     parents = {child: (index, position) for index, node in enumerate(nodes)
                for position, child in enumerate(node.children)}
@@ -252,8 +253,15 @@ def _direct_raw_display_count(tree, *, max_work):
             continue
         parts = _parts(tree, index)
         if (len(parts) != 2 or nodes[parts[0]].kind != 'Ident'
-                or _text(tree, parts[0]) != 'annot' or nodes[parts[1]].kind != 'Args'
-                or not _arguments(tree, parts[1])):
+                or _text(tree, parts[0]) != ('annot-cetz' if overlay else 'annot')
+                or nodes[parts[1]].kind != 'Args'):
+            continue
+        if overlay:
+            args = [child for child in _parts(tree, parts[1])
+                    if nodes[child].kind not in ('LeftParen', 'RightParen', 'Comma')]
+            if len(args) != 3 or any(nodes[child].kind in ('Named', 'Spread') for child in args):
+                continue
+        elif not _arguments(tree, parts[1]):
             continue
         parent, position = parents[index]
         if nodes[parent].kind != 'Math' or not position or parent not in parents:
@@ -305,11 +313,12 @@ def _conditional_raw_sections(context, catalog, metadata, cap, items):
                 wrappers += value['wrappers_examined']
                 dynamic += value['wrappers_in_dynamic_context']
                 display += value['lexical_display_calls']
-            elif module is direct:
+            else:
                 require(type(value.get('lexical_display_calls')) is int and value['lexical_display_calls'] >= 0,
                         'Conditional raw annotation display count is invalid')
                 if value['status'] == 'PARTIAL':
-                    expected, charged = _direct_raw_display_count(item.tree, max_work=_LOCAL_RAW_OWNER_WORK - work)
+                    expected, charged = _direct_raw_display_count(
+                        item.tree, max_work=_LOCAL_RAW_OWNER_WORK - work, overlay=module is raw_overlay)
                     work += charged
                     require(value['lexical_display_calls'] == expected,
                             'Conditional raw annotation display count does not match captured syntax')
@@ -317,12 +326,11 @@ def _conditional_raw_sections(context, catalog, metadata, cap, items):
             if value['status'] == 'UNAVAILABLE':
                 require(not value['diagnostics'] and not value['suppressed'] and value['unresolved']
                         and (not wrapper or not value['wrappers_examined'] and not value['lexical_display_calls'])
-                        and (module is not direct or not value['lexical_display_calls']),
+                        and (wrapper or not value['lexical_display_calls']),
                         'Unavailable annotation result contains partial findings')
             items += (1 + sum(len(value[k]) for k in ('diagnostics', 'suppressed', 'unresolved'))
-                      + len(value['conditions']) + (value['wrappers_examined'] + value['lexical_display_calls']
-                                                    if wrapper else value['lexical_display_calls']
-                                                    if module is direct else 0))
+                      + len(value['conditions']) + value['lexical_display_calls']
+                      + (value['wrappers_examined'] if wrapper else 0))
             require(items <= _LINT_ITEM_LIMIT, 'Document lint item limit exceeded')
             positions, starts, farthest = {}, [], []
             line_starts = ()
@@ -395,7 +403,7 @@ def _conditional_raw_sections(context, catalog, metadata, cap, items):
             if wrapper:
                 file.update({k: value[k] for k in ('wrappers_examined', 'wrappers_in_dynamic_context',
                                                    'lexical_display_calls')})
-            elif module is direct:
+            else:
                 file['lexical_display_calls'] = value['lexical_display_calls']
             files.append(file)
         rows, hidden_rows = _finish_mapping_sample(findings), _finish_mapping_sample(hidden)
@@ -409,7 +417,7 @@ def _conditional_raw_sections(context, catalog, metadata, cap, items):
         if wrapper:
             section.update(wrappers_examined=wrappers, wrappers_in_dynamic_context=dynamic,
                            lexical_display_calls=display)
-        elif module is direct:
+        else:
             section['lexical_display_calls'] = display
         sections[name] = section
     return sections, items

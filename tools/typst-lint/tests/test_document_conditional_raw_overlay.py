@@ -28,8 +28,7 @@ class ConditionalRawOverlayTests(unittest.TestCase):
         self.assertNotIn('edits', result)
 
     def test_display_deferred_and_dynamic_contexts_are_not_reported(self):
-        cases = (b'$ x ' + self.call + b' $',
-                 b'#let f(x) = [' + self.call + b']',
+        cases = (b'#let f(x) = [' + self.call + b']',
                  b'#for x in (1,) [' + self.call + b']',
                  b'#if true [' + self.call + b']',
                  b'#context [' + self.call + b']',
@@ -39,6 +38,21 @@ class ConditionalRawOverlayTests(unittest.TestCase):
                 result = check.analyze(source, 'main.typ')
                 self.assertFalse(result['diagnostics'])
                 self.assertTrue(result['unresolved'])
+
+    def test_only_direct_supported_display_calls_are_lexically_counted(self):
+        source = b'$ x ' + self.call + b' $\n$ y ' + self.call + b' $'
+        result = check.analyze(source, 'main.typ')
+        self.assertEqual(result['lexical_display_calls'], 2)
+        self.assertFalse(result['diagnostics'] or result['unresolved'])
+        self.assertFalse(result['runtime_binding_proved'] or result['execution_proved'])
+        for source in (b'$x ' + self.call + b'$',
+                       b'$ x #annot-cetz(x, y) $',
+                       b'$ x #annot-cetz(x, y, z, ..args) $',
+                       b'$ x #f(annot-cetz(x, y, z)) $',
+                       b'#let annot-cetz = none\n$ x ' + self.call + b' $'):
+            with self.subTest(source=source):
+                result = check.analyze(source, 'main.typ')
+                self.assertEqual(result['lexical_display_calls'], 0)
 
     def test_explicit_shadows_and_module_imports_are_never_promoted(self):
         cases = (b'#let annot-cetz = none', b'#let annot-cetz(a, b, c) = none',

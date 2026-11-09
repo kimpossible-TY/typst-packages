@@ -79,6 +79,19 @@ class ConditionalRawOverlayCliTests(unittest.TestCase):
         self.assertIn('unresolved:', self.run_cli(*options, format='text'))
         self.assertEqual((self.root / 'main.typ').read_bytes(), source)
 
+    def test_lexical_display_counts_are_opt_in_and_non_mutating(self):
+        source = b'$ x #annot-cetz((<x>,), cetz, {draw}) $'
+        (self.root / 'main.typ').write_bytes(source)
+        options = ('--rule-set', 'pde', '--preview-conditional-scoped-calls')
+        result = self.run_cli(*options)
+        row, = result['conditional_raw_overlays']['by_file']
+        self.assertEqual(row['lexical_display_calls'], 1)
+        self.assertFalse(row['diagnostics'] or row['unresolved'] or row['runtime_binding_proved']
+                         or row['execution_proved'] or row['coverage_complete'])
+        self.assertIn('1 direct lexical display calls', self.run_cli(*options, format='text'))
+        self.assertFalse(result['applied_fixes'] or result['compiler_invoked'])
+        self.assertEqual((self.root / 'main.typ').read_bytes(), source)
+
     def test_raw_section_counts_against_item_budget(self):
         (self.root / 'main.typ').write_bytes(b'#proof[#annot-cetz((<x>,), cetz, {draw})]')
         report = document_cli.report_document(str(self.root), 'main.typ', rule_set='pde',

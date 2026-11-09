@@ -10,6 +10,8 @@ from suppression import resolve as resolve_suppressions
 from typst_lint import Diagnostic, digest, load_rules
 
 RULE_ID = 'pde.theme-cancelmark'
+DEFERRED_REASON = 'Deferred or dynamic mathematical call is unsupported at byte '
+UNRESOLVED_REASON = 'Unresolved or shadowed mathematical callee; no cancellation identity proof at byte '
 _DEFERRED = frozenset(('Closure', 'Contextual', 'ShowRule', 'Conditional',
                        'ForLoop', 'WhileLoop'))
 
@@ -50,11 +52,11 @@ def analyze(tree, path, resolution):
             continue
         fact = resolution.facts[i]
         if fact.deferred or any(kind in _DEFERRED for kind in ancestors):
-            skips.append(f'Deferred or dynamic mathematical call is unsupported at byte {node.start}')
+            skips.append(f'{DEFERRED_REASON}{node.start}')
             continue
         if not is_math_cancel_binding(fact.binding):
             if fact.binding is None:
-                skips.append(f'Unresolved or shadowed mathematical callee; no cancellation identity proof at byte {node.start}')
+                skips.append(f'{UNRESOLVED_REASON}{node.start}')
             continue
         start = node.start
         line = source[:start].count(b'\n') + 1

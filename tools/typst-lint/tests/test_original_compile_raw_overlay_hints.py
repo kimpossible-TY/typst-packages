@@ -7,6 +7,27 @@ import test_original_compile_scoped_raw_hints as fixtures
 
 
 class RawOverlayCompileTests(fixtures.OriginalCompileScopedRawHintsTests):
+    def test_lexical_display_count_is_rechecked_on_captured_tree(self):
+        source = b'$ x #annot-cetz((<x>,), cetz, [draw]) $'
+        flags = ('--lint-document', '--rule-set', 'pde', '--lint-local-hints')
+        status, _, report, _ = self.run_mock(source, *flags)
+        self.assertEqual(status, 0, report)
+        section = report['lint']['conditional_raw_overlays']
+        self.assertEqual(section['lexical_display_calls'], 1)
+        self.assertEqual(section['by_file'][0]['lexical_display_calls'], 1)
+        self.assertEqual(section['diagnostics_count'], 0)
+        self.assertFalse(section['runtime_binding_proved'] or section['execution_proved'])
+        original = overlay._analyze_captured_tree
+        def forged(tree, path, **kw):
+            value = original(tree, path, **kw)
+            value['lexical_display_calls'] += 1
+            return value
+        with patch.object(overlay, '_analyze_captured_tree', side_effect=forged):
+            status, pdf, report, compiler = self.run_mock(source, *flags)
+        self.assertEqual(status, 2, report)
+        self.assertEqual(pdf, b'')
+        compiler.assert_not_called()
+
     def test_captured_tree_and_suppression(self):
         source = (b'#annot-cetz((<x>,), cetz, [draw])\n'
                   b'// typst-lint: ignore-next core.annotation-in-display -- intentional\n'
