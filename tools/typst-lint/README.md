@@ -165,7 +165,10 @@ plan and do not enter compiler previews. See the
 
 With explicit modern highlight evidence, `--preview-conditional-modern-highlights`
 also offers limited independent source splits that leave literal math outside
-highlighting. They are not applied or compiled and can change layout; see the
+highlighting, including simple direct `@label` references without supplements.
+Reference resolution and custom show rules remain conditional. This source-only
+reference extension does not change compiler preview selection. These proposals
+are not applied or compiled and can change layout; see the
 [modern highlight preview contract](MODERN_HIGHLIGHT_PREVIEW_CONTRACT.md).
 
 The `--preview-conditional-punctuation` inspection reports adjacent trailing

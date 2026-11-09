@@ -29,6 +29,9 @@ CONDITIONS = (
     'The captured source executes in the same intended prose and math context.',
     'Splitting highlighting can change emphasis, smart-quote direction, spacing and page layout; PDF equivalence is not proved.',
 )
+REFERENCE_CONDITION = (
+    'Reference resolution and custom reference show rules may change rendering; equivalence is not proved.',
+)
 _MATH_EXCLUDED = frozenset(('FuncCall', 'MathCall', 'CodeBlock', 'Hash', 'Contextual', 'LetBinding',
                             'ShowRule', 'ModuleImport', 'ModuleInclude', 'Label', 'LineComment', 'BlockComment'))
 MAX_PREVIEW_ITEMS = 100_000
@@ -58,7 +61,14 @@ def _math_signature(tree, root, *, allow_reviewed_calls=False):
                  for i in order)
 
 
-def _select(tree, diagnostics, *, proven_math_spans=frozenset()):
+def _prose_signature(tree, index):
+    node = tree.nodes[index]
+    return (node.kind, tree.source[node.start:node.end], tuple(
+        (tree.nodes[child].kind, tree.source[tree.nodes[child].start:tree.nodes[child].end])
+        for child in node.children))
+
+
+def _select(tree, diagnostics, *, proven_math_spans=frozenset(), allow_direct_references=False):
     nodes, source = tree.nodes, tree.source
     parents = {child: index for index, node in enumerate(nodes) for child in node.children}
     positions = {child: pos for node in nodes for pos, child in enumerate(node.children)}
@@ -90,7 +100,14 @@ def _select(tree, diagnostics, *, proven_math_spans=frozenset()):
             continue
         body = nodes[inner[0]]
         children = [nodes[c] for c in body.children]
-        if not children or any(c.kind not in ('Text', 'Space', 'SmartQuote', 'Equation') for c in children):
+        supported = ('Text', 'Space', 'SmartQuote', 'Equation', 'Ref') if allow_direct_references else (
+            'Text', 'Space', 'SmartQuote', 'Equation')
+        if not children or any(c.kind not in supported for c in children):
+            continue
+        # A literal @label is a single reference marker. An explicit
+        # supplement can contain arbitrary executable code and is withheld.
+        if any(c.kind == 'Ref' and (len(c.children) != 1
+                or nodes[c.children[0]].kind != 'RefMarker') for c in children):
             continue
         parent, position = parents.get(index), positions.get(index, 0)
         if parent is None or nodes[parent].kind != 'Markup' or not position:
@@ -116,7 +133,7 @@ def _select(tree, diagnostics, *, proven_math_spans=frozenset()):
                 start = len(output)
                 output.extend(b'#highlighted[' + text + b']')
                 spans.append(('highlight', start, len(output), tuple(
-                    (nodes[child].kind, source[nodes[child].start:nodes[child].end]) for child in text_nodes)))
+                    _prose_signature(tree, child) for child in text_nodes)))
             else:
                 output.extend(text)
             text_start = None
@@ -174,8 +191,8 @@ def _verify_insertions(original, candidate, edits, plans):
                         or nodes[args[0]].kind != 'ContentBlock'):
                     raise SafetyError('Generated highlight call shape or escape changed')
                 bodies = [child for child in nodes[args[0]].children if nodes[child].kind == 'Markup']
-                if (len(bodies) != 1 or tuple((nodes[child].kind,
-                        candidate.source[nodes[child].start:nodes[child].end]) for child in nodes[bodies[0]].children)
+                if (len(bodies) != 1 or tuple(_prose_signature(candidate, child)
+                        for child in nodes[bodies[0]].children)
                         != signature):
                     raise SafetyError('Generated highlight prose syntax changed')
 
@@ -252,8 +269,10 @@ def _same_script_findings_with_moved_equations(before_tree, before, after_tree, 
             and mapped_keys(before.suppressed) == _keys(after_tree.source, after.suppressed))
 
 
-def _preview_source(evidence, tree, path, diagnostics, records, *, proven_math_spans=frozenset()):
-    edits, plans = _select(tree, diagnostics, proven_math_spans=proven_math_spans)
+def _preview_source(evidence, tree, path, diagnostics, records, *, proven_math_spans=frozenset(),
+                    allow_direct_references=False):
+    edits, plans = _select(tree, diagnostics, proven_math_spans=proven_math_spans,
+                           allow_direct_references=allow_direct_references)
     if not edits:
         return None
     empty = dict(path=path, baseline_sha256=digest(tree.source), candidate_sha256=None,
@@ -329,11 +348,13 @@ def _preview_source(evidence, tree, path, diagnostics, records, *, proven_math_s
         return dict(empty, reason=str(error))
 
 
-def _partial_preview(evidence, tree, path, diagnostics, records, original, budget, *, proven_math_spans=frozenset()):
+def _partial_preview(evidence, tree, path, diagnostics, records, original, budget, *, proven_math_spans=frozenset(),
+                     allow_direct_references=False):
     """Retry independent edits, then revalidate their union on the original tree."""
     if original['verification'] != 'withheld' or original.get('reason') != _OVERLAPPING_FINDING:
         return original
-    edits, _ = _select(tree, diagnostics, proven_math_spans=proven_math_spans)
+    edits, _ = _select(tree, diagnostics, proven_math_spans=proven_math_spans,
+                       allow_direct_references=allow_direct_references)
     if len(edits) < 2:
         return original
     if len(edits) > budget[0]:
@@ -342,6 +363,9 @@ def _partial_preview(evidence, tree, path, diagnostics, records, original, budge
     by_span = {(item['start'] - 1, item['end']): item for item in diagnostics}
     accepted = []
     def run_subset(subset):
+        if allow_direct_references:
+            return _preview_source(evidence, tree, path, subset, records, proven_math_spans=proven_math_spans,
+                                   allow_direct_references=True)
         if proven_math_spans:
             return _preview_source(evidence, tree, path, subset, records, proven_math_spans=proven_math_spans)
         return _preview_source(evidence, tree, path, subset, records)
@@ -365,11 +389,13 @@ def _partial_preview(evidence, tree, path, diagnostics, records, original, budge
     return combined
 
 
-def preview_all(evidence, *, max_items=MAX_PREVIEW_ITEMS, max_bytes=MAX_PREVIEW_BYTES, return_evidence=False):
+def preview_all(evidence, *, max_items=MAX_PREVIEW_ITEMS, max_bytes=MAX_PREVIEW_BYTES, return_evidence=False,
+                allow_direct_references=False):
     """Recompute pinned evidence and return an all-or-nothing source-only batch."""
     if type(evidence) is not modern.ModernHighlightAnalyzer:
         raise InputError('Issued modern highlight evidence is required')
-    require(type(return_evidence) is bool and type(max_items) is int and 0 < max_items <= MAX_PREVIEW_ITEMS
+    require(type(return_evidence) is bool and type(allow_direct_references) is bool
+            and type(max_items) is int and 0 < max_items <= MAX_PREVIEW_ITEMS
             and type(max_bytes) is int and 0 < max_bytes <= MAX_PREVIEW_BYTES,
             'Invalid modern highlight preview budget')
     evidence._check()
@@ -380,11 +406,13 @@ def preview_all(evidence, *, max_items=MAX_PREVIEW_ITEMS, max_bytes=MAX_PREVIEW_
                   withheld_source_count=0, unresolved_reasons_count=0,
                   runtime_binding_proved=False, execution_proved=False, render_equivalence_proved=False,
                   edit_permission=False, compiler_permission=False)
+    if allow_direct_references:
+        result['conditions'] += REFERENCE_CONDITION
     encoded = json.dumps(result, ensure_ascii=False, sort_keys=True, indent=2)
     evidence_encoded = json.dumps(diagnostics, ensure_ascii=False, sort_keys=True, indent=2)
     size = (len(encoded.encode('utf-8')) + 2 * encoded.count('\n')
             + len(evidence_encoded.encode('utf-8')) + 2 * evidence_encoded.count('\n'))
-    items = 6 + len(CONDITIONS)
+    items = 6 + len(result['conditions'])
     require(items + diagnostics['report_items'] <= max_items and size <= max_bytes,
             'Modern highlight preview report budget exceeded')
     subset_budget = [MAX_SUBSET_CHECKS]
@@ -394,11 +422,16 @@ def preview_all(evidence, *, max_items=MAX_PREVIEW_ITEMS, max_bytes=MAX_PREVIEW_
         if not row['diagnostics']:
             continue
         source = evidence._session._context.source_for(row['path'])
-        record = _preview_source(evidence, source.tree, source.path, row['diagnostics'], records)
+        record = (_preview_source(evidence, source.tree, source.path, row['diagnostics'], records,
+                                  allow_direct_references=True) if allow_direct_references else
+                  _preview_source(evidence, source.tree, source.path, row['diagnostics'], records))
         if record is None:
             result['unpreviewed_diagnostics'] += len(row['diagnostics'])
             continue
-        record = _partial_preview(evidence, source.tree, source.path, row['diagnostics'], records, record, subset_budget)
+        record = _partial_preview(evidence, source.tree, source.path, row['diagnostics'], records, record, subset_budget,
+                                  allow_direct_references=allow_direct_references)
+        if allow_direct_references:
+            record['conditions'] += REFERENCE_CONDITION
         if record['verification'] == 'withheld':
             result['withheld_source_count'] += 1
             result['unpreviewed_diagnostics'] += len(row['diagnostics'])

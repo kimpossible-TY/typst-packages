@@ -10,8 +10,13 @@ compiler permission remain unproved.
 
 Only an unsuppressed proven source route to a direct no-option literal
 `#highlighted[...]` or `#highlighted()[...]` with ordinary text, whitespace,
-smart-quote tokens, and inline or display equations can be proposed. The latter requires exactly
+smart-quote tokens, simple direct `@label` references, and inline or display equations can be proposed. The latter requires exactly
 empty adjacent parentheses; whitespace or comments inside them are not removed.
+Reference supplements and embedded calls are not selected; reference syntax and
+its highlight ownership are rechecked after parsing. User-defined reference show
+rules and runtime reference resolution are not proved and may alter rendering.
+This reference extension applies only to the source-only inspection option;
+compiler preview selection is unchanged.
 Math containing function calls, code, labels,
 comments or imports and bodies with nonliteral/nested content are skipped.
 Each equation is copied unchanged outside highlighting; nonempty prose segments

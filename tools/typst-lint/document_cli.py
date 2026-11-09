@@ -265,7 +265,8 @@ def report_document(root, entrypoint, *, rule_set='core', package_path=None,
                 if preview_conditional_modern_highlights:
                     from document_modern_highlight_preview import preview_all as preview_modern_highlights
                     repeated_report, modern_highlight_previews = preview_modern_highlights(
-                        modern_analyzer, max_items=MAX_REPORT_ITEMS - items, return_evidence=True)
+                        modern_analyzer, max_items=MAX_REPORT_ITEMS - items, return_evidence=True,
+                        allow_direct_references=True)
                     if modern_highlight_report is not None:
                         require(modern_highlight_report == repeated_report, 'Modern highlight evidence changed between previews')
                     modern_highlight_report = repeated_report
