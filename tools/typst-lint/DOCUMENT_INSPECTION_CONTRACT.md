@@ -49,6 +49,17 @@ Callback findings add call/body byte spans and opaque parameter names in
 routes. Empty callback metadata is omitted to preserve previous root/literal
 records. Its variable entries are included in report item accounting.
 
+The separate `--inspect-include-forwarding` option requires PDE and explicit
+package and cache roots. It captures every included source and the fixed
+math-book manifest/entrypoint from the package root, without falling back to
+the cache root, and reuses the independent original-compile source validator.
+The extra section conditionally identifies direct reviewed `book-part` bodies
+and direct literal `context` content, while preserving all original unresolved
+include records and other reports. Runtime selection, execution and rendering
+remain unproved; this performs no compilation and grants no edit authority.
+Its work, item and byte limits are bounded. Insufficient budget withholds or
+omits the extra section and never discards prior reports.
+
 The independent `--rule-set pde --preview-conditional-scoped-calls` option
 inspects direct scope-field calls in narrowly supported literal
 `local-tag-scope` and `local-scope-annotations` callbacks. Its per-file report

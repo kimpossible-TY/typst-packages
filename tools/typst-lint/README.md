@@ -366,6 +366,15 @@ display-continuation gaps; omission
 retains the script-only `core` inspection. Consumer configuration is not loaded.
 Its byte offsets, baseline/candidate hashes and in-memory edit proposals can be
 inspected even when includes occur inside `book-part` or other opaque wrappers.
+With `--rule-set pde`, `--package-path` and `--footnote-cache-path`,
+`--inspect-include-forwarding` adds conditional source ownership evidence for
+reviewed direct `book-part` bodies and direct context content. It captures the
+included sources and exact math-book manifest and entrypoint again, then
+independently rechecks each reported site. The selected math-book must be in
+`--package-path`; this option does not fall back to the cache root. Original
+unresolved include records remain unchanged: execution, package initialization
+and rendering are not proved. The extra report has bounded work and output; if
+there is insufficient room it is withheld or omitted while prior reports remain.
 `pde.display-continuation-gap` also diagnoses a standalone typed display followed
 by a blank source line and direct literal prose in the same root or nested
 Markup body. Comments, markers and wrappers are never crossed. These are

@@ -66,6 +66,8 @@ class IncludeForwardingEvidenceTests(unittest.TestCase):
                   b'#book-part(prefix: "A", single-chapter: true)[#include "child.typ"]\n'
                   b'#context { [#include "child.typ"] }')
         context, result = self.inspect(source)
+        with self.assertRaisesRegex(InputError, 'work budget'):
+            forwarding.analyze(context, self.packages, snapshot=self.snapshot(context), max_work=1)
         self.assertEqual(result['unresolved_sites_before'], 2)
         self.assertEqual(result['unresolved_occurrences_before'], 2)
         self.assertEqual(result['recognized_site_count'], 2)
@@ -124,13 +126,46 @@ class IncludeForwardingEvidenceTests(unittest.TestCase):
         context = self.context(source)
         snapshot = self.snapshot(context)
         original = forwarding._book_calls
-        def changed(tree):
-            result = original(tree)
+        def changed(tree, **kwargs):
+            result = original(tree, **kwargs)
             object.__setattr__(snapshot.files[0], 'data', b'changed')
             return result
         with patch.object(forwarding, '_book_calls', side_effect=changed):
             with self.assertRaises(SafetyError):
                 forwarding.analyze(context, self.packages, snapshot=snapshot)
+
+    def test_context_membership_work_is_reserved_before_both_replays(self):
+        import document_original_compile_cli as original_cli
+        source = b'#box[x] ' * 300 + b'\n#context { [#include "child.typ"] }\n'
+        context = self.context(source)
+        snapshot = self.snapshot(context)
+        budget = [forwarding.MAX_WORK]
+        for item in context.sources:
+            forwarding._book_calls(item.tree, budget=budget)
+        edge, = context.edges
+        source_item = context.source_for(edge.node.source.path)
+        needed = forwarding._match_work(edge, source_item)
+        self.assertGreater(needed, 100)
+        short = forwarding.MAX_WORK - budget[0] + needed - 1
+        with patch.object(forwarding, '_matches', side_effect=AssertionError('match ran before reservation')):
+            with self.assertRaisesRegex(InputError, 'work budget'):
+                forwarding.analyze(context, self.packages, snapshot=snapshot, max_work=short)
+        real_analyze, real_match = forwarding.analyze, forwarding._matches
+        count = 0
+        def limit_validator(*args, **kwargs):
+            result = real_analyze(*args, **kwargs)
+            forwarding.MAX_WORK = short
+            return result
+        def count_match(*args, **kwargs):
+            nonlocal count
+            count += 1
+            return real_match(*args, **kwargs)
+        with patch.object(forwarding, 'MAX_WORK', forwarding.MAX_WORK), \
+             patch.object(forwarding, 'analyze', side_effect=limit_validator), \
+             patch.object(forwarding, '_matches', side_effect=count_match):
+            with self.assertRaisesRegex(InputError, 'work budget'):
+                original_cli._include_forwarding(context, snapshot, 50)
+        self.assertEqual(count, 1)  # Initial analysis only, not the validator.
 
     def test_missing_or_mismatched_resource_capture_is_unavailable(self):
         source = b'#import "@local/math-book:0.2.0": book-part\n#book-part[#include "child.typ"]'

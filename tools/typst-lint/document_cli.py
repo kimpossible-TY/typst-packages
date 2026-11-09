@@ -42,6 +42,7 @@ def report_document(root, entrypoint, *, rule_set='core', package_path=None,
                     preview_conditional_aligned_spacers=False,
                     preview_conditional_prose_markers=False,
                     import_obligations=False,
+                    inspect_include_forwarding=False,
                     footnote_cache_path=None,
                     footnote_punctuation_evidence=False,
                     modern_highlight_evidence=False,
@@ -69,6 +70,9 @@ def report_document(root, entrypoint, *, rule_set='core', package_path=None,
     require(type(rule_set) is str and rule_set in ('core', 'pde'),
             'Document rule-set must be core or pde')
     require(type(import_obligations) is bool, 'Import obligations must be explicitly requested')
+    require(type(inspect_include_forwarding) is bool and (not inspect_include_forwarding
+            or (rule_set == 'pde' and package_path is not None and footnote_cache_path is not None)),
+            'Include forwarding inspection requires PDE and both explicit namespace roots')
     require(type(inspect_capitalization_review) is bool and (not inspect_capitalization_review or rule_set == 'pde'),
             'Capitalization review requires explicit --rule-set pde')
     require(package_path is None or rule_set == 'pde',
@@ -1267,6 +1271,22 @@ def report_document(root, entrypoint, *, rule_set='core', package_path=None,
             trial = dict(report, scoped_parent_patterns=scoped_parent_pattern_report)
         if len(json.dumps(trial, ensure_ascii=False, sort_keys=True, indent=2).encode('utf-8')) <= MAX_MODERN_REPORT_BYTES:
             report = trial
+            items += scoped_parent_pattern_report.get('report_items', 0)
+    if inspect_include_forwarding:
+        # Run after all existing reports so the optional evidence never
+        # consumes their item/byte budgets or alters their proposals.
+        available = MAX_REPORT_ITEMS - items
+        if available > 0:
+            from document_include_forwarding_inspect import inspect as inspect_forwarding
+            section, _ = inspect_forwarding(captured, os.fspath(package_path),
+                                            os.fspath(footnote_cache_path), max_items=available)
+            trial = dict(report, conditional_include_forwarding=section)
+            if len(json.dumps(trial, ensure_ascii=False, sort_keys=True, indent=2).encode('utf-8')) > MAX_MODERN_REPORT_BYTES:
+                import include_forwarding_evidence as forwarding
+                section = forwarding._unavailable(captured, 'Remaining document report byte budget is insufficient')
+                trial = dict(report, conditional_include_forwarding=section)
+            if len(json.dumps(trial, ensure_ascii=False, sort_keys=True, indent=2).encode('utf-8')) <= MAX_MODERN_REPORT_BYTES:
+                report = trial
     return report
 
 
@@ -1280,6 +1300,8 @@ def main(arguments=None):
     parser.add_argument('--entrypoint', required=True, help='Canonical project-relative .typ entrypoint')
     parser.add_argument('--import-obligations', action='store_true',
                         help='Report unresolved static relative-import graph requests by included source')
+    parser.add_argument('--inspect-include-forwarding', action='store_true',
+                        help='Report conditional include ownership using math-book from --package-path (no cache fallback); execution remains unproved')
     parser.add_argument('--rule-set', choices=('core', 'pde'), default='core',
                         help='Explicit source checks: core (scripts) or pde (also display layout); default core')
     parser.add_argument('--package-path',
@@ -1365,6 +1387,7 @@ def main(arguments=None):
     try:
         result = report_document(args.root, args.entrypoint, rule_set=args.rule_set,
                                  import_obligations=args.import_obligations,
+                                 inspect_include_forwarding=args.inspect_include_forwarding,
                                  package_path=args.package_path,
                                  footnote_cache_path=args.footnote_cache_path,
                                  footnote_punctuation_evidence=args.footnote_punctuation_evidence,
@@ -1410,6 +1433,9 @@ def main(arguments=None):
     if (args.inspect_scoped_parent_patterns and 'error' not in result
             and 'scoped_parent_patterns' not in result):
         print('Scoped parent pattern inventory omitted: document report byte budget is full', file=sys.stderr)
+    if (args.inspect_include_forwarding and 'error' not in result
+            and 'conditional_include_forwarding' not in result):
+        print('Include forwarding evidence omitted: document report budget is full', file=sys.stderr)
     if args.format == 'json':
         print(json.dumps(result, ensure_ascii=False, sort_keys=True, indent=2))
     elif 'error' in result:
@@ -1419,6 +1445,15 @@ def main(arguments=None):
         print(f"typst-lint inspect-document: {len(context['sources'])} sources, "
               f"{len(context['occurrences'])} include occurrences, "
               f"{len(result['diagnostics'])} source-style findings")
+        if 'conditional_include_forwarding' in result:
+            section = result['conditional_include_forwarding']
+            print(f"Conditional include ownership: {section['status']}; "
+                  f"{section['recognized_site_count']} source sites; execution is not proved")
+            print('  Original unresolved include records remain unchanged.')
+            if section.get('reason'):
+                print(f"  unavailable: {section['reason']}")
+            for site in section.get('sites', ()):
+                print(f"  {site['path']}:{site['line']}: {site['target']} ({site['evidence_kind']})")
         if 'import_obligations' in result:
             inventory = result['import_obligations']
             print('Static import obligations (distinct requests; execution and package evaluation not proved):')

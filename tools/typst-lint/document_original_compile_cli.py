@@ -546,12 +546,15 @@ def _include_forwarding(context, snapshot, cap):
                     manifest_identity=manifest.evidence.path, manifest_sha256=manifest.sha256,
                     source_identity=source.evidence.path, source_sha256=source.sha256),
                 'Include forwarding package evidence does not match the capture')
-        calls = {item.path: forwarding._book_calls(item.tree) for item in context.sources}
+        verify_budget = [forwarding.MAX_WORK]
+        calls = {item.path: forwarding._book_calls(item.tree, budget=verify_budget) for item in context.sources}
         expected = {}
         for edge in context.edges:
             if edge.target is None or edge.literal is None:
+                forwarding._charge(verify_budget, 1)
                 continue
             item = context.source_for(edge.node.source.path)
+            forwarding._charge(verify_budget, forwarding._match_work(edge, item))
             match = forwarding._matches(edge, item, calls[item.path])
             if match is not None:
                 kind, conditions, owner = match
@@ -567,6 +570,7 @@ def _include_forwarding(context, snapshot, cap):
             require(key in expected and key not in recognized, 'Unexpected or duplicate include forwarding site')
             recognized.add(key)
             edge, item, kind, conditions, owner = expected[key]
+            forwarding._charge(verify_budget, edge.node.start)
             require(row.get('source_sha256') == item.identity.source_sha256
                     and row.get('line') == item.source.count(b'\n', 0, edge.node.start) + 1
                     and row.get('target') == edge.target.path and row.get('target_sha256') == edge.target.source_sha256
@@ -581,6 +585,7 @@ def _include_forwarding(context, snapshot, cap):
         edges_by_node = {(edge.node.source.path, edge.node.node_id): edge for edge in context.edges}
         explained = 0
         for occurrence in context.occurrences:
+            forwarding._charge(verify_budget, 1 + len(occurrence.edge_chain))
             if not occurrence.unresolved_codes or 'include-cycle' in occurrence.unresolved_codes:
                 continue
             unresolved = [node for node in occurrence.edge_chain
