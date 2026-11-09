@@ -176,6 +176,11 @@ is conditional diagnostic evidence, not a claim that runtime binding or renderin
 is proven, nor permission to change sources. See
 [the highlight contract](CONDITIONAL_HIGHLIGHT_CONTRACT.md).
 
+Splitting a reviewed `highlighted` body intentionally removes the highlight
+background from equations while retaining it on the surrounding prose. The
+helper also wraps equations in boxes, so a split can change equation width,
+line height, pagination or other visible layout; inspect the rendered result.
+
 The independent `--preview-conditional-gaps` inspection also offers separate
 source-only footnote-gap candidates before a literal `paragraph-tab` marker or
 direct `figure` call; their bindings, execution and rendering remain conditional.
