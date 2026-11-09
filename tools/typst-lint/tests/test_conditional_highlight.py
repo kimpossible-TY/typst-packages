@@ -96,6 +96,47 @@ class ConditionalHighlightTests(unittest.TestCase):
             self.namespaces if namespaces is None else namespaces, rule_ids=rule_ids,
             scoped_callbacks=scoped_callbacks)
 
+    def test_builtin_block_literal_bodies_keep_conditional_ownership(self):
+        for opener in (b'#block[', b'#block(sticky: true)[',
+                       b'#block(breakable: false)[', b'#let boxit = block\n#boxit['):
+            with self.subTest(opener=opener):
+                result = self.analyze(PREFIX + b'#local-tag-scope(s => [\n' + opener
+                                      + b'#highlighted[inside $x$]]])', scoped_callbacks=True)
+                finding, = result.diagnostics
+                self.assertEqual(finding.status, 'CONDITIONAL')
+                self.assertFalse(finding.edit_permission)
+                self.assertEqual(finding.content_context[-1][0].operation, 'builtin')
+                self.assertIn(conditional.BUILTIN_BLOCK_CONDITION, finding.conditions)
+                self.assertEqual(len(finding.callback_context), 1)
+                self.assertFalse(result.unresolved)
+
+    def test_builtin_block_shadowing_mutation_and_unknown_options_are_not_traversed(self):
+        cases = (
+            b'#let block = x => x\n#block[#highlighted[$x$]]',
+            b'#local-tag-scope(block => [#block[#highlighted[$x$]]])',
+            b'#let block = none\n#block[#highlighted[$x$]]',
+            b'#block(sticky: value)[#highlighted[$x$]]',
+            b'#block(fill: red)[#highlighted[$x$]]',
+            b'#block(sticky: true, breakable: value)[#highlighted[$x$]]',
+            b'#block(block(sticky: true)[x])[#highlighted[$x$]]',
+            b'#let x = 1\n#(x = 2)\n#block[#highlighted[$x$]]',
+        )
+        for body in cases:
+            with self.subTest(body=body):
+                result = self.analyze(PREFIX + body, scoped_callbacks=True)
+                self.assertFalse(result.diagnostics, result)
+                self.assertTrue(result.unresolved, result)
+
+    def test_builtin_block_wildcard_and_named_import_shadowing(self):
+        style = STYLE + b'\n#let block = x => x\n'
+        result = self.analyze(PREFIX + b'#block[#highlighted[$x$]]', style=style)
+        self.assertFalse(result.diagnostics)
+        self.assertTrue(result.unresolved)
+        source = PREFIX + b'#import "Styles/styles.typ": block\n#block[#highlighted[$x$]]'
+        result = self.analyze(source, style=style)
+        self.assertFalse(result.diagnostics)
+        self.assertTrue(result.unresolved)
+
     def test_realistic_wildcard_facade_and_figures_keep_conditional_identity(self):
         result = self.analyze()
         self.assertEqual(len(result.diagnostics), 1, result.unresolved)
@@ -241,7 +282,7 @@ class ConditionalHighlightTests(unittest.TestCase):
         self.assertEqual(len(self.analyze(figures=figures).diagnostics), 1)
 
     def test_nested_callbacks_and_scopes_are_explicitly_unresolved(self):
-        for call in (b'#block[#highlighted[$x$]]', b'#let f() = [#highlighted[$x$]]',
+        for call in (b'#box[#highlighted[$x$]]', b'#let f() = [#highlighted[$x$]]',
                      b'#context [#highlighted[$x$]]'):
             with self.subTest(call=call):
                 result = self.analyze(PREFIX + call)
@@ -746,7 +787,7 @@ class ConditionalHighlightTests(unittest.TestCase):
             b'#local-scope-annotations(s=>[#highlighted[$x$]],parent:s)',
             b'#local-tag-scope(body:s=>[#highlighted[$x$]])',
             b'#local-tag-scope(s=>[#highlighted[$x$]], t=>[])',
-            b'#local-tag-scope(s=>[#block[#highlighted[$x$]]])',
+            b'#local-tag-scope(s=>[#box[#highlighted[$x$]]])',
             b'#local-tag-scope(s=>[#context [#highlighted[$x$]]])',
         )
         for call in calls:

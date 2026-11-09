@@ -19,6 +19,11 @@ aliases preserve their origin, and active assignments/default mutations can
 invalidate outer names. Wrapper aliases are traced; shadowed or unknown wrappers
 do not establish this context. Only one positional literal body is admitted.
 Proof accepts no named options; theorem/note accept at most one `title` option.
+Highlight inspection also admits an unshadowed builtin `block` or immutable
+alias with one literal content body and optional literal Boolean `sticky` and
+`breakable` arguments. Other arguments and explicit shadowing remain unresolved.
+The source route does not prove that inherited or ambient bindings leave the
+builtin selected at runtime, nor that the wrapper executes or renders its body.
 Unknown, duplicate or named-body options are refused. Other callbacks, deferred functions, code
 or unknown scopes retain explicit unresolved execution context. Math in options,
 raw strings or a nonliteral body does not establish this finding.
@@ -169,7 +174,7 @@ This is not a general control-flow evaluator. An active return, including one
 inside an ordinary literal wrapper or code block, abandons that scoped
 callback's earlier/suppressed hints and prevents later imports from restarting
 its scan. It stops at the nearest callback; an inner callback return does not
-invalidate its caller. Block and Contextual bodies remain unresolved. Inside an
+invalidate its caller. Unknown block and Contextual bodies remain unresolved. Inside an
 admitted callback, a Contextual expression preserves the enclosing lexical
 bindings for subsequent source expressions when the syntactic scan finds no
 assignment or return. Other effects and rendering remain unproved. Detected
@@ -189,7 +194,7 @@ Preserving bindings after Contextual expressions without detected assignment or
 return adds six highlight hints in chapter 3.5, for 79 highlight and 19
 marker-gap hints. All
 earlier records, source findings, script proposals and 44 retained source hashes
-remain identical. Contextual bodies themselves and remaining block-contained
+remain identical. Contextual bodies themselves and unsupported block-contained
 calls stay unresolved. See `audit/conditional-callback-evidence.json` and
 `audit/conditional-context-evidence.json`.
 

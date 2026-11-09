@@ -239,7 +239,10 @@ package namespace contracts and relative import sources. This can trace
 `highlighted` through the actual PDE wildcard facade, including combined module
 alias/item imports. It reports literal math inside root helper calls and the
 direct literal bodies of captured `proof`, `theorem` and `note` wrappers. Local
-shadowing, aliases and scope boundaries remain explicit.
+shadowing, aliases and scope boundaries remain explicit. Highlight inspection
+also follows an unshadowed builtin `block` with one literal content body and
+only literal `sticky` or `breakable` options; runtime builtin selection and
+rendering remain conditional.
 The same opt-in route also reports a missing blank source line before a
 standalone captured `paragraph_tab`/`paragraph-tab` value or immutable alias.
 File/body openings do not replace that blank line; a following heading/display
@@ -1343,8 +1346,11 @@ candidate parser, coverage-retention and idempotence checks. See the
 - `pde.import-order` reorders only pure, disjoint, immediate styles/figures import
   groups. `pde.no-redundant-facade-import` removes a compatibility import only when
   the retained facade already supplies identical captured leaf bindings. Exact
-  unchanged statement spans map candidate locations through reorderings. Comments,
-  directives, dependency effects and name-only facade assumptions refuse repair.
+  unchanged statement spans map candidate locations through reorderings. For
+  ordering, a later comment may be retained after a complete intervening root
+  construct; possibly attached comments and intersecting directives still refuse
+  repair. Deleting compatibility imports remains blocked by comments. Dependency
+  effects and name-only facade assumptions also refuse repair.
 - `pde.flowbox-colored-border` uses the complete reviewed math-blocks module's
   AST/token fingerprint with one permitted border expression slot. A literal
   width-only stroke can acquire its proven theme.rule color; copied fragments

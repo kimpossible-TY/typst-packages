@@ -194,6 +194,32 @@ def analyze(tree, path, *, graph=None, _verify=True):
 
     comments = any(node.kind in ('LineComment', 'BlockComment') for node in nodes)
 
+    def order_comments_detached(group):
+        """Allow only comments after a complete independent root construct.
+
+        An immediately preceding, intervening, or following comment may attach
+        to a moved import. A later comment cannot attach to the import group
+        once a complete root construct intervenes. Reject comments nested in
+        that construct rather than guessing their ownership.
+        """
+        comment_starts = [node.start for node in nodes
+                          if node.kind in ('LineComment', 'BlockComment')]
+        if not comment_starts:
+            return True
+        first_comment = min(comment_starts)
+        if first_comment < group[-1].end:
+            return False
+        after = [nodes[index] for index in siblings
+                 if nodes[index].start >= group[-1].end and nodes[index].kind not in _TRIVIA]
+        if not after:
+            return False
+        first = after[0]
+        if first.kind == 'Hash':
+            if len(after) < 2 or after[1].start != first.end:
+                return False
+            first = after[1]
+        return first.end <= first_comment
+
     def standalone(statement):
         start = source.rfind(b'\n', 0, statement.start) + 1
         end = source.find(b'\n', statement.end)
@@ -212,7 +238,7 @@ def analyze(tree, path, *, graph=None, _verify=True):
             reason = 'An unrelated import would be moved or crossed'
         elif not all(item.prefix and item.incoming is not None for item in group):
             reason = 'Unknown imports, prior execution or module initialization are not proved safe'
-        elif comments:
+        elif not order_comments_detached(group):
             reason = 'Comment/directive attachment is not certified for moving imports'
         elif not all(standalone(item) for item in group):
             reason = 'Only standalone immediate import statements can move'

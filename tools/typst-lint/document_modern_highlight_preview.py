@@ -27,6 +27,8 @@ RULE = 'pde.text-only-highlight'
 CONDITIONS = (
     'Runtime resolves highlighted to the exact reviewed modern text-utils helper.',
     'The captured source executes in the same intended prose and math context.',
+    'Any enclosing recognized wrappers and callbacks execute and render the literal body as assumed.',
+    'Any recorded builtin block wrapper resolves to Typst\'s builtin at runtime; inherited or ambient bindings are not proved absent.',
     'Splitting highlighting can change emphasis, smart-quote direction, spacing and page layout; PDF equivalence is not proved.',
 )
 REFERENCE_CONDITION = (

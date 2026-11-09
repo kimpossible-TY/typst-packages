@@ -212,11 +212,31 @@ class ImportRulesTests(unittest.TestCase):
     def test_comments_preserve_diagnostics_but_block_ambiguous_attachments(self):
         for source in (b'// Header\n' + FIGURES + STYLES,
                        FIGURES + b'// Between\n' + STYLES,
+                       FIGURES + STYLES + b'// Following import\n#tag\n',
+                       FIGURES + STYLES.rstrip(b'\n') + b' // trailing import\n#tag\n',
+                       FIGURES + STYLES + b'#let x = (\n// Inside next construct\n1)\n',
                        STYLES + b'// Compatibility\n' + COMPAT,
                        STYLES + COMPAT.rstrip(b'\n') + b' // trailing\n'):
             result = self.assert_no_edits(source)
             self.assertTrue(any(r.diagnostics for r in result.values()))
             self.assertTrue(any('Comment/directive' in reason for r in result.values() for reason in r.skips))
+
+    def test_order_allows_comments_detached_by_complete_later_construct(self):
+        tails = (
+            b'#tag\n// Body comment\n#diagram\n',
+            b'Ordinary prose.\n/* Body comment */\n#diagram\n',
+            b'#let x = 1\n// typst-lint: ignore-next pde.import-order -- later\n#tag\n',
+        )
+        for tail in tails:
+            with self.subTest(tail=tail):
+                source = FIGURES + STYLES + tail
+                result, candidate, graph = self.run_source(source)
+                self.assertEqual(candidate, STYLES + FIGURES + tail)
+                self.assertEqual(len(result[ORDER].edits), 1)
+                final_graph = rebase_graph(graph, 'main.typ', source, candidate)
+                final = analyze(parse(candidate), 'main.typ', graph=final_graph)
+                self.assertFalse(any(r.edits for r in final.values()))
+                self.assertEqual(final[ORDER].suppressed, result[ORDER].suppressed)
 
     def test_directives_suppress_exact_import_and_never_move_or_reassign(self):
         directive = b'// typst-lint: ignore-next pde.import-order -- intentional\n'

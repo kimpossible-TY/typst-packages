@@ -24,6 +24,48 @@ from syntax_client import EXECUTABLE, parse
                      and shutil.which('typst') and EXECUTABLE.is_file(),
                      'Opt in with TYPST_LINT_RENDER_TESTS=1; requires Typst and syntax adapter')
 class ImportRenderTests(unittest.TestCase):
+    def test_detached_body_comment_preserves_reordered_exports_and_svg(self):
+        version = subprocess.run(['typst', '--version'], check=True, capture_output=True, text=True).stdout
+        if not version.startswith('typst 0.15.1 '):
+            self.skipTest('Evidence requires Typst 0.15.1')
+        with tempfile.TemporaryDirectory(prefix='typst-import-detached-render-') as directory:
+            root = Path(directory).resolve()
+            (root / 'Styles').mkdir()
+            (root / 'empty-cache').mkdir()
+            (root / 'empty-packages').mkdir()
+            for name, contents in {
+                'leaf.typ': b'#let tag = "Tag"\n',
+                'Styles/styles.typ': b'#import "../leaf.typ": *\n',
+                'figures.typ': b'#let diagram = "Diagram"\n',
+            }.items():
+                (root / name).write_bytes(contents)
+            source = (b'#import "figures.typ": *\n#import "Styles/styles.typ": *\n'
+                      b'#metadata((tag, diagram)) <identity>\n// Body comment\n#tag #diagram\n')
+            main = root / 'main.typ'
+            main.write_bytes(source)
+            graph = load_import_graph(root, (('main.typ', source),))
+            result = analyze(parse(source), 'main.typ', graph=graph)
+            self.assertEqual(len(result[ORDER].edits), 1)
+            candidate = plan(source, [edit for value in result.values() for edit in value.edits]).candidate()
+            self.assertEqual(candidate, source.replace(
+                b'#import "figures.typ": *\n#import "Styles/styles.typ": *\n',
+                b'#import "Styles/styles.typ": *\n#import "figures.typ": *\n'))
+            flags = ['--root', str(root), '--package-path', str(root / 'empty-packages'),
+                     '--package-cache-path', str(root / 'empty-cache')]
+            queries, renders = [], []
+            for stage, contents in (('before', source), ('after', candidate)):
+                main.write_bytes(contents)
+                query = subprocess.run(['typst', 'query', *flags, str(main), '<identity>'],
+                                       capture_output=True, text=True, check=True, timeout=30)
+                queries.append(json.loads(query.stdout))
+                svg = root / f'{stage}.svg'
+                subprocess.run(['typst', 'compile', *flags, str(main), str(svg)],
+                               capture_output=True, check=True, timeout=30)
+                renders.append(svg.read_bytes())
+            self.assertEqual(queries[0], queries[1])
+            self.assertEqual(queries[0][0]['value'], ['Tag', 'Diagram'])
+            self.assertEqual(renders[0], renders[1])
+
     def test_reordering_and_removal_preserve_actual_exports_and_svg(self):
         version = subprocess.run(['typst', '--version'], check=True, capture_output=True, text=True).stdout
         if not version.startswith('typst 0.15.1 '):

@@ -64,6 +64,13 @@ class ModernHighlightPreviewTests(unittest.TestCase):
         self.assertEqual(row['candidate_sha256'], digest(candidate))
         self.assertFalse(row['edit_permission'] or row['compiler_permission'] or row['render_equivalence_proved'])
 
+    def test_builtin_block_preview_retains_runtime_conditions(self):
+        _, candidate, result = self.candidate(b'#block(sticky: true)[#highlighted[Text $x$]]')
+        self.assertIn(b'#block(sticky: true)[#highlighted[Text ]$x$]', candidate)
+        conditions = result['by_file'][0]['conditions']
+        self.assertTrue(any('builtin block wrapper' in item and 'runtime' in item for item in conditions))
+        self.assertTrue(any('wrappers and callbacks execute' in item for item in conditions))
+
     def test_reviewed_math_preserves_existing_script_diagnostics(self):
         for prefix in (b'', b'// typst-lint: ignore-next core.parenthesized-scripts -- deliberate\n'):
             with self.subTest(prefix=prefix):

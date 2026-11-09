@@ -22,7 +22,7 @@ SUPPORTED_RULE_IDS = (RULE_ID, MARKER_GAP)
 TEXT_UTILS = '@local/text-utils:0.1.2'
 MATH_BLOCKS = '@local/math-blocks:0.2.0'
 SCOPED_ANNOTATIONS = '@local/scoped-annotations:0.3.0'
-_CONTENT_WRAPPERS = frozenset(('proof', 'theorem', 'note'))
+_CONTENT_WRAPPERS = frozenset(('proof', 'theorem', 'note', 'builtin-block'))
 _SCOPED_CALLBACKS = {
     'local-tag-scope': frozenset(('prefix',)),
     'local-scope-annotations': frozenset(('prefix', 'parent', 'name')),
@@ -39,6 +39,10 @@ MARKER_CONDITIONS = CONDITIONS[:2] + (
 CALLBACK_CONDITIONS = (
     'Every captured scoped callback is invoked by its exact pinned wrapper with the documented single dictionary argument.',
     'The callback returns this literal content for actual rendering; callback invocation, argument values and rendering are not proved.',
+)
+BUILTIN_BLOCK_CONDITION = (
+    'The recorded block wrapper resolves to Typst\'s builtin at runtime; '
+    'an inherited or ambient binding is not proved absent.'
 )
 _ASSIGNMENTS = frozenset(('Eq', 'PlusEq', 'HyphEq', 'StarEq', 'SlashEq'))
 _PACKAGE = re.compile(r'^@(local|preview)/([a-z][a-z0-9-]*):[0-9]+\.[0-9]+\.[0-9]+$')
@@ -552,11 +556,17 @@ def _wrapper_bodies(tree, index, canonical_name):
             bodies.append(child)
         elif kind == 'Named':
             parts = graph.significant(tree, child)
-            if (len(parts) != 3 or tree.nodes[parts[0]].kind != 'Ident'
-                    or canonical_name == 'proof' or graph.raw(tree, parts[0]) != b'title'
-                    or 'title' in named):
+            if len(parts) != 3 or tree.nodes[parts[0]].kind != 'Ident':
                 return ()
-            named.add('title')
+            name = graph.raw(tree, parts[0]).decode('utf-8')
+            if canonical_name == 'builtin-block':
+                if name not in ('sticky', 'breakable') or tree.nodes[parts[2]].kind != 'Bool':
+                    return ()
+            elif canonical_name == 'proof' or name != 'title':
+                return ()
+            if name in named:
+                return ()
+            named.add(name)
         elif kind not in ('LeftParen', 'RightParen', 'Comma'):
             return ()
     return tuple(bodies) if len(bodies) == 1 else ()
@@ -729,6 +739,8 @@ def _analyze(tree, path, analyzer):
         column = len(source[source.rfind(b'\n', 0, start) + 1:start].decode('utf-8')) + 1
         conditions += (('Every enclosing recognized literal content wrapper executes and renders this body.',)
                        if len(context) > len(callbacks) else ())
+        if any(step.operation == 'builtin' for route in context for step in route):
+            conditions += (BUILTIN_BLOCK_CONDITION,)
         if callbacks:
             conditions += CALLBACK_CONDITIONS
         finding = ConditionalDiagnostic(rule_id, path, line, column, start, end, message,
@@ -864,7 +876,14 @@ def _analyze(tree, path, analyzer):
                 value, sources, packages, requests, context, callbacks, CONDITIONS)
         return mutated_outer
 
-    scan(0, {}, {path: SourceHash(path, digest(source))},
+    # An unshadowed root `block` starts as Typst's builtin. Normal local
+    # declarations, imports and unknown mutations replace or clear this fact.
+    # As with imported wrappers, actual execution and rendering remain
+    # conditional; the recorded source route does not prove runtime selection.
+    builtin_block = _Value((NameRoute(path, digest(source), 'builtin', '', 'block', 'block'),),
+                           'builtin-block')
+    initial = {'block': builtin_block} if RULE_ID in analyzer.rule_ids else {}
+    scan(0, initial, {path: SourceHash(path, digest(source))},
          {p.import_path: p for p in analyzer.evidence}, set())
     if analyzer.exhausted:
         return refusal(analyzer.exhausted)
