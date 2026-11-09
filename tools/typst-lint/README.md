@@ -235,6 +235,17 @@ union verification. Runtime callback execution, binding, side effects, styles,
 rendering, source writes and compilation are not proved. This option handles one
 location per inspection; the overall report item and byte limits still apply.
 
+Use `--inspect-capitalization-review` with `--rule-set pde` to list direct
+lowercase paragraph starter patterns that are outside the versioned
+capitalization starter set. These are review-only source patterns, not rule
+violations or proposed fixes: marker binding, ordinary English prose, execution
+and the author's intended capitalization are not established. The option
+respects capitalization suppressions, reports unresolved includes, and leaves
+the authored starter policy and all existing reports unchanged. Work and whole
+report item/byte limits apply; exhaustion fails the inspection. Long or many
+inline suppression directives may exhaust the conservative work limit before
+they are evaluated.
+
 For one issued modern highlight diagnostic, `--inspect-scoped-parent-transfer
 PATH START` inspects its reviewed root callback and reports conditional source
 routes for strictly recognized child scope calls and `parent: s` transfers. It

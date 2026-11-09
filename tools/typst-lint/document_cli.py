@@ -31,6 +31,7 @@ CONDITIONAL_RULES = ('pde.text-only-highlight', 'pde.paragraph-marker-gap')
 def report_document(root, entrypoint, *, rule_set='core', package_path=None,
                     preview_display_gaps=False, preview_standalone_displays=False,
                     preview_sequence=False, local_rule_hints=False, preview_conditional_gaps=False,
+                    inspect_capitalization_review=False,
                     preview_conditional_punctuation=False, preview_conditional_spacers=False,
                     preview_conditional_scoped_calls=False,
                     preview_conditional_continuations=False,
@@ -67,6 +68,8 @@ def report_document(root, entrypoint, *, rule_set='core', package_path=None,
     require(type(rule_set) is str and rule_set in ('core', 'pde'),
             'Document rule-set must be core or pde')
     require(type(import_obligations) is bool, 'Import obligations must be explicitly requested')
+    require(type(inspect_capitalization_review) is bool and (not inspect_capitalization_review or rule_set == 'pde'),
+            'Capitalization review requires explicit --rule-set pde')
     require(package_path is None or rule_set == 'pde',
             'Conditional package namespace inspection requires explicit --rule-set pde')
     require(type(preview_display_gaps) is bool and (not preview_display_gaps or rule_set == 'pde'),
@@ -296,6 +299,12 @@ def report_document(root, entrypoint, *, rule_set='core', package_path=None,
     conditional_hyphen_markers = []
     conditional_local_scope_raw_annotations = []
     items = len(captured.sources) + len(captured.edges) + len(captured.occurrences) + len(captured.unresolved)
+    capitalization_review = None
+    if inspect_capitalization_review:
+        from document_capitalization_review import analyze as review_capitalization
+        capitalization_review = review_capitalization(captured, catalog['rules'], max_items=MAX_REPORT_ITEMS - items)
+        items += capitalization_review['report_items']
+        require(items <= MAX_REPORT_ITEMS, 'Document inspection report item limit exceeded')
     import_obligation_report = None
     if import_obligations:
         from document_import_obligations import analyze as analyze_import_obligations
@@ -1167,6 +1176,8 @@ def report_document(root, entrypoint, *, rule_set='core', package_path=None,
         report['reference_provenance'] = reference_report
     if footnote_report is not None:
         report['conditional_footnote_bindings'] = footnote_report
+    if capitalization_review is not None:
+        report['capitalization_starter_review'] = capitalization_review
     if import_obligation_report is not None:
         report['import_obligations'] = import_obligation_report
     if modern_highlight_report is not None:
@@ -1193,7 +1204,7 @@ def report_document(root, entrypoint, *, rule_set='core', package_path=None,
     if modern_highlight_report is not None:
         require(valid_footnote_session(footnote_session), 'Conditional highlight capture changed during inspection')
     if (modern_highlight_report is not None or import_obligation_report is not None
-            or cetz_annotations is not None):
+            or cetz_annotations is not None or capitalization_review is not None):
         require(len(json.dumps(report, ensure_ascii=False, sort_keys=True, indent=2).encode('utf-8'))
                 <= MAX_MODERN_REPORT_BYTES,
                 'Document inspection report byte limit exceeded')
@@ -1253,6 +1264,8 @@ def main(arguments=None):
                         help='Report the exact modern text-utils highlighted variant (requires --package-path and --footnote-cache-path)')
     parser.add_argument('--cetz-annotation-manifest',
                         help='Capture an explicit resource manifest for conditional CeTZ annotation hints (requires scoped-call previews and both namespace roots)')
+    parser.add_argument('--inspect-capitalization-review', action='store_true',
+                        help='Review lowercase paragraph starters outside the versioned policy (not rule violations or edits)')
     parser.add_argument('--inspect-scoped-parent-patterns', action='store_true',
                         help='Inventory nested scoped-parent source patterns (requires --modern-highlight-evidence)')
     parser.add_argument('--inspect-scoped-parent-transfer', nargs=2, metavar=('PATH', 'START'),
@@ -1329,6 +1342,7 @@ def main(arguments=None):
                                  cetz_annotation_manifest=args.cetz_annotation_manifest,
                                  preview_conditional_modern_highlights=args.preview_conditional_modern_highlights,
                                  inspect_scoped_parent_patterns=args.inspect_scoped_parent_patterns,
+                                 inspect_capitalization_review=args.inspect_capitalization_review,
                                  inspect_scoped_parent_transfer=args.inspect_scoped_parent_transfer,
                                  preview_conditional_modern_parent_reference=args.preview_conditional_modern_parent_reference,
                                  preview_conditional_modern_parent_union=args.preview_conditional_modern_parent_union,
@@ -1577,6 +1591,12 @@ def main(arguments=None):
             print('  Do not merge with other plans; execution, side effects and rendering are not proved.')
             if row.get('reason'):
                 print(f"  withheld: {row['reason']}")
+        if 'capitalization_starter_review' in result:
+            review = result['capitalization_starter_review']
+            print(f"Capitalization starter review: {review['status']}; {len(review['findings'])} review-only patterns")
+            print('  These are not proven rule violations; language, marker binding and intent are unknown.')
+            for row in review['findings']:
+                print(f"  {row['path']}:{row['line']}:{row['column']}: review starter {row['starter']!r}")
         if 'conditional_scoped_parent_transfer' in result:
             row = result['conditional_scoped_parent_transfer']
             count = sum(item['parent_transfer'] for item in row.get('parents', ()))
