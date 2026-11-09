@@ -511,7 +511,13 @@ global rule coverage is incomplete. The same preview is available explicitly as
 `typst-style compile --preview --root /absolute/project --entrypoint main.typ
 --manifest /absolute/font-seed.json --discover-dependencies --format json`.
 Explicit `--conditional-gaps` also composes the conditional proof, nested
-math-footnote and selected nested paragraph-marker gap stages in that preview.
+math-footnote, selected prose-footnote and selected nested paragraph-marker gap
+stages in that preview. The prose-footnote stage is limited to direct footnotes
+followed by an existing standalone `paragraph_tab` and inserts `#parbreak()`;
+the footnote, parbreak and marker bindings, the paragraph show rule and execution
+remain conditions, and the inserted break can change rendering. A conservative
+per-source preflight may omit this optional stage on complex inputs. Other
+prose-footnote forms are not composed by this stage.
 The marker stage only handles a first marker immediately after a literal content
 block opens or a marker directly after a supported standalone literal `#block`
 call. Other unknown marker boundaries still prevent this stage from producing a

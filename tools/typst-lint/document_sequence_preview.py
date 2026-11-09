@@ -820,6 +820,62 @@ def preview(tree, path, catalog, *, profile=_STANDARD, footnote_evidence=None, c
                     if deferred_calls:
                         step['conditional_deferred_footnote_calls'] = sorted(deferred_calls)
                     steps.append(step)
+        if profile != _STANDARD and b'#footnote' in current.source and b'#paragraph_tab' in current.source:
+            import document_composed_prose_footnote_gap as prose_gap
+            selected = prose_gap.preview(current, path, catalog)
+            if selected is not None:
+                import document_nested_prose_footnote_gap as source_gap
+                import continuation_rules
+                import paragraph_rules
+                before = current
+                if type(selected) is not dict or not prose_gap._within_budget(before):
+                    raise SafetyError('Conditional prose footnote stage is invalid or exceeds its budget')
+                boundaries = paragraph_rules.analyze_conditional_nested_gap(before, path, catalog=catalog)
+                if any(reason.startswith(paragraph_rules.NESTED_GAP_UNRESOLVED) for reason in boundaries.skips):
+                    raise SafetyError('Conditional prose footnote stage has unresolved paragraph boundaries')
+                resolution = resolve(before, packages=())
+                notes = footnote_rules.analyze_conditional_nested(before, path, resolution, catalog=catalog)
+                expected_edits, targets = source_gap._select(before, path, catalog, resolution, notes)
+                proof = source_gap.preview(before, path, catalog=catalog)
+                if (not expected_edits or len(expected_edits) != len(targets) or type(proof) is not dict
+                        or proof.get('verification') != 'conditional-prose-footnote-gap-syntax-directives-and-reanalysis'
+                        or proof.get('conditions') != source_gap.CONDITIONS
+                        or any(proof.get(key) is not False for key in ('runtime_binding_proved',
+                            'render_equivalence_proved', 'edit_permission', 'compiler_permission'))
+                        or proof.get('execution_proved', False) is not False):
+                    raise SafetyError('Conditional prose footnote source proof is invalid')
+                expected_rows = [dict(start=e.start, end=e.end, replacement=e.replacement.decode('ascii'),
+                                      rule_id=source_gap.RULE) for e in expected_edits]
+                if not _same_data(proof.get('edits'), expected_rows):
+                    raise SafetyError('Conditional prose footnote source selection changed')
+                expected_stage = dict(rule_id=source_gap.RULE, baseline_sha256=proof.get('baseline_sha256'),
+                    candidate_sha256=proof.get('candidate_sha256'), edits=[dict(row,
+                        conditions=list(source_gap.CONDITIONS), runtime_binding_proved=False,
+                        execution_proved=False, render_equivalence_proved=False, edit_permission=False,
+                        compiler_permission=False) for row in expected_rows])
+                if not _same_data(selected, expected_stage):
+                    raise SafetyError('Conditional prose footnote stage was altered')
+                edits = tuple(Edit(row['start'], row['end'], row['replacement'].encode('utf-8'))
+                              for row in selected['edits'])
+                proposal = plan(before.source, edits)
+                candidate = proposal.candidate()
+                if (proposal.deferred or len(proposal.edits) != len(edits)
+                        or digest(before.source) != selected['baseline_sha256']
+                        or digest(candidate) != selected['candidate_sha256']):
+                    raise SafetyError('Conditional prose footnote stage hash mismatch')
+                current = parse(candidate, tree.mode)
+                if current.nodes[0].errors or not prose_gap._within_budget(current):
+                    raise SafetyError('Conditional prose footnote candidate is malformed or exceeds its budget')
+                for analyzer in (lambda t: analyze_script(t, path, catalog=catalog, _verify=False, _allow_code_call=True),
+                                 lambda t: continuation_rules.analyze_conditional(t, path, catalog=catalog)):
+                    if not _same_findings(before, analyzer(before), current, analyzer(current), proposal.edits):
+                        raise SafetyError('Conditional prose footnote changed other findings or suppressions')
+                old_displays, new_displays = analyze_all(before, path, catalog=catalog), analyze_all(current, path, catalog=catalog)
+                if any(not _same_findings(before, old_displays[rid], current, new_displays[rid], proposal.edits)
+                       for rid in old_displays):
+                    raise SafetyError('Conditional prose footnote changed display findings or suppressions')
+                _preserve_unresolved_paragraph_boundaries(before, current, path, catalog, proposal.edits)
+                steps.append(selected)
         if conditional_continuations:
             import document_conditional_continuation as continuation
             import paragraph_rules
