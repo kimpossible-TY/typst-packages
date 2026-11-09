@@ -178,7 +178,7 @@ def _compile_captured(context, records, catalog, snapshot, *, entrypoint, deadli
                     explicit_withheld_sources=(), conditional_continuations=False, conditional_adjacent_punctuation=False,
                     original_only=False, modern_highlight_evidence=None,
                     composed_modern_evidence=None, sequence_facade_evidence=False,
-                    conditional_deferred_footnotes=False):
+                    conditional_deferred_footnotes=False, composed_reviewed_math=False):
     """Compile baseline and candidate from explicit captured bytes in private.
 
     macOS sandbox-exec denies networking and writes outside the temporary
@@ -194,6 +194,8 @@ def _compile_captured(context, records, catalog, snapshot, *, entrypoint, deadli
         raise SafetyError('Preview compiler deadline must be in (0, 120] seconds')
     if cancel_event is not None and type(cancel_event) is not threading.Event:
         raise SafetyError('Preview cancellation requires a threading.Event')
+    if type(composed_reviewed_math) is not bool or (composed_reviewed_math and composed_modern_evidence is None):
+        raise SafetyError('Reviewed math requires an explicit composed modern preview')
     if expected_dependencies is not None:
         if (type(expected_dependencies) is not tuple or len(expected_dependencies) > document_resources.MAX_FILES
                 or any(type(item) is not tuple or len(item) != 2 or any(type(x) is not str for x in item)
@@ -234,7 +236,8 @@ def _compile_captured(context, records, catalog, snapshot, *, entrypoint, deadli
             conditional_continuations=conditional_continuations,
             conditional_adjacent_punctuation=conditional_adjacent_punctuation,
             sequence_facade_evidence=sequence_facade_evidence,
-            conditional_deferred_footnotes=conditional_deferred_footnotes)
+            conditional_deferred_footnotes=conditional_deferred_footnotes,
+            reviewed_math=composed_reviewed_math)
         if not modern_summary['source_count']:
             raise NoComposedPreview(modern_summary)
     elif sequence_facade_evidence is not False:
@@ -444,7 +447,8 @@ def compile_preview(context, records, catalog, snapshot, *, entrypoint, deadline
                     partial_unsupported=False, withheld_records=None, partial_unproven_binding=False,
                     explicit_withheld_sources=(), conditional_continuations=False, conditional_adjacent_punctuation=False,
                     modern_highlight_evidence=None, composed_modern_evidence=None,
-                    sequence_facade_evidence=False, conditional_deferred_footnotes=False):
+                    sequence_facade_evidence=False, conditional_deferred_footnotes=False,
+                    composed_reviewed_math=False):
     return _compile_captured(context, records, catalog, snapshot, entrypoint=entrypoint,
         deadline_seconds=deadline_seconds, cancel_event=cancel_event, expected_dependencies=expected_dependencies,
         expected_baseline_sha256=expected_baseline_sha256, profile=profile, starts=starts,
@@ -455,7 +459,7 @@ def compile_preview(context, records, catalog, snapshot, *, entrypoint, deadline
         modern_highlight_evidence=modern_highlight_evidence,
         composed_modern_evidence=composed_modern_evidence,
         sequence_facade_evidence=sequence_facade_evidence,
-        conditional_deferred_footnotes=conditional_deferred_footnotes)
+        conditional_deferred_footnotes=conditional_deferred_footnotes, composed_reviewed_math=composed_reviewed_math)
 
 
 def compile_original(context, snapshot, *, entrypoint, deadline_seconds=120.0, cancel_event=None,

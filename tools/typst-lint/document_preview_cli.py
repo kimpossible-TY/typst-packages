@@ -179,6 +179,8 @@ def main(arguments=None, *, gate=False):
                         help='Preview only conditional modern text-utils highlight splits; rendering may change')
     parser.add_argument('--compose-modern-highlights', action='store_true',
                         help='Add conditional modern highlight splits after the selected sequence; rendering may change')
+    parser.add_argument('--compose-reviewed-math-highlights', action='store_true',
+                        help='Also split reviewed builtin math calls in composed highlights; rendering may change')
     parser.add_argument('--conditional-adjacent-punctuation', action='store_true',
                         help='Move adjacent prose punctuation across footnotes atomically; rendering may change')
     parser.add_argument('--conditional-punctuation', action='store_true',
@@ -209,6 +211,8 @@ def main(arguments=None, *, gate=False):
             return 2
     if args.review_edits and args.format != 'json' and not args.pdf_stdout:
         parser.error('--review-edits requires --format json or --pdf-stdout')
+    if args.compose_reviewed_math_highlights and not args.compose_modern_highlights:
+        parser.error('--compose-reviewed-math-highlights requires --compose-modern-highlights')
     if args.conditional_modern_highlights and (args.conditional_gaps or args.conditional_punctuation
             or args.conditional_spacers or args.conditional_facade_footnotes or args.conditional_continuations
             or args.conditional_adjacent_punctuation or args.conditional_deferred_footnotes or args.partial_unsupported_preview
@@ -369,7 +373,8 @@ def main(arguments=None, *, gate=False):
         compile_options = {'modern_highlight_evidence': modern_evidence} if modern_evidence is not None else {}
         if args.compose_modern_highlights:
             compile_options = dict(composed_modern_evidence=footnote_evidence,
-                                   sequence_facade_evidence=args.conditional_facade_footnotes)
+                                   sequence_facade_evidence=args.conditional_facade_footnotes,
+                                   composed_reviewed_math=args.compose_reviewed_math_highlights)
         preview = document_preview_compile.compile_preview(context, records, catalog['rules'], snapshot,
                                                            entrypoint=args.entrypoint, cancel_event=cancel,
                                                            expected_dependencies=observed,

@@ -73,6 +73,19 @@ source application and publication remain unavailable.
 The compiler deadline applies separately to each Typst process, not to total
 planning and verification wall time.
 
+`--compose-reviewed-math-highlights` additionally requires
+`--compose-modern-highlights`. It independently derives reviewed builtin-math
+evidence from the issued intermediate graph, combines eligible ordinary and
+math highlight splits in one revalidated source plan, and repeats that evidence
+and plan before staging. Intermediate graph sources and all selected namespace
+package manifests and entrypoints must match the resource snapshot. Highlight
+edits in graph-imported sources are withheld because they could affect another
+source's namespace. The candidate parser and math resolver recheck each moved
+equation; dynamic contexts, unknown or shadowed names, changed suppression and
+other conflicting findings remain withheld. This does not prove runtime binding,
+execution, complete coverage or visual equivalence and grants no source-write or
+publication permission. The additional analysis increases planning time.
+
 The opt-in `--conditional-gaps` profile appends source-local nested math
 footnote and proof gap stages to the standard sequence. Every step is replayed
 from the captured source with the same profile, hash and suppression checks;

@@ -357,6 +357,12 @@ footnote call, its final offset is mapped, and its facade is rechecked. A
 change to another finding's route or a captured footnote facade is refused.
 `--review-edits` is not
 available with this composed profile; these checks do not grant source writes.
+Adding `--compose-reviewed-math-highlights` explicitly extends the composed
+stage to supported calls to reviewed Typst math builtins. It rechecks bindings
+against the captured namespaces on both intermediate and proposed source,
+and withholds highlight edits in sources imported by another graph source. It
+leaves unsupported or dynamic math calls unresolved. This option adds analysis
+work; the runtime bindings, execution and visual equivalence remain unproved.
 Adding `--conditional-punctuation` appends the separate conditional prose
 footnote spacing stage; it requires `--conditional-gaps`.
 For the separately opted-in spacer and facade profile,

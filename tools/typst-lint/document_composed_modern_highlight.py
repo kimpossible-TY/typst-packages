@@ -20,8 +20,10 @@ from typst_lint import SafetyError, digest
 def stage(proof, records, *, profile='standard', partial_unsupported=False, withheld_records=None,
           partial_unproven_binding=False, explicit_withheld_sources=(), conditional_continuations=False,
           conditional_adjacent_punctuation=False, sequence_facade_evidence=False,
-          conditional_deferred_footnotes=False):
+          conditional_deferred_footnotes=False, reviewed_math=False):
     """Derive both stages from issued inputs; never trust a caller's candidate."""
+    if type(reviewed_math) is not bool:
+        raise SafetyError('Reviewed math selection must be Boolean')
     if sequence_facade_evidence is True and profile not in ('conditional-gaps-and-spacers',
                                                             'conditional-gaps-punctuation-and-spacers'):
         raise SafetyError('Facade-footnote evidence requires a spacer profile')
@@ -37,7 +39,8 @@ def stage(proof, records, *, profile='standard', partial_unsupported=False, with
         conditional_deferred_footnotes=conditional_deferred_footnotes)
     session = intermediate.issue_binding(view)
     analyzer = modern.ModernHighlightAnalyzer(session, scoped_callbacks=True)
-    diagnostics, proposed = highlight.preview_all(analyzer, return_evidence=True)
+    preview_options = {'reviewed_math': True} if reviewed_math else {}
+    diagnostics, proposed = highlight.preview_all(analyzer, return_evidence=True, **preview_options)
     modern_evidence._verify_routes(analyzer, view.sources, diagnostics)
     conditional_calls = {record['path']: sequence._final_conditional_footnote_calls(
                          proof._session._context.source_for(record['path']).tree, record)
@@ -49,9 +52,16 @@ def stage(proof, records, *, profile='standard', partial_unsupported=False, with
     final = dict(view.sources)
     edits_by_path = {}
     modern_withheld = []
+    imported_sources = {edge.target for edge in view.graph.edges} if reviewed_math else set()
     for row in proposed['by_file']:
         path = row['path']
         if path in excluded or row['verification'] == 'withheld':
+            continue
+        # Any edited imported module could change another source's wildcard
+        # namespace. Until candidate-graph math replay exists, withhold it.
+        if path in imported_sources:
+            modern_withheld.append(dict(path=path, reason_code='math-import-dependency',
+                reason='A highlight edit would change an imported source used by the math binding graph'))
             continue
         key = ('project', path)
         if key not in final:
@@ -93,7 +103,7 @@ def stage(proof, records, *, profile='standard', partial_unsupported=False, with
         footnote.PreviewFootnoteEvidence.validate_staged_facades(proof, project, conditional_calls, **options)
 
     # Recompute independently before authorizing even a private staging map.
-    repeated_diagnostics, repeated_proposed = highlight.preview_all(analyzer, return_evidence=True)
+    repeated_diagnostics, repeated_proposed = highlight.preview_all(analyzer, return_evidence=True, **preview_options)
     if repeated_diagnostics != diagnostics or repeated_proposed != proposed:
         raise SafetyError('Composed highlight replay changed')
     modern_evidence._verify_routes(analyzer, view.sources, repeated_diagnostics)
@@ -132,6 +142,9 @@ def stage(proof, records, *, profile='standard', partial_unsupported=False, with
                   runtime_binding_proved=False, execution_proved=False, coverage_complete=False,
                   render_equivalence_proved=False, edit_permission=False, compiler_permission=False,
                   staged_workspace_proved=False)
+    if reviewed_math:
+        result['reviewed_math'] = True
+        result['math_conditions'] = highlight.MATH_CONDITIONS
     encoded = [json.dumps(x, ensure_ascii=False, sort_keys=True, indent=2) for x in (diagnostics, proposed, result)]
     size = sum(len(raw.encode('utf-8')) + 2 * raw.count('\n') for raw in encoded)
     stage_items = (len(modern_withheld)

@@ -392,16 +392,23 @@ def _partial_preview(evidence, tree, path, diagnostics, records, original, budge
 
 
 def preview_all(evidence, *, max_items=MAX_PREVIEW_ITEMS, max_bytes=MAX_PREVIEW_BYTES, return_evidence=False,
-                allow_direct_references=False):
+                allow_direct_references=False, reviewed_math=False):
     """Recompute pinned evidence and return an all-or-nothing source-only batch."""
     if type(evidence) is not modern.ModernHighlightAnalyzer:
         raise InputError('Issued modern highlight evidence is required')
-    require(type(return_evidence) is bool and type(allow_direct_references) is bool
+    require(type(return_evidence) is bool and type(allow_direct_references) is bool and type(reviewed_math) is bool
             and type(max_items) is int and 0 < max_items <= MAX_PREVIEW_ITEMS
             and type(max_bytes) is int and 0 < max_bytes <= MAX_PREVIEW_BYTES,
             'Invalid modern highlight preview budget')
     evidence._check()
-    diagnostics = evidence.analyze_all(max_items=max_items, max_bytes=max_bytes)
+    math_report = None
+    if reviewed_math:
+        import document_math_builtin_evidence as math_evidence
+        diagnostics, math_report = math_evidence.analyze_all(evidence, return_modern=True,
+                                                              max_items=max_items, max_bytes=max_bytes)
+    else:
+        diagnostics = evidence.analyze_all(max_items=max_items, max_bytes=max_bytes)
+    math_by_path = {} if math_report is None else {row['path']: row for row in math_report['by_file']}
     records = load_rules()[0]['rules']
     result = dict(status='CONDITIONAL', by_file=[], conditions=CONDITIONS, coverage_complete=False, report_items=0,
                   diagnostics_count=0, previewed_diagnostics=0, unpreviewed_diagnostics=0,
@@ -410,11 +417,23 @@ def preview_all(evidence, *, max_items=MAX_PREVIEW_ITEMS, max_bytes=MAX_PREVIEW_
                   edit_permission=False, compiler_permission=False)
     if allow_direct_references:
         result['conditions'] += REFERENCE_CONDITION
+    if reviewed_math:
+        result['conditions'] = MATH_CONDITIONS
+        if allow_direct_references:
+            result['conditions'] += REFERENCE_CONDITION
+        result['reviewed_math'] = True
     encoded = json.dumps(result, ensure_ascii=False, sort_keys=True, indent=2)
     evidence_encoded = json.dumps(diagnostics, ensure_ascii=False, sort_keys=True, indent=2)
     size = (len(encoded.encode('utf-8')) + 2 * encoded.count('\n')
             + len(evidence_encoded.encode('utf-8')) + 2 * evidence_encoded.count('\n'))
     items = 6 + len(result['conditions'])
+    if math_report is not None:
+        math_json = json.dumps(math_report, ensure_ascii=False, sort_keys=True, indent=2)
+        size += len(math_json.encode('utf-8')) + 2 * math_json.count('\n')
+        items += sum(1 + len(row['findings']) + len(row['unresolved']) + len(row['upstream_unresolved'])
+                     + len(row['parse_errors']) + sum(len(x['math_calls']) + len(x['conditions'])
+                                                        for x in row['findings'])
+                     for row in math_report['by_file'])
     require(items + diagnostics['report_items'] <= max_items and size <= max_bytes,
             'Modern highlight preview report budget exceeded')
     subset_budget = [MAX_SUBSET_CHECKS]
@@ -424,14 +443,24 @@ def preview_all(evidence, *, max_items=MAX_PREVIEW_ITEMS, max_bytes=MAX_PREVIEW_
         if not row['diagnostics']:
             continue
         source = evidence._session._context.source_for(row['path'])
-        record = (_preview_source(evidence, source.tree, source.path, row['diagnostics'], records,
-                                  allow_direct_references=True) if allow_direct_references else
-                  _preview_source(evidence, source.tree, source.path, row['diagnostics'], records))
+        reviewed = math_by_path.get(row['path'])
+        spans = (frozenset((entry['start'], entry['end']) for entry in reviewed['findings'])
+                 if reviewed is not None else frozenset())
+        if reviewed_math:
+            record = _preview_source(evidence, source.tree, source.path, row['diagnostics'], records,
+                                     proven_math_spans=spans, allow_direct_references=allow_direct_references)
+        elif allow_direct_references:
+            record = _preview_source(evidence, source.tree, source.path, row['diagnostics'], records,
+                                     allow_direct_references=True)
+        else:
+            record = _preview_source(evidence, source.tree, source.path, row['diagnostics'], records)
         if record is None:
             result['unpreviewed_diagnostics'] += len(row['diagnostics'])
             continue
         record = _partial_preview(evidence, source.tree, source.path, row['diagnostics'], records, record, subset_budget,
-                                  allow_direct_references=allow_direct_references)
+                                  proven_math_spans=spans, allow_direct_references=allow_direct_references)
+        if reviewed_math:
+            record['conditions'] = MATH_CONDITIONS
         if allow_direct_references:
             record['conditions'] += REFERENCE_CONDITION
         if record['verification'] == 'withheld':
@@ -454,7 +483,8 @@ def preview_all(evidence, *, max_items=MAX_PREVIEW_ITEMS, max_bytes=MAX_PREVIEW_
     # bytes independently before releasing either part of the batch.
     final = json.dumps(result, ensure_ascii=False, sort_keys=True, indent=2)
     require(len(final.encode('utf-8')) + 2 * final.count('\n')
-            + len(evidence_encoded.encode('utf-8')) + 2 * evidence_encoded.count('\n') <= max_bytes,
+            + len(evidence_encoded.encode('utf-8')) + 2 * evidence_encoded.count('\n')
+            + (len(math_json.encode('utf-8')) + 2 * math_json.count('\n') if math_report is not None else 0) <= max_bytes,
             'Modern highlight preview report budget exceeded')
     return (diagnostics, result) if return_evidence else result
 
