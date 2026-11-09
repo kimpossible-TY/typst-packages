@@ -88,3 +88,21 @@ Both source-preview flags can be requested together. They are separate plans
 against the original captured source; do not concatenate their edits without
 independent combined revalidation. Existing compilation profiles do not select
 this math-call path.
+
+The explicitly selected `--preview-conditional-modern-combined-highlights`
+instead builds one source-only plan using direct references, proven scoped
+references and reviewed math calls together. It requires the same modern
+evidence and cannot be combined with the separate modern or math preview
+flags. All selected edits for each source are reparsed and revalidated as a
+union with the existing syntax, directive, finding and scope checks. The
+existing bounded scoped-proof fallback rechecks eligible non-scoped candidates
+when scoped evidence exhausts its work budget; the scoped portion remains
+explicitly withheld and the batch incomplete. The combined unpreviewed count
+does not individually classify every unsupported candidate or math binding.
+Math calls inside callbacks or other dynamic/deferred ancestors remain outside
+the reviewed math proof, including a math call and a scoped reference in the
+same callback body. The existing aggregate item and byte limits apply to the
+whole inspection; if exceeded the inspection fails rather than returning a
+partial report. Preservation of existing report sections applies to successful
+inspections. Runtime binding, label resolution, execution, rendering,
+source edits, publication and compiler permission remain unproved.

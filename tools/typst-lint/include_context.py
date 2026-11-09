@@ -415,21 +415,43 @@ def _context_signature(context):
         require(total_nodes <= max_nodes)
         child_count = 0
         for item in tree.nodes:
-            require(type(item) is Node)
-            string(item.kind, 80)
-            integer(item.start, len(source.source))
-            integer(item.end, len(source.source))
-            require(type(item.errors) is bool and (item.display is None or type(item.display) is bool))
-            sequence(item.children, len(tree.nodes))
+            if type(item) is not Node:
+                raise IncludeCaptureError('Issued include context representation changed')
+            kind = item.kind
+            if type(kind) is not str or len(kind) > 80 or len(kind.encode('utf-8')) > 80:
+                raise IncludeCaptureError('Issued include context representation changed')
+            start = item.start
+            start_limit = len(source.source)
+            if type(start) is not int or not 0 <= start <= start_limit:
+                raise IncludeCaptureError('Issued include context representation changed')
+            end = item.end
+            end_limit = len(source.source)
+            if type(end) is not int or not 0 <= end <= end_limit:
+                raise IncludeCaptureError('Issued include context representation changed')
+            if not (type(item.errors) is bool and (item.display is None or type(item.display) is bool)):
+                raise IncludeCaptureError('Issued include context representation changed')
+            children = item.children
+            children_limit = len(tree.nodes)
+            if type(children) is not tuple or len(children) > children_limit:
+                raise IncludeCaptureError('Issued include context representation changed')
             child_count += len(item.children)
-            require(child_count <= len(tree.nodes))
+            if child_count > len(tree.nodes):
+                raise IncludeCaptureError('Issued include context representation changed')
             for child in item.children:
-                integer(child, len(tree.nodes))
-            for operand in sequence(item.operands, 2):
-                sequence(operand, 2)
-                require(len(operand) == 2 and type(operand[0]) is str
-                        and operand[0] in ('top', 'bottom'))
-                integer(operand[1], len(tree.nodes))
+                child_limit = len(tree.nodes)
+                if type(child) is not int or not 0 <= child <= child_limit:
+                    raise IncludeCaptureError('Issued include context representation changed')
+            operands = item.operands
+            if type(operands) is not tuple or len(operands) > 2:
+                raise IncludeCaptureError('Issued include context representation changed')
+            for operand in operands:
+                if (type(operand) is not tuple or len(operand) > 2 or len(operand) != 2
+                        or type(operand[0]) is not str or operand[0] not in ('top', 'bottom')):
+                    raise IncludeCaptureError('Issued include context representation changed')
+                operand_node = operand[1]
+                operand_limit = len(tree.nodes)
+                if type(operand_node) is not int or not 0 <= operand_node <= operand_limit:
+                    raise IncludeCaptureError('Issued include context representation changed')
         sequence(source.fingerprint, 9)
         require(len(source.fingerprint) == 9)
         for value in source.fingerprint:

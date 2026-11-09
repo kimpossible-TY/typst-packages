@@ -203,6 +203,19 @@ remain withheld. The work budget is shared across the batch; exhaustion explicit
 the scoped portion while independently preserving eligible existing proposals. Execution, rendered equivalence, source writes and compiler
 permission are not proved. This option does not enable composed compilation.
 
+For one source-only plan containing separate supported reviewed-math and scoped
+reference highlight splits, select `--preview-conditional-modern-combined-highlights`
+with `--modern-highlight-evidence`. It includes direct reference previews and
+rechecks the combined edits together; it cannot be mixed with the separate
+modern-highlight or math-highlight preview options. A math call inside a scoped
+callback, including a call in the same highlight as a scoped reference, remains
+unproved and unpreviewed. The combined count does not separately classify each
+unpreviewed candidate's reason. Scoped budget exhaustion explicitly withholds that
+part while separately rechecking eligible baseline candidates. Execution,
+rendering, source writes and compiler authority remain unproved. As with other
+inspection previews, an aggregate item or byte limit failure rejects the whole
+inspection rather than returning a partial report.
+
 With `--modern-highlight-evidence`, the separate
 `--inspect-scoped-parent-patterns` option lists bounded source patterns where a
 syntactic scoped callback parameter appears as a child call's `parent`, including
