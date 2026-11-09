@@ -515,9 +515,12 @@ math-footnote, selected prose-footnote and selected nested paragraph-marker gap
 stages in that preview. The prose-footnote stage is limited to direct footnotes
 followed by an existing standalone `paragraph_tab` and inserts `#parbreak()`;
 the footnote, parbreak and marker bindings, the paragraph show rule and execution
-remain conditions, and the inserted break can change rendering. A conservative
+remain conditions, and the inserted break can change rendering. Direct displays
+and literal `#figure` calls are also supported as separate, revalidated stages;
+figure binding and block behavior remain conditions. A source containing both
+figure and `paragraph-tab` candidates keeps the figure stage unselected. A conservative
 per-source preflight may omit this optional stage on complex inputs. Other
-prose-footnote forms are not composed by this stage.
+prose-footnote forms are not composed by these stages.
 The marker stage only handles a first marker immediately after a literal content
 block opens or a marker directly after a supported standalone literal `#block`
 call. Other unknown marker boundaries still prevent this stage from producing a

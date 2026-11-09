@@ -44,9 +44,7 @@ class ComposedProseFootnoteTests(unittest.TestCase):
                     sequence.replay(parse(source), 'main.typ', self.catalog, bad, profile='conditional-gaps')
 
     def test_other_forms_and_suppression_unchanged(self):
-        for source in (b'#block[Text.#footnote[X]\n\n$ x $]',
-                       b'#block[Text.#footnote[X]\n\n#paragraph-tab\nNext.]',
-                       b'#block[Text.#footnote[X]\n\n#figure[X]]',
+        for source in (b'#block[Text.#footnote[X]\n\n#paragraph-tab\nNext.]',
                        b'#let parbreak = none\n#block[Text.#footnote[X]\n\n#paragraph_tab\nNext.]',
                        b'// typst-lint: ignore-next pde.footnote-trailing-gap -- intention\n'
                        b'#block[Text.#footnote[X]\n\n#paragraph_tab\nNext.]'):

@@ -876,6 +876,28 @@ def preview(tree, path, catalog, *, profile=_STANDARD, footnote_evidence=None, c
                     raise SafetyError('Conditional prose footnote changed display findings or suppressions')
                 _preserve_unresolved_paragraph_boundaries(before, current, path, catalog, proposal.edits)
                 steps.append(selected)
+        if profile != _STANDARD and b'#footnote' in current.source:
+            import document_composed_prose_block_gap as block_gap
+            for kind in ('display', 'figure'):
+                before = current
+                selected = block_gap.preview(before, path, catalog, kind)
+                if selected is None:
+                    continue
+                expected = block_gap._prove(before, path, catalog, kind)
+                if expected is None or not _same_data(selected, expected):
+                    raise SafetyError('Conditional prose block stage was altered')
+                edits = tuple(Edit(row['start'], row['end'], row['replacement'].encode('utf-8'))
+                              for row in selected['edits'])
+                proposal = plan(before.source, edits)
+                candidate = proposal.candidate()
+                if (proposal.deferred or len(proposal.edits) != len(edits)
+                        or digest(before.source) != selected['baseline_sha256']
+                        or digest(candidate) != selected['candidate_sha256']):
+                    raise SafetyError('Conditional prose block stage hash mismatch')
+                current = parse(candidate, tree.mode)
+                if current.nodes[0].errors:
+                    raise SafetyError('Conditional prose block candidate is malformed')
+                steps.append(selected)
         if conditional_continuations:
             import document_conditional_continuation as continuation
             import paragraph_rules
