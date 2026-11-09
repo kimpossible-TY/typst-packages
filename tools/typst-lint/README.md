@@ -552,6 +552,20 @@ and withholds highlight edits in sources imported by another graph source. It
 leaves unsupported or dynamic math calls unresolved. This option adds analysis
 work; the runtime bindings, execution and visual equivalence remain unproved.
 
+The separate `--compose-highlight-references` additionally requires both
+`--compose-modern-highlights` and `--compose-reviewed-math-highlights`. It
+conditionally admits the reviewed literal `@label` and scoped `(s.ref)("...")`
+forms, reissues source diagnostics, checks the candidate's callback/helper
+routes against a newly derived graph and repeats the proof before private
+compilation. Existing reviewed-math edits are kept when reference expansion or
+its optional work budget cannot preserve them. Imported sources remain
+withheld. Reference resolution, show rules, runtime binding and rendering are
+unproved; splitting may change emphasis, punctuation, spacing and page layout.
+This is not permission to edit source. It is deliberately expensive: a single
+PDE capture measured the expanded proof at about 69 seconds **per pass**, and
+this option performs two such passes plus the existing-plan comparison and
+independent candidate/route replay. Timings vary by project and machine.
+
 Add `--phase-timings --format json` (or use `--phase-timings --pdf-stdout`)
 to include a single run's monotonic elapsed wall times in `phase_timings`.
 The optional completed spans do not overlap: `planning_seconds` covers source

@@ -58,6 +58,13 @@
 | `pde.flowbox-colored-border` | 제안 | — | — | 검토된 전체 math-blocks 모듈의 정확한 형태와 이미 존재하는 theme binding이 필요하다. |
 | `pde.paragraph-capitalization` | 제안 | L, 독립 미리보기 | — | 중첩 `paragraph_tab`/`paragraph-tab` 뒤 제한된 소문자 시작어를 별도 조건부 진단·수정 제안한다. 바인딩·언어·실행은 미증명이고 렌더가 달라질 수 있다. `--inspect-capitalization-review`는 명세의 허용 목록 밖 직접 소문자 시작을 위반이 아닌 별도 검토 항목으로 표시한다. 바인딩·언어·의도는 미증명이며 수정은 없다. |
 
+`--compose-highlight-references`는 reviewed-math 결합 미리보기에서 제한된
+직접·scoped 참조를 별도 선택한다. 후보 graph의 helper 경로와 callback
+소유권을 두 번 재생하지만 실행·참조 show·렌더는 미증명이다. 선택적 예산
+초과 시 기존 계획으로 돌아가며, 기존 보고서와 보류 안내도 한도를 넘으면
+전체를 거부한다. 한 PDE 사본의 확장 proof는 1회 약 69초였고 두 번 실행되며
+기존 계획 대조와 후보 graph 재생 시간은 별도다.
+
 ## 읽을 때 주의할 점
 
 - parent scope 독립 소스 검사에서는 검토된 `theme-from-text-fill()` 바인딩과 지정된 palette 필드만 읽는 제한된 `context` 지역 선언을 확인한다. child `m`을 캡처하는 제한된 리터럴 태그 함수와 같은 child의 직접 수식 호출도 확인한다. 해당 `markub`의 바인딩·효과와 다른 지역 선언·closure, 실행과 렌더는 증명하지 않는다.

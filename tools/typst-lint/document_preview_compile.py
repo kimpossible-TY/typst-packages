@@ -178,7 +178,8 @@ def _compile_captured(context, records, catalog, snapshot, *, entrypoint, deadli
                     explicit_withheld_sources=(), conditional_continuations=False, conditional_adjacent_punctuation=False,
                     original_only=False, modern_highlight_evidence=None,
                     composed_modern_evidence=None, sequence_facade_evidence=False,
-                    conditional_deferred_footnotes=False, composed_reviewed_math=False, phase_timings=None):
+                    conditional_deferred_footnotes=False, composed_reviewed_math=False,
+                    composed_references=False, phase_timings=None):
     """Compile baseline and candidate from explicit captured bytes in private.
 
     macOS sandbox-exec denies networking and writes outside the temporary
@@ -198,6 +199,9 @@ def _compile_captured(context, records, catalog, snapshot, *, entrypoint, deadli
         raise SafetyError('Preview cancellation requires a threading.Event')
     if type(composed_reviewed_math) is not bool or (composed_reviewed_math and composed_modern_evidence is None):
         raise SafetyError('Reviewed math requires an explicit composed modern preview')
+    if (type(composed_references) is not bool or (composed_references
+            and (not composed_reviewed_math or composed_modern_evidence is None))):
+        raise SafetyError('Composed references require reviewed math and a composed modern preview')
     if expected_dependencies is not None:
         if (type(expected_dependencies) is not tuple or len(expected_dependencies) > document_resources.MAX_FILES
                 or any(type(item) is not tuple or len(item) != 2 or any(type(x) is not str for x in item)
@@ -233,6 +237,8 @@ def _compile_captured(context, records, catalog, snapshot, *, entrypoint, deadli
                 or footnote_evidence is not None or type(sequence_facade_evidence) is not bool):
             raise SafetyError('Composed modern preview requires the matching issued resource capture')
         timing_options = {'phase_timings': phase_timings} if phase_timings is not None else {}
+        if composed_references:
+            timing_options['composed_references'] = True
         candidates, modern_summary, composed_view = composed_modern.stage(composed_modern_evidence, records,
             profile=profile, partial_unsupported=partial_unsupported, withheld_records=withheld_records,
             partial_unproven_binding=partial_unproven_binding, explicit_withheld_sources=explicit_withheld_sources,
@@ -460,7 +466,10 @@ def compile_preview(context, records, catalog, snapshot, *, entrypoint, deadline
                     explicit_withheld_sources=(), conditional_continuations=False, conditional_adjacent_punctuation=False,
                     modern_highlight_evidence=None, composed_modern_evidence=None,
                     sequence_facade_evidence=False, conditional_deferred_footnotes=False,
-                    composed_reviewed_math=False, phase_timings=None):
+                    composed_reviewed_math=False, composed_references=False, phase_timings=None):
+    extra = {'composed_references': True} if composed_references is True else {}
+    if type(composed_references) is not bool:
+        raise SafetyError('Composed references selection must be Boolean')
     return _compile_captured(context, records, catalog, snapshot, entrypoint=entrypoint,
         deadline_seconds=deadline_seconds, cancel_event=cancel_event, expected_dependencies=expected_dependencies,
         expected_baseline_sha256=expected_baseline_sha256, profile=profile, starts=starts,
@@ -472,7 +481,7 @@ def compile_preview(context, records, catalog, snapshot, *, entrypoint, deadline
         composed_modern_evidence=composed_modern_evidence,
         sequence_facade_evidence=sequence_facade_evidence,
         conditional_deferred_footnotes=conditional_deferred_footnotes, composed_reviewed_math=composed_reviewed_math,
-        phase_timings=phase_timings)
+        phase_timings=phase_timings, **extra)
 
 
 def compile_original(context, snapshot, *, entrypoint, deadline_seconds=120.0, cancel_event=None,

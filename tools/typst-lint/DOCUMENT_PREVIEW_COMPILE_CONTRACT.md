@@ -86,6 +86,25 @@ other conflicting findings remain withheld. This does not prove runtime binding,
 execution, complete coverage or visual equivalence and grants no source-write or
 publication permission. The additional analysis increases planning time.
 
+`--compose-highlight-references` additionally requires both composed modern
+and reviewed-math options. It admits only the reviewed literal direct and
+scoped-reference source patterns. It independently reissues the previous
+reviewed-math plan, retains its edits, derives a final candidate graph, replays
+generated helper routes and callback owners, and repeats the expanded proof.
+When the optional scope, candidate-route or aggregate report budget is
+exhausted, the older plan is retained if its report and fallback notice fit;
+otherwise the preview is refused. Imported sources, unknown/shadowed bindings,
+unsupported references and conflicting routes remain withheld. Captured routes
+that fail source/candidate identity or independent replay validation refuse the
+preview rather than being silently treated as budget exhaustion. A route-source
+conflict introduced solely by the optional reference edits falls back to the
+independently replayed older plan and reports the reason. All captured routes
+are conditional static evidence: runtime package selection, execution, label
+resolution, custom reference show rules and rendering are not proved.
+The expanded proof is run twice. On one PDE capture each pass took about 69
+seconds, before accounting for the old-plan comparison and independent final
+candidate graph/source replay; this figure is not a performance guarantee.
+
 The opt-in `--conditional-gaps` profile appends source-local nested math
 footnote and proof gap stages to the standard sequence. Every step is replayed
 from the captured source with the same profile, hash and suppression checks;

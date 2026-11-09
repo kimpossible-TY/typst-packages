@@ -184,6 +184,8 @@ def main(arguments=None, *, gate=False):
                         help='Add conditional modern highlight splits after the selected sequence; rendering may change')
     parser.add_argument('--compose-reviewed-math-highlights', action='store_true',
                         help='Also split reviewed builtin math calls in composed highlights; rendering may change')
+    parser.add_argument('--compose-highlight-references', action='store_true',
+                        help='Also compose reviewed direct and scoped references; rendering may change and proof is repeated')
     parser.add_argument('--conditional-adjacent-punctuation', action='store_true',
                         help='Move adjacent prose punctuation across footnotes atomically; rendering may change')
     parser.add_argument('--conditional-punctuation', action='store_true',
@@ -218,6 +220,8 @@ def main(arguments=None, *, gate=False):
         parser.error('--phase-timings requires --format json or --pdf-stdout')
     if args.compose_reviewed_math_highlights and not args.compose_modern_highlights:
         parser.error('--compose-reviewed-math-highlights requires --compose-modern-highlights')
+    if args.compose_highlight_references and not args.compose_reviewed_math_highlights:
+        parser.error('--compose-highlight-references requires --compose-reviewed-math-highlights')
     if args.conditional_modern_highlights and (args.conditional_gaps or args.conditional_punctuation
             or args.conditional_spacers or args.conditional_facade_footnotes or args.conditional_continuations
             or args.conditional_adjacent_punctuation or args.conditional_deferred_footnotes or args.partial_unsupported_preview
@@ -392,6 +396,8 @@ def main(arguments=None, *, gate=False):
             compile_options = dict(composed_modern_evidence=footnote_evidence,
                                    sequence_facade_evidence=args.conditional_facade_footnotes,
                                    composed_reviewed_math=args.compose_reviewed_math_highlights)
+            if args.compose_highlight_references:
+                compile_options['composed_references'] = True
         if phase_timings is not None:
             compile_options['phase_timings'] = phase_timings
         preview = document_preview_compile.compile_preview(context, records, catalog['rules'], snapshot,
@@ -459,6 +465,8 @@ def main(arguments=None, *, gate=False):
             if args.compose_modern_highlights:
                 result['composed_modern_highlights'] = True
                 result['sequence_planned_edits'] = sequence_edits
+            if args.compose_highlight_references:
+                result['composed_highlight_references'] = True
         if partial_requested:
             if args.partial_unsupported_preview:
                 result['partial_unsupported_preview'] = True
