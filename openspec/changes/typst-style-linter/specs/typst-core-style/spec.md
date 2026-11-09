@@ -140,12 +140,20 @@ Do not write bare scripts such as `$X^i$` or `$X_j$`.
 - **Description:** The linter SHALL require exactly two positional arguments and no named arguments for resolved `project-ref`: a string project key and a global Typst label. Known strings, reference content, displayed numbers, or scope-generated labels in the second slot SHALL be rejected. Unresolved values SHALL not be guessed.
 
 #### Scenario: Violation with extra or wrong arguments
-- **WHEN** code contains `#project-ref("pde", <energy>, 3)`, `#project-ref("pde", "1.1.1")`, `#project-ref("pde", @energy)`, or `#project-ref("pde", (s.tag)("energy"))`
+- **WHEN** code contains `#project-ref("pde", <energy>, 3)`, `#project-ref("pde", "1.1.1")`, `#project-ref("pde", [@energy])`, or `#project-ref("pde", (s.tag)("energy"))`
 - **THEN** this rule reports each invalid call shape or known nonglobal-label argument.
 
 #### Scenario: Non-violation with a global label
 - **WHEN** code contains `#project-ref("pde", <zero_acceleration>)`
 - **THEN** this rule emits no finding; catalog membership is checked separately.
+
+#### Scenario: Exact content-reference repair
+- **WHEN** the resolved call has exactly two positional arguments, a literal project key and `[@energy]` containing only that unsupplemented reference, and a configured valid catalog proves the unique nonambiguous matching target
+- **THEN** the repair replaces only `[@energy]` with `<energy>` and reparses; whitespace, comments, supplements, additional content, extra/named arguments or missing/ambiguous targets defeat this repair.
+
+#### Scenario: Malformed bare reference is not repaired
+- **WHEN** code uses `#project-ref("pde", @energy)` without a content block
+- **THEN** the official parser's error is reported and no reference repair is proposed; this rule does not expand malformed-syntax recovery.
 
 ### Requirement: core.project-ref-catalog-target
 - **Grade:** error

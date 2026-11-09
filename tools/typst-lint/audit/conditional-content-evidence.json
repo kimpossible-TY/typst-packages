@@ -1,0 +1,468 @@
+{
+  "baseline_commit": "baf1ae666606c3d075bc2fbc4e7d0a50173e6d54",
+  "bounds": {
+    "bindings": 1024,
+    "charged_syntax_and_scope_work": 2000000,
+    "module_visits": 512,
+    "report_items": 100000,
+    "route_entries": 128
+  },
+  "command": "typst-lint inspect-document --root <consumer> --entrypoint main.typ --rule-set pde --package-path <explicit-captured-root> --format json",
+  "final_source_replay_report_equal": true,
+  "focused_tests": {
+    "test_conditional_highlight": 28,
+    "test_document_cli": 22,
+    "total": 50
+  },
+  "generated_utc": "2026-11-08T00:57:11.321606+00:00",
+  "inspection": {
+    "added_findings": 18,
+    "added_sites": [
+      {
+        "column": 2,
+        "line": 27,
+        "path": "Preliminaries/Riemannian manifolds/Geodesics.typ",
+        "root_sha256": "e02808664deef79a7fb997405d14255a406ff48b4815e5e6e19ad0b19db8f342",
+        "wrapper_names": [
+          "proof"
+        ]
+      },
+      {
+        "column": 114,
+        "line": 242,
+        "path": "Preliminaries/Riemannian manifolds/Levi-chivita.typ",
+        "root_sha256": "6741c0b74b20d4686ea05e98e72988e6342db8a232725a03e5343092c3d5f574",
+        "wrapper_names": [
+          "proof"
+        ]
+      },
+      {
+        "column": 258,
+        "line": 245,
+        "path": "Preliminaries/Riemannian manifolds/Levi-chivita.typ",
+        "root_sha256": "6741c0b74b20d4686ea05e98e72988e6342db8a232725a03e5343092c3d5f574",
+        "wrapper_names": [
+          "proof"
+        ]
+      },
+      {
+        "column": 423,
+        "line": 251,
+        "path": "Preliminaries/Riemannian manifolds/Levi-chivita.typ",
+        "root_sha256": "6741c0b74b20d4686ea05e98e72988e6342db8a232725a03e5343092c3d5f574",
+        "wrapper_names": [
+          "proof"
+        ]
+      },
+      {
+        "column": 2,
+        "line": 57,
+        "path": "Preliminaries/Riemannian manifolds/conection.typ",
+        "root_sha256": "2821e26bf5717a5dc35ada70019f14faf9e17ba1674fba7ce35591d139e25a4f",
+        "wrapper_names": [
+          "proof"
+        ]
+      },
+      {
+        "column": 82,
+        "line": 117,
+        "path": "Preliminaries/Riemannian manifolds/parallel_transport.typ",
+        "root_sha256": "5f64d3ede81f17ff923b2c8a4ed2fa5f4f76962d8df3c09c93b206d5073db078",
+        "wrapper_names": [
+          "proof"
+        ]
+      },
+      {
+        "column": 187,
+        "line": 237,
+        "path": "Preliminaries/Riemannian manifolds/parallel_transport.typ",
+        "root_sha256": "5f64d3ede81f17ff923b2c8a4ed2fa5f4f76962d8df3c09c93b206d5073db078",
+        "wrapper_names": [
+          "proof"
+        ]
+      },
+      {
+        "column": 13,
+        "line": 34,
+        "path": "Preliminaries/Riemannian manifolds/vector and tensor fields along the curve.typ",
+        "root_sha256": "e8437be608b284ec5004240b3b15424f1c8e7fbd2989f7768ae04a25144c4ae5",
+        "wrapper_names": [
+          "theorem"
+        ]
+      },
+      {
+        "column": 82,
+        "line": 60,
+        "path": "Preliminaries/Riemannian manifolds/vector and tensor fields along the curve.typ",
+        "root_sha256": "e8437be608b284ec5004240b3b15424f1c8e7fbd2989f7768ae04a25144c4ae5",
+        "wrapper_names": [
+          "proof"
+        ]
+      },
+      {
+        "column": 2,
+        "line": 298,
+        "path": "chapter 1/1.11.typ",
+        "root_sha256": "07a5e7f1ef87a4529fab3c4a0d22e956997306c66a4241968e317127eeda2fdb",
+        "wrapper_names": [
+          "proof"
+        ]
+      },
+      {
+        "column": 4,
+        "line": 457,
+        "path": "chapter 1/1.11.typ",
+        "root_sha256": "07a5e7f1ef87a4529fab3c4a0d22e956997306c66a4241968e317127eeda2fdb",
+        "wrapper_names": [
+          "proof"
+        ]
+      },
+      {
+        "column": 179,
+        "line": 471,
+        "path": "chapter 1/1.11.typ",
+        "root_sha256": "07a5e7f1ef87a4529fab3c4a0d22e956997306c66a4241968e317127eeda2fdb",
+        "wrapper_names": [
+          "proof"
+        ]
+      },
+      {
+        "column": 128,
+        "line": 699,
+        "path": "chapter 1/1.11.typ",
+        "root_sha256": "07a5e7f1ef87a4529fab3c4a0d22e956997306c66a4241968e317127eeda2fdb",
+        "wrapper_names": [
+          "note"
+        ]
+      },
+      {
+        "column": 122,
+        "line": 107,
+        "path": "chapter 1/1.15.typ",
+        "root_sha256": "ea19a9186c098a83bc243c3dd35dd941c5a59f9bafbe953a079205eb13361d07",
+        "wrapper_names": [
+          "proof"
+        ]
+      },
+      {
+        "column": 4,
+        "line": 73,
+        "path": "chapter 2/2.3.typ",
+        "root_sha256": "8773f392b8d2ab0d6614bba20dd8c17ac57ccf731c9c57d4f36b90d1748fd7cb",
+        "wrapper_names": [
+          "proof"
+        ]
+      },
+      {
+        "column": 2,
+        "line": 252,
+        "path": "chapter 2/2.5.typ",
+        "root_sha256": "1e77854655e6b8d59ba643408173f35fae8f9bdf12d628d8e07d695a88df36fe",
+        "wrapper_names": []
+      },
+      {
+        "column": 4,
+        "line": 319,
+        "path": "chapter 2/2.6.typ",
+        "root_sha256": "6b2f33447fa2f8bd977064f31174a02b07f3ec17b5b830cf5033578df098721c",
+        "wrapper_names": [
+          "proof"
+        ]
+      },
+      {
+        "column": 127,
+        "line": 13,
+        "path": "chapter 2/2.7.typ",
+        "root_sha256": "bd0cc51688751e1cac146e73208e2d489d4ce38c8c82e98a559dbd96fe8d6172",
+        "wrapper_names": []
+      }
+    ],
+    "available_source_backends": [
+      "core.parenthesized-scripts",
+      "pde.standalone-display",
+      "pde.display-continuation-gap"
+    ],
+    "budget_refusals": 0,
+    "conditional_findings": 29,
+    "exit": 2,
+    "global_complete": false,
+    "helper_edits": 0,
+    "include_snapshot_equal": true,
+    "included_sources": 37,
+    "literal_content_findings": 16,
+    "previous_findings": 11,
+    "proposed_script_insertions": 9686,
+    "retained_sources": 44,
+    "root_findings": 13,
+    "source_diagnostics_and_proposals_equal": true,
+    "source_diagnostics_by_rule": {
+      "core.parenthesized-scripts": 5044,
+      "pde.display-continuation-gap": 63,
+      "pde.standalone-display": 7
+    },
+    "source_hashes_current": true,
+    "uninspected_pde_rules": 30,
+    "unresolved_by_reason": {
+      "Nested or deferred helper call has unresolved execution context": 62,
+      "Unknown root namespace scope": 31
+    },
+    "unsupported_import_refusals": 0
+  },
+  "limitations": [
+    "All helper findings remain conditional, with no trusted Binding, edit permission or full rule coverage.",
+    "Only pinned math-blocks proof/theorem/note identities with one direct positional literal body are admitted; callbacks, closures, code and unknown wrappers remain unresolved.",
+    "Wrapper aliases/local shadowing/source order and active/default mutation are tracked; named body arguments are not admitted.",
+    "Proof rejects named options; theorem/note allow one title option and reject unsupported or duplicate options.",
+    "The owned native fixture preserves equation/label bytes and semantics/word order without claiming geometry or PDF equivalence.",
+    "User documents, package originals, installed caches, editor settings and PR metadata are preserved."
+  ],
+  "native_combined_import": {
+    "forms": [
+      "module alias + named items",
+      "module alias + wildcard",
+      "module alias + renamed item",
+      "module alias and named item collision"
+    ],
+    "observed_precedence": "module alias first; imported items override collisions",
+    "official_ast": [
+      "Import",
+      "Str",
+      "As",
+      "Ident",
+      "Colon",
+      "ImportItems or Star"
+    ],
+    "trusted_import_grammar_changed": false
+  },
+  "native_proof_fixture": {
+    "conditional_content_context": "proof from @local/math-blocks:0.2.0",
+    "diagnostics_before_after": [
+      1,
+      0
+    ],
+    "elapsed_seconds": 6.432,
+    "executions": {
+      "compile": 2,
+      "pdftotext": 2,
+      "query": 4
+    },
+    "namespace_packages": 6,
+    "pde_root_direct_highlight_lines": [
+      16,
+      87,
+      99
+    ],
+    "preserved": {
+      "facade_and_consumer_originals": true,
+      "full_extracted_word_order": true,
+      "native_equation_bodies_order": true,
+      "native_sentinel_label_target": "equation",
+      "package_files": 80,
+      "private_cache_empty": true,
+      "source_equation_bytes": [
+        "$x^2$",
+        "$ y^2 = 1 $"
+      ],
+      "source_label_bytes": [
+        "<untouched-energy>"
+      ]
+    },
+    "runtime_package_trees": 9,
+    "scope": "one owned genuine-facade proof literal body; no geometry/PDF-equivalence claim",
+    "status": "passed",
+    "tests": 1,
+    "typst_version": "0.15.1",
+    "writer_or_edit_permission": false
+  },
+  "published_baseline_ci": {
+    "aggregate_gates": 2,
+    "completed_utc": "2026-11-08T00:55:11Z",
+    "conclusion": "success",
+    "elapsed_seconds": 1371,
+    "execution_shards": 8,
+    "head": "baf1ae666606c3d075bc2fbc4e7d0a50173e6d54",
+    "passed_per_interpreter": 2009,
+    "run": 42430203586,
+    "skipped_per_interpreter": 55,
+    "tests_per_interpreter": 2064
+  },
+  "remote_ci_for_this_change": "not-published",
+  "runtime_sha256": {
+    "conditional_highlight.py": "8b38c4a3ba2c62193e4b5b5f80e3c189d9df7eccffe4cc61a34738900583aac0",
+    "document_cli.py": "b967ce0a148d99d29560c992900b22549c7a0f4054f343df510fdf003f0ef4a7",
+    "document_display.py": "c5b7f492bfc37935d94f63e901ea72b661e96cb6f0dc376bdfc4027879d1f30e",
+    "import_graph.py": "11caef3fe01bb107acdb08fae646764372a2832d8b11b1582e04e6d0bc7fbda4",
+    "namespace_packages.py": "3f2e07a3dd8cccf2be24a21c184639d1be4888a08f94bd60a6717e10cbd1cdf2",
+    "script_rule.py": "de23a485a15a62f968ab1fa6f707899fc5fb05ce00f2aac0836f5db665459b5f",
+    "suppression.py": "398c990af7e65016a739572a62c6b385ce381554185fc96c4bf7b6cadb404057",
+    "syntax_client.py": "4886db74e8314da44f59085254e13e9a683837e4705d80c15ed11c4d2a168562"
+  },
+  "sample_literal_content_finding": {
+    "column": 2,
+    "conditions": [
+      "Every referenced module loads and initializes successfully; initializer purity is not proved.",
+      "Runtime imports select the exact captured package versions and bytes; ambient package selection is not proved.",
+      "The reported source call actually executes and its literal body is rendered in the intended document context.",
+      "Every enclosing recognized literal content wrapper executes and renders this body."
+    ],
+    "content_context": [
+      [
+        {
+          "imported_name": "proof",
+          "local_name": "proof",
+          "operation": "package-export",
+          "path": "@local/math-blocks:0.2.0",
+          "request": "@local/math-blocks:0.2.0",
+          "source_sha256": "542c7ce1ebfc6fbd51a7fefb2b55405a968a951b61d49170e49ef331948f36ff"
+        },
+        {
+          "imported_name": "proof",
+          "local_name": "proof",
+          "operation": "wildcard-import",
+          "path": "Styles/styles.typ",
+          "request": "@local/math-blocks:0.2.0",
+          "source_sha256": "ed4ab7c876bd3080f8a0ef9de00fd855c8a8b5c3544483bb6112bdf5e1d466ed"
+        },
+        {
+          "imported_name": "proof",
+          "local_name": "proof",
+          "operation": "wildcard-import",
+          "path": "Preliminaries/Riemannian manifolds/Geodesics.typ",
+          "request": "../../Styles/styles.typ",
+          "source_sha256": "e02808664deef79a7fb997405d14255a406ff48b4815e5e6e19ad0b19db8f342"
+        }
+      ]
+    ],
+    "edit_permission": false,
+    "end": 1887,
+    "grade": "warning",
+    "line": 27,
+    "message": "Keep math outside text highlighting, conditional on the captured helper identity and execution context.",
+    "package_evidence": [
+      {
+        "artifacts": [],
+        "entrypoint": "lib.typ",
+        "import_path": "@local/cetz-helpers:0.2.0",
+        "manifest_identity": "/private/var/folders/n3/yrkwhlf55_913xl78mylpw200000gn/T/typst-lint-namespace-packages-c7k31e31/local/cetz-helpers/0.2.0/typst.toml",
+        "manifest_sha256": "7733132a6cb15391cbe64afc8f5f86281a44b1a87c9df98a7a72e3931ec4e402",
+        "name": "cetz-helpers",
+        "namespace": "local",
+        "source_identity": "/private/var/folders/n3/yrkwhlf55_913xl78mylpw200000gn/T/typst-lint-namespace-packages-c7k31e31/local/cetz-helpers/0.2.0/lib.typ",
+        "source_sha256": "19c807971311c94a58413fbc5cac14ae2ea5065c78206d95ceda97890558e2c3",
+        "version": "0.2.0"
+      },
+      {
+        "artifacts": [],
+        "entrypoint": "lib.typ",
+        "import_path": "@local/math-blocks:0.2.0",
+        "manifest_identity": "/private/var/folders/n3/yrkwhlf55_913xl78mylpw200000gn/T/typst-lint-namespace-packages-c7k31e31/local/math-blocks/0.2.0/typst.toml",
+        "manifest_sha256": "e5eeaa72f830e8893e5f7c4dd10129b9819f31a8f1b80b7fbe22551f1295c5c4",
+        "name": "math-blocks",
+        "namespace": "local",
+        "source_identity": "/private/var/folders/n3/yrkwhlf55_913xl78mylpw200000gn/T/typst-lint-namespace-packages-c7k31e31/local/math-blocks/0.2.0/lib.typ",
+        "source_sha256": "542c7ce1ebfc6fbd51a7fefb2b55405a968a951b61d49170e49ef331948f36ff",
+        "version": "0.2.0"
+      },
+      {
+        "artifacts": [],
+        "entrypoint": "lib.typ",
+        "import_path": "@local/scoped-annotations:0.3.0",
+        "manifest_identity": "/private/var/folders/n3/yrkwhlf55_913xl78mylpw200000gn/T/typst-lint-namespace-packages-c7k31e31/local/scoped-annotations/0.3.0/typst.toml",
+        "manifest_sha256": "2deffaddbdcde7f320f9ff4ed8d16430b41ce0d933140ca7cfb8cdbb708f3dfd",
+        "name": "scoped-annotations",
+        "namespace": "local",
+        "source_identity": "/private/var/folders/n3/yrkwhlf55_913xl78mylpw200000gn/T/typst-lint-namespace-packages-c7k31e31/local/scoped-annotations/0.3.0/lib.typ",
+        "source_sha256": "eb8e7ff7b31238c8fa4b996deb9502fec0ae4610240427a8b40873708e509203",
+        "version": "0.3.0"
+      },
+      {
+        "artifacts": [],
+        "entrypoint": "lib.typ",
+        "import_path": "@local/text-utils:0.1.2",
+        "manifest_identity": "/private/var/folders/n3/yrkwhlf55_913xl78mylpw200000gn/T/typst-lint-namespace-packages-c7k31e31/local/text-utils/0.1.2/typst.toml",
+        "manifest_sha256": "e1d27052412a39d4f839dede28406159c1c9a5394592a73c2ed5666dcbc60df2",
+        "name": "text-utils",
+        "namespace": "local",
+        "source_identity": "/private/var/folders/n3/yrkwhlf55_913xl78mylpw200000gn/T/typst-lint-namespace-packages-c7k31e31/local/text-utils/0.1.2/lib.typ",
+        "source_sha256": "7e151150dac47b01ebf7706457906133d74a52abee1b5c43ce824ff89279bd71",
+        "version": "0.1.2"
+      },
+      {
+        "artifacts": [],
+        "entrypoint": "src/lib.typ",
+        "import_path": "@preview/cetz:0.4.2",
+        "manifest_identity": "/private/var/folders/n3/yrkwhlf55_913xl78mylpw200000gn/T/typst-lint-namespace-packages-c7k31e31/preview/cetz/0.4.2/typst.toml",
+        "manifest_sha256": "2ccea70cc14ad8d79897179d3c8946758e610903e59f154acdb0f9b9ff81ac02",
+        "name": "cetz",
+        "namespace": "preview",
+        "source_identity": "/private/var/folders/n3/yrkwhlf55_913xl78mylpw200000gn/T/typst-lint-namespace-packages-c7k31e31/preview/cetz/0.4.2/src/lib.typ",
+        "source_sha256": "53380cd9de16c1f845f325e9d8be8e0f03493c2073fba1c54d546e1906a8f8ed",
+        "version": "0.4.2"
+      },
+      {
+        "artifacts": [],
+        "entrypoint": "src/lib.typ",
+        "import_path": "@preview/mannot:0.4.0",
+        "manifest_identity": "/private/var/folders/n3/yrkwhlf55_913xl78mylpw200000gn/T/typst-lint-namespace-packages-c7k31e31/preview/mannot/0.4.0/typst.toml",
+        "manifest_sha256": "aef4310b36955dc98d8b03ec4abf17d45777d0a08b65d6e67214752e57647545",
+        "name": "mannot",
+        "namespace": "preview",
+        "source_identity": "/private/var/folders/n3/yrkwhlf55_913xl78mylpw200000gn/T/typst-lint-namespace-packages-c7k31e31/preview/mannot/0.4.0/src/lib.typ",
+        "source_sha256": "288027cea059b327bf3253c44ae975339e7afc0f149375d9d87ca1c1fe739f57",
+        "version": "0.4.0"
+      }
+    ],
+    "package_requests": [
+      "@local/cetz-helpers:0.2.0",
+      "@local/math-blocks:0.2.0",
+      "@local/scoped-annotations:0.3.0",
+      "@local/text-utils:0.1.2",
+      "@preview/mannot:0.4.0"
+    ],
+    "path": "Preliminaries/Riemannian manifolds/Geodesics.typ",
+    "root_sha256": "e02808664deef79a7fb997405d14255a406ff48b4815e5e6e19ad0b19db8f342",
+    "route": [
+      {
+        "imported_name": "highlighted",
+        "local_name": "highlighted",
+        "operation": "package-export",
+        "path": "@local/text-utils:0.1.2",
+        "request": "@local/text-utils:0.1.2",
+        "source_sha256": "7e151150dac47b01ebf7706457906133d74a52abee1b5c43ce824ff89279bd71"
+      },
+      {
+        "imported_name": "highlighted",
+        "local_name": "highlighted",
+        "operation": "wildcard-import",
+        "path": "Styles/styles.typ",
+        "request": "@local/text-utils:0.1.2",
+        "source_sha256": "ed4ab7c876bd3080f8a0ef9de00fd855c8a8b5c3544483bb6112bdf5e1d466ed"
+      },
+      {
+        "imported_name": "highlighted",
+        "local_name": "highlighted",
+        "operation": "wildcard-import",
+        "path": "Preliminaries/Riemannian manifolds/Geodesics.typ",
+        "request": "../../Styles/styles.typ",
+        "source_sha256": "e02808664deef79a7fb997405d14255a406ff48b4815e5e6e19ad0b19db8f342"
+      }
+    ],
+    "rule_id": "pde.text-only-highlight",
+    "source": "My / Mathematical presentation; PDE / highlight.",
+    "source_hashes": [
+      {
+        "path": "Preliminaries/Riemannian manifolds/Geodesics.typ",
+        "source_sha256": "e02808664deef79a7fb997405d14255a406ff48b4815e5e6e19ad0b19db8f342"
+      },
+      {
+        "path": "Styles/styles.typ",
+        "source_sha256": "ed4ab7c876bd3080f8a0ef9de00fd855c8a8b5c3544483bb6112bdf5e1d466ed"
+      }
+    ],
+    "start": 1640,
+    "status": "CONDITIONAL"
+  },
+  "schema": 1,
+  "source_manifest_reference": "conditional-highlight-evidence.json:source_manifest",
+  "source_manifest_sha256": "520ff7ccb7e31516ec3846d9eab54226d33ff13fb8990cf82224c720ca86f169"
+}

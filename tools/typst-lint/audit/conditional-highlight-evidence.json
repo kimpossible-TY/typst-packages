@@ -1,0 +1,636 @@
+{
+  "baseline_commit": "a9112a23d508bc5e3f1a1cdf8ba3d5ab7f76f7e1",
+  "command": "typst-lint inspect-document --root <consumer> --entrypoint main.typ --rule-set pde --package-path <explicit-captured-root> --format json",
+  "earlier_source_snapshot_equal": true,
+  "facade_native_probe": {
+    "builtin_names_exported": {
+      "footnote": false,
+      "label": false,
+      "ref": false
+    },
+    "equalities": {
+      "highlighted": true,
+      "local_scope": true,
+      "marker": true,
+      "paragraph_show": true
+    },
+    "export_counts": {
+      "blocks": 27,
+      "diagrams": 23,
+      "facade": 75,
+      "mannot": 11,
+      "scopes": 17,
+      "textutils": 6
+    }
+  },
+  "focused_tests": {
+    "supporting_regressions": 102,
+    "test_conditional_highlight": 19,
+    "test_document_cli": 20,
+    "test_namespace_packages": 15,
+    "total": 156
+  },
+  "generated_utc": "2026-11-08T00:25:04.156343+00:00",
+  "inspection": {
+    "available_source_backends": [
+      "core.parenthesized-scripts",
+      "pde.standalone-display",
+      "pde.display-continuation-gap"
+    ],
+    "budget_refusals": 0,
+    "conditional_findings": 11,
+    "conditional_findings_by_source": {
+      "Preliminaries/Riemannian manifolds/parallel_transport.typ": 1,
+      "chapter 1/1.11.typ": 3,
+      "chapter 1/1.15.typ": 1,
+      "chapter 1/1.16.typ": 5,
+      "chapter 2/2.2.typ": 1
+    },
+    "conditional_sites": [
+      {
+        "column": 72,
+        "edit_permission": false,
+        "end": 1694,
+        "line": 29,
+        "path": "Preliminaries/Riemannian manifolds/parallel_transport.typ",
+        "root_sha256": "5f64d3ede81f17ff923b2c8a4ed2fa5f4f76962d8df3c09c93b206d5073db078",
+        "start": 1523,
+        "status": "CONDITIONAL"
+      },
+      {
+        "column": 2,
+        "edit_permission": false,
+        "end": 828,
+        "line": 16,
+        "path": "chapter 1/1.11.typ",
+        "root_sha256": "07a5e7f1ef87a4529fab3c4a0d22e956997306c66a4241968e317127eeda2fdb",
+        "start": 712,
+        "status": "CONDITIONAL"
+      },
+      {
+        "column": 85,
+        "edit_permission": false,
+        "end": 4504,
+        "line": 87,
+        "path": "chapter 1/1.11.typ",
+        "root_sha256": "07a5e7f1ef87a4529fab3c4a0d22e956997306c66a4241968e317127eeda2fdb",
+        "start": 4391,
+        "status": "CONDITIONAL"
+      },
+      {
+        "column": 295,
+        "edit_permission": false,
+        "end": 5909,
+        "line": 99,
+        "path": "chapter 1/1.11.typ",
+        "root_sha256": "07a5e7f1ef87a4529fab3c4a0d22e956997306c66a4241968e317127eeda2fdb",
+        "start": 5775,
+        "status": "CONDITIONAL"
+      },
+      {
+        "column": 398,
+        "edit_permission": false,
+        "end": 2951,
+        "line": 41,
+        "path": "chapter 1/1.15.typ",
+        "root_sha256": "ea19a9186c098a83bc243c3dd35dd941c5a59f9bafbe953a079205eb13361d07",
+        "start": 2742,
+        "status": "CONDITIONAL"
+      },
+      {
+        "column": 77,
+        "edit_permission": false,
+        "end": 10305,
+        "line": 202,
+        "path": "chapter 1/1.16.typ",
+        "root_sha256": "7296e79dc5f111db4f8ba8c232a7e65d20818b74a2ef03168a454fbfd2b8c297",
+        "start": 10160,
+        "status": "CONDITIONAL"
+      },
+      {
+        "column": 2,
+        "edit_permission": false,
+        "end": 11909,
+        "line": 231,
+        "path": "chapter 1/1.16.typ",
+        "root_sha256": "7296e79dc5f111db4f8ba8c232a7e65d20818b74a2ef03168a454fbfd2b8c297",
+        "start": 11829,
+        "status": "CONDITIONAL"
+      },
+      {
+        "column": 104,
+        "edit_permission": false,
+        "end": 12766,
+        "line": 259,
+        "path": "chapter 1/1.16.typ",
+        "root_sha256": "7296e79dc5f111db4f8ba8c232a7e65d20818b74a2ef03168a454fbfd2b8c297",
+        "start": 12705,
+        "status": "CONDITIONAL"
+      },
+      {
+        "column": 256,
+        "edit_permission": false,
+        "end": 12961,
+        "line": 259,
+        "path": "chapter 1/1.16.typ",
+        "root_sha256": "7296e79dc5f111db4f8ba8c232a7e65d20818b74a2ef03168a454fbfd2b8c297",
+        "start": 12857,
+        "status": "CONDITIONAL"
+      },
+      {
+        "column": 37,
+        "edit_permission": false,
+        "end": 15650,
+        "line": 314,
+        "path": "chapter 1/1.16.typ",
+        "root_sha256": "7296e79dc5f111db4f8ba8c232a7e65d20818b74a2ef03168a454fbfd2b8c297",
+        "start": 15448,
+        "status": "CONDITIONAL"
+      },
+      {
+        "column": 2,
+        "edit_permission": false,
+        "end": 1542,
+        "line": 37,
+        "path": "chapter 2/2.2.typ",
+        "root_sha256": "2cfc76e936897039f477dbe263d9c182f9042390023f614e7270bf8e7a6da312",
+        "start": 1374,
+        "status": "CONDITIONAL"
+      }
+    ],
+    "conditional_unresolved_contexts": 58,
+    "diagnostics_by_rule": {
+      "core.parenthesized-scripts": 5044,
+      "pde.display-continuation-gap": 63,
+      "pde.standalone-display": 7
+    },
+    "exit": 2,
+    "global_complete": false,
+    "proposed_script_insertions": 9686,
+    "public_helper_edits": 0,
+    "relative_import_sources": 44,
+    "source_files": 37,
+    "uninspected_pde_rules": 30
+  },
+  "limitations": [
+    "Helper hints remain conditional on successful initialization, exact runtime package selection and actual rendering context.",
+    "Only six package namespace roots are captured; full transitive initialization and resource purity remain unresolved.",
+    "Unknown scopes, dynamic imports and nested/deferred calls retain 58 specific unresolved contexts.",
+    "Highlight hints do not grant trusted bindings, edit permission or full rule coverage; public proposals remain script-only.",
+    "Native fixture is manually specified in an owned copy and does not establish geometry or PDF equivalence.",
+    "No consumer document, installed package, cache, editor setting or PR metadata was changed."
+  ],
+  "namespace_packages": [
+    {
+      "entrypoint": "lib.typ",
+      "exports": [
+        "apply-paragraph-tabs",
+        "capitalize-title",
+        "highlighted",
+        "is-numeric-title",
+        "paragraph-tab",
+        "paragraph_tab"
+      ],
+      "import_path": "@local/text-utils:0.1.2",
+      "manifest_sha256": "e1d27052412a39d4f839dede28406159c1c9a5394592a73c2ed5666dcbc60df2",
+      "name": "text-utils",
+      "namespace": "local",
+      "origins": [
+        [
+          "highlighted",
+          "@local/text-utils:0.1.2"
+        ]
+      ],
+      "source_sha256": "7e151150dac47b01ebf7706457906133d74a52abee1b5c43ce824ff89279bd71",
+      "version": "0.1.2"
+    },
+    {
+      "entrypoint": "lib.typ",
+      "exports": [
+        "apply-math-block-reset",
+        "callout",
+        "capitalize-title",
+        "dark-theme",
+        "definition",
+        "dots_space",
+        "emphasis",
+        "flowbox",
+        "heading-numbering-style",
+        "is-numeric-title",
+        "lemma",
+        "light-theme",
+        "math-block-kinds",
+        "math-block-title",
+        "math_font",
+        "note",
+        "numbered-math-block",
+        "project-ref",
+        "proof",
+        "proposition",
+        "qed",
+        "reset-math-block-counters",
+        "scoped-figure-numbering",
+        "scoped-numbering",
+        "theme-from-text-fill",
+        "theorem",
+        "title_size"
+      ],
+      "import_path": "@local/math-blocks:0.2.0",
+      "manifest_sha256": "e5eeaa72f830e8893e5f7c4dd10129b9819f31a8f1b80b7fbe22551f1295c5c4",
+      "name": "math-blocks",
+      "namespace": "local",
+      "origins": [],
+      "source_sha256": "542c7ce1ebfc6fbd51a7fefb2b55405a968a951b61d49170e49ef331948f36ff",
+      "version": "0.2.0"
+    },
+    {
+      "entrypoint": "lib.typ",
+      "exports": [
+        "_local-scope-annotation-counter",
+        "_local-scope-counter",
+        "annot",
+        "annot-cetz",
+        "annot-cetz-local",
+        "core-annot",
+        "core-mark",
+        "local-scope-annotations",
+        "local-tag-scope",
+        "mannot-scope",
+        "mark",
+        "markhl",
+        "markrect",
+        "markub",
+        "markul",
+        "markuw",
+        "tiptoe"
+      ],
+      "import_path": "@local/scoped-annotations:0.3.0",
+      "manifest_sha256": "2deffaddbdcde7f320f9ff4ed8d16430b41ce0d933140ca7cfb8cdbb708f3dfd",
+      "name": "scoped-annotations",
+      "namespace": "local",
+      "origins": [],
+      "source_sha256": "eb8e7ff7b31238c8fa4b996deb9502fec0ae4610240427a8b40873708e509203",
+      "version": "0.3.0"
+    },
+    {
+      "entrypoint": "lib.typ",
+      "exports": [
+        "angle",
+        "canvas",
+        "coordinate",
+        "decorations",
+        "description_box",
+        "draw",
+        "drawable",
+        "intersection",
+        "legend_box",
+        "mark",
+        "mark-shapes",
+        "matrix",
+        "palette",
+        "path-util",
+        "process",
+        "sample-curve",
+        "sample-function",
+        "sorting",
+        "styles",
+        "tree",
+        "util",
+        "vector",
+        "version"
+      ],
+      "import_path": "@local/cetz-helpers:0.2.0",
+      "manifest_sha256": "7733132a6cb15391cbe64afc8f5f86281a44b1a87c9df98a7a72e3931ec4e402",
+      "name": "cetz-helpers",
+      "namespace": "local",
+      "origins": [],
+      "source_sha256": "19c807971311c94a58413fbc5cac14ae2ea5065c78206d95ceda97890558e2c3",
+      "version": "0.2.0"
+    },
+    {
+      "entrypoint": "src/lib.typ",
+      "exports": [
+        "annot",
+        "annot-cetz",
+        "core-annot",
+        "core-mark",
+        "mark",
+        "markhl",
+        "markrect",
+        "markub",
+        "markul",
+        "markuw",
+        "tiptoe"
+      ],
+      "import_path": "@preview/mannot:0.4.0",
+      "manifest_sha256": "aef4310b36955dc98d8b03ec4abf17d45777d0a08b65d6e67214752e57647545",
+      "name": "mannot",
+      "namespace": "preview",
+      "origins": [],
+      "source_sha256": "288027cea059b327bf3253c44ae975339e7afc0f149375d9d87ca1c1fe739f57",
+      "version": "0.4.0"
+    },
+    {
+      "entrypoint": "src/lib.typ",
+      "exports": [
+        "angle",
+        "canvas",
+        "coordinate",
+        "decorations",
+        "draw",
+        "drawable",
+        "intersection",
+        "mark",
+        "mark-shapes",
+        "matrix",
+        "palette",
+        "path-util",
+        "process",
+        "sorting",
+        "styles",
+        "tree",
+        "util",
+        "vector",
+        "version"
+      ],
+      "import_path": "@preview/cetz:0.4.2",
+      "manifest_sha256": "2ccea70cc14ad8d79897179d3c8946758e610903e59f154acdb0f9b9ff81ac02",
+      "name": "cetz",
+      "namespace": "preview",
+      "origins": [],
+      "source_sha256": "53380cd9de16c1f845f325e9d8be8e0f03493c2073fba1c54d546e1906a8f8ed",
+      "version": "0.4.2"
+    }
+  ],
+  "native_fixture": {
+    "diagnostics_before_after": [
+      1,
+      0
+    ],
+    "elapsed_seconds": 0.467,
+    "executions": {
+      "compile": 2,
+      "pdftotext": 2,
+      "query": 4
+    },
+    "namespace_packages": 6,
+    "pde_root_direct_highlight_lines": [
+      16,
+      87,
+      99
+    ],
+    "preserved": {
+      "facade_and_consumer_originals": true,
+      "full_extracted_word_order": true,
+      "native_equation_bodies_order": true,
+      "native_sentinel_label_target": "equation",
+      "package_files": 80,
+      "private_cache_empty": true,
+      "source_equation_bytes": [
+        "$x^2$",
+        "$ y^2 = 1 $"
+      ],
+      "source_label_bytes": [
+        "<untouched-energy>"
+      ]
+    },
+    "prior_interrupted_probe": {
+      "compile": 1,
+      "pdftotext": 1,
+      "query": 1,
+      "reason": "deprecated query CLI warning; final run uses eval(query(...))"
+    },
+    "runtime_package_trees": 9,
+    "scope": "one owned facade fixture; no geometry/PDF-equivalence claim",
+    "status": "passed",
+    "tests": 1,
+    "typst_version": "0.15.1",
+    "writer_or_edit_permission": false
+  },
+  "original_sources_unchanged": true,
+  "published_baseline_ci": {
+    "aggregate_gates": 2,
+    "conclusion": "success",
+    "execution_shards": 8,
+    "head": "a9112a23d508bc5e3f1a1cdf8ba3d5ab7f76f7e1",
+    "passed_per_interpreter": 1971,
+    "run": 42426813337,
+    "skipped_per_interpreter": 55,
+    "tests_per_interpreter": 2026
+  },
+  "remote_ci_for_this_change": "not-published",
+  "runtime_sha256": {
+    "conditional_highlight.py": "1db0b10f493909547afef42470812941cee7841cf5dc652d2f9509c33d17358a",
+    "document_cli.py": "f18318eba7b543e53bea51d439de266d7e1577bb281ddcf76ee5a36582434b40",
+    "document_display.py": "c5b7f492bfc37935d94f63e901ea72b661e96cb6f0dc376bdfc4027879d1f30e",
+    "import_graph.py": "11caef3fe01bb107acdb08fae646764372a2832d8b11b1582e04e6d0bc7fbda4",
+    "namespace_packages.py": "3f2e07a3dd8cccf2be24a21c184639d1be4888a08f94bd60a6717e10cbd1cdf2",
+    "script_rule.py": "de23a485a15a62f968ab1fa6f707899fc5fb05ce00f2aac0836f5db665459b5f",
+    "suppression.py": "398c990af7e65016a739572a62c6b385ce381554185fc96c4bf7b6cadb404057",
+    "syntax_client.py": "4886db74e8314da44f59085254e13e9a683837e4705d80c15ed11c4d2a168562"
+  },
+  "schema": 1,
+  "source_manifest": [
+    {
+      "path": "Frontmatter/notation.typ",
+      "source_sha256": "147cd1647c2f5df9b233b3b30681d3cc492de11fb471f5dc5717ef9b6afce40c",
+      "tree_sha256": "987ebc50a56187deded80ae95db6c64f9a16a1aa621a450b3dc2c754c56a7cc4"
+    },
+    {
+      "path": "Preliminaries/Linear_Algebra/Jacobi_formula.typ",
+      "source_sha256": "13124a35080c04c1e13b562ca0732053783b5d5cfb36fafff0e48e38ce0e47cb",
+      "tree_sha256": "bcb9c3e2b301d33d0372ef605ba9f287ef684e940a095c6988dacf1a19ff8c69"
+    },
+    {
+      "path": "Preliminaries/Linear_Algebra/abstract_algebra_approach.typ",
+      "source_sha256": "eb279a00c5eb268efb6d19905a81600ec6aeb9999d9950987f2833b83c99b6c5",
+      "tree_sha256": "e048178fdf1bd50f8f338491845d9f83dcc4b10060c1490cc9f0d05f8ba90caa"
+    },
+    {
+      "path": "Preliminaries/Linear_Algebra/linear_algebra.typ",
+      "source_sha256": "6d54d25d7da99c42654698a6c34f43cf9a406d140ae44a591492937e79ffbcd5",
+      "tree_sha256": "a8ea612ce187bb0f425960563a70371989e0d1fca0b8e729cfe13b5ae6ead3f8"
+    },
+    {
+      "path": "Preliminaries/Riemannian manifolds/Geodesics.typ",
+      "source_sha256": "e02808664deef79a7fb997405d14255a406ff48b4815e5e6e19ad0b19db8f342",
+      "tree_sha256": "7f960a690373a19a14d59d8317d103001318ce8a8f1f732f4038b433d0e9476d"
+    },
+    {
+      "path": "Preliminaries/Riemannian manifolds/Levi-chivita.typ",
+      "source_sha256": "6741c0b74b20d4686ea05e98e72988e6342db8a232725a03e5343092c3d5f574",
+      "tree_sha256": "aa6e830cdd062f720371136d3d5d4929a78f3509ad898eea74b0e414f3f2d9b3"
+    },
+    {
+      "path": "Preliminaries/Riemannian manifolds/Riemannian manifolds.typ",
+      "source_sha256": "c98714eee4d4adb38e6320e377eb75619583fbdfeab7adc777724e9c6ffd70bb",
+      "tree_sha256": "321351d77860687893ac75c5c8dc2eec3c054db684bf1201a9c49760c710de61"
+    },
+    {
+      "path": "Preliminaries/Riemannian manifolds/conection.typ",
+      "source_sha256": "2821e26bf5717a5dc35ada70019f14faf9e17ba1674fba7ce35591d139e25a4f",
+      "tree_sha256": "f9f54bef8457d379cf4c1c6aaaa725d7340df09a80206d9bec16fd7ecf88b538"
+    },
+    {
+      "path": "Preliminaries/Riemannian manifolds/covariant Derivatives of tensor fields.typ",
+      "source_sha256": "a1a1926131d80e276adef8c398a6c046670f774fbe184da84408998e59451cca",
+      "tree_sha256": "7903bffc034da092f388f7ad47c230c06a8d704e257c677596fc8e7bd2c9802a"
+    },
+    {
+      "path": "Preliminaries/Riemannian manifolds/parallel_transport.typ",
+      "source_sha256": "5f64d3ede81f17ff923b2c8a4ed2fa5f4f76962d8df3c09c93b206d5073db078",
+      "tree_sha256": "3addbcc4e18373b9a97a2a7727591b1fa060b309f2e7df2eeb88a6472ce31c3c"
+    },
+    {
+      "path": "Preliminaries/Riemannian manifolds/vector and tensor fields along the curve.typ",
+      "source_sha256": "e8437be608b284ec5004240b3b15424f1c8e7fbd2989f7768ae04a25144c4ae5",
+      "tree_sha256": "0c7ef6f145c1496523f1dc2434824d7f34d95fbebcf9023a9398a34cc41a6aa0"
+    },
+    {
+      "path": "Preliminaries/preliminaries.typ",
+      "source_sha256": "493a5be0538d7046e661aaa9742731acda647641b09881fe55cba9e77a0ef605",
+      "tree_sha256": "4b63b33481a2362e68b9609171b1fb7a2eeba39ecf3a74333612b60ecb7d1646"
+    },
+    {
+      "path": "Supplementary/Riemannian_trace_and_matrix_trace.typ",
+      "source_sha256": "63f08fddcf93f73d9535ff45071fefd8de2abac589bc2e6068d0521e9244255c",
+      "tree_sha256": "fab74c45d091ae7f86a8ec26d628ad2e1f7f654bdad9bb769f2ed103c73a5e74"
+    },
+    {
+      "path": "Supplementary/Schwartz_kernel_theorem.typ",
+      "source_sha256": "24dac0e7695a4976b3e68ce8d8b45bb27659a76f6a1dbeb1e8511404628d66ae",
+      "tree_sha256": "2a66a449f01a1f2b368c8c9017253835832b9fd7bb1c71018a5b1a5aaad662c9"
+    },
+    {
+      "path": "Supplementary/supplementary.typ",
+      "source_sha256": "8a49fb8a0b9bf8961bf5aed476afa8e4294be41a220bff4c8a52ae24175b4435",
+      "tree_sha256": "488bb15dada75d5a85c5854bbd88b71725d6bcbe948d18b7a432781aa4c353b0"
+    },
+    {
+      "path": "Supplementary/usage.typ",
+      "source_sha256": "1554203ec049c12b4b49f6b3679e5408f0852b40cf40d81074713a17abe7e3dc",
+      "tree_sha256": "48ec686cea18ee80092018f3a988fd9b531d853560e7cbe2b6fbd0e76718a70b"
+    },
+    {
+      "path": "chapter 1/1.11.typ",
+      "source_sha256": "07a5e7f1ef87a4529fab3c4a0d22e956997306c66a4241968e317127eeda2fdb",
+      "tree_sha256": "33ce81af812ee68b4d78ffbca4cc709cab54ac1ef0699c005b962d0bdd893655"
+    },
+    {
+      "path": "chapter 1/1.15.typ",
+      "source_sha256": "ea19a9186c098a83bc243c3dd35dd941c5a59f9bafbe953a079205eb13361d07",
+      "tree_sha256": "0fa6a3e7bde57dc7d4cede4c93ef594e100427a5712177e73de39e0a6ad08e7c"
+    },
+    {
+      "path": "chapter 1/1.16.typ",
+      "source_sha256": "7296e79dc5f111db4f8ba8c232a7e65d20818b74a2ef03168a454fbfd2b8c297",
+      "tree_sha256": "9df0af35a9e02b94c3d68dc486530bcd89e6607d18909ecca0dc5c0a73e169c4"
+    },
+    {
+      "path": "chapter 1/chapter 1.typ",
+      "source_sha256": "60d5bda74f16691ec4038f0c179ad526389cfc9780c9b05d3bcb01d9b2f57047",
+      "tree_sha256": "b37c1c40f6f57c29189f96dd0bd81b8c0ea24786aefb569cf511277ae0fbe2de"
+    },
+    {
+      "path": "chapter 2/2.10.typ",
+      "source_sha256": "e0f81ddf8adca807992de8ac5b82aeaf40e2132c68d0bde5cf9f5bb1d582d5d0",
+      "tree_sha256": "95a6efe1d3dbd0c72b5b2febe5e352f4c41d0a51dbfe2e323b0ddf9d89d73a23"
+    },
+    {
+      "path": "chapter 2/2.11.typ",
+      "source_sha256": "2960392edc8c70826c022079120a6921373bd33834cbe4860edf4c0ccc8c1e32",
+      "tree_sha256": "c6ddbd94efda2891105c317157f1382fc2c3fb05b7059c0ec02129d08c8838b8"
+    },
+    {
+      "path": "chapter 2/2.2.typ",
+      "source_sha256": "2cfc76e936897039f477dbe263d9c182f9042390023f614e7270bf8e7a6da312",
+      "tree_sha256": "e816d757eeaf951c35bec9e40ea3a0b9b246a695cc93d33d67bac25b49d7796c"
+    },
+    {
+      "path": "chapter 2/2.3.typ",
+      "source_sha256": "8773f392b8d2ab0d6614bba20dd8c17ac57ccf731c9c57d4f36b90d1748fd7cb",
+      "tree_sha256": "7e05376fd1662bf24f093b4ae612f2002f1856e3ccee07a2da22d2ab068eb180"
+    },
+    {
+      "path": "chapter 2/2.4.typ",
+      "source_sha256": "ba858b05e30bd6aed1fd32423e30288118c88a38c64a3e9cd6f273bdfc0ddf11",
+      "tree_sha256": "c9c542cd5463744d5a5b121a377e4eef5984fecd98804c5cdff8ace7d78ffe69"
+    },
+    {
+      "path": "chapter 2/2.5.typ",
+      "source_sha256": "1e77854655e6b8d59ba643408173f35fae8f9bdf12d628d8e07d695a88df36fe",
+      "tree_sha256": "2780f1a50e6dda99d0754550d208485f2ef82f4006a4fa5405513dbd7a34f5ca"
+    },
+    {
+      "path": "chapter 2/2.6.typ",
+      "source_sha256": "6b2f33447fa2f8bd977064f31174a02b07f3ec17b5b830cf5033578df098721c",
+      "tree_sha256": "6dc1a489c26d861403bdd4dc94b984606cc14fbe77b61474d02299bed477da92"
+    },
+    {
+      "path": "chapter 2/2.7.typ",
+      "source_sha256": "bd0cc51688751e1cac146e73208e2d489d4ce38c8c82e98a559dbd96fe8d6172",
+      "tree_sha256": "62c4cfce83e5e415e8bef8fda15a3f169a90740bd081ffbb7fcf8ef9dc899680"
+    },
+    {
+      "path": "chapter 2/2.8.typ",
+      "source_sha256": "74e25068ab603e97a66c9f047004d5bc6e42690aefb649992aeb21d469ef4143",
+      "tree_sha256": "0fb8fc2495613ac69eb7483e40d62a13d4de3d515948f73098b8a9b8d6ad4695"
+    },
+    {
+      "path": "chapter 2/2.9.typ",
+      "source_sha256": "f97a5bb6037bb5f041b87b0e7d50a01dc88b3600da168e9cf18bd23d4224a968",
+      "tree_sha256": "730e014c25df3e2aa3514469799ffcd304185769727f1549e88f5468702c256d"
+    },
+    {
+      "path": "chapter 2/chapter 2.typ",
+      "source_sha256": "06deae2028579b433eb7a849ac8e7725788d6942acaf7d350d96f480e0fafc85",
+      "tree_sha256": "3b2491b1ddb7f3684b53e8efa11cb09d51a8aa3580a63f4680dc8c2e19eec917"
+    },
+    {
+      "path": "chapter 3/3.3.typ",
+      "source_sha256": "0314da97df705c00d0eed02edcf138b9bc6c314ba3d2c4a114403519f7db52f3",
+      "tree_sha256": "bfd79df523a491bde457dca86ced818691cd22a9c1a1ebbe290407e078b49d63"
+    },
+    {
+      "path": "chapter 3/3.4.typ",
+      "source_sha256": "24fd9126b1e5e77d11cc5d778e043a0d005c8d216e46bfd4db53d67e3e9eae49",
+      "tree_sha256": "90ed0838250ff780ef0077ed4d24f42eb5f9c4bb17c7ab9bfd5cf209efc0e5cb"
+    },
+    {
+      "path": "chapter 3/3.5.typ",
+      "source_sha256": "06b43d99740643427c434640ffcbb5c6fa2c07c7cbeceb7318563b0a97b57e1e",
+      "tree_sha256": "b6c7b1b0f32a7af90cc1c7e5417b564add704d1e1cfe4b86b13b924e14b70a19"
+    },
+    {
+      "path": "chapter 3/chapter_3.typ",
+      "source_sha256": "e9749b3493ac7d5e75b3ab4e2c8eab434750fb70485144117545141645ec8d7b",
+      "tree_sha256": "d4646c8200ab2c127d3616407df1765990c8942ef2bbefeb9a1cbf519d489691"
+    },
+    {
+      "path": "cover.typ",
+      "source_sha256": "dbe9ad0c7d52ff0e43e4ade2cb2ac86ef88cebbb261db33b29bce7222c46fd22",
+      "tree_sha256": "671ba488bff4cbb69675acddb0456fc24d5d94c3ba6b4437b7d5862224054c61"
+    },
+    {
+      "path": "main.typ",
+      "source_sha256": "0ef7404c7cce6c3db9114aae32e6982c8e0499f1b86ec2ec19501095c12f4209",
+      "tree_sha256": "96f227f91e0cac69890fcf679e37335607bcd2e1c0a6d61e9f0547939d17b6ae"
+    }
+  ],
+  "source_manifest_sha256": "520ff7ccb7e31516ec3846d9eab54226d33ff13fb8990cf82224c720ca86f169",
+  "work_characterization": {
+    "bounds": {
+      "bindings": 1024,
+      "charged_ast_nodes": 2000000,
+      "module_visits": 512,
+      "route_entries": 128
+    },
+    "final_budget_refused_sources": 0,
+    "final_charged_ast_nodes": 1176399,
+    "final_module_visits": 56,
+    "intrinsic_refusal_cache_entries": 2,
+    "prior_budget_refused_sources": 5,
+    "prior_charged_ast_nodes": 2034597,
+    "successful_namespace_cache_entries": 5
+  }
+}

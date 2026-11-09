@@ -1,0 +1,118 @@
+{
+  "baseline_commit": "618052837ca67717374a604a36827dfdb844d4a3",
+  "command": "python3 tools/typst-lint/typst-lint inspect-document --root <consumer> --entrypoint main.typ --format json",
+  "compiler_sha256": "08d01e5a434e821c4a1ce30dd1593e1bbc57c9b1203c4d760d8912ef4ce6a621",
+  "compiler_version": "typst 0.15.1",
+  "consumer_snapshot_sha256": "107e8e75e254e098ab0acc30110702221be0184e5d31cfa497a53c8977b19265",
+  "focused_tests": {
+    "test_document_cli": 12,
+    "test_foundation": 22,
+    "test_include_context": 74,
+    "test_offline_cli": 19,
+    "test_run_test_shard": 21,
+    "test_scoped_paragraph_context": 59
+  },
+  "focused_tests_total": 207,
+  "generated_utc": "2026-11-07T22:34:15.912483+00:00",
+  "inspection": {
+    "candidate_sources": 26,
+    "diagnostics": 5044,
+    "edges": 36,
+    "global_complete": false,
+    "insertions": 9686,
+    "occurrences": 37,
+    "partial_sources": [
+      "Preliminaries/Riemannian manifolds/parallel_transport.typ"
+    ],
+    "source_bytes": 668562,
+    "source_nodes": 290452,
+    "sources": 37,
+    "status": 2,
+    "unresolved_include_records": 6
+  },
+  "limitations": [
+    "Local snapshot characterization only; not general rendering equivalence",
+    "Literal include inventory excludes import dependencies from style analysis",
+    "Other style rules and runtime execution remain unresolved",
+    "No protected source application or compiler authority is granted by inspect-document",
+    "No consumer rollout or installed resource changes",
+    "Prior 1964-test full-suite baseline was not rerun for this focused change",
+    "Remote push denied earlier; not retried; remote CI unverified"
+  ],
+  "openspec_strict_passed": true,
+  "public_report_sha256": "aead9925438dcb05ccad3eea2bb0cf648f738f617cd9dc83f64f79dcf3017505",
+  "rendering": {
+    "baseline": {
+      "pages": 302,
+      "pdf_sha256": "e008231599707751b5c33d0f02c3afefa975178718b3d6f1181bf6e5ddd135c3",
+      "raster_pages": 302,
+      "seconds": 10.239
+    },
+    "compiler_dependency_count": 176,
+    "compiler_dependency_membership_equal": true,
+    "compiler_dependency_membership_sha256": "f769ea3fb93e179a5b9f0f79bbf7da9e6a7a56ce0800a5cd7080254e2440ddd5",
+    "final_public_proposals": {
+      "changed_sources": 26,
+      "diagnostics": 5044,
+      "insertions": 9686,
+      "pages": 302,
+      "partial_sources": [
+        "Preliminaries/Riemannian manifolds/parallel_transport.typ"
+      ],
+      "pdf_bytes_equal": true,
+      "pdf_sha256": "e008231599707751b5c33d0f02c3afefa975178718b3d6f1181bf6e5ddd135c3",
+      "raster_72dpi_equal": true,
+      "raster_basis": "byte-identical PDF to baseline, already rasterized on all 302 pages",
+      "seconds": 9.955,
+      "source_count": 37,
+      "target": "final-public-cli-proposals"
+    },
+    "installed_cache_unchanged": true,
+    "original_sources_unchanged": true,
+    "package_sources_unchanged": true,
+    "private_package_cache_changed": false,
+    "section_probes": [
+      {
+        "candidate_sha256": "d40344b4da0b17283604e5b00ee3ebc247f79a740d2d552a291c556ee22340e6",
+        "differing_raster_pages": [],
+        "exact_word_boxes_equal": true,
+        "findings": 336,
+        "insertions": 672,
+        "pages": 302,
+        "pdf_sha256": "e008231599707751b5c33d0f02c3afefa975178718b3d6f1181bf6e5ddd135c3",
+        "raster_72dpi_equal": true,
+        "seconds": 10.028,
+        "source_sha256": "74e25068ab603e97a66c9f047004d5bc6e42690aefb649992aeb21d469ef4143",
+        "stable_second_analysis": true,
+        "target": "chapter 2/2.8.typ"
+      },
+      {
+        "candidate_sha256": "e513af2e1270ec8fdd6bb5f3ab213f460999fccef2d6469491e986817994e16a",
+        "differing_raster_pages": [],
+        "exact_word_boxes_equal": true,
+        "findings": 610,
+        "insertions": 1220,
+        "pages": 302,
+        "pdf_sha256": "e008231599707751b5c33d0f02c3afefa975178718b3d6f1181bf6e5ddd135c3",
+        "raster_72dpi_equal": true,
+        "seconds": 10.171,
+        "source_sha256": "07a5e7f1ef87a4529fab3c4a0d22e956997306c66a4241968e317127eeda2fdb",
+        "stable_second_analysis": true,
+        "target": "chapter 1/1.11.typ"
+      }
+    ]
+  },
+  "runtime_fingerprint": "d9d604689a975d475c3166dc8b0b90f1a165d27110462f33b9edcb9a166d8fd3",
+  "runtime_sha256": {
+    "tools/typst-lint/document_cli.py": "297d550ee7717964b07cdb5d38665f758f4e5bbcd4d4902e583ac232260df4a4",
+    "tools/typst-lint/edit_plan.py": "f2ec67310e8ab5a065ae2625dabd7518891e4d54bb2b342b952ad6579e425c85",
+    "tools/typst-lint/include_context.py": "53341a2082ecfbf675ca4a0d209986a2cc5ec63fd6cf572cdc60f6fc232104ba",
+    "tools/typst-lint/script_rule.py": "de23a485a15a62f968ab1fa6f707899fc5fb05ce00f2aac0836f5db665459b5f",
+    "tools/typst-lint/suppression.py": "398c990af7e65016a739572a62c6b385ce381554185fc96c4bf7b6cadb404057",
+    "tools/typst-lint/syntax_client.py": "4886db74e8314da44f59085254e13e9a683837e4705d80c15ed11c4d2a168562",
+    "tools/typst-lint/typst_lint.py": "a74522bf9337af0d2e08898d2cddc462ea2310ffe66235c583c95362c3a3b725"
+  },
+  "schema": 1,
+  "syntax_adapter_sha256": "0cad7e5b07bfe7fb96c089d02671f063aa992ac946a03bd25d5dd2063631cae8",
+  "whitespace_passed": true
+}
