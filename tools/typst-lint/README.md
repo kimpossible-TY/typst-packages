@@ -242,6 +242,10 @@ tracks literal `s` and `m` helper calls throughout the child bodies. Use the
 project-relative diagnostic `path` and its `start` byte offset. This proof is
 not a runtime binding, execution or editing certificate.
 
+The inspection also admits a narrow contextual palette setup with a captured
+reviewed `theme-from-text-fill` binding and literal `theme.callouts` border
+field reads. Other contextual bindings and captured functions remain withheld.
+
 With the combined preview enabled, `--preview-conditional-modern-parent-reference
 PATH START` can instead offer one independent source-only split involving a
 literal outer `s.ref` in that callback. It replays parent/child routes on the

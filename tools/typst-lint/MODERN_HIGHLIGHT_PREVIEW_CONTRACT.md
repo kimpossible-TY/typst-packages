@@ -187,6 +187,13 @@ one literal string. Unsupported bindings, dynamic code, escapes and work
 exhaustion withhold the proof. `PATH` and `START` must match the same issued
 modern highlight diagnostic.
 
+A narrowly recognized `context` may declare `theme` from the reviewed,
+captured `theme-from-text-fill()` route and non-shadowing local colors from
+`theme.callouts.proposition.border` or `theme.callouts.important.border`.
+The entire context body remains visible to the scope scanner. The selector
+route and bindings are replayed on the candidate; other contextual declarations
+and captured local functions remain unsupported.
+
 `--preview-conditional-modern-parent-reference PATH START` instead requires
 the combined preview and offers one independent source-only proposal. It
 reparses the candidate and replays all parent/child identities and routes on a

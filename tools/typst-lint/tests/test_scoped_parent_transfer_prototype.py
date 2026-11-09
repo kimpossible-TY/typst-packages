@@ -2,6 +2,7 @@
 from dataclasses import replace
 from pathlib import Path
 import json
+import shutil
 import subprocess
 import sys
 import unittest
@@ -38,6 +39,92 @@ class ParentTransferPrototypeTests(unittest.TestCase):
         tree = context.source_for('main.typ').tree
         diagnostics = analyzer.analyze(tree, 'main.typ')['diagnostics']
         return source, analyzer, diagnostics
+
+    def issue_theme(self, context, prefix=b''):
+        package = TOOL / 'tests/fixtures/reviewed-packages/local/math-blocks/0.2.0'
+        dest = self.fixture.fixture.packages / 'local/math-blocks/0.2.0'
+        dest.parent.mkdir(parents=True, exist_ok=True)
+        if not dest.exists():
+            shutil.copytree(package, dest)
+        body = (b'#import "@local/math-blocks:0.2.0": *\n' + prefix
+                + b'#local-tag-scope(s => [\n'
+                + b'#mannot-scope(m => [#(m.tag)("a")], parent: s, name: "one")\n'
+                + context + b'\n#highlighted[See #(s.ref)("a") $x_1$ end.]])')
+        return self.issue(body)
+
+    def test_context_palette_reissues_binding_and_independent_candidate(self):
+        context = (b'#context { let theme = theme-from-text-fill()\n'
+                   b'let tint = theme.callouts.proposition.border\n'
+                   b'local-scope-annotations(m => [#(m.tag)("b")], parent: s, name: "two") }')
+        source, analyzer, diagnostics = self.issue_theme(context)
+        start = diagnostics[0]['start']
+        baseline = preview.preview_all(analyzer, allow_direct_references=True,
+                                       allow_scoped_references=True, reviewed_math=True)
+        result = proof.analyze_one(analyzer, 'main.typ', start)
+        self.assertEqual(result['theme_contexts'], 1)
+        self.assertEqual(result['theme_selector_route'][0]['imported_name'], 'theme-from-text-fill')
+        self.assertEqual(len(result['parents']), 2)
+        candidate = proof.preview_one(analyzer, 'main.typ', start)
+        self.assertEqual(len(candidate['edits']), 1)
+        self.assertFalse(candidate['execution_proved'] or candidate['render_equivalence_proved'])
+        self.assertEqual(baseline, preview.preview_all(analyzer, allow_direct_references=True,
+                                                       allow_scoped_references=True, reviewed_math=True))
+        self.assertEqual((self.fixture.fixture.project / 'main.typ').read_bytes(), source)
+        with self.assertRaisesRegex(SafetyError, 'budget'):
+            proof.analyze_one(analyzer, 'main.typ', start, max_work=result['work_used'] - 1)
+
+    def test_context_palette_shadow_escape_and_tampering_are_refused(self):
+        good = (b'#context { let theme = theme-from-text-fill()\n'
+                b'let tint = theme.callouts.proposition.border\n'
+                b'local-scope-annotations(m => [#(m.tag)("b")], parent: s, name: "two") }')
+        bad = (
+            good.replace(b'let tint', b'let s'),
+            good.replace(b'let tint', b'let local-scope-annotations'),
+            good.replace(b'theme-from-text-fill()', b'theme-from-text-fill(s)'),
+            good.replace(b'theme.callouts.proposition.border', b'unknown(s)'),
+            good.replace(b'#(m.tag)("b")', b'#unknown(m)'),
+            good.replace(b'let tint =', b'let theme ='),
+        )
+        for context in bad:
+            with self.subTest(context=context):
+                _, analyzer, diagnostics = self.issue_theme(context)
+                with self.assertRaises((InputError, SafetyError)):
+                    proof.analyze_one(analyzer, 'main.typ', diagnostics[0]['start'])
+        _, analyzer, diagnostics = self.issue_theme(good, b'#let theme-from-text-fill() = 1\n')
+        with self.assertRaises((InputError, SafetyError)):
+            proof.analyze_one(analyzer, 'main.typ', diagnostics[0]['start'])
+        original = proof._prove_tree
+        _, analyzer, diagnostics = self.issue_theme(good)
+        def tamper(*args, **kwargs):
+            result = original(*args, **kwargs)
+            if kwargs.get('graph_override') is not None:
+                result['theme_selector_route'][0]['source_sha256'] = '0' * 64
+            return result
+        with patch.object(proof, '_prove_tree', side_effect=tamper):
+            with self.assertRaisesRegex(SafetyError, 'theme selector binding route changed'):
+                proof.preview_one(analyzer, 'main.typ', diagnostics[0]['start'])
+
+    def test_context_selector_facade_shadow_is_refused(self):
+        # Install the reviewed math-blocks fixture, then exercise an actual
+        # wildcard facade rather than a direct root import.
+        self.issue_theme(b'')
+        facade = self.fixture.fixture.project / 'palette.typ'
+        source = (fixtures.IMPORT + b'#import "@local/scoped-annotations:0.3.0": *\n'
+                  b'#import "palette.typ": *\n#local-tag-scope(s => ['
+                  b'#mannot-scope(m => [#(m.tag)("a")], parent: s, name: "one")\n'
+                  b'#context { let theme = theme-from-text-fill()\n figure([]) }\n'
+                  b'#highlighted[See #(s.ref)("a") $x$ end.]])')
+        facade.write_bytes(b'#import "@local/math-blocks:0.2.0": *\n')
+        session, context = self.fixture.fixture.session(source)
+        analyzer = modern.ModernHighlightAnalyzer(session, scoped_callbacks=True)
+        start = analyzer.analyze(context.source_for('main.typ').tree, 'main.typ')['diagnostics'][0]['start']
+        self.assertTrue(any(step['request'] == 'palette.typ' for step in
+                            proof.analyze_one(analyzer, 'main.typ', start)['theme_selector_route']))
+        facade.write_bytes(facade.read_bytes() + b'#let theme-from-text-fill() = 1\n')
+        session, context = self.fixture.fixture.session(source)
+        analyzer = modern.ModernHighlightAnalyzer(session, scoped_callbacks=True)
+        with self.assertRaisesRegex(SafetyError, 'Theme selector root binding is unresolved'):
+            proof.analyze_one(analyzer, 'main.typ', start)
 
     def test_direct_facade_route_and_outer_s_inside_child(self):
         body = (b'#local-tag-scope(s => [\n'

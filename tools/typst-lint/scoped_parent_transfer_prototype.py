@@ -11,6 +11,7 @@ import conditional_modern_highlight as modern
 import conditional_footnote_binding as binding
 import import_graph as graph
 import scoped_reference_preview as scoped
+import static_resolver
 from typst_lint import InputError, SafetyError, digest, require
 
 MAX_WORK = 2_000_000
@@ -44,6 +45,19 @@ class _Tracer(modern._ModernAnalyzer):
     def incoming(self, tree, index, path, active):
         result = super().incoming(tree, index, path, active)
         shape = graph.import_shape(tree, index)
+        if (not result.reason and shape is not None and shape.items is None
+                and shape.request == highlight.MATH_BLOCKS):
+            pkg = self.packages.get(highlight.MATH_BLOCKS)
+            name = 'theme-from-text-fill'
+            if (pkg is not None and pkg.evidence.source_sha256 == static_resolver.MATH_BLOCKS_SOURCE_SHA256
+                    and name in pkg.exports):
+                values = dict(result.exports)
+                route = (highlight.NameRoute(highlight.MATH_BLOCKS, pkg.evidence.source_sha256,
+                         'package-export', highlight.MATH_BLOCKS, name, name),
+                         highlight.NameRoute(path, digest(tree.source), 'wildcard-import',
+                         highlight.MATH_BLOCKS, name, name))
+                values[name] = highlight._Value(route, 'theme-selector')
+                result = replace(result, exports=tuple(sorted(values.items())))
         if (result.reason or shape is None or shape.request != highlight.SCOPED_ANNOTATIONS
                 or shape.items is not None):
             return result
@@ -107,6 +121,41 @@ def _child(tree, call, parents):
     elif set(named) != {'prefix'} or graph.literal_string(tree, named['prefix']) is None:
         return None
     return dict(call=call, closure=closure, body=parts[2], parameter=params[0], parent=parent, name=name)
+
+
+def _theme_context(tree, context):
+    """Recognize a narrow, non-shadowing palette setup; never hide its body."""
+    n = tree.nodes
+    parts = graph.significant(tree, context)
+    if len(parts) != 2 or tuple(n[i].kind for i in parts) != ('Context', 'CodeBlock'):
+        return None
+    block = graph.significant(tree, parts[1])
+    if len(block) != 3 or tuple(n[i].kind for i in block) != ('LeftBrace', 'Code', 'RightBrace'):
+        return None
+    statements = graph.significant(tree, block[1])
+    if len(statements) < 2 or n[statements[-1]].kind != 'FuncCall':
+        return None
+    lets, names = statements[:-1], set()
+    for pos, i in enumerate(lets):
+        p = graph.significant(tree, i)
+        if (n[i].kind != 'LetBinding' or len(p) != 4
+                or tuple(n[x].kind for x in p[:3]) != ('Let', 'Ident', 'Eq')):
+            return None
+        name = graph.raw(tree, p[1])
+        if name in names or name in (b's', b'm', b'mannot-scope', b'local-scope-annotations', b'theme-from-text-fill'):
+            return None
+        names.add(name)
+        if pos == 0:
+            q = graph.significant(tree, p[3])
+            if (name != b'theme' or n[p[3]].kind != 'FuncCall' or len(q) != 2
+                    or n[q[0]].kind != 'Ident' or graph.raw(tree, q[0]) != b'theme-from-text-fill'
+                    or n[q[1]].kind != 'Args'
+                    or tuple(n[x].kind for x in graph.significant(tree, q[1])) != ('LeftParen', 'RightParen')):
+                return None
+        elif (n[p[3]].kind != 'FieldAccess' or graph.raw(tree, p[3]) not in
+              (b'theme.callouts.proposition.border', b'theme.callouts.important.border')):
+            return None
+    return set(lets)
 
 
 def _root_bindings(tree, path, outer, tracer, remaining):
@@ -222,14 +271,22 @@ def _prove_tree(evidence, tree, path, outer, origin, outer_route, remaining, max
             or parents.get(call) != 0 or (nodes[call].start, nodes[call].end) != (outer['call_start'], outer['call_end'])):
         raise SafetyError('Outer wrapper ownership changed')
     pending, inside, child_by_call = [body], [], {}
+    contexts, context_lets = set(), set()
     while pending:
         i = pending.pop()
         remaining -= 1
         if remaining < 0:
             raise SafetyError('Parent proof work budget exceeded')
         n = nodes[i]
-        if n.kind in _FORBIDDEN or n.errors or (n.kind == 'Binary' and any(
-                nodes[c].kind in _ASSIGNMENTS for c in n.children)):
+        if n.kind == 'Contextual':
+            approved = _theme_context(tree, i)
+            if approved is None:
+                raise SafetyError('Contextual palette binding is unsupported')
+            contexts.add(i)
+            context_lets.update(approved)
+        if ((n.kind in _FORBIDDEN and i not in contexts and i not in context_lets)
+                or n.errors or (n.kind == 'Binary' and any(
+                nodes[c].kind in _ASSIGNMENTS for c in n.children))):
             raise SafetyError('Outer scope contains dynamic binding or mutation')
         inside.append(i)
         if n.kind == 'FuncCall':
@@ -329,7 +386,7 @@ def _prove_tree(evidence, tree, path, outer, origin, outer_route, remaining, max
     missing_names = {child['name'] for i, child in child_by_call.items()
                      if (nodes[i].start, nodes[i].end) not in routes_by_span and child['name'] not in known}
     root_values = {}
-    if missing_names:
+    if missing_names or contexts:
         prior_ast_work = tracer.ast_work
         root_values, remaining = _root_bindings(tree, path, outer, tracer, remaining)
         remaining -= tracer.ast_work - prior_ast_work
@@ -342,6 +399,15 @@ def _prove_tree(evidence, tree, path, outer, origin, outer_route, remaining, max
                     or value.route[0].source_sha256 != scoped._SCOPE_HASH
                     or value.route[0].imported_name != name):
                 raise SafetyError('Child wrapper root binding is unresolved')
+    theme_route = []
+    if contexts:
+        value = root_values.get('theme-from-text-fill')
+        if (type(value) is not highlight._Value or not value.route
+                or value.route[0].path != highlight.MATH_BLOCKS
+                or value.route[0].source_sha256 != static_resolver.MATH_BLOCKS_SOURCE_SHA256
+                or value.route[0].imported_name != 'theme-from-text-fill'):
+            raise SafetyError('Theme selector root binding is unresolved')
+        theme_route = [asdict(step) for step in value.route]
     rows = []
     for i, child in sorted(child_by_call.items(), key=lambda pair: nodes[pair[0]].start):
         n = nodes[i]
@@ -361,7 +427,7 @@ def _prove_tree(evidence, tree, path, outer, origin, outer_route, remaining, max
                 if remaining < 0:
                     raise SafetyError('Parent proof work budget exceeded')
                 cursor = parents.get(cursor)
-                if cursor is None or (cursor != body and nodes[cursor].kind in
+                if cursor is None or (cursor != body and cursor not in contexts and nodes[cursor].kind in
                         ('Closure', 'Contextual', 'ShowRule', 'Conditional', 'ForLoop', 'WhileLoop')):
                     raise SafetyError('Child wrapper lexical scope is unresolved')
             method = 'same-callback-lexical' if route is not None else 'captured-root-lexical'
@@ -375,6 +441,7 @@ def _prove_tree(evidence, tree, path, outer, origin, outer_route, remaining, max
     result = dict(path=path, source_sha256=digest(tree.source), status='CONDITIONAL', parents=rows,
                   outer_scope_fields=outer_fields, child_scope_fields=inner_fields,
                   outer_scope_uses_inside_children=outer_inside_child, work_used=max_work - remaining,
+                  theme_contexts=len(contexts), theme_selector_route=theme_route,
                   conditions=CONDITIONS, runtime_binding_proved=False, execution_proved=False,
                   coverage_complete=False, render_equivalence_proved=False, edit_permission=False,
                   compiler_permission=False)
@@ -516,8 +583,13 @@ def _preview_selected(evidence, path, highlight_starts, *, max_work=MAX_PREVIEW_
     if (parent_proof['outer_scope_fields'] != after_proof['outer_scope_fields']
             or parent_proof['child_scope_fields'] != after_proof['child_scope_fields']
             or parent_proof['outer_scope_uses_inside_children'] != after_proof['outer_scope_uses_inside_children']
+            or parent_proof['theme_contexts'] != after_proof['theme_contexts']
             or len(parent_proof['parents']) != len(after_proof['parents'])):
         raise SafetyError('Candidate parent/child lexical identities changed')
+    expected_theme_route = [dict(step, source_sha256=digest(candidate)) if step['path'] == path else step
+                            for step in parent_proof['theme_selector_route']]
+    if expected_theme_route != after_proof['theme_selector_route']:
+        raise SafetyError('Candidate theme selector binding route changed')
     for before, after in zip(parent_proof['parents'], after_proof['parents']):
         if (before['helper'] != after['helper'] or before['parent_transfer'] != after['parent_transfer']
                 or before['route_method'] != after['route_method']
