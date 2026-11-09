@@ -200,6 +200,18 @@ while independently revalidating existing proposals; runtime binding, execution,
 visual equivalence and modification permission remain
 unproved. See the same contract for accepted receiver and argument shapes.
 
+`--inspect-scoped-parent-patterns` additionally requires
+`--modern-highlight-evidence`. It inventories source syntax where a parameter
+of a syntactically recognizable scope callback is passed as `parent`, and lists
+bounded child call syntax and source hashes/locations. These patterns can be
+unrelated to any highlight diagnostic or omitted preview. A listed call need not
+execute or bind to its apparent name; no effects, runtime behavior, coverage,
+rendering, edit or compiler authority follows. Work, item and byte limits are
+charged during this optional inspection and exhaustion explicitly reports an
+incomplete inventory. Existing previews are computed before this inventory. If
+the complete existing report leaves too few bytes even for an incomplete marker,
+the API preserves it without the optional section and the CLI warns on stderr.
+
 JSON includes:
 
 - `include_context`: selected budget, source hashes/counts, edges, occurrences

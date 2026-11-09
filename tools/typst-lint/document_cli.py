@@ -46,6 +46,7 @@ def report_document(root, entrypoint, *, rule_set='core', package_path=None,
                     modern_highlight_evidence=False,
                     cetz_annotation_manifest=None,
                     preview_conditional_modern_highlights=False,
+                    inspect_scoped_parent_patterns=False,
                     preview_conditional_modern_scoped_references=False,
                     preview_conditional_modern_math_highlights=False,
                     reference_package_path=None, reference_facade=None, reference_cache_path=None,
@@ -114,6 +115,9 @@ def report_document(root, entrypoint, *, rule_set='core', package_path=None,
     require(cetz_annotation_manifest is None or (type(cetz_annotation_manifest) is str
             and preview_conditional_scoped_calls and footnote_cache_path is not None),
             'CeTZ annotation manifest requires --preview-conditional-scoped-calls, --package-path and --footnote-cache-path')
+    require(type(inspect_scoped_parent_patterns) is bool
+            and (not inspect_scoped_parent_patterns or modern_highlight_evidence),
+            'Scoped parent pattern inspection requires --modern-highlight-evidence')
     require(type(preview_conditional_modern_highlights) is bool
             and (not preview_conditional_modern_highlights or modern_highlight_evidence),
             'Modern highlight previews require --modern-highlight-evidence')
@@ -224,6 +228,8 @@ def report_document(root, entrypoint, *, rule_set='core', package_path=None,
             require(items <= MAX_REPORT_ITEMS, 'Document inspection report item limit exceeded')
     footnote_report = None
     modern_highlight_report = None
+    modern_analyzer = None
+    scoped_parent_pattern_report = None
     modern_highlight_previews = None
     modern_math_report = None
     modern_math_previews = None
@@ -286,6 +292,11 @@ def report_document(root, entrypoint, *, rule_set='core', package_path=None,
                     runtime_binding_proved=False, execution_proved=False, coverage_complete=False,
                     edit_permission=False, compiler_permission=False, render_equivalence_proved=False)
                 items += 1
+                if inspect_scoped_parent_patterns:
+                    scoped_parent_pattern_report = dict(status='UNAVAILABLE', reason=str(error), findings=[],
+                        report_items=0, truncated=True, runtime_binding_proved=False, execution_proved=False,
+                        coverage_complete=False, edit_permission=False, compiler_permission=False,
+                        render_equivalence_proved=False)
                 if preview_conditional_modern_highlights:
                     modern_highlight_previews = dict(status='UNAVAILABLE', reason=str(error), by_file=[],
                         runtime_binding_proved=False, execution_proved=False, coverage_complete=False,
@@ -991,6 +1002,37 @@ def report_document(root, entrypoint, *, rule_set='core', package_path=None,
         require(len(json.dumps(report, ensure_ascii=False, sort_keys=True, indent=2).encode('utf-8'))
                 <= MAX_MODERN_REPORT_BYTES,
                 'Document inspection report byte limit exceeded')
+    # Optional inventory runs last. It can use only the item/byte headroom left
+    # after the complete existing report, including scoped namespace sections.
+    # Its truncation must never remove already verified proposals.
+    if inspect_scoped_parent_patterns:
+        from scoped_parent_patterns import analyze as inspect_parent_patterns, MAX_ITEMS as PARENT_MAX_ITEMS, MAX_BYTES as PARENT_MAX_BYTES
+        base_size = len(json.dumps(report, ensure_ascii=False, sort_keys=True, indent=2).encode('utf-8'))
+        byte_room = MAX_MODERN_REPORT_BYTES - base_size
+        available = min(PARENT_MAX_ITEMS, MAX_REPORT_ITEMS - items)
+        if scoped_parent_pattern_report is None:
+            if available < 7 or byte_room < 4096:
+                scoped_parent_pattern_report = dict(status='INCOMPLETE', findings=[], truncated=True,
+                    reason='Remaining document report budget cannot hold the scoped parent inventory',
+                    report_items=0, runtime_binding_proved=False, execution_proved=False,
+                    coverage_complete=False, edit_permission=False, compiler_permission=False,
+                    render_equivalence_proved=False)
+            else:
+                scoped_parent_pattern_report = inspect_parent_patterns(modern_analyzer, max_items=available,
+                    max_bytes=min(PARENT_MAX_BYTES, byte_room - 512))
+        trial = dict(report, scoped_parent_patterns=scoped_parent_pattern_report)
+        if len(json.dumps(trial, ensure_ascii=False, sort_keys=True, indent=2).encode('utf-8')) > MAX_MODERN_REPORT_BYTES:
+            # The small fallback itself is the only additional content. If even
+            # that cannot fit, leave the pre-existing report intact; the CLI
+            # reports the missing optional section on stderr.
+            scoped_parent_pattern_report = dict(status='INCOMPLETE', findings=[], truncated=True,
+                reason='Remaining document report byte budget cannot hold the scoped parent inventory',
+                report_items=0, runtime_binding_proved=False, execution_proved=False,
+                coverage_complete=False, edit_permission=False, compiler_permission=False,
+                render_equivalence_proved=False)
+            trial = dict(report, scoped_parent_patterns=scoped_parent_pattern_report)
+        if len(json.dumps(trial, ensure_ascii=False, sort_keys=True, indent=2).encode('utf-8')) <= MAX_MODERN_REPORT_BYTES:
+            report = trial
     return report
 
 
@@ -1016,6 +1058,8 @@ def main(arguments=None):
                         help='Report the exact modern text-utils highlighted variant (requires --package-path and --footnote-cache-path)')
     parser.add_argument('--cetz-annotation-manifest',
                         help='Capture an explicit resource manifest for conditional CeTZ annotation hints (requires scoped-call previews and both namespace roots)')
+    parser.add_argument('--inspect-scoped-parent-patterns', action='store_true',
+                        help='Inventory nested scoped-parent source patterns (requires --modern-highlight-evidence)')
     parser.add_argument('--preview-conditional-modern-highlights', action='store_true',
                         help='Preview simple modern highlight splits (requires --modern-highlight-evidence)')
     parser.add_argument('--preview-conditional-modern-scoped-references', action='store_true',
@@ -1075,6 +1119,7 @@ def main(arguments=None):
                                  modern_highlight_evidence=args.modern_highlight_evidence,
                                  cetz_annotation_manifest=args.cetz_annotation_manifest,
                                  preview_conditional_modern_highlights=args.preview_conditional_modern_highlights,
+                                 inspect_scoped_parent_patterns=args.inspect_scoped_parent_patterns,
                                  preview_conditional_modern_scoped_references=args.preview_conditional_modern_scoped_references,
                                  preview_conditional_modern_math_highlights=args.preview_conditional_modern_math_highlights,
                                  preview_display_gaps=args.preview_display_gaps,
@@ -1101,6 +1146,9 @@ def main(arguments=None):
     except (InputError, PackageInputError, OSError, ValueError) as error:
         result = dict(schema=1, tool_version=VERSION, mode='inspect-document', status=2,
                       phase='input', compiler_invoked=False, applied_fixes=[], error=str(error))
+    if (args.inspect_scoped_parent_patterns and 'error' not in result
+            and 'scoped_parent_patterns' not in result):
+        print('Scoped parent pattern inventory omitted: document report byte budget is full', file=sys.stderr)
     if args.format == 'json':
         print(json.dumps(result, ensure_ascii=False, sort_keys=True, indent=2))
     elif 'error' in result:
@@ -1252,6 +1300,18 @@ def main(arguments=None):
                             print(f"      condition: {condition}")
                 for reason in row['unresolved']:
                     print(f"    unresolved: {reason}")
+        if 'scoped_parent_patterns' in result:
+            parent_inventory = result['scoped_parent_patterns']
+            print(f"Scoped parent source patterns: {parent_inventory['status']}; syntax only, no edit or compiler permission")
+            for item in parent_inventory['findings']:
+                print(f"  {item['path']}:{item['line']}:{item['column']}: {item['wrapper_syntax']}; "
+                      + ', '.join(item['reasons']))
+                for child in item['child_calls']:
+                    print(f"    {child['line']}:{child['column']}: unreviewed call syntax {child['callee_syntax']}")
+                if item['child_calls_truncated']:
+                    print(f"    {item['child_calls_truncated']} additional call sites omitted")
+            if parent_inventory.get('reason'):
+                print('  ' + parent_inventory['reason'])
         if 'conditional_modern_highlight_previews' in result:
             previews = result['conditional_modern_highlight_previews']
             print(f"Conditional modern highlight previews: {previews['status']}; "

@@ -178,7 +178,7 @@ def _compile_captured(context, records, catalog, snapshot, *, entrypoint, deadli
                     explicit_withheld_sources=(), conditional_continuations=False, conditional_adjacent_punctuation=False,
                     original_only=False, modern_highlight_evidence=None,
                     composed_modern_evidence=None, sequence_facade_evidence=False,
-                    conditional_deferred_footnotes=False, composed_reviewed_math=False):
+                    conditional_deferred_footnotes=False, composed_reviewed_math=False, phase_timings=None):
     """Compile baseline and candidate from explicit captured bytes in private.
 
     macOS sandbox-exec denies networking and writes outside the temporary
@@ -189,6 +189,8 @@ def _compile_captured(context, records, catalog, snapshot, *, entrypoint, deadli
     written. This is a bounded preview, not proof of complete future reads or
     permission to publish/apply changes.
     """
+    if phase_timings is not None and type(phase_timings) is not dict:
+        raise SafetyError('Phase timing sink must be a dictionary')
     if (type(deadline_seconds) not in (int, float) or isinstance(deadline_seconds, bool)
             or not 0 < deadline_seconds <= 120):
         raise SafetyError('Preview compiler deadline must be in (0, 120] seconds')
@@ -230,6 +232,7 @@ def _compile_captured(context, records, catalog, snapshot, *, entrypoint, deadli
                 or composed_modern_evidence._session._context is not context
                 or footnote_evidence is not None or type(sequence_facade_evidence) is not bool):
             raise SafetyError('Composed modern preview requires the matching issued resource capture')
+        timing_options = {'phase_timings': phase_timings} if phase_timings is not None else {}
         candidates, modern_summary, composed_view = composed_modern.stage(composed_modern_evidence, records,
             profile=profile, partial_unsupported=partial_unsupported, withheld_records=withheld_records,
             partial_unproven_binding=partial_unproven_binding, explicit_withheld_sources=explicit_withheld_sources,
@@ -237,7 +240,7 @@ def _compile_captured(context, records, catalog, snapshot, *, entrypoint, deadli
             conditional_adjacent_punctuation=conditional_adjacent_punctuation,
             sequence_facade_evidence=sequence_facade_evidence,
             conditional_deferred_footnotes=conditional_deferred_footnotes,
-            reviewed_math=composed_reviewed_math)
+            reviewed_math=composed_reviewed_math, **timing_options)
         if not modern_summary['source_count']:
             raise NoComposedPreview(modern_summary)
     elif sequence_facade_evidence is not False:
@@ -260,6 +263,7 @@ def _compile_captured(context, records, catalog, snapshot, *, entrypoint, deadli
     elif original_only:
         candidates = document_resources.stage_original(context, snapshot)
     else:
+        started = time.monotonic() if phase_timings is not None else None
         candidates = document_resources.stage_document(context, records, catalog, snapshot, profile=profile,
                                                        footnote_evidence=footnote_evidence,
                                                        partial_unsupported=partial_unsupported,
@@ -269,6 +273,8 @@ def _compile_captured(context, records, catalog, snapshot, *, entrypoint, deadli
                                                        conditional_continuations=conditional_continuations,
                                                        conditional_adjacent_punctuation=conditional_adjacent_punctuation,
                                                        conditional_deferred_footnotes=conditional_deferred_footnotes)
+        if phase_timings is not None:
+            phase_timings['replay_and_intermediate_seconds'] = time.monotonic() - started
     cancelled()
     external_fonts = [item for item in snapshot.files
                       if item.request.role == 'font' and item.request.root != 'project']
@@ -299,6 +305,7 @@ def _compile_captured(context, records, catalog, snapshot, *, entrypoint, deadli
     sandbox_bytes, sandbox_evidence = runtime._capture(SANDBOX, 2 * 1024 * 1024, executable=True)
     del sandbox_bytes  # The fixed system sandbox executable remains at its reviewed path.
 
+    started_staging = time.monotonic() if phase_timings is not None else None
     with tempfile.TemporaryDirectory(prefix='typst-document-preview-') as directory, ExitStack() as stack:
         base = Path(directory).resolve()
         sandbox_profile = _sandbox_profile(base)
@@ -342,6 +349,8 @@ def _compile_captured(context, records, catalog, snapshot, *, entrypoint, deadli
             deps, deps_fd, deps_identity = runtime._bind_output(workspace / 'dependencies', stack)
             workspaces[label] = (workspace, staged_roots, system_fonts, project_fonts,
                                  pdf, pdf_fd, pdf_identity, deps, deps_fd, deps_identity)
+        if phase_timings is not None:
+            phase_timings['private_staging_seconds'] = time.monotonic() - started_staging
         if modern_highlight_evidence is not None:
             modern_evidence._valid(modern_highlight_evidence)
         if composed_view is not None:
@@ -387,9 +396,12 @@ def _compile_captured(context, records, catalog, snapshot, *, entrypoint, deadli
                        '--creation-timestamp', '1700000000', '--deps', str(deps),
                        '--deps-format', 'zero', '--', entrypoint, str(pdf)]
             try:
+                started = time.monotonic() if phase_timings is not None else None
                 invocation = _run_tracked(command, starts=starts, purpose=f'document-preview-{label}', cwd=staged['project'],
                                           environment=environment, deadline=time.monotonic() + deadline_seconds,
                                           cancel_event=cancel_event, check_workspace=check_workspace)
+                if phase_timings is not None:
+                    phase_timings[f'{label}_compile_seconds'] = time.monotonic() - started
             except runtime.CompilerFailure as error:
                 # _run cleans up before returning this failure. If launch was
                 # possible, refuse unsafe output before exposing its stderr.
@@ -448,7 +460,7 @@ def compile_preview(context, records, catalog, snapshot, *, entrypoint, deadline
                     explicit_withheld_sources=(), conditional_continuations=False, conditional_adjacent_punctuation=False,
                     modern_highlight_evidence=None, composed_modern_evidence=None,
                     sequence_facade_evidence=False, conditional_deferred_footnotes=False,
-                    composed_reviewed_math=False):
+                    composed_reviewed_math=False, phase_timings=None):
     return _compile_captured(context, records, catalog, snapshot, entrypoint=entrypoint,
         deadline_seconds=deadline_seconds, cancel_event=cancel_event, expected_dependencies=expected_dependencies,
         expected_baseline_sha256=expected_baseline_sha256, profile=profile, starts=starts,
@@ -459,7 +471,8 @@ def compile_preview(context, records, catalog, snapshot, *, entrypoint, deadline
         modern_highlight_evidence=modern_highlight_evidence,
         composed_modern_evidence=composed_modern_evidence,
         sequence_facade_evidence=sequence_facade_evidence,
-        conditional_deferred_footnotes=conditional_deferred_footnotes, composed_reviewed_math=composed_reviewed_math)
+        conditional_deferred_footnotes=conditional_deferred_footnotes, composed_reviewed_math=composed_reviewed_math,
+        phase_timings=phase_timings)
 
 
 def compile_original(context, snapshot, *, entrypoint, deadline_seconds=120.0, cancel_event=None,

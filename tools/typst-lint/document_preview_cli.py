@@ -4,6 +4,7 @@ import json
 from pathlib import Path
 import stat
 import sys
+import time
 
 import closed_core_compile as runtime
 import document_dependencies
@@ -171,6 +172,8 @@ def main(arguments=None, *, gate=False):
     parser.add_argument('--pdf-stdout', action='store_true', help='Emit only the candidate PDF to stdout')
     parser.add_argument('--review-edits', action='store_true',
                         help='Include bounded per-source, per-stage edits and hashes in the JSON report')
+    parser.add_argument('--phase-timings', action='store_true',
+                        help='Include non-overlapping, single-run monotonic phase durations in JSON; null means incomplete or not applicable. Argument errors and early PDF stream refusals produce no timings (requires --format json or --pdf-stdout)')
     parser.add_argument('--conditional-gaps', action='store_true',
                         help='Also preview conditional proof and nested math-footnote gap edits')
     parser.add_argument('--conditional-continuations', action='store_true',
@@ -211,6 +214,8 @@ def main(arguments=None, *, gate=False):
             return 2
     if args.review_edits and args.format != 'json' and not args.pdf_stdout:
         parser.error('--review-edits requires --format json or --pdf-stdout')
+    if args.phase_timings and args.format != 'json' and not args.pdf_stdout:
+        parser.error('--phase-timings requires --format json or --pdf-stdout')
     if args.compose_reviewed_math_highlights and not args.compose_modern_highlights:
         parser.error('--compose-reviewed-math-highlights requires --compose-modern-highlights')
     if args.conditional_modern_highlights and (args.conditional_gaps or args.conditional_punctuation
@@ -246,6 +251,11 @@ def main(arguments=None, *, gate=False):
     discovery_completed = False
     withheld = None
     starts = document_preview_compile.PreviewCompilerStarts()
+    phase_timings = (dict(planning_seconds=None, replay_and_intermediate_seconds=None,
+                          highlight_analysis_seconds=None, highlight_replay_seconds=None,
+                          private_staging_seconds=None, baseline_compile_seconds=None,
+                          candidate_compile_seconds=None) if args.phase_timings else None)
+    timing_started = time.monotonic() if phase_timings is not None else None
     profile = ('conditional-gaps-punctuation-and-spacers' if args.conditional_punctuation and args.conditional_spacers else
                'conditional-gaps-and-spacers' if args.conditional_spacers else
                'conditional-gaps-and-punctuation' if args.conditional_punctuation else
@@ -296,8 +306,15 @@ def main(arguments=None, *, gate=False):
 
         # Preserve the existing fail-before-discovery behavior unless this
         # profile needs a resource-bound facade proof for planning.
+        def timed_plan_records(evidence):
+            start = time.monotonic() if phase_timings is not None else None
+            value = plan_records(evidence)
+            if phase_timings is not None:
+                phase_timings['planning_seconds'] = time.monotonic() - start
+            return value
+
         planned = None if (args.conditional_facade_footnotes or args.conditional_modern_highlights
-                           or args.compose_modern_highlights) else plan_records(None)
+                           or args.compose_modern_highlights) else timed_plan_records(None)
         footnote_session = None
         if args.conditional_facade_footnotes or args.conditional_modern_highlights or args.compose_modern_highlights:
             import conditional_footnote_binding
@@ -365,7 +382,7 @@ def main(arguments=None, *, gate=False):
             records, withheld = None, []
         elif planned is None:
             phase = 'planning'
-            planned = plan_records(footnote_evidence if args.conditional_facade_footnotes else None)
+            planned = timed_plan_records(footnote_evidence if args.conditional_facade_footnotes else None)
         if not args.conditional_modern_highlights:
             records, withheld = planned
         review = review_sources(context, records, withheld if partial_requested else None) if args.review_edits else None
@@ -375,6 +392,8 @@ def main(arguments=None, *, gate=False):
             compile_options = dict(composed_modern_evidence=footnote_evidence,
                                    sequence_facade_evidence=args.conditional_facade_footnotes,
                                    composed_reviewed_math=args.compose_reviewed_math_highlights)
+        if phase_timings is not None:
+            compile_options['phase_timings'] = phase_timings
         preview = document_preview_compile.compile_preview(context, records, catalog['rules'], snapshot,
                                                            entrypoint=args.entrypoint, cancel_event=cancel,
                                                            expected_dependencies=observed,
@@ -558,6 +577,12 @@ def main(arguments=None, *, gate=False):
     result['compiler_stages_started'] = stage_starts
     result['compiler_invoked'] = document_preview_compile.PreviewCompilerStarts._combine(stage_starts.values())
     result['compiler_version_probe_invoked'] = starts.version_probe_invoked()
+    if phase_timings is not None:
+        result['phase_timings'] = dict(
+            unit='seconds', clock='monotonic', sample='single run',
+            note=('Completed non-overlapping instrumented spans only; null means not completed or not applicable. '
+                  'Replay includes intermediate-context construction when composed. Total includes uninstrumented work.'),
+            total_seconds=time.monotonic() - timing_started, **phase_timings)
     if args.pdf_stdout:
         result.setdefault('pdf_streamed', False)
         result['source_modification_scope'] = ('Tool-controlled actions only; caller redirection and '

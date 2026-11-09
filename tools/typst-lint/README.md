@@ -190,6 +190,15 @@ remain withheld. The work budget is shared across the batch; exhaustion explicit
 the scoped portion while independently preserving eligible existing proposals. Execution, rendered equivalence, source writes and compiler
 permission are not proved. This option does not enable composed compilation.
 
+With `--modern-highlight-evidence`, the separate
+`--inspect-scoped-parent-patterns` option lists bounded source patterns where a
+syntactic scoped callback parameter appears as a child call's `parent`, including
+source locations and child call syntax. Some patterns can be unrelated to
+highlight findings or preview omissions. Names, binding, execution, effects,
+rendering and edit permission are not proved. Work and output limits explicitly
+mark incomplete inventories, and this option does not change preview selection.
+If the report is completely full, the section is omitted and the CLI warns on stderr.
+
 The `--preview-conditional-punctuation` inspection reports adjacent trailing
 punctuation moves independently from moves whose footnote has preceding spaces.
 Each adjacent move has inseparable insertion and deletion edits; its source-only
@@ -372,6 +381,27 @@ against the captured namespaces on both intermediate and proposed source,
 and withholds highlight edits in sources imported by another graph source. It
 leaves unsupported or dynamic math calls unresolved. This option adds analysis
 work; the runtime bindings, execution and visual equivalence remain unproved.
+
+Add `--phase-timings --format json` (or use `--phase-timings --pdf-stdout`)
+to include a single run's monotonic elapsed wall times in `phase_timings`.
+The optional completed spans do not overlap: `planning_seconds` covers source
+sequence planning; `replay_and_intermediate_seconds` covers independent
+sequence replay and, for composed previews, creation of the intermediate
+context; `highlight_analysis_seconds` and `highlight_replay_seconds` cover
+the two separate composed-highlight analyses; `private_staging_seconds` covers
+creation of the private compiler copy and staged workspaces; and
+`baseline_compile_seconds` and `candidate_compile_seconds` cover each tracked
+compiler invocation including its workspace monitoring. These are elapsed
+times, not CPU times. `total_seconds` runs from after argument validation to
+report construction, includes other setup and verification, and excludes final
+JSON serialization; the listed spans therefore need not sum to it.
+A `null` span means it was not applicable or did not complete, including on
+failure or cancellation after timing starts. Argument parsing errors and early
+PDF stream refusals, including a regular-file `--pdf-stdout`, occur before the
+timing report is initialized and have no `phase_timings` field. No source
+contents or paths are added by this option; it does not alter preview validation,
+source-write authority or PDF streaming.
+
 Adding `--conditional-punctuation` appends the separate conditional prose
 footnote spacing stage; it requires `--conditional-gaps`.
 For the separately opted-in spacer and facade profile,

@@ -5,6 +5,7 @@ publication authority. The caller must bind those exact bytes to compiler
 staging and apply its independent dependency and workspace checks.
 """
 import json
+import time
 from types import MappingProxyType
 
 import conditional_modern_highlight as modern
@@ -20,7 +21,7 @@ from typst_lint import SafetyError, digest
 def stage(proof, records, *, profile='standard', partial_unsupported=False, withheld_records=None,
           partial_unproven_binding=False, explicit_withheld_sources=(), conditional_continuations=False,
           conditional_adjacent_punctuation=False, sequence_facade_evidence=False,
-          conditional_deferred_footnotes=False, reviewed_math=False):
+          conditional_deferred_footnotes=False, reviewed_math=False, phase_timings=None):
     """Derive both stages from issued inputs; never trust a caller's candidate."""
     if type(reviewed_math) is not bool:
         raise SafetyError('Reviewed math selection must be Boolean')
@@ -29,18 +30,26 @@ def stage(proof, records, *, profile='standard', partial_unsupported=False, with
         raise SafetyError('Facade-footnote evidence requires a spacer profile')
     if partial_unsupported is True and sequence_facade_evidence is not True:
         raise SafetyError('Partial unsupported preview requires facade-footnote evidence')
+    if phase_timings is not None and type(phase_timings) is not dict:
+        raise SafetyError('Phase timing sink must be a dictionary')
     stable_records = intermediate._copy_records(records)
     stable_withheld = intermediate._copy_records(withheld_records)
+    started = time.monotonic() if phase_timings is not None else None
     view = intermediate.derive(proof, stable_records, profile=profile, partial_unsupported=partial_unsupported,
         withheld_records=stable_withheld, partial_unproven_binding=partial_unproven_binding,
         explicit_withheld_sources=explicit_withheld_sources, conditional_continuations=conditional_continuations,
         conditional_adjacent_punctuation=conditional_adjacent_punctuation,
         sequence_facade_evidence=sequence_facade_evidence,
         conditional_deferred_footnotes=conditional_deferred_footnotes)
+    if phase_timings is not None:
+        phase_timings['replay_and_intermediate_seconds'] = time.monotonic() - started
     session = intermediate.issue_binding(view)
     analyzer = modern.ModernHighlightAnalyzer(session, scoped_callbacks=True)
     preview_options = {'reviewed_math': True} if reviewed_math else {}
+    started = time.monotonic() if phase_timings is not None else None
     diagnostics, proposed = highlight.preview_all(analyzer, return_evidence=True, **preview_options)
+    if phase_timings is not None:
+        phase_timings['highlight_analysis_seconds'] = time.monotonic() - started
     modern_evidence._verify_routes(analyzer, view.sources, diagnostics)
     conditional_calls = {record['path']: sequence._final_conditional_footnote_calls(
                          proof._session._context.source_for(record['path']).tree, record)
@@ -103,7 +112,10 @@ def stage(proof, records, *, profile='standard', partial_unsupported=False, with
         footnote.PreviewFootnoteEvidence.validate_staged_facades(proof, project, conditional_calls, **options)
 
     # Recompute independently before authorizing even a private staging map.
+    started = time.monotonic() if phase_timings is not None else None
     repeated_diagnostics, repeated_proposed = highlight.preview_all(analyzer, return_evidence=True, **preview_options)
+    if phase_timings is not None:
+        phase_timings['highlight_replay_seconds'] = time.monotonic() - started
     if repeated_diagnostics != diagnostics or repeated_proposed != proposed:
         raise SafetyError('Composed highlight replay changed')
     modern_evidence._verify_routes(analyzer, view.sources, repeated_diagnostics)
