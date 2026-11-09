@@ -109,7 +109,7 @@ def _direct_literal_block_before(tree, siblings, prior, marker_start):
 
 
 def analyze_conditional_nested_gap(tree, path, *, catalog=None, _allow_first_content=False,
-                                   _allow_direct_block=False, _block_markers=None):
+                                   _allow_direct_block=False, _block_markers=None, _first_markers=None):
     """Find standalone marker-shaped tokens in nested literal markup only.
 
     These are source patterns: the identifier's binding, execution and prose
@@ -117,7 +117,8 @@ def analyze_conditional_nested_gap(tree, path, *, catalog=None, _allow_first_con
     interpret an empty result as coverage of arbitrary rendered content.
     """
     if (type(_allow_first_content) is not bool or type(_allow_direct_block) is not bool
-            or (_block_markers is not None and type(_block_markers) is not list)):
+            or (_block_markers is not None and type(_block_markers) is not list)
+            or (_first_markers is not None and type(_first_markers) is not list)):
         raise InputError('Invalid conditional marker selection')
     source, nodes = tree.source, tree.nodes
     if nodes[0].errors:
@@ -203,6 +204,8 @@ def analyze_conditional_nested_gap(tree, path, *, catalog=None, _allow_first_con
             rule = selected[0]
             message = ('Conditional source hint: if this standalone name is the paragraph marker, '
                        'place a blank source line before it.')
+            if first_in_block and not ignored and _first_markers is not None:
+                _first_markers.append(start)
             if direct_block:
                 message += ' The preceding block call must resolve to the intended builtin.'
                 if not ignored and _block_markers is not None:

@@ -175,7 +175,7 @@ def main(arguments=None, *, gate=False):
     parser.add_argument('--phase-timings', action='store_true',
                         help='Include non-overlapping, single-run monotonic phase durations in JSON; null means incomplete or not applicable. Argument errors and early PDF stream refusals produce no timings (requires --format json or --pdf-stdout)')
     parser.add_argument('--conditional-gaps', action='store_true',
-                        help='Also preview conditional proof and nested math-footnote gap edits')
+                        help='Also preview conditional proof, nested math-footnote and selected paragraph-marker gap edits')
     parser.add_argument('--conditional-continuations', action='store_true',
                         help='Preview conditional prose continuation line joins; rendering equivalence is unproved')
     parser.add_argument('--conditional-modern-highlights', action='store_true',
@@ -430,7 +430,7 @@ def main(arguments=None, *, gate=False):
                       conditional_facade_footnotes=args.conditional_facade_footnotes,
                       conditional_deferred_footnotes=args.conditional_deferred_footnotes,
                       conditionally_previewed_rule_ids=(
-                          (['pde.proof-trailing-gap', 'pde.footnote-trailing-gap'] if args.conditional_gaps else [])
+                          (['pde.proof-trailing-gap', 'pde.footnote-trailing-gap', 'pde.paragraph-marker-gap'] if args.conditional_gaps else [])
                           + (['pde.prose-footnote-punctuation'] if args.conditional_punctuation else [])
                           + (['pde.unaligned-footnote-no-spacer'] if args.conditional_spacers else [])
                           + (['pde.continuation-line'] if args.conditional_continuations else [])

@@ -419,6 +419,65 @@ def preview(tree, path, catalog, *, profile=_STANDARD, footnote_evidence=None, c
             for item in footnote_evidence._session._namespaces.packages:
                 document_footnote_evidence._verify_package(
                     footnote_evidence._session, captured, item.evidence, checked_packages)
+        if profile != _STANDARD and b'#paragraph_tab' in current.source:
+            import document_conditional_paragraph_gap as marker_gap
+            import paragraph_rules
+            before = current
+            first, blocks = [], []
+            hints = paragraph_rules.analyze_conditional_nested_gap(before, path, catalog=catalog,
+                _allow_first_content=True, _allow_direct_block=True,
+                _first_markers=first, _block_markers=blocks)
+            offsets = set(first + blocks)
+            unresolved = any(reason.startswith(paragraph_rules.NESTED_GAP_UNRESOLVED) for reason in hints.skips)
+            # Keep the old sequence available when this new, optional stage
+            # cannot establish all marker boundaries. Later stages still run
+            # their existing unresolved-boundary safety checks.
+            selected = (None if unresolved or not offsets
+                        else marker_gap.preview(before, path, catalog=catalog, _special_only=True))
+            if selected is None and offsets and not unresolved:
+                raise SafetyError('Conditional paragraph marker candidates were omitted')
+            if selected is not None:
+                if type(selected) is not dict:
+                    raise SafetyError('Conditional paragraph marker proof is invalid')
+                if selected.get('verification') == 'withheld':
+                    raise SafetyError('Conditional paragraph marker preview withheld: ' + str(selected.get('reason', 'unknown')))
+                conditions = marker_gap.CONDITIONS + (marker_gap.BLOCK_CONDITION if blocks else ())
+                if (selected.get('verification') != 'conditional-paragraph-gap-syntax-directives-and-reanalysis'
+                        or selected.get('conditions') != conditions
+                        or any(selected.get(key) is not False for key in ('runtime_binding_proved', 'execution_proved',
+                            'render_equivalence_proved', 'edit_permission', 'compiler_permission'))):
+                    raise SafetyError('Conditional paragraph marker proof is invalid')
+                mapper = _FindingMapper(before.source)
+                findings = [mapper.offset(item) for item in hints.diagnostics if mapper.offset(item) in offsets]
+                if len(findings) != len(offsets) or set(findings) != offsets:
+                    raise SafetyError('Conditional paragraph marker findings mismatch')
+                expected = []
+                for offset in sorted(offsets):
+                    start = before.source.rfind(b'\n', 0, offset) + 1
+                    newline = b'\r\n' if before.source[max(0, start - 2):start] == b'\r\n' else b'\n'
+                    expected.append(Edit(start, start, newline))
+                rows = selected.get('edits')
+                if (type(rows) is not list or len(rows) != len(expected) or any(type(row) is not dict
+                        or set(row) != {'start', 'end', 'replacement', 'rule_id'}
+                        or row.get('rule_id') != marker_gap.RULE or type(row.get('start')) is not int
+                        or type(row.get('end')) is not int or row.get('replacement') not in ('\n', '\r\n')
+                        for row in rows)):
+                    raise SafetyError('Conditional paragraph marker edits are invalid')
+                edits = tuple(Edit(row['start'], row['end'], row['replacement'].encode('ascii')) for row in rows)
+                proposal = plan(before.source, edits)
+                candidate = proposal.candidate()
+                if (proposal.deferred or tuple(proposal.edits) != tuple(expected)
+                        or digest(before.source) != selected.get('baseline_sha256')
+                        or digest(candidate) != selected.get('candidate_sha256')):
+                    raise SafetyError('Conditional paragraph marker hash or edit mismatch')
+                current = parse(candidate, tree.mode)
+                if current.nodes[0].errors or marker_gap.preview(current, path, catalog=catalog, _special_only=True) is not None:
+                    raise SafetyError('Conditional paragraph marker stage did not converge')
+                conditional_rows = [dict(row, conditions=list(conditions), runtime_binding_proved=False,
+                    execution_proved=False, render_equivalence_proved=False, edit_permission=False,
+                    compiler_permission=False) for row in rows]
+                steps.append(dict(rule_id=marker_gap.RULE, baseline_sha256=digest(before.source),
+                                  candidate_sha256=digest(candidate), edits=conditional_rows))
         apply_display(preview_standalone, STANDALONE)
         script = analyze_script(current, path, catalog=catalog, _verify=False, _allow_code_call=True)
         if script.skips or script.parse_errors:

@@ -28,8 +28,10 @@ BLOCK_CONDITION = (
 )
 
 
-def preview(tree, path, *, catalog=None):
+def preview(tree, path, *, catalog=None, _special_only=False):
     """Propose a blank line for existing unsuppressed nested-marker hints."""
+    if type(_special_only) is not bool:
+        raise InputError('Invalid conditional marker selection')
     records = load_rules()[0]['rules'] if catalog is None else catalog
     source = tree.source
     empty = dict(path=path, baseline_sha256=digest(source), candidate_sha256=None,
@@ -38,9 +40,13 @@ def preview(tree, path, *, catalog=None):
     try:
         if tree.mode != 'markup' or tree.nodes[0].errors:
             raise SafetyError('Requires well-formed markup source')
-        block_markers = []
+        block_markers, first_markers = [], []
         before = paragraph_rules.analyze_conditional_nested_gap(tree, path, catalog=records,
-            _allow_first_content=True, _allow_direct_block=True, _block_markers=block_markers)
+            _allow_first_content=True, _allow_direct_block=True, _block_markers=block_markers,
+            _first_markers=first_markers)
+        selected_offsets = set(first_markers + block_markers)
+        if _special_only and not selected_offsets:
+            return None
         if block_markers:
             empty['conditions'] = CONDITIONS + BLOCK_CONDITION
         unresolved = tuple(reason for reason in before.skips
@@ -48,15 +54,23 @@ def preview(tree, path, *, catalog=None):
         if unresolved:
             raise SafetyError('Paragraph marker boundary is unproved: ' + '; '.join(unresolved))
         mapper = _FindingMapper(source)
-        edits = []
+        edits, remaining, seen = [], [], set()
         for finding in before.diagnostics:
             offset = mapper.offset(finding)
+            if _special_only and offset not in selected_offsets:
+                remaining.append(finding)
+                continue
+            if offset in seen:
+                raise SafetyError('Duplicate conditional marker location')
+            seen.add(offset)
             line_start = source.rfind(b'\n', 0, offset) + 1
             if (source[offset:offset + len(b'#paragraph_tab')] != b'#paragraph_tab'
                     or source[line_start:offset].strip(b' \t')):
                 raise SafetyError('Conditional marker location or standalone line changed')
             newline = b'\r\n' if source[max(0, line_start - 2):line_start] == b'\r\n' else b'\n'
             edits.append(Edit(line_start, line_start, newline))
+        if _special_only and seen != selected_offsets:
+            raise SafetyError('Conditional marker selection did not match findings')
         if not edits:
             return None
         proposal = plan(source, edits)
@@ -68,7 +82,8 @@ def preview(tree, path, *, catalog=None):
                 or _scopes(tree, records, proposal.edits) != _scopes(parsed, records)):
             raise SafetyError('Marker gap preview changed non-whitespace syntax or suppression targets')
         after = paragraph_rules.analyze_conditional_nested_gap(parsed, path, catalog=records, _allow_first_content=True, _allow_direct_block=True)
-        if (after.diagnostics or after.parse_errors
+        if (after.parse_errors or before.skips != after.skips
+                or _keys(source, remaining, proposal.edits) != _keys(candidate, after.diagnostics)
                 or _keys(source, before.suppressed, proposal.edits) != _keys(candidate, after.suppressed)):
             raise SafetyError('Marker gap preview changed suppressed findings or did not converge')
         before_resolution, after_resolution = resolve(tree, packages=()), resolve(parsed, packages=())

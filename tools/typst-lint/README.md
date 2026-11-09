@@ -501,8 +501,13 @@ candidate PDF to stdout, never changes consumer sources and still exits 2 becaus
 global rule coverage is incomplete. The same preview is available explicitly as
 `typst-style compile --preview --root /absolute/project --entrypoint main.typ
 --manifest /absolute/font-seed.json --discover-dependencies --format json`.
-Explicit `--conditional-gaps` also composes the conditional proof and nested
-math-footnote gap stages in that preview; it does not authorize source writes.
+Explicit `--conditional-gaps` also composes the conditional proof, nested
+math-footnote and selected nested paragraph-marker gap stages in that preview.
+The marker stage only handles a first marker immediately after a literal content
+block opens or a marker directly after a supported standalone literal `#block`
+call. Other unknown marker boundaries still prevent this stage from producing a
+plan. Marker and block bindings, execution and rendering remain unproved, and
+private compilation does not authorize source writes.
 The separate `--conditional-modern-highlights` option previews only supported
 modern text-utils highlight splits. It cannot be combined with the other
 conditional stages, `--withhold-source` or `--review-edits`; it requires the
