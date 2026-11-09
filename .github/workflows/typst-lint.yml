@@ -55,7 +55,11 @@ jobs:
           cargo clippy --locked -- -D warnings
           cargo test --locked
           cargo build --locked
+          cargo build --locked --release
           test -x target/debug/typst-lint-syntax
+          test -x target/release/typst-lint-syntax
+          cd ..
+          python -c "import syntax_client as c; assert c.EXECUTABLE == c.RELEASE_EXECUTABLE; c.adapter_identity()"
       - name: Test linter components and real parser
         run: python tools/typst-lint/run_test_shard.py --shard-index ${{ matrix.shard }} --shard-count 8 --balance-profile measured-v1
       - name: Check whitespace

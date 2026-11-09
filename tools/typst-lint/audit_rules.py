@@ -19,11 +19,13 @@ import re
 import subprocess
 import sys
 import tempfile
+import syntax_client
 
 TOOL = Path(__file__).resolve().parent
 REPO = TOOL.parents[1]
 SPEC = REPO / 'openspec/changes/typst-style-linter'
-ADAPTER = TOOL / 'syntax-adapter/target/debug/typst-lint-syntax'
+ADAPTER = syntax_client.EXECUTABLE
+ADAPTER_WORKER = TOOL / 'audit_adapter_worker.py'
 INVENTORY = TOOL / 'audit/fixtures.json'
 
 
@@ -49,9 +51,14 @@ def snapshot():
     paths |= set((REPO / 'local').rglob('*.typ'))
     paths |= set((REPO / 'local').rglob('typst.toml'))
     files = {p.relative_to(REPO).as_posix(): digest(p.read_bytes()) for p in sorted(paths) if p.is_file()}
+    adapter = syntax_client.audit_adapter_inventory()
+    public_candidates = {name: (None if state is None else
+                                {'kind': state['kind'], 'sha256': state['sha256']})
+                         for name, state in adapter['candidates'].items()}
     return {'commit': git('rev-parse', 'HEAD'), 'branch': git('branch', '--show-current'),
             'files': files, 'working_tree_sha256': digest(json.dumps(files, sort_keys=True).encode()),
-            'adapter_sha256': digest(ADAPTER.read_bytes()) if ADAPTER.is_file() else None}
+            'adapter_path': adapter['path'], 'adapter_sha256': adapter['sha256'],
+            'adapter_candidates': public_candidates}
 
 
 def normalize(value, root, package_root=None):
@@ -153,7 +160,11 @@ def run_cli(fixture, mode='dry-run', source_files=None, *, _analysis_contexts=No
         args += ['--format', 'json']
         if mode == 'compile':
             args += ['--', 'main.typ', 'output.pdf']
-        process = subprocess.run(args, capture_output=True, text=True, timeout=30, env=env)
+        adapter = syntax_client.audit_adapter_inventory()
+        worker_args = [sys.executable, str(ADAPTER_WORKER), json.dumps(adapter, sort_keys=True), *args[1:]]
+        process = subprocess.run(worker_args, capture_output=True, text=True, timeout=30, env=env)
+        if syntax_client.audit_adapter_inventory() != adapter:
+            raise syntax_client.AdapterError('Syntax adapter changed during audit child execution')
         after = {name: digest((root / name).read_bytes()) if (root / name).is_file() else None for name in files}
         try:
             report = json.loads(process.stdout)

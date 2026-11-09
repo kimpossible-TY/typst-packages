@@ -25,9 +25,9 @@ sys.dont_write_bytecode = True
 TOOL = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(TOOL))
 from transactions import _xattrs
+from syntax_client import EXECUTABLE as PARSER, audit_adapter_inventory
 
 LAUNCHER = TOOL / 'typst-lint'
-PARSER = TOOL / 'syntax-adapter/target/debug/typst-lint-syntax'
 CATALOG = TOOL / 'rules/catalog.json'
 PROFILE = 'captured-relative-core-v1'
 ASCII = 'embedded-ascii-v1'
@@ -101,6 +101,9 @@ class NativeCapturedRelativeCliTests(unittest.TestCase):
         self.remember_resource(CATALOG)
         self.remember_resource(LAUNCHER)
         self.remember_resource(PARSER)
+        adapter_inventory = audit_adapter_inventory()
+        self.addCleanup(lambda: self.assertEqual(audit_adapter_inventory(), adapter_inventory,
+                                                  'Syntax adapter capture changed during test'))
         temporary = tempfile.TemporaryDirectory(prefix='typst-relative-cli-native-')
         self.base = Path(temporary.name).resolve()
         self.base.chmod(0o700)

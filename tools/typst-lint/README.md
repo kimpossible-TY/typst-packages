@@ -22,10 +22,23 @@ Build explicitly from this checkout:
 
 ```sh
 cargo build --locked --manifest-path tools/typst-lint/syntax-adapter/Cargo.toml
+cargo build --locked --release --manifest-path tools/typst-lint/syntax-adapter/Cargo.toml
 ```
 
-The runtime uses only the known absolute, locally built
-`syntax-adapter/target/debug/typst-lint-syntax` executable. It never builds,
+At process start the runtime selects the fixed local
+`syntax-adapter/target/release/typst-lint-syntax` if present, otherwise the fixed
+`syntax-adapter/target/debug/typst-lint-syntax`. Existing debug-only builds
+continue to work. An invalid, non-executable or symlinked release path is refused
+rather than silently falling back. The selected path and binary identity are
+checked before and after parsing; detected changes block analysis. These
+snapshots are not continuous monitoring.
+Changes in either build-profile directory are conservatively treated as adapter
+drift, even if that profile is not selected. Restart a running linter process
+after adding, removing or rebuilding an adapter.
+The audit records the selected relative path and SHA-256 and binds its CLI
+children to the same selection and capture. These checks detect changes but do
+not authenticate the adapter's build or prevent an attacker from executing a
+swapped binary before the post-execution check. The runtime never builds,
 installs or downloads dependencies itself. Missing or mismatched adapters produce
 unsupported-analysis results, not a regex fallback or clean lint result. No
 consumer copies, global PATH changes or package installation are needed.

@@ -1,5 +1,6 @@
 """Bounded client for the locally built, pinned, syntax-only official parser."""
 from dataclasses import dataclass
+import hashlib
 import json
 import os
 from pathlib import Path
@@ -7,6 +8,7 @@ import selectors
 import stat
 import subprocess
 import time
+import threading
 
 from typst_lint import InputError, digest
 
@@ -14,7 +16,37 @@ MAX_INPUT = 1_048_576
 MAX_OUTPUT = 16_777_216
 MAX_NODES = 100_000
 MAX_DEPTH = 256
-EXECUTABLE = Path(__file__).resolve().parent / 'syntax-adapter/target/debug/typst-lint-syntax'
+_TOOL_ROOT = Path(__file__).resolve().parent
+_ADAPTER_BASE = _TOOL_ROOT / 'syntax-adapter/target'
+RELEASE_EXECUTABLE = _ADAPTER_BASE / 'release/typst-lint-syntax'
+DEBUG_EXECUTABLE = _ADAPTER_BASE / 'debug/typst-lint-syntax'
+
+
+def _release_present():
+    """Treat invalid candidate ancestors and access errors as present, not absent."""
+    for directory in (_ADAPTER_BASE.parent, _ADAPTER_BASE, RELEASE_EXECUTABLE.parent):
+        try:
+            info = directory.stat(follow_symlinks=False)
+        except FileNotFoundError:
+            return False
+        except OSError:
+            return True
+        if not stat.S_ISDIR(info.st_mode):
+            return True
+    try:
+        RELEASE_EXECUTABLE.stat(follow_symlinks=False)
+        return True
+    except FileNotFoundError:
+        return False
+    except OSError:
+        return True
+
+
+# Choose once per process. A present but invalid release path is never skipped.
+EXECUTABLE = RELEASE_EXECUTABLE if _release_present() else DEBUG_EXECUTABLE
+MAX_ADAPTER_BYTES = 64 * 1024 * 1024
+_adapter_lock = threading.Lock()
+_adapter_pin = None
 
 
 class AdapterError(InputError):
@@ -42,6 +74,144 @@ class Tree:
 def demand(condition, message):
     if not condition:
         raise AdapterError(message)
+
+
+def _file_identity(info):
+    return (info.st_dev, info.st_ino, info.st_mode, info.st_size, info.st_mtime_ns, info.st_ctime_ns)
+
+
+def _directory_identities(path):
+    """Capture the fixed in-checkout directory chain without following links."""
+    values = []
+    flags = os.O_RDONLY | getattr(os, 'O_CLOEXEC', 0) | getattr(os, 'O_NOFOLLOW', 0) | getattr(os, 'O_DIRECTORY', 0)
+    for directory in (_TOOL_ROOT, _ADAPTER_BASE.parent, _ADAPTER_BASE, path.parent):
+        before = directory.stat(follow_symlinks=False)
+        demand(stat.S_ISDIR(before.st_mode) and directory.resolve() == directory,
+               'Syntax adapter directory is unsafe')
+        descriptor = os.open(directory, flags)
+        try:
+            demand(_file_identity(os.fstat(descriptor)) == _file_identity(before),
+                   'Syntax adapter directory changed during capture')
+            demand(_file_identity(directory.stat(follow_symlinks=False)) == _file_identity(before)
+                   and directory.resolve() == directory, 'Syntax adapter directory path changed during capture')
+        finally:
+            os.close(descriptor)
+        values.append((str(directory.relative_to(_TOOL_ROOT)), _file_identity(before)))
+    return tuple(values)
+
+
+def _capture_adapter(path, *, require_executable=True):
+    """Read one fixed candidate without following symlinks."""
+    path = Path(path)
+    demand(path.is_absolute() and path in (DEBUG_EXECUTABLE, RELEASE_EXECUTABLE) and path.resolve() == path,
+           'Only fixed local syntax adapter paths are allowed')
+    directories = _directory_identities(path)
+    before = path.stat(follow_symlinks=False)
+    demand(stat.S_ISREG(before.st_mode) and (not require_executable or os.access(path, os.X_OK)),
+           'Syntax adapter is not a regular executable')
+    demand(0 < before.st_size <= MAX_ADAPTER_BYTES, 'Syntax adapter size exceeds limit')
+    flags = os.O_RDONLY | getattr(os, 'O_CLOEXEC', 0) | getattr(os, 'O_NOFOLLOW', 0)
+    descriptor = os.open(path, flags)
+    try:
+        opened = os.fstat(descriptor)
+        demand(_file_identity(opened) == _file_identity(before), 'Syntax adapter changed during capture')
+        hasher, total = hashlib.sha256(), 0
+        while True:
+            chunk = os.read(descriptor, 128 * 1024)
+            if not chunk:
+                break
+            total += len(chunk)
+            demand(total <= MAX_ADAPTER_BYTES, 'Syntax adapter size exceeds limit')
+            hasher.update(chunk)
+        demand(total == before.st_size and _file_identity(os.fstat(descriptor)) == _file_identity(before),
+               'Syntax adapter changed during capture')
+        demand(_file_identity(path.stat(follow_symlinks=False)) == _file_identity(before)
+               and path.resolve() == path, 'Syntax adapter path changed during capture')
+        demand(_directory_identities(path) == directories, 'Syntax adapter directory changed during capture')
+        return (str(path), _file_identity(before), hasher.hexdigest(), directories)
+    finally:
+        os.close(descriptor)
+
+
+def adapter_identity(path=EXECUTABLE):
+    """Read the selected adapter without following symlinks."""
+    demand(Path(path) == EXECUTABLE, 'Only the selected local syntax adapter is allowed')
+    return _capture_adapter(path)
+
+
+def _selection():
+    return RELEASE_EXECUTABLE if _release_present() else DEBUG_EXECUTABLE
+
+
+def _entry_present(path):
+    try:
+        path.stat(follow_symlinks=False)
+        return True
+    except FileNotFoundError:
+        return False
+    except OSError:
+        return True
+
+
+def _profile_directory_identities():
+    """Retain both profile directory states, including an empty release directory."""
+    values = []
+    for directory in (DEBUG_EXECUTABLE.parent, RELEASE_EXECUTABLE.parent):
+        try:
+            info = directory.stat(follow_symlinks=False)
+        except FileNotFoundError:
+            values.append((directory.name, None))
+        else:
+            values.append((directory.name, _file_identity(info)))
+    return tuple(values)
+
+
+def _pin_adapter():
+    """Reject a changed binary within this process; never trust protocol labels as a hash."""
+    global _adapter_pin
+    with _adapter_lock:
+        demand(_selection() == EXECUTABLE, 'Syntax adapter selection changed during this process')
+        profiles = _profile_directory_identities()
+        current = (*adapter_identity(), profiles)
+        demand(_profile_directory_identities() == profiles,
+               'Syntax adapter profile directories changed during capture')
+        if _adapter_pin is None:
+            _adapter_pin = current
+        demand(current == _adapter_pin, 'Syntax adapter changed during this process')
+        return current
+
+
+def audit_adapter_inventory():
+    """Capture selected bytes and both fixed candidate states for audit drift checks."""
+    demand(_selection() == EXECUTABLE, 'Syntax adapter selection changed during audit')
+    selected = _pin_adapter() if (_release_present() if EXECUTABLE == RELEASE_EXECUTABLE
+                                  else _entry_present(EXECUTABLE)) else None
+    candidates = {}
+    for name, path in (('debug', DEBUG_EXECUTABLE), ('release', RELEASE_EXECUTABLE)):
+        if not _entry_present(path):
+            candidates[name] = None
+            continue
+        info = path.stat(follow_symlinks=False)
+        if stat.S_ISREG(info.st_mode) and path.resolve() == path:
+            if path != EXECUTABLE and not (0 < info.st_size <= MAX_ADAPTER_BYTES):
+                identity, sha256 = _file_identity(info), None
+            else:
+                try:
+                    _, identity, sha256, _ = _capture_adapter(path, require_executable=(path == EXECUTABLE))
+                except PermissionError:
+                    if path == EXECUTABLE:
+                        raise
+                    identity, sha256 = _file_identity(info), None
+            candidates[name] = {'identity': identity, 'sha256': sha256, 'kind': 'regular'}
+        else:
+            candidates[name] = {'identity': _file_identity(info), 'sha256': None, 'kind': 'other'}
+    demand(_selection() == EXECUTABLE, 'Syntax adapter selection changed during audit')
+    if selected is not None:
+        demand(_pin_adapter() == selected, 'Syntax adapter changed during audit')
+    return {'path': EXECUTABLE.relative_to(_ADAPTER_BASE.parent.parent).as_posix(),
+            'sha256': selected[2] if selected is not None else None,
+            'candidates': candidates, 'directories': selected[3] if selected is not None else None,
+            'profile_directories': selected[4] if selected is not None else None}
 
 
 def _run(source, mode, executable, timeout):
@@ -164,11 +334,11 @@ def parse(source: bytes, mode='markup', *, executable=EXECUTABLE, timeout=5.0):
         path = Path(executable)
         demand(path.is_absolute() and path == EXECUTABLE and path.resolve() == EXECUTABLE,
                'Only the known absolute local syntax adapter is allowed')
-        info = path.stat()
-        # Cargo may hardlink this read-only executable to its deps artifact.
-        # Source-write hardlink restrictions do not apply to build artifacts.
-        demand(stat.S_ISREG(info.st_mode) and os.access(path, os.X_OK), 'Syntax adapter is not a regular executable')
-        raw = _run(source, mode, path, timeout)
+        _pin_adapter()
+        try:
+            raw = _run(source, mode, path, timeout)
+        finally:
+            _pin_adapter()
         demand(len(raw) <= MAX_OUTPUT, 'Syntax adapter output limit exceeded')
         return validate(json.loads(raw), source, mode)
     except AdapterError:
