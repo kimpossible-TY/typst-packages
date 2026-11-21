@@ -12,6 +12,7 @@ import stat
 import tempfile
 import threading
 import time
+from types import MappingProxyType
 import unicodedata
 
 import closed_core_compile as runtime
@@ -171,32 +172,9 @@ def _workspace_guard(base, allowed_files, allowed_dirs, output_limits):
                 raise SafetyError('Unsafe private preview workspace entry')
 
 
-def _compile_captured(context, records, catalog, snapshot, *, entrypoint, deadline_seconds=120.0,
-                    cancel_event=None, expected_dependencies=None, expected_baseline_sha256=None,
-                    profile='standard', starts=None, footnote_evidence=None,
-                    partial_unsupported=False, withheld_records=None, partial_unproven_binding=False,
-                    explicit_withheld_sources=(), conditional_continuations=False, conditional_capitalization=False, conditional_prose_markers=False, conditional_adjacent_punctuation=False,
-                    original_only=False, modern_highlight_evidence=None,
-                    composed_modern_evidence=None, sequence_facade_evidence=False,
-                    conditional_deferred_footnotes=False, composed_reviewed_math=False,
-                    composed_references=False, phase_timings=None, aligned_spacer_target=None):
-    """Compile baseline and candidate from explicit captured bytes in private.
-
-    macOS sandbox-exec denies networking and writes outside the temporary
-    workspace. The pinned Typst binary runs with system fonts disabled, the
-    captured external font files first, then the captured project fonts. Each
-    observed dependency must be captured and the two observed sets must match.
-    PDF bytes are returned in memory; no destination or original source is
-    written. This is a bounded preview, not proof of complete future reads or
-    permission to publish/apply changes.
-    """
-    if phase_timings is not None and type(phase_timings) is not dict:
-        raise SafetyError('Phase timing sink must be a dictionary')
-    if (type(deadline_seconds) not in (int, float) or isinstance(deadline_seconds, bool)
-            or not 0 < deadline_seconds <= 120):
-        raise SafetyError('Preview compiler deadline must be in (0, 120] seconds')
-    if cancel_event is not None and type(cancel_event) is not threading.Event:
-        raise SafetyError('Preview cancellation requires a threading.Event')
+def _validate_stage_options(*, original_only=False, modern_highlight_evidence=None,
+                            composed_modern_evidence=None, composed_reviewed_math=False,
+                            composed_references=False, aligned_spacer_target=None):
     if type(composed_reviewed_math) is not bool or (composed_reviewed_math and composed_modern_evidence is None):
         raise SafetyError('Reviewed math requires an explicit composed modern preview')
     if (type(composed_references) is not bool or (composed_references
@@ -207,6 +185,25 @@ def _compile_captured(context, records, catalog, snapshot, *, entrypoint, deadli
     if aligned_spacer_target is not None and (composed_modern_evidence is not None
                                                or modern_highlight_evidence is not None):
         raise SafetyError('Aligned spacer selection cannot be combined with modern highlights')
+
+
+def _validate_compile_inputs(context, snapshot, *, entrypoint, deadline_seconds, cancel_event,
+                             expected_dependencies, expected_baseline_sha256, phase_timings,
+                             original_only=False, modern_highlight_evidence=None,
+                             composed_modern_evidence=None, composed_reviewed_math=False,
+                             composed_references=False, aligned_spacer_target=None):
+    if phase_timings is not None and type(phase_timings) is not dict:
+        raise SafetyError('Phase timing sink must be a dictionary')
+    if (type(deadline_seconds) not in (int, float) or isinstance(deadline_seconds, bool)
+            or not 0 < deadline_seconds <= 120):
+        raise SafetyError('Preview compiler deadline must be in (0, 120] seconds')
+    if cancel_event is not None and type(cancel_event) is not threading.Event:
+        raise SafetyError('Preview cancellation requires a threading.Event')
+    _validate_stage_options(
+        original_only=original_only, modern_highlight_evidence=modern_highlight_evidence,
+        composed_modern_evidence=composed_modern_evidence,
+        composed_reviewed_math=composed_reviewed_math,
+        composed_references=composed_references, aligned_spacer_target=aligned_spacer_target)
     if expected_dependencies is not None:
         if (type(expected_dependencies) is not tuple or len(expected_dependencies) > document_resources.MAX_FILES
                 or any(type(item) is not tuple or len(item) != 2 or any(type(x) is not str for x in item)
@@ -216,10 +213,8 @@ def _compile_captured(context, records, catalog, snapshot, *, entrypoint, deadli
     if expected_baseline_sha256 is not None and (type(expected_baseline_sha256) is not str
             or re.fullmatch(r'[0-9a-f]{64}', expected_baseline_sha256) is None):
         raise SafetyError('Invalid expected preview baseline PDF hash')
-    def cancelled():
-        if cancel_event is not None and cancel_event.is_set():
-            raise runtime.CompilerFailure('cancelled', kind=runtime.CompilerFailureKind.CANCELLED)
-    cancelled()
+    if cancel_event is not None and cancel_event.is_set():
+        raise runtime.CompilerFailure('cancelled', kind=runtime.CompilerFailureKind.CANCELLED)
     include_context.assert_include_context(context)
     document_resources.assert_capture(snapshot)
     if (type(entrypoint) is not str or len(context.entrypoints) != 1
@@ -230,6 +225,30 @@ def _compile_captured(context, records, catalog, snapshot, *, entrypoint, deadli
         raise SafetyError('Preview requires explicit project, packages and cache roots')
     if any(len(name) > 64 for name in roots):
         raise SafetyError('Preview resource root ID is too long')
+    return roots
+
+
+def stage_preview_candidates(context, records, catalog, snapshot, *, profile='standard',
+                             footnote_evidence=None, partial_unsupported=False,
+                             withheld_records=None, partial_unproven_binding=False,
+                             explicit_withheld_sources=(), conditional_continuations=False,
+                             conditional_capitalization=False, conditional_prose_markers=False,
+                             conditional_adjacent_punctuation=False, original_only=False,
+                             modern_highlight_evidence=None, composed_modern_evidence=None,
+                             sequence_facade_evidence=False, conditional_deferred_footnotes=False,
+                             composed_reviewed_math=False, composed_references=False,
+                             phase_timings=None, aligned_spacer_target=None,
+                             allow_empty_composed=False):
+    """Derive staged in-memory candidates from issued captures and verified plans."""
+    if phase_timings is not None and type(phase_timings) is not dict:
+        raise SafetyError('Phase timing sink must be a dictionary')
+    _validate_stage_options(
+        original_only=original_only, modern_highlight_evidence=modern_highlight_evidence,
+        composed_modern_evidence=composed_modern_evidence,
+        composed_reviewed_math=composed_reviewed_math,
+        composed_references=composed_references, aligned_spacer_target=aligned_spacer_target)
+    include_context.assert_include_context(context)
+    document_resources.assert_capture(snapshot)
     modern_summary = None
     composed_view = None
     if composed_modern_evidence is not None:
@@ -247,12 +266,13 @@ def _compile_captured(context, records, catalog, snapshot, *, entrypoint, deadli
         candidates, modern_summary, composed_view = composed_modern.stage(composed_modern_evidence, records,
             profile=profile, partial_unsupported=partial_unsupported, withheld_records=withheld_records,
             partial_unproven_binding=partial_unproven_binding, explicit_withheld_sources=explicit_withheld_sources,
-            conditional_continuations=conditional_continuations, conditional_capitalization=conditional_capitalization, conditional_prose_markers=conditional_prose_markers,
+            conditional_continuations=conditional_continuations, conditional_capitalization=conditional_capitalization,
+            conditional_prose_markers=conditional_prose_markers,
             conditional_adjacent_punctuation=conditional_adjacent_punctuation,
             sequence_facade_evidence=sequence_facade_evidence,
             conditional_deferred_footnotes=conditional_deferred_footnotes,
             reviewed_math=composed_reviewed_math, **timing_options)
-        if not modern_summary['source_count']:
+        if not allow_empty_composed and not modern_summary['source_count']:
             raise NoComposedPreview(modern_summary)
     elif sequence_facade_evidence is not False:
         raise SafetyError('Sequence facade selection requires a composed modern preview')
@@ -264,7 +284,8 @@ def _compile_captured(context, records, catalog, snapshot, *, entrypoint, deadli
                 or records is not None or type(profile) is not str or profile != 'standard' or footnote_evidence is not None
                 or partial_unsupported is not False or partial_unproven_binding is not False
                 or withheld_records is not None or type(explicit_withheld_sources) is not tuple
-                or explicit_withheld_sources or conditional_continuations is not False or conditional_capitalization is not False or conditional_prose_markers is not False
+                or explicit_withheld_sources or conditional_continuations is not False
+                or conditional_capitalization is not False or conditional_prose_markers is not False
                 or conditional_adjacent_punctuation is not False
                 or conditional_deferred_footnotes is not False or aligned_spacer_target is not None):
             raise SafetyError('Modern highlight preview requires its own issued capture and exclusive profile')
@@ -281,12 +302,86 @@ def _compile_captured(context, records, catalog, snapshot, *, entrypoint, deadli
                                                        withheld_records=withheld_records,
                                                        partial_unproven_binding=partial_unproven_binding,
                                                        explicit_withheld_sources=explicit_withheld_sources,
-                                                       conditional_continuations=conditional_continuations, conditional_capitalization=conditional_capitalization, conditional_prose_markers=conditional_prose_markers,
+                                                       conditional_continuations=conditional_continuations,
+                                                       conditional_capitalization=conditional_capitalization,
+                                                       conditional_prose_markers=conditional_prose_markers,
                                                        conditional_adjacent_punctuation=conditional_adjacent_punctuation,
                                                        conditional_deferred_footnotes=conditional_deferred_footnotes,
                                                        aligned_spacer_target=aligned_spacer_target)
         if phase_timings is not None:
             phase_timings['replay_and_intermediate_seconds'] = time.monotonic() - started
+    return candidates, modern_summary, composed_view
+
+
+def compile_staged_candidates(context, snapshot, candidates, *, entrypoint, deadline_seconds=120.0,
+                              cancel_event=None, expected_dependencies=None, expected_baseline_sha256=None,
+                              starts=None, original_only=False, phase_timings=None,
+                              modern_highlight_evidence=None, modern_summary=None,
+                              composed_view=None, composed_modern_evidence=None):
+    """Compile captured baseline vs verified in-memory candidate mapping in private.
+
+    macOS sandbox-exec denies networking and writes outside the temporary
+    workspace. The pinned Typst binary runs with system fonts disabled, the
+    captured external font files first, then the captured project fonts. Each
+    observed dependency must be captured and the two observed sets must match.
+    PDF bytes are returned in memory; no destination or original source is
+    written. This is a bounded preview, not proof of complete future reads or
+    permission to publish/apply changes.
+    """
+    if type(original_only) is not bool:
+        raise SafetyError('Original-only selection must be Boolean')
+    if modern_summary is not None and type(modern_summary) is not dict:
+        raise SafetyError('Modern highlight summary must be a dictionary')
+    roots = _validate_compile_inputs(
+        context, snapshot, entrypoint=entrypoint, deadline_seconds=deadline_seconds,
+        cancel_event=cancel_event, expected_dependencies=expected_dependencies,
+        expected_baseline_sha256=expected_baseline_sha256, phase_timings=phase_timings)
+
+    def cancelled():
+        if cancel_event is not None and cancel_event.is_set():
+            raise runtime.CompilerFailure('cancelled', kind=runtime.CompilerFailureKind.CANCELLED)
+
+    if type(candidates) is not MappingProxyType:
+        raise SafetyError('Staged preview candidates must be an immutable MappingProxyType')
+    expected_keys = {(item.request.root, item.request.path) for item in snapshot.files}
+    if set(candidates.keys()) != expected_keys:
+        raise SafetyError('Staged preview candidates do not match the issued resource capture')
+    for item in snapshot.files:
+        key = (item.request.root, item.request.path)
+        raw = candidates[key]
+        if type(raw) is not bytes:
+            raise SafetyError('Staged preview candidate value must be bytes')
+        if item.request.root != 'project' and raw != item.data:
+            raise SafetyError('Non-project captured resources may not be modified in preview staging')
+
+    modern_evidence = None
+    footnote_capture = None
+    intermediate_context = None
+    if modern_highlight_evidence is not None:
+        import document_modern_highlight_evidence as modern_evidence
+        if (original_only is not False or composed_view is not None or composed_modern_evidence is not None
+                or type(modern_highlight_evidence) is not modern_evidence.CapturedModernHighlightEvidence
+                or modern_highlight_evidence._snapshot is not snapshot
+                or modern_highlight_evidence._analyzer._session._context is not context):
+            raise SafetyError('Modern highlight preview requires its own issued capture and exclusive profile')
+    if composed_view is not None or composed_modern_evidence is not None:
+        import document_footnote_evidence as footnote_capture
+        import document_intermediate_context as intermediate_context
+        if (original_only is not False or modern_highlight_evidence is not None
+                or composed_view is None or composed_modern_evidence is None
+                or type(composed_modern_evidence) is not footnote_capture.PreviewFootnoteEvidence
+                or composed_modern_evidence._snapshot is not snapshot
+                or composed_modern_evidence._session._context is not context):
+            raise SafetyError('Composed modern preview requires the matching issued resource capture')
+
+    def verify_evidence():
+        if modern_highlight_evidence is not None:
+            modern_evidence._valid(modern_highlight_evidence)
+        if composed_view is not None:
+            intermediate_context.assert_intermediate(composed_view)
+            footnote_capture._valid(composed_modern_evidence)
+
+    verify_evidence()
     cancelled()
     external_fonts = [item for item in snapshot.files
                       if item.request.role == 'font' and item.request.root != 'project']
@@ -363,12 +458,7 @@ def _compile_captured(context, records, catalog, snapshot, *, entrypoint, deadli
                                  pdf, pdf_fd, pdf_identity, deps, deps_fd, deps_identity)
         if phase_timings is not None:
             phase_timings['private_staging_seconds'] = time.monotonic() - started_staging
-        if modern_highlight_evidence is not None:
-            modern_evidence._valid(modern_highlight_evidence)
-        if composed_view is not None:
-            import document_intermediate_context
-            document_intermediate_context.assert_intermediate(composed_view)
-            footnote_capture._valid(composed_modern_evidence)
+        verify_evidence()
         envbase = base / 'environment'
         _mkdir(envbase)
         for name in ('home', 'cache', 'config', 'data', 'tmp'):
@@ -447,11 +537,7 @@ def _compile_captured(context, records, catalog, snapshot, *, entrypoint, deadli
         runtime._same(SANDBOX, sandbox_evidence, 2 * 1024 * 1024, executable=True)
         include_context.assert_include_context(context)
         document_resources.assert_capture(snapshot)
-        if modern_highlight_evidence is not None:
-            modern_evidence._valid(modern_highlight_evidence)
-        if composed_view is not None:
-            document_intermediate_context.assert_intermediate(composed_view)
-            footnote_capture._valid(composed_modern_evidence)
+        verify_evidence()
         check_workspace(force=True)
         cancelled()
         if original_only:
@@ -463,6 +549,49 @@ def _compile_captured(context, records, catalog, snapshot, *, entrypoint, deadli
                                     len(outputs['candidate'][1].observed),
                                     len(outputs['candidate'][1].unobserved), compiler_evidence.sha256,
                                     len(external_fonts), after, modern_highlight_evidence=modern_summary)
+
+
+def _compile_captured(context, records, catalog, snapshot, *, entrypoint, deadline_seconds=120.0,
+                    cancel_event=None, expected_dependencies=None, expected_baseline_sha256=None,
+                    profile='standard', starts=None, footnote_evidence=None,
+                    partial_unsupported=False, withheld_records=None, partial_unproven_binding=False,
+                    explicit_withheld_sources=(), conditional_continuations=False, conditional_capitalization=False, conditional_prose_markers=False, conditional_adjacent_punctuation=False,
+                    original_only=False, modern_highlight_evidence=None,
+                    composed_modern_evidence=None, sequence_facade_evidence=False,
+                    conditional_deferred_footnotes=False, composed_reviewed_math=False,
+                    composed_references=False, phase_timings=None, aligned_spacer_target=None):
+    """Compile baseline and candidate from explicit captured bytes in private."""
+    _validate_compile_inputs(
+        context, snapshot, entrypoint=entrypoint, deadline_seconds=deadline_seconds,
+        cancel_event=cancel_event, expected_dependencies=expected_dependencies,
+        expected_baseline_sha256=expected_baseline_sha256, phase_timings=phase_timings,
+        original_only=original_only, modern_highlight_evidence=modern_highlight_evidence,
+        composed_modern_evidence=composed_modern_evidence,
+        composed_reviewed_math=composed_reviewed_math,
+        composed_references=composed_references, aligned_spacer_target=aligned_spacer_target)
+    candidates, modern_summary, composed_view = stage_preview_candidates(
+        context, records, catalog, snapshot, profile=profile, footnote_evidence=footnote_evidence,
+        partial_unsupported=partial_unsupported, withheld_records=withheld_records,
+        partial_unproven_binding=partial_unproven_binding,
+        explicit_withheld_sources=explicit_withheld_sources,
+        conditional_continuations=conditional_continuations,
+        conditional_capitalization=conditional_capitalization,
+        conditional_prose_markers=conditional_prose_markers,
+        conditional_adjacent_punctuation=conditional_adjacent_punctuation,
+        original_only=original_only, modern_highlight_evidence=modern_highlight_evidence,
+        composed_modern_evidence=composed_modern_evidence,
+        sequence_facade_evidence=sequence_facade_evidence,
+        conditional_deferred_footnotes=conditional_deferred_footnotes,
+        composed_reviewed_math=composed_reviewed_math,
+        composed_references=composed_references,
+        phase_timings=phase_timings, aligned_spacer_target=aligned_spacer_target)
+    return compile_staged_candidates(
+        context, snapshot, candidates, entrypoint=entrypoint, deadline_seconds=deadline_seconds,
+        cancel_event=cancel_event, expected_dependencies=expected_dependencies,
+        expected_baseline_sha256=expected_baseline_sha256, starts=starts,
+        original_only=original_only, phase_timings=phase_timings,
+        modern_highlight_evidence=modern_highlight_evidence, modern_summary=modern_summary,
+        composed_view=composed_view, composed_modern_evidence=composed_modern_evidence)
 
 
 def compile_preview(context, records, catalog, snapshot, *, entrypoint, deadline_seconds=120.0,

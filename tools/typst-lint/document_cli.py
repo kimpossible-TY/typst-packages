@@ -60,7 +60,8 @@ def report_document(root, entrypoint, *, rule_set='core', package_path=None,
                     preview_conditional_modern_parent_union=None,
                     attest_parent_mannot=False,
                     reference_package_path=None, reference_facade=None, reference_cache_path=None,
-                    reference_calls=False, reference_arguments=False, reference_catalog=None):
+                    reference_calls=False, reference_arguments=False, reference_catalog=None,
+                    inspect_captured_rules=False, preview_conditional_captured_rules=False):
     """Inspect retained source bytes without reading consumer configuration.
 
     Literal includes inside unknown containers are inventory entries, not proof
@@ -69,13 +70,18 @@ def report_document(root, entrypoint, *, rule_set='core', package_path=None,
     """
     require(type(rule_set) is str and rule_set in ('core', 'pde'),
             'Document rule-set must be core or pde')
+    require(type(inspect_captured_rules) is bool,
+            'Captured rule inspection must be explicitly requested')
+    require(type(preview_conditional_captured_rules) is bool,
+            'Conditional captured rule previews must be explicitly requested')
+    captured_rules_requested = inspect_captured_rules or preview_conditional_captured_rules
     require(type(import_obligations) is bool, 'Import obligations must be explicitly requested')
     require(type(inspect_include_forwarding) is bool and (not inspect_include_forwarding
             or (rule_set == 'pde' and package_path is not None and footnote_cache_path is not None)),
             'Include forwarding inspection requires PDE and both explicit namespace roots')
     require(type(inspect_capitalization_review) is bool and (not inspect_capitalization_review or rule_set == 'pde'),
             'Capitalization review requires explicit --rule-set pde')
-    require(package_path is None or rule_set == 'pde',
+    require(package_path is None or rule_set == 'pde' or captured_rules_requested,
             'Conditional package namespace inspection requires explicit --rule-set pde')
     require(type(preview_display_gaps) is bool and (not preview_display_gaps or rule_set == 'pde'),
             'Display gap previews require explicit --rule-set pde')
@@ -119,13 +125,13 @@ def report_document(root, entrypoint, *, rule_set='core', package_path=None,
             and (not preview_conditional_prose_markers or rule_set == 'pde'),
             'Conditional prose marker previews require explicit --rule-set pde')
     require(footnote_cache_path is None or (type(footnote_cache_path) is str
-            and rule_set == 'pde' and package_path is not None),
+            and (rule_set == 'pde' or captured_rules_requested) and package_path is not None),
             'Conditional footnote bindings require --rule-set pde, --package-path and --footnote-cache-path')
     require(type(footnote_punctuation_evidence) is bool
-            and (not footnote_punctuation_evidence or footnote_cache_path is not None),
+            and (not footnote_punctuation_evidence or (rule_set == 'pde' and footnote_cache_path is not None)),
             'Footnote punctuation evidence requires --footnote-cache-path')
     require(type(modern_highlight_evidence) is bool
-            and (not modern_highlight_evidence or footnote_cache_path is not None),
+            and (not modern_highlight_evidence or (rule_set == 'pde' and footnote_cache_path is not None)),
             'Modern highlight evidence requires --rule-set pde, --package-path and --footnote-cache-path')
     require(cetz_annotation_manifest is None or (type(cetz_annotation_manifest) is str
             and preview_conditional_scoped_calls and footnote_cache_path is not None),
@@ -253,7 +259,8 @@ def report_document(root, entrypoint, *, rule_set='core', package_path=None,
     backends = [RULE_ID, STANDALONE, DISPLAY_GAP] if rule_set == 'pde' else [RULE_ID]
     conditional_session = None
     namespace_report = None
-    if package_path is not None:
+    imports = None
+    if package_path is not None and rule_set == 'pde':
         from conditional_highlight import ConditionalHighlightAnalyzer
         from import_graph import load_import_graph
         from namespace_packages import load_namespace_packages
@@ -335,7 +342,7 @@ def report_document(root, entrypoint, *, rule_set='core', package_path=None,
     parent_mannot_result = None
     modern_math_report = None
     modern_math_previews = None
-    if footnote_cache_path is not None:
+    if footnote_cache_path is not None and rule_set == 'pde':
         from conditional_footnote_binding import ConditionalFootnoteBinding, _valid as valid_footnote_session
         from namespace_multiroot import load_multiroot_capture
         footnote_roots = load_multiroot_capture(package_path, footnote_cache_path,
@@ -1235,10 +1242,54 @@ def report_document(root, entrypoint, *, rule_set='core', package_path=None,
         report['conditional_modern_math_evidence'] = modern_math_report
     if modern_math_previews is not None:
         report['conditional_modern_math_previews'] = modern_math_previews
+    captured_rules_report = None
+    captured_rule_previews_report = None
+    if captured_rules_requested:
+        from document_captured_rules import (
+            capture_reviewed_packages,
+            collect_import_paths,
+            inspect_captured_document,
+            preview_captured_document,
+        )
+        captured_imports = imports
+        if captured_imports is None:
+            from import_graph import load_import_graph
+            captured_imports = load_import_graph(root, ((item.path, item.source) for item in captured.sources))
+            retained = {item.path: item.source for item in captured_imports.sources}
+            require(all(retained.get(item.path) == item.source for item in captured.sources),
+                    'Captured import graph differs from the included source snapshot')
+        captured_pkg_bundle = None
+        if package_path is not None:
+            pkg_roots = (package_path, footnote_cache_path) if footnote_cache_path is not None else (package_path,)
+            pkg_import_paths = collect_import_paths(captured.sources, import_graph=captured_imports)
+            captured_pkg_bundle = capture_reviewed_packages(pkg_roots, pkg_import_paths)
+        if inspect_captured_rules:
+            captured_rules_report = inspect_captured_document(
+                captured, entrypoint=entrypoint, rule_set=rule_set,
+                import_graph=captured_imports, package_bundle=captured_pkg_bundle,
+                max_items=MAX_REPORT_ITEMS - items,
+            )
+            items += captured_rules_report['report_items']
+            require(items <= MAX_REPORT_ITEMS, 'Document inspection report item limit exceeded')
+        if preview_conditional_captured_rules:
+            captured_rule_previews_report = preview_captured_document(
+                captured, entrypoint=entrypoint, rule_set=rule_set,
+                import_graph=captured_imports, package_bundle=captured_pkg_bundle,
+                catalog=catalog['rules'],
+                max_items=MAX_REPORT_ITEMS - items,
+            )
+            items += captured_rule_previews_report['report_items']
+            require(items <= MAX_REPORT_ITEMS, 'Document inspection report item limit exceeded')
+    if captured_rules_report is not None:
+        report['captured_rules'] = captured_rules_report
+    if captured_rule_previews_report is not None:
+        report['conditional_captured_rule_previews'] = captured_rule_previews_report
+        report['conditional_captured_rule_preview_status'] = 'independent-source-only-not-composed-or-render-verified'
     if modern_highlight_report is not None:
         require(valid_footnote_session(footnote_session), 'Conditional highlight capture changed during inspection')
     if (modern_highlight_report is not None or import_obligation_report is not None
-            or cetz_annotations is not None or capitalization_review is not None):
+            or cetz_annotations is not None or capitalization_review is not None
+            or captured_rules_report is not None or captured_rule_previews_report is not None):
         require(len(json.dumps(report, ensure_ascii=False, sort_keys=True, indent=2).encode('utf-8'))
                 <= MAX_MODERN_REPORT_BYTES,
                 'Document inspection report byte limit exceeded')
@@ -1384,6 +1435,10 @@ def main(arguments=None):
                         help='Inspect arguments of conditionally traced project-reference calls')
     parser.add_argument('--reference-catalog',
                         help='Explicit absolute JSON catalog snapshot for conditional reference membership')
+    parser.add_argument('--inspect-captured-rules', action='store_true',
+                        help='Inspect the 7 (core) or 9 (pde) captured-snapshot rules without filesystem rereads or edits')
+    parser.add_argument('--preview-conditional-captured-rules', action='store_true',
+                        help='Preview independently verified source-only candidates for proposal-capable captured rules')
     parser.add_argument('--format', choices=('json', 'text'), default='text')
     args = parser.parse_args(sys.argv[1:] if arguments is None else arguments)
     try:
@@ -1428,7 +1483,9 @@ def main(arguments=None):
                                  reference_cache_path=args.reference_cache_path,
                                  reference_calls=args.reference_calls,
                                  reference_arguments=args.reference_arguments,
-                                 reference_catalog=args.reference_catalog)
+                                 reference_catalog=args.reference_catalog,
+                                 inspect_captured_rules=args.inspect_captured_rules,
+                                 preview_conditional_captured_rules=args.preview_conditional_captured_rules)
     except (InputError, PackageInputError, OSError, ValueError) as error:
         result = dict(schema=1, tool_version=VERSION, mode='inspect-document', status=2,
                       phase='input', compiler_invoked=False, applied_fixes=[], error=str(error))
@@ -2070,6 +2127,32 @@ def main(arguments=None):
                     for condition in UNALIGNED_PREVIEW_CONDITIONS:
                         print(f"  applicability: {condition}")
                     print(f"  possible render effect: {UNALIGNED_RENDER_EFFECT}")
+        if 'captured_rules' in result:
+            captured_section = result['captured_rules']
+            print(f"Captured rules ({captured_section['rule_set']}): "
+                  f"{len(captured_section['rule_ids'])} rules, "
+                  f"{len(captured_section['diagnostics'])} findings, "
+                  f"{captured_section['suppressed_count']} suppressed; "
+                  'no edit or compiler permission')
+            for finding in captured_section['diagnostics']:
+                print(f"  {finding['path']}:{finding['line']}:{finding['column']}: "
+                      f"captured conditional {finding['rule_id']}: {finding['explanation']}")
+            for condition in captured_section['conditions']:
+                print(f"  condition: {condition}")
+        if 'conditional_captured_rule_previews' in result:
+            previews = result['conditional_captured_rule_previews']
+            print(f"Conditional captured rule previews ({previews['rule_set']}): "
+                  f"{previews['candidate_count']} verified candidates ({previews['planned_edits']} edits), "
+                  f"{previews['withheld_count']} withheld; "
+                  'independent source-only, no edit or compiler permission')
+            for row in previews['by_file']:
+                print(f"  {row['path']} ({row['rule_id']}): {row['verification']}; "
+                      f"{len(row['edits'])} edits; source sha256 {row['baseline_sha256']}; "
+                      f"candidate sha256 {row['candidate_sha256']}")
+                if row.get('reason'):
+                    print(f"    withheld: {row['reason']}")
+            for condition in previews['conditions']:
+                print(f"  condition: {condition}")
         for blocker in result['blockers']:
             print(blocker)
         print('Global coverage incomplete (exit 2); compiler not invoked')

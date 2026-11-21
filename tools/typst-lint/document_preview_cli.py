@@ -15,7 +15,7 @@ import document_sequence_preview
 import document_display
 import include_context
 import script_rule
-from package_loader import PackageInputError, _absolute_root, read_snapshot_file
+from package_loader import PackageInputError, read_snapshot_file, resolve_absolute_root
 from typst_lint import InputError, SafetyError, VERSION, checked_path, load_rules, relative, require
 
 MAX_MANIFEST_BYTES = 1024 * 1024
@@ -241,6 +241,10 @@ def main(arguments=None, *, gate=False):
                         help='Also keep exact source-footnote binding refusals unchanged (requires --partial-unsupported-preview)')
     parser.add_argument('--withhold-source', action='append', default=[], metavar='PROJECT_RELATIVE_PATH',
                         help='Keep this source unchanged through every rule stage; it can still execute during PDF compilation (may be repeated)')
+    parser.add_argument('--conditional-captured-proposals', action='store_true',
+                        help='Also verify and compose non-overlapping in-memory candidates for the 9 remaining proposal-capable captured rules; overlapping or unproven sources are withheld fail-closed')
+    parser.add_argument('--inspect-all-captured-rules', action='store_true',
+                        help='Record bounded 33/33 captured-rule inspection over captured snapshots (global_coverage_complete remains False, exit 2, source_apply_gate.eligible remains False)')
     args = parser.parse_args(words)
     output_identity = error_identity = None
     if args.pdf_stdout:
@@ -265,10 +269,12 @@ def main(arguments=None, *, gate=False):
             or args.conditional_spacers or args.conditional_facade_footnotes or args.conditional_aligned_spacer or args.conditional_continuations or args.conditional_capitalization or args.conditional_prose_markers
             or args.conditional_adjacent_punctuation or args.conditional_deferred_footnotes or args.partial_unsupported_preview
             or args.partial_unproven_binding_preview or args.withhold_source or args.review_edits
-            or args.compose_modern_highlights):
-        parser.error('--conditional-modern-highlights is an exclusive preview and does not support --review-edits')
+            or args.compose_modern_highlights or args.conditional_captured_proposals):
+        parser.error('--conditional-modern-highlights is an exclusive preview and cannot be combined with other preview or review options')
     if args.compose_modern_highlights and args.review_edits:
         parser.error('--compose-modern-highlights does not yet support --review-edits')
+    if args.conditional_captured_proposals and args.review_edits:
+        parser.error('--conditional-captured-proposals does not yet support --review-edits')
     if args.conditional_punctuation and not args.conditional_gaps:
         parser.error('--conditional-punctuation requires --conditional-gaps')
     if args.conditional_spacers and not args.conditional_gaps:
@@ -297,6 +303,8 @@ def main(arguments=None, *, gate=False):
     result = None
     discovery_completed = False
     withheld = None
+    captured_inspection = None
+    captured_proposals_summary = None
     starts = document_preview_compile.PreviewCompilerStarts()
     phase_timings = (dict(planning_seconds=None, replay_and_intermediate_seconds=None,
                           highlight_analysis_seconds=None, highlight_replay_seconds=None,
@@ -309,7 +317,7 @@ def main(arguments=None, *, gate=False):
                'conditional-gaps' if args.conditional_gaps else 'standard')
     try:
         raw_root = args.root
-        root = _absolute_root(raw_root)
+        root = resolve_absolute_root(raw_root)
         require(raw_root == str(root), 'Preview root must be canonical and absolute')
         relative(args.entrypoint)
         require(args.entrypoint.endswith('.typ'), 'Preview entrypoint must be a Typst path')
@@ -351,7 +359,7 @@ def main(arguments=None, *, gate=False):
                             raise SafetyError(f"{item.path}: {record['reason']}")
                     else:
                         records.append(record)
-            if withheld and not records and not args.compose_modern_highlights:
+            if withheld and not records and not args.compose_modern_highlights and not args.conditional_captured_proposals:
                 raise NoPartialPreview(withheld, [rule['id'] for rule in catalog['rules'] if rule['id'] not in
                     (document_display.STANDALONE, script_rule.RULE_ID, document_display.RULE_ID)])
             return records, withheld
@@ -437,37 +445,125 @@ def main(arguments=None, *, gate=False):
             planned = timed_plan_records(footnote_evidence if args.conditional_facade_footnotes else None)
         if not args.conditional_modern_highlights:
             records, withheld = planned
+        if args.inspect_all_captured_rules:
+            import document_captured_preview_stage
+            captured_inspection = document_captured_preview_stage.inspect_all_captured_rules(
+                context, snapshot, catalog['rules'], entrypoint=args.entrypoint)
         review = review_sources(context, records, withheld if partial_requested else None) if args.review_edits else None
         phase = 'compile'
-        compile_options = {'modern_highlight_evidence': modern_evidence} if modern_evidence is not None else {}
-        if args.compose_modern_highlights:
-            compile_options = dict(composed_modern_evidence=footnote_evidence,
-                                   sequence_facade_evidence=args.conditional_facade_footnotes,
-                                   composed_reviewed_math=args.compose_reviewed_math_highlights)
-            if args.compose_highlight_references:
-                compile_options['composed_references'] = True
-        if phase_timings is not None:
-            compile_options['phase_timings'] = phase_timings
-        preview = document_preview_compile.compile_preview(context, records, catalog['rules'], snapshot,
-                                                           entrypoint=args.entrypoint, cancel_event=cancel,
-                                                           expected_dependencies=observed,
-                                                           expected_baseline_sha256=discovery_baseline_sha256,
-                                                           profile=profile, starts=starts,
-                                                           footnote_evidence=None if args.compose_modern_highlights else footnote_evidence,
-                                                           partial_unsupported=args.partial_unsupported_preview,
-                                                           withheld_records=withheld if partial_requested else None,
-                                                           partial_unproven_binding=args.partial_unproven_binding_preview,
-                                                           explicit_withheld_sources=explicit_paths,
-                                                           conditional_continuations=args.conditional_continuations, conditional_capitalization=args.conditional_capitalization, conditional_prose_markers=args.conditional_prose_markers,
-                                                           conditional_adjacent_punctuation=args.conditional_adjacent_punctuation,
-                                                           conditional_deferred_footnotes=args.conditional_deferred_footnotes,
-                                                           aligned_spacer_target=args.conditional_aligned_spacer,
-                                                           **compile_options)
+        if args.conditional_captured_proposals:
+            import document_captured_preview_stage
+            stage_options = {}
+            if args.compose_modern_highlights:
+                stage_options = dict(
+                    composed_modern_evidence=footnote_evidence,
+                    sequence_facade_evidence=args.conditional_facade_footnotes,
+                    composed_reviewed_math=args.compose_reviewed_math_highlights,
+                    allow_empty_composed=True,
+                )
+                if args.compose_highlight_references:
+                    stage_options['composed_references'] = True
+            if phase_timings is not None:
+                stage_options['phase_timings'] = phase_timings
+            base_candidates, composed_modern_summary, composed_view = (
+                document_preview_compile.stage_preview_candidates(
+                    context, records, catalog['rules'], snapshot,
+                    profile=profile,
+                    footnote_evidence=None if args.compose_modern_highlights else footnote_evidence,
+                    partial_unsupported=args.partial_unsupported_preview,
+                    withheld_records=withheld if partial_requested else None,
+                    partial_unproven_binding=args.partial_unproven_binding_preview,
+                    explicit_withheld_sources=explicit_paths,
+                    conditional_continuations=args.conditional_continuations,
+                    conditional_capitalization=args.conditional_capitalization,
+                    conditional_prose_markers=args.conditional_prose_markers,
+                    conditional_adjacent_punctuation=args.conditional_adjacent_punctuation,
+                    conditional_deferred_footnotes=args.conditional_deferred_footnotes,
+                    aligned_spacer_target=args.conditional_aligned_spacer,
+                    **stage_options,
+                )
+            )
+            prior_withheld_paths = frozenset(row['path'] for row in (withheld or ()))
+            staged_candidates, captured_proposals_summary = document_captured_preview_stage.stage_captured_proposals(
+                context, snapshot, base_candidates, catalog['rules'],
+                entrypoint=args.entrypoint,
+                explicit_withheld_sources=explicit_paths,
+                prior_withheld_paths=prior_withheld_paths,
+                prior_records=records or (),
+                prior_modern_summary=composed_modern_summary,
+                pre_modern_sources=composed_view.sources if composed_view is not None else None,
+            )
+            if (args.compose_modern_highlights and not composed_modern_summary['source_count']
+                    and not captured_proposals_summary['candidate_count']):
+                raise document_preview_compile.NoComposedPreview(composed_modern_summary)
+            if (withheld and not records and not args.compose_modern_highlights
+                    and not captured_proposals_summary['candidate_count']):
+                raise NoPartialPreview(withheld, [rule['id'] for rule in catalog['rules'] if rule['id'] not in
+                    (document_display.STANDALONE, script_rule.RULE_ID, document_display.RULE_ID)])
+            preview = document_captured_preview_stage.compile_staged_preview(
+                context, snapshot, staged_candidates,
+                entrypoint=args.entrypoint,
+                cancel_event=cancel,
+                expected_dependencies=observed,
+                expected_baseline_sha256=discovery_baseline_sha256,
+                starts=starts,
+                phase_timings=phase_timings,
+                modern_summary=composed_modern_summary,
+                composed_view=composed_view,
+                composed_modern_evidence=footnote_evidence if args.compose_modern_highlights else None,
+            )
+        else:
+            compile_options = {'modern_highlight_evidence': modern_evidence} if modern_evidence is not None else {}
+            if args.compose_modern_highlights:
+                compile_options = dict(composed_modern_evidence=footnote_evidence,
+                                       sequence_facade_evidence=args.conditional_facade_footnotes,
+                                       composed_reviewed_math=args.compose_reviewed_math_highlights)
+                if args.compose_highlight_references:
+                    compile_options['composed_references'] = True
+            if phase_timings is not None:
+                compile_options['phase_timings'] = phase_timings
+            preview = document_preview_compile.compile_preview(context, records, catalog['rules'], snapshot,
+                                                               entrypoint=args.entrypoint, cancel_event=cancel,
+                                                               expected_dependencies=observed,
+                                                               expected_baseline_sha256=discovery_baseline_sha256,
+                                                               profile=profile, starts=starts,
+                                                               footnote_evidence=None if args.compose_modern_highlights else footnote_evidence,
+                                                               partial_unsupported=args.partial_unsupported_preview,
+                                                               withheld_records=withheld if partial_requested else None,
+                                                               partial_unproven_binding=args.partial_unproven_binding_preview,
+                                                               explicit_withheld_sources=explicit_paths,
+                                                               conditional_continuations=args.conditional_continuations, conditional_capitalization=args.conditional_capitalization, conditional_prose_markers=args.conditional_prose_markers,
+                                                               conditional_adjacent_punctuation=args.conditional_adjacent_punctuation,
+                                                               conditional_deferred_footnotes=args.conditional_deferred_footnotes,
+                                                               aligned_spacer_target=args.conditional_aligned_spacer,
+                                                               **compile_options)
         modern_summary = preview.modern_highlight_evidence if (args.conditional_modern_highlights
                                                               or args.compose_modern_highlights) else None
-        planned_sources = modern_summary['source_count'] if modern_summary is not None else len(records)
+        if captured_proposals_summary is not None:
+            base_planned_paths = ({row['path'] for row in modern_summary['sources']}
+                                  if modern_summary is not None
+                                  else {row['path'] for row in (records or ())})
+            captured_paths = {row['path'] for row in captured_proposals_summary['sources']}
+            planned_sources = len(base_planned_paths | captured_paths)
+        else:
+            planned_sources = modern_summary['source_count'] if modern_summary is not None else len(records)
         sequence_edits = sum(len(step['edits']) for record in (records or ()) for step in record['steps'])
-        planned_edits = sequence_edits + (modern_summary['candidate_count'] if modern_summary is not None else 0)
+        planned_edits = (sequence_edits
+                         + (modern_summary['candidate_count'] if modern_summary is not None else 0)
+                         + (captured_proposals_summary['planned_edits'] if captured_proposals_summary is not None else 0))
+        if captured_inspection is not None:
+            partially_inspected = [rule['id'] for rule in catalog['rules']]
+        else:
+            base_inspected = (['pde.text-only-highlight'] if args.conditional_modern_highlights else
+                [document_display.STANDALONE, script_rule.RULE_ID, document_display.RULE_ID]
+                + (['pde.text-only-highlight'] if args.compose_modern_highlights else []))
+            if captured_proposals_summary is not None:
+                partially_inspected = list(dict.fromkeys(
+                    base_inspected + list(captured_proposals_summary['rule_ids'])))
+            else:
+                partially_inspected = base_inspected
+        inspected_set = set(partially_inspected)
+        uninspected = [rule['id'] for rule in catalog['rules'] if rule['id'] not in inspected_set]
         result = dict(schema=1, tool_version=VERSION, mode='preview-compile', status=2, phase='preview',
                       compiler_invoked=True, pdf_generated=True, source_files_modified=False,
                       publication_authority=False, global_coverage_complete=False,
@@ -493,14 +589,10 @@ def main(arguments=None, *, gate=False):
                           + (['pde.paragraph-capitalization'] if args.conditional_capitalization else [])
                           + (['pde.prose-paragraph-marker'] if args.conditional_prose_markers else [])
                           + (['pde.prose-footnote-punctuation'] if args.conditional_adjacent_punctuation and not args.conditional_punctuation else [])
-                          + (['pde.text-only-highlight'] if modern_summary is not None else [])),
-                      partially_inspected_rule_ids=(['pde.text-only-highlight'] if args.conditional_modern_highlights else
-                          [document_display.STANDALONE, script_rule.RULE_ID, document_display.RULE_ID]
-                          + (['pde.text-only-highlight'] if args.compose_modern_highlights else [])),
-                      uninspected_rule_ids=[rule['id'] for rule in catalog['rules'] if rule['id'] not in
-                                           (('pde.text-only-highlight',) if args.conditional_modern_highlights else
-                                            (document_display.STANDALONE, script_rule.RULE_ID, document_display.RULE_ID)
-                                            + (('pde.text-only-highlight',) if args.compose_modern_highlights else ()))],
+                          + (['pde.text-only-highlight'] if modern_summary is not None else [])
+                          + (list(captured_proposals_summary['rule_ids']) if captured_proposals_summary is not None else [])),
+                      partially_inspected_rule_ids=partially_inspected,
+                      uninspected_rule_ids=uninspected,
                       source_apply_gate=dict(eligible=False,
                           blockers=['global_rule_coverage_incomplete', 'dependency_closure_unproved',
                                     'live_source_freshness_unproved', 'protected_source_transaction_unavailable']
@@ -509,7 +601,15 @@ def main(arguments=None, *, gate=False):
                                    + (['modern_highlight_incomplete'] if modern_summary is not None
                                       and modern_summary['status'] == 'INCOMPLETE' else [])
                                    + (['partial_preview_withheld_files'] if withheld or (modern_summary is not None
-                                      and modern_summary['withheld_source_count']) else [])))
+                                      and modern_summary['withheld_source_count']) else [])
+                                   + (['captured_proposals_runtime_binding_unproved'] if captured_proposals_summary is not None else [])
+                                   + (['captured_proposals_withheld'] if captured_proposals_summary is not None
+                                      and captured_proposals_summary['withheld_count'] else [])
+                                   + (['captured_all_rules_inspection_bounded'] if captured_inspection is not None else [])))
+        if captured_proposals_summary is not None:
+            result['conditional_captured_proposals'] = captured_proposals_summary
+        if captured_inspection is not None:
+            result['all_captured_rules_inspection'] = captured_inspection
         if modern_summary is not None:
             result['conditional_modern_highlight_preview'] = dict(modern_summary,
                 condition='Runtime helper binding and execution are unproved.',
@@ -569,6 +669,10 @@ def main(arguments=None, *, gate=False):
                       source_files_modified=False, publication_authority=False, error=str(error))
         if args.pdf_stdout and phase == 'stream':
             result['stdout_may_be_partial'] = True
+        if captured_proposals_summary is not None:
+            result['conditional_captured_proposals'] = captured_proposals_summary
+        if captured_inspection is not None:
+            result['all_captured_rules_inspection'] = captured_inspection
         if isinstance(error, NoPartialPreview):
             if args.partial_unsupported_preview:
                 result['partial_unsupported_preview'] = True
@@ -735,6 +839,16 @@ def main(arguments=None, *, gate=False):
         if 'conditional_adjacent_punctuation_preview' in result:
             info = result['conditional_adjacent_punctuation_preview']
             print(f"Conditional adjacent punctuation moves planned: {info['planned_moves']} ({info['planned_edits']} atomic-pair edits). {info['eligibility']} {info['render_effect']} {info['pdf_attribution']}", file=stream)
+        if 'conditional_captured_proposals' in result:
+            info = result['conditional_captured_proposals']
+            print(f"Conditional captured proposals ({info['rule_count']} rules): {info['candidate_count']} source(s), "
+                  f"{info['planned_edits']} edit(s), {info['withheld_count']} withheld; status: {info['status']}. "
+                  f"Runtime binding, execution and render equivalence remain unproved; no write or compiler authority.", file=stream)
+        if 'all_captured_rules_inspection' in result:
+            info = result['all_captured_rules_inspection']
+            print(f"Captured-rule inspection: {info['inspected_rule_count']}/{info['catalog_rule_count']} rules across "
+                  f"{info['source_count']} source(s) ({info['diagnostics_count']} finding(s), {info['suppressed_count']} suppressed). "
+                  f"Global coverage remains incomplete (exit 2); source_apply_gate.eligible=False.", file=stream)
         if partial_requested:
             print(f"Partial preview: {len(result['withheld_sources'])} source(s) kept at their captured original bytes; "
                   f"{result['planned_sources']} source(s) have candidate edits.", file=stream)
