@@ -116,10 +116,19 @@ class PreviewFootnoteEvidence:
 
     def candidate_calls(self, path, candidate):
         resources = _valid(self)
+        result = PreviewFootnoteEvidence._candidate_calls(self, path, candidate, resources)
+        _valid(self)
+        return result
+
+    def _candidate_calls(self, path, candidate, resources, *, tree=None):
+        """Internal stage-local analysis; callers must bracket it with _valid."""
         if (type(path) is not str or path not in self._session._graph.selected
                 or type(candidate) is not bytes):
             raise InputError('Candidate must be bytes for a selected source')
-        tree = parse(candidate)
+        if tree is None:
+            tree = parse(candidate)
+        elif tree.source != candidate:
+            raise SafetyError('Candidate tree does not match source bytes')
         if tree.nodes[0].errors or tree.mode != 'markup':
             raise SafetyError('Candidate syntax is invalid')
         engine = bindings._NamespaceAnalyzer(self._session._graph, self._session._namespaces, (), False)
@@ -141,8 +150,32 @@ class PreviewFootnoteEvidence:
                 tuple(packages[key] for key in sorted(packages)), tuple(sorted(requests)),
                 bindings.CALLBACK_CONDITIONS if index in resolver.closure_calls else bindings.CONDITIONS))
         result = CandidateCalls(path, digest(candidate), tuple(calls), tuple(dict.fromkeys(resolver.unresolved)))
-        _valid(self)
         return result
+
+    def candidate_calls_with_deferred(self, path, candidate, offsets):
+        """Recompute both analyses on one parse, bracketed by full capture checks."""
+        import document_deferred_footnote_evidence
+        resources = _valid(self)
+        if (type(path) is not str or path not in self._session._graph.selected
+                or type(candidate) is not bytes):
+            raise InputError('Candidate must be bytes for a selected source')
+        if (type(offsets) is not tuple or not offsets
+                or len(offsets) > document_deferred_footnote_evidence.MAX_CALLS
+                or any(type(offset) is not int or offset < 0 for offset in offsets)
+                or len(set(offsets)) != len(offsets)):
+            raise InputError('Invalid deferred footnote call selection')
+        tree = parse(candidate)
+        direct = PreviewFootnoteEvidence._candidate_calls(self, path, candidate, resources, tree=tree)
+        # The graph, selected package roots and snapshot must still match
+        # before their bytes are used by the second analysis.
+        resources = _valid(self)
+        eligible = {call.start for call in direct.calls if call.conditions != bindings.CALLBACK_CONDITIONS}
+        deferred = None
+        if any(offset not in eligible for offset in offsets):
+            deferred = document_deferred_footnote_evidence._analyze(
+                self, path, offsets, resources, candidate=candidate, tree=tree)
+        _valid(self)
+        return direct, deferred
 
     def validate_staged_facades(self, candidates, issued_calls, *, allow_deferred=False):
         """Recheck dependency bytes after all source candidates are known.

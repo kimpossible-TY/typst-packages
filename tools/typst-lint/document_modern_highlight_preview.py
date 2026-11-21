@@ -5,6 +5,7 @@ source, runtime binding, render equivalence or compiler authority is implied.
 """
 from bisect import bisect_right
 from collections import Counter
+from contextvars import ContextVar
 import json
 
 import conditional_modern_highlight as modern
@@ -21,7 +22,7 @@ import prose_marker_rules
 from script_rule import analyze as analyze_scripts
 from static_resolver import resolve
 from syntax_client import parse
-from typst_lint import InputError, SafetyError, digest, load_rules, require
+from typst_lint import Diagnostic, InputError, SafetyError, digest, load_rules, require
 
 RULE = 'pde.text-only-highlight'
 CONDITIONS = (
@@ -46,6 +47,69 @@ MAX_PREVIEW_BYTES = 16 * 1024 * 1024
 # of the output size. Exhaustion never permits an unverified partial plan.
 MAX_SUBSET_CHECKS = 32
 _OVERLAPPING_FINDING = 'An existing conditional finding lies inside an edit'
+_SUBSET_BASELINE = ContextVar('modern_highlight_subset_baseline', default=None)
+
+
+class _SubsetBaseline:
+    """One source/one partial-preview attempt; never shared across replays.
+
+    Only immutable diagnostic primitives are retained. The original tree and
+    catalog are checked on every use, including between separate subset trials.
+    The candidate tree, binding, suppression and finding checks are never cached.
+    """
+    def __init__(self, tree, path, records):
+        self.tree, self.path, self.records = tree, path, records
+        self.signature = self._signature(tree, path, records)
+        self.findings = {}
+
+    @staticmethod
+    def _signature(tree, path, records):
+        try:
+            return (tree.source, tree.mode, path,
+                    tuple((n.kind, n.start, n.end, n.children, n.errors, n.operands, n.display)
+                          for n in tree.nodes),
+                    json.dumps(records, sort_keys=True, ensure_ascii=True, allow_nan=False))
+        except (AttributeError, TypeError, ValueError, RecursionError) as error:
+            raise SafetyError('Invalid subset baseline input') from error
+
+    def check(self, tree, path, records):
+        if (tree is not self.tree or records is not self.records or type(path) is not str
+                or self._signature(tree, path, records) != self.signature):
+            raise SafetyError('Subset baseline tree, catalog or path changed')
+
+    @staticmethod
+    def _freeze(result):
+        def freeze(items):
+            return tuple((item.rule_id, item.grade, item.path, item.line, item.column,
+                          item.explanation, item.source) for item in items)
+        return (freeze(result.diagnostics), freeze(result.suppressed))
+
+    @staticmethod
+    def _thaw(value):
+        diagnostics, suppressed = value
+        return _BaselineFindings(tuple(Diagnostic(*item) for item in diagnostics),
+                                 tuple(Diagnostic(*item) for item in suppressed))
+
+    def get(self, key, builder):
+        self.check(self.tree, self.path, self.records)
+        if key not in self.findings:
+            self.findings[key] = self._freeze(builder())
+            self.check(self.tree, self.path, self.records)
+        return self._thaw(self.findings[key])
+
+    def get_group(self, key, builder):
+        self.check(self.tree, self.path, self.records)
+        if key not in self.findings:
+            self.findings[key] = tuple((name, self._freeze(value)) for name, value in builder().items())
+            self.check(self.tree, self.path, self.records)
+        return {name: self._thaw(value) for name, value in self.findings[key]}
+
+
+class _BaselineFindings:
+    __slots__ = ('diagnostics', 'suppressed')
+
+    def __init__(self, diagnostics, suppressed):
+        self.diagnostics, self.suppressed = diagnostics, suppressed
 
 
 def _math_signature(tree, root, *, allow_reviewed_calls=False):
@@ -300,6 +364,9 @@ def _same_script_findings_with_moved_equations(before_tree, before, after_tree, 
 
 def _preview_source(evidence, tree, path, diagnostics, records, *, proven_math_spans=frozenset(),
                     allow_direct_references=False, allow_scoped_references=False, scoped_budget=None, scoped_capture=None):
+    baseline = _SUBSET_BASELINE.get()
+    if baseline is not None:
+        baseline.check(tree, path, records)
     empty = dict(path=path, baseline_sha256=digest(tree.source), candidate_sha256=None,
                  verification='withheld', conditions=CONDITIONS, edits=[], edit_permission=False,
                  compiler_permission=False, runtime_binding_proved=False, render_equivalence_proved=False)
@@ -366,12 +433,17 @@ def _preview_source(evidence, tree, path, diagnostics, records, *, proven_math_s
                         if node.kind == 'MathCall' and i not in resolver.resolved:
                             raise SafetyError('Candidate math binding is no longer supported')
                         pending.extend(node.children)
-        before_resolution, after_resolution = resolve(tree, packages=()), resolve(parsed, packages=())
-        before_display, after_display = analyze_displays(tree, path, catalog=records), analyze_displays(parsed, path, catalog=records)
+        before_resolution = resolve(tree, packages=()) if baseline is None else None
+        after_resolution = resolve(parsed, packages=())
+        before_display = (analyze_displays(tree, path, catalog=records) if baseline is None else
+                          baseline.get_group('display', lambda: analyze_displays(tree, path, catalog=records)))
+        after_display = analyze_displays(parsed, path, catalog=records)
         if any(not _same_findings(tree, before_display[rid], parsed, after_display[rid], proposal.edits)
                for rid in before_display):
             raise SafetyError('Highlight split changes display findings')
-        before_scripts = analyze_scripts(tree, path, catalog=records, _verify=False, _allow_code_call=True)
+        before_scripts = (analyze_scripts(tree, path, catalog=records, _verify=False, _allow_code_call=True)
+                          if baseline is None else baseline.get('scripts', lambda: analyze_scripts(
+                              tree, path, catalog=records, _verify=False, _allow_code_call=True)))
         after_scripts = analyze_scripts(parsed, path, catalog=records, _verify=False, _allow_code_call=True)
         # The selected equations are already re-parsed and checked byte-for-byte
         # above, regardless of whether their math calls needed extra evidence.
@@ -381,7 +453,10 @@ def _preview_source(evidence, tree, path, diagnostics, records, *, proven_math_s
             tree, before_scripts, parsed, after_scripts, proposal.edits, plans)
         if not scripts_match:
             raise SafetyError('Highlight split changes script findings')
-        notes_before = footnote_rules.analyze_conditional_nested(tree, path, before_resolution, catalog=records)
+        notes_before = (footnote_rules.analyze_conditional_nested(tree, path, before_resolution, catalog=records)
+                        if baseline is None else baseline.get_group('footnotes', lambda:
+                            footnote_rules.analyze_conditional_nested(tree, path, resolve(tree, packages=()),
+                                                                      catalog=records)))
         notes_after = footnote_rules.analyze_conditional_nested(parsed, path, after_resolution, catalog=records)
         if any(not _same_findings(tree, notes_before[rid], parsed, notes_after[rid], proposal.edits)
                for rid in footnote_rules.RULE_IDS):
@@ -389,14 +464,21 @@ def _preview_source(evidence, tree, path, diagnostics, records, *, proven_math_s
         for analyzer in (paragraph_rules.analyze_conditional_nested_gap, paragraph_rules.analyze_conditional_nested_target,
                          paragraph_rules.analyze_conditional_nested_capitalization, prose_marker_rules.analyze_conditional,
                          continuation_rules.analyze_conditional):
-            if not _same_findings(tree, analyzer(tree, path, catalog=records),
+            before_paragraph = (analyzer(tree, path, catalog=records) if baseline is None else
+                                baseline.get(analyzer, lambda: analyzer(tree, path, catalog=records)))
+            if not _same_findings(tree, before_paragraph,
                                   parsed, analyzer(parsed, path, catalog=records), proposal.edits):
                 raise SafetyError('Highlight split changes paragraph findings')
-        if not _same_findings(tree, proof_rules.analyze_conditional(tree, path, before_resolution, catalog=records),
+        before_proof = (proof_rules.analyze_conditional(tree, path, before_resolution, catalog=records)
+                        if baseline is None else baseline.get('proof', lambda: proof_rules.analyze_conditional(
+                            tree, path, resolve(tree, packages=()), catalog=records)))
+        if not _same_findings(tree, before_proof,
                               parsed, proof_rules.analyze_conditional(parsed, path, after_resolution, catalog=records),
                               proposal.edits):
             raise SafetyError('Highlight split changes proof findings')
         evidence._check()
+        if baseline is not None:
+            baseline.check(tree, path, records)
         return dict(empty, verification='conditional-modern-highlight-syntax-directives-and-reanalysis',
                     candidate_sha256=digest(candidate),
                     edits=[dict(start=edit.start, end=edit.end, replacement=edit.replacement.decode('utf-8'), rule_id=RULE)
@@ -440,30 +522,37 @@ def _partial_preview(evidence, tree, path, diagnostics, records, original, budge
         if proven_math_spans:
             return _preview_source(evidence, tree, path, subset, records, proven_math_spans=proven_math_spans)
         return _preview_source(evidence, tree, path, subset, records)
-    for edit in edits:
-        diagnostic = by_span.get((edit.start, edit.end))
-        if diagnostic is None:
+    baseline = _SubsetBaseline(tree, path, records)
+    token = _SUBSET_BASELINE.set(baseline)
+    try:
+        for edit in edits:
+            baseline.check(tree, path, records)
+            diagnostic = by_span.get((edit.start, edit.end))
+            if diagnostic is None:
+                return original
+            candidate = run_subset([diagnostic])
+            baseline.check(tree, path, records)
+            if (allow_scoped_references and candidate is not None
+                    and candidate.get('reason') == scoped_reference_preview.BUDGET_REASON):
+                return dict(original, reason=scoped_reference_preview.BUDGET_REASON)
+            if candidate is not None and candidate['verification'] != 'withheld':
+                accepted.append(diagnostic)
+        if not accepted or len(accepted) == len(edits):
+            # A combination may fail even when all its members pass separately.
             return original
-        candidate = run_subset([diagnostic])
-        if (allow_scoped_references and candidate is not None
-                and candidate.get('reason') == scoped_reference_preview.BUDGET_REASON):
+        # Reparse and verify the union against the unchanged original tree.
+        combined = run_subset(accepted)
+        baseline.check(tree, path, records)
+        if (allow_scoped_references and combined is not None
+                and combined.get('reason') == scoped_reference_preview.BUDGET_REASON):
             return dict(original, reason=scoped_reference_preview.BUDGET_REASON)
-        if candidate is not None and candidate['verification'] != 'withheld':
-            accepted.append(diagnostic)
-    if not accepted or len(accepted) == len(edits):
-        # A combination may fail even when all its members pass separately.
-        return original
-    # The final result is based on the original source, not independently
-    # generated candidates. This catches interactions among accepted edits and
-    # rechecks all existing diagnostics and suppression scopes, including the
-    # excluded source. If the union fails, retain the original withheld result.
-    combined = run_subset(accepted)
-    if (allow_scoped_references and combined is not None
-            and combined.get('reason') == scoped_reference_preview.BUDGET_REASON):
-        return dict(original, reason=scoped_reference_preview.BUDGET_REASON)
-    if combined is None or combined['verification'] == 'withheld':
-        return original
-    return combined
+        if combined is None or combined['verification'] == 'withheld':
+            return original
+        return combined
+    except SafetyError:
+        return dict(original, reason='Subset baseline changed during verification; entire source withheld')
+    finally:
+        _SUBSET_BASELINE.reset(token)
 
 
 def preview_all(evidence, *, max_items=MAX_PREVIEW_ITEMS, max_bytes=MAX_PREVIEW_BYTES, return_evidence=False,

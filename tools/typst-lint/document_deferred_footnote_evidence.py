@@ -45,6 +45,13 @@ def analyze(proof, path, offsets, *, candidate=None):
     conditional and non-authoritative.
     """
     resources = evidence._valid(proof)
+    result = _analyze(proof, path, offsets, resources, candidate=candidate)
+    evidence._valid(proof)
+    return result
+
+
+def _analyze(proof, path, offsets, resources, *, candidate=None, tree=None):
+    """Internal analysis on the same source, enclosed by caller validation."""
     session = proof._session
     if (type(path) is not str or type(offsets) is not tuple or not offsets or len(offsets) > MAX_CALLS
             or any(type(offset) is not int or offset < 0 for offset in offsets)
@@ -53,7 +60,10 @@ def analyze(proof, path, offsets, *, candidate=None):
     source = session._context.source_for(path)
     if source is None or resources.get(('project', path)) != source.source:
         raise SafetyError('Deferred footnote source is absent from the captured context')
-    if candidate is None:
+    if tree is not None:
+        if type(candidate) is not bytes or tree.source != candidate or tree.mode != 'markup':
+            raise InputError('Deferred analysis tree does not match the candidate')
+    elif candidate is None:
         tree = source.tree
     else:
         if type(candidate) is not bytes or len(candidate) > MAX_INPUT:
@@ -170,7 +180,6 @@ def analyze(proof, path, offsets, *, candidate=None):
             tuple(sources[key] for key in sorted(sources)),
             tuple(packages[key] for key in sorted(packages)), tuple(sorted(requests)),
             binding.CALLBACK_CONDITIONS))
-    evidence._valid(proof)
     return DeferredCallResult(path, digest(tree.source), tuple(calls),
         tuple((offset, rejected[offset]) for offset in offsets if offset in rejected),
         'CONDITIONAL' if not rejected else 'INCOMPLETE')

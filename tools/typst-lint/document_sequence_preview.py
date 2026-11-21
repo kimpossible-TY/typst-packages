@@ -758,8 +758,21 @@ def preview(tree, path, catalog, *, profile=_STANDARD, footnote_evidence=None, c
                                         if type(footnote_evidence) is not document_footnote_evidence.PreviewFootnoteEvidence:
                                             raise SafetyError('Invalid conditional footnote evidence')
                                         if conditional_proof is None:
-                                            conditional_proof = document_footnote_evidence.PreviewFootnoteEvidence.candidate_calls(
-                                                footnote_evidence, path, before_tree.source)
+                                            positions = []
+                                            if conditional_deferred_footnotes and call_id is not None:
+                                                for item in edits:
+                                                    position = item.end
+                                                    while before_tree.source[position:position + 1] in (b' ', b'\t', b'\r', b'\n'):
+                                                        position += 1
+                                                    if (position in calls
+                                                            and before_tree.source[position:position + 9] == b'#footnote'):
+                                                        positions.append(position)
+                                            if positions:
+                                                conditional_proof, deferred_proof = document_footnote_evidence.PreviewFootnoteEvidence.candidate_calls_with_deferred(
+                                                    footnote_evidence, path, before_tree.source, tuple(sorted(set(positions))))
+                                            else:
+                                                conditional_proof = document_footnote_evidence.PreviewFootnoteEvidence.candidate_calls(
+                                                    footnote_evidence, path, before_tree.source)
                                         if conditional_proof.source_sha256 != digest(before_tree.source):
                                             raise SafetyError('Conditional spacer footnote evidence has a stale source hash'
                                                 if classify_deferred else
