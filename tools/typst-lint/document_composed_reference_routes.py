@@ -15,7 +15,6 @@ import document_math_builtin_evidence as math_evidence
 import document_modern_highlight_preview as preview
 import document_sequence_preview as sequence
 from document_gap_preview import _MappedEdits
-from edit_plan import Edit
 import import_graph
 import scoped_reference_preview as scoped
 from syntax_client import parse
@@ -158,9 +157,9 @@ def verify(view, analyzer, final, edits_by_path, baseline, diagnostics):
     remaining, call_count = [MAX_FINAL_ROUTE_WORK - work], 0
     scope_budget = [scoped.MAX_SCOPE_WORK]
     catalog = load_rules()[0]['rules']
-    # Independent per-source analyzers each start with empty module caches.
-    # Charge the full captured graph for both the namespace and math replay
-    # on every target instead of assuming their facade walks are shared.
+    # Charge the shared graph-wide baseline work (namespace and math replay)
+    # once per verify() invocation; each target file still pays its own
+    # reanalysis, candidate AST, and tracer work below.
     graph_work = (len(view.graph.sources) * len(view.context.sources)
                   + sum(len(item.source) + len(item.manifest)
                         for item in analyzer._session._namespaces.packages))
@@ -176,6 +175,13 @@ def verify(view, analyzer, final, edits_by_path, baseline, diagnostics):
                 graph_work += 4 * depths[index] + 2 * (node.end - node.start)
             if graph_work > MAX_FINAL_ROUTE_WORK:
                 raise RouteBudgetExceeded('Final reference route work budget exceeded')
+    remaining[0] -= 2 * graph_work
+    if remaining[0] < 0:
+        raise RouteBudgetExceeded('Final reference route work budget exceeded')
+    # Reuse immutable graph/module evaluation caches across target files so
+    # actual CPU work matches the single 2 * graph_work deduction above.
+    shared_modern = analyzer.new_shared_analyzer()
+    shared_math_engine = math_evidence._engine(analyzer._session)
     for path, extra in sorted(targets_by_path.items()):
         tree = context.source_for(path).tree
         all_edits = edits_by_path[path]
@@ -188,13 +194,13 @@ def verify(view, analyzer, final, edits_by_path, baseline, diagnostics):
         # Independently reissue source selection, math binding, candidate
         # syntax, suppression and scoped reference checks. Do not trust a
         # self-consistent but forged batch report.
-        remaining[0] -= _reanalysis_work(original) + 2 * graph_work
+        remaining[0] -= _reanalysis_work(original)
         if remaining[0] < 0:
             raise RouteBudgetExceeded('Final reference route work budget exceeded')
-        independently_issued = analyzer.analyze(original, path)
+        independently_issued = analyzer.analyze(original, path, _shared_analyzer=shared_modern)
         if not sequence._same_data(independently_issued, diagnostic_row):
             raise SafetyError('Reference source diagnostics or suppressions changed on independent replay')
-        math = math_evidence._analyze_report(analyzer, path, diagnostic_row)
+        math = math_evidence._analyze_report(analyzer, path, diagnostic_row, engine=shared_math_engine)
         spans = frozenset((item['start'], item['end']) for item in math['findings'])
         try:
             captured = (scoped.CapturedScopedReferences(analyzer, original, path, budget=scope_budget)

@@ -23,6 +23,7 @@ RULE = highlight.RULE_ID
 MAX_BATCH_ITEMS = 100_000
 MAX_BATCH_BYTES = 16 * 1024 * 1024
 _ISSUED = {}
+_ISSUED_SHARED = {}
 VARIANT_CONDITION = (
     'The selected highlighted function is the separately reviewed text-utils 0.1.2 '
     'main-c161707 implementation and its captured mode is used at runtime.'
@@ -180,10 +181,59 @@ class ModernHighlightAnalyzer:
                     execution_proved=False, coverage_complete=False, edit_permission=False,
                     compiler_permission=False, render_equivalence_proved=False)
 
-    def analyze(self, tree, path):
+    def new_shared_analyzer(self):
+        """Issue one reusable graph-cache analyzer bound to this exact capture."""
         self._check()
-        result = self._analyze_one(tree, path, _ModernAnalyzer(
-            self._session, self._variant, scoped_callbacks=self._scoped_callbacks))
+        shared = _ModernAnalyzer(
+            self._session, self._variant, scoped_callbacks=self._scoped_callbacks)
+        identity = id(shared)
+        def release(reference):
+            item = _ISSUED_SHARED.get(identity)
+            if item is not None and item[0] is reference:
+                _ISSUED_SHARED.pop(identity, None)
+        _ISSUED_SHARED[identity] = (
+            weakref.ref(shared, release),
+            weakref.ref(self),
+            self._session,
+            self._variant,
+            self._scoped_callbacks,
+            shared.graph,
+            shared.reason,
+            shared.evidence,
+            shared.known_rule_ids,
+            tuple(shared.packages.items()),
+        )
+        return shared
+
+    def _check_shared(self, shared):
+        issued = _ISSUED_SHARED.get(id(shared))
+        if (type(shared) is not _ModernAnalyzer or issued is None or issued[0]() is not shared
+                or issued[1]() is not self
+                or issued[2] is not self._session
+                or issued[3] is not self._variant
+                or issued[4] is not self._scoped_callbacks
+                or shared.graph is not issued[5]
+                or shared.graph is not self._session._graph
+                or shared.scoped_callbacks is not self._scoped_callbacks
+                or shared.rule_ids != frozenset((RULE,))
+                or shared.reason != issued[6]
+                or shared.evidence is not issued[7]
+                or shared.known_rule_ids is not issued[8]
+                or type(shared.packages) is not dict
+                or tuple(shared.packages.items()) != issued[9]):
+            raise InputError('Shared modern highlight analyzer does not match this issued session')
+
+    def analyze(self, tree, path, *, _shared_analyzer=None):
+        self._check()
+        if _shared_analyzer is None:
+            shared = _ModernAnalyzer(
+                self._session, self._variant, scoped_callbacks=self._scoped_callbacks)
+        else:
+            self._check_shared(_shared_analyzer)
+            shared = _shared_analyzer
+        result = self._analyze_one(tree, path, shared)
+        if _shared_analyzer is not None:
+            self._check_shared(_shared_analyzer)
         self._check()
         return result
 

@@ -5,8 +5,10 @@ static finding; runtime execution, package selection, source edits and
 render equivalence are not established by this module.
 """
 import json
+import weakref
 
 import conditional_footnote_binding as binding
+import conditional_modern_highlight as modern
 import facade_provenance
 import import_graph
 from static_resolver import Binding, _Resolver
@@ -121,20 +123,70 @@ def analyze(analyzer, path):
     return result
 
 
+_ISSUED_ENGINES = {}
+
+
 def _engine(session):
     engine = binding._NamespaceAnalyzer(session._graph, session._namespaces, (), False)
     engine.reason = facade_provenance._graph_reason(session._graph)
     engine.packages = {item.evidence.import_path: item for item in session._namespaces.packages}
     engine.evidence = session._namespaces.evidence
+    identity = id(engine)
+    def release(reference):
+        item = _ISSUED_ENGINES.get(identity)
+        if item is not None and item[0] is reference:
+            _ISSUED_ENGINES.pop(identity, None)
+    _ISSUED_ENGINES[identity] = (
+        weakref.ref(engine, release),
+        session,
+        session._graph,
+        session._namespaces,
+        engine.reason,
+        engine.evidence,
+        tuple(engine.packages.items()),
+    )
     return engine
 
 
-def _analyze_report(analyzer, path, report):
-    session = analyzer._session
+def _check_engine(session, engine):
+    issued = _ISSUED_ENGINES.get(id(engine))
+    if (type(engine) is not binding._NamespaceAnalyzer or issued is None or issued[0]() is not engine
+            or issued[1] is not session
+            or issued[2] is not session._graph
+            or issued[3] is not session._namespaces
+            or engine.graph is not session._graph
+            or engine.rule_ids != frozenset()
+            or engine.scoped_callbacks is not False
+            or engine.reason != issued[4]
+            or engine.evidence is not issued[5]
+            or type(engine.packages) is not dict
+            or tuple(engine.packages.items()) != issued[6]):
+        raise InputError('Shared math namespace engine does not match this issued session')
+
+
+def _check_batch_analyzer(analyzer, engine):
+    issued = modern._ISSUED.get(id(analyzer))
+    if (type(analyzer) is not modern.ModernHighlightAnalyzer or issued is None or issued[0]() is not analyzer
+            or issued[1] is not analyzer._session or issued[2] is not analyzer._variant
+            or issued[3] is not analyzer._scoped_callbacks):
+        raise InputError('Modern highlight capture changed or is unissued')
+    _check_engine(analyzer._session, engine)
+
+
+def _analyze_report(analyzer, path, report, *, engine=None):
+    if engine is None:
+        analyzer._check()
+        session = analyzer._session
+        shared_engine = _engine(session)
+    else:
+        _check_batch_analyzer(analyzer, engine)
+        session = analyzer._session
+        shared_engine = engine
     source = session._context.source_for(path)
+    if source is None:
+        raise InputError('Source is not in the issued include capture')
     tree = source.tree
-    engine = _engine(session)
-    resolver = _MathResolver(tree, path, engine)
+    resolver = _MathResolver(tree, path, shared_engine)
     resolver.visit(0, resolver.state)
     parents = {c: i for i, n in enumerate(tree.nodes) for c in n.children}
     findings, unresolved = [], []
@@ -191,6 +243,12 @@ def _analyze_report(analyzer, path, report):
                   suppressed_count=len(report['suppressed']), coverage_complete=False,
                   runtime_binding_proved=False, edit_permission=False, compiler_permission=False)
     _check_budget((result,))
+    if engine is None:
+        analyzer._check()
+    else:
+        _check_batch_analyzer(analyzer, engine)
+        if analyzer._session is not session:
+            raise InputError('Modern highlight capture changed or is unissued')
     return result
 
 
@@ -219,10 +277,11 @@ def analyze_all(analyzer, *, return_modern=False, max_items=None, max_bytes=None
             or type(max_bytes) is not int or not 0 < max_bytes <= MAX_BYTES):
         raise InputError('Invalid math evidence batch selection')
     reports = analyzer.analyze_all(max_items=max_items, max_bytes=max_bytes)
+    engine = _engine(analyzer._session)
     results = []
     for report in reports['by_file']:
         if report['diagnostics'] or report['suppressed'] or report['unresolved'] or report['parse_errors']:
-            results.append(_analyze_report(analyzer, report['path'], report))
+            results.append(_analyze_report(analyzer, report['path'], report, engine=engine))
             _check_budget(results, max_items=max_items, max_bytes=max_bytes)
     analyzer._check()
     result = dict(status='INCOMPLETE' if any(x['status'] == 'INCOMPLETE' for x in results) else 'CONDITIONAL',
