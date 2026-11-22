@@ -312,7 +312,7 @@ def _analyze_nine_proposal_rules(tree: Tree, path: str, *,
     return results, {rid: tuple(reasons) for rid, reasons in extra_withheld.items()}
 
 
-def _prior_result_spans(baseline_bytes: bytes, steps: list[dict]) -> tuple[tuple[int, int], ...]:
+def _prior_result_spans(steps: list[dict]) -> tuple[tuple[int, int], ...]:
     """Compute final byte spans touched by prior sequence steps in post-sequence coordinates."""
     if not steps:
         return ()
@@ -397,6 +397,31 @@ def stage_captured_proposals(context, snapshot, base_candidates, catalog, *,
     candidate_by_rule = {rid: 0 for rid in CAPTURED_PROPOSAL_RULE_IDS}
     withheld_by_rule = {rid: 0 for rid in CAPTURED_PROPOSAL_RULE_IDS}
     planned_edits_total = 0
+    pre_modern_map = {} if pre_modern_sources is None else pre_modern_sources
+
+    def record_withheld(path: str, baseline_sha256: str, reason_code: str, reason: str, *,
+                        rule_id: str | None = None,
+                        rule_ids: tuple[str, ...] | None = None,
+                        reasons: tuple[str, ...] | None = None) -> None:
+        if rule_ids is not None:
+            for rid in rule_ids:
+                withheld_by_rule[rid] += 1
+            if rule_id is None and len(rule_ids) == 1:
+                rule_id = rule_ids[0]
+        elif rule_id is not None:
+            withheld_by_rule[rule_id] += 1
+        entry = dict(
+            path=path,
+            baseline_sha256=baseline_sha256,
+            rule_id=rule_id,
+            reason_code=reason_code,
+            reason=reason,
+        )
+        if rule_ids is not None:
+            entry['rule_ids'] = list(rule_ids)
+        if reasons is not None:
+            entry['reasons'] = list(reasons)
+        withheld_sources.append(entry)
 
     for item in context.sources:
         path = item.path
@@ -405,35 +430,26 @@ def stage_captured_proposals(context, snapshot, base_candidates, catalog, *,
         current_sha = digest(current_bytes)
 
         if path in excluded:
-            withheld_sources.append(dict(
-                path=path,
-                baseline_sha256=current_sha,
-                rule_id=None,
-                reason_code='prior-withheld-source',
-                reason='Source was excluded or withheld by an earlier preview stage',
-            ))
+            record_withheld(
+                path, current_sha, 'prior-withheld-source',
+                'Source was excluded or withheld by an earlier preview stage',
+            )
             continue
 
         try:
             current_tree = item.tree if current_bytes == item.source else parse(current_bytes)
         except AdapterError as error:
-            withheld_sources.append(dict(
-                path=path,
-                baseline_sha256=current_sha,
-                rule_id=None,
-                reason_code='parse-error',
-                reason=f'Malformed source syntax; captured proposals withheld: {error}',
-            ))
+            record_withheld(
+                path, current_sha, 'parse-error',
+                f'Malformed source syntax; captured proposals withheld: {error}',
+            )
             continue
 
         if current_tree.nodes[0].errors:
-            withheld_sources.append(dict(
-                path=path,
-                baseline_sha256=current_sha,
-                rule_id=None,
-                reason_code='parse-error',
-                reason='Malformed source syntax; captured proposals withheld',
-            ))
+            record_withheld(
+                path, current_sha, 'parse-error',
+                'Malformed source syntax; captured proposals withheld',
+            )
             continue
 
         initial_results, extra_withheld = _analyze_nine_proposal_rules(
@@ -449,27 +465,17 @@ def stage_captured_proposals(context, snapshot, base_candidates, catalog, *,
         for rid in CAPTURED_PROPOSAL_RULE_IDS:
             res = initial_results[rid]
             if rid in extra_withheld:
-                withheld_by_rule[rid] += 1
-                withheld_sources.append(dict(
-                    path=path,
-                    baseline_sha256=current_sha,
-                    rule_id=rid,
-                    reason_code='unproven-captured-proposal',
-                    reason=extra_withheld[rid][0],
-                    reasons=list(extra_withheld[rid]),
-                ))
+                record_withheld(
+                    path, current_sha, 'unproven-captured-proposal',
+                    extra_withheld[rid][0], rule_id=rid, reasons=extra_withheld[rid],
+                )
             elif res.diagnostics and not res.edits:
                 refusals = refusal_reasons(rid, res.skips)
                 primary = refusals[0] if refusals else 'Rule reported findings without eligible candidate edits'
-                withheld_by_rule[rid] += 1
-                withheld_sources.append(dict(
-                    path=path,
-                    baseline_sha256=current_sha,
-                    rule_id=rid,
-                    reason_code='unproven-captured-proposal',
-                    reason=primary,
-                    reasons=list(refusals),
-                ))
+                record_withheld(
+                    path, current_sha, 'unproven-captured-proposal',
+                    primary, rule_id=rid, reasons=refusals,
+                )
 
         initial_edits = tuple(
             edit for rid in CAPTURED_PROPOSAL_RULE_IDS for edit in initial_results[rid].edits
@@ -481,46 +487,35 @@ def stage_captured_proposals(context, snapshot, base_candidates, catalog, *,
 
         # Fail closed if editing an imported module could invalidate other sources' binding graphs.
         if path in imported_targets:
-            for rid in proposing_rules:
-                withheld_by_rule[rid] += 1
-            withheld_sources.append(dict(
-                path=path,
-                baseline_sha256=current_sha,
-                rule_id=proposing_rules[0] if len(proposing_rules) == 1 else None,
-                rule_ids=list(proposing_rules),
-                reason_code='imported-source-dependency',
-                reason='Captured proposal would modify an imported module used by another source',
-            ))
+            record_withheld(
+                path, current_sha, 'imported-source-dependency',
+                'Captured proposal would modify an imported module used by another source',
+                rule_ids=proposing_rules,
+            )
             continue
 
         # Fail closed on overlapping edits among the 9 rules themselves.
         initial_plan = plan(current_bytes, initial_edits)
         if initial_plan.deferred or not initial_plan.edits:
-            for rid in proposing_rules:
-                withheld_by_rule[rid] += 1
-            withheld_sources.append(dict(
-                path=path,
-                baseline_sha256=current_sha,
-                rule_id=proposing_rules[0] if len(proposing_rules) == 1 else None,
-                rule_ids=list(proposing_rules),
-                reason_code='overlapping-captured-proposals',
-                reason='Captured proposal edits overlap or conflict',
-            ))
+            record_withheld(
+                path, current_sha, 'overlapping-captured-proposals',
+                'Captured proposal edits overlap or conflict',
+                rule_ids=proposing_rules,
+            )
             continue
 
         # Fail closed on overlap with prior preview stage edits on this source.
         prior_spans: list[tuple[int, int]] = []
         if path in record_by_path:
-            prior_spans.extend(_prior_result_spans(item.source, record_by_path[path].get('steps', ())))
+            prior_spans.extend(_prior_result_spans(record_by_path[path].get('steps', ())))
         modern_edit_spans: list[tuple[int, int]] = []
         if path in modern_by_path:
             for stage_entry in modern_by_path[path].get('stages', ()):
                 if stage_entry.get('rule_id') == highlight_rules.RULE_ID:
                     for sp in stage_entry.get('edit_spans', ()):
                         modern_edit_spans.append((sp['start'], sp['end']))
-        middle_bytes = (pre_modern_sources[key]
-                        if pre_modern_sources is not None and key in pre_modern_sources
-                        else None)
+        middle_bytes = pre_modern_map.get(key)
+        missing_pre_modern = middle_bytes is None and bool(modern_edit_spans)
         modern_opcodes = None
         if middle_bytes is not None and middle_bytes != current_bytes:
             modern_opcodes = difflib.SequenceMatcher(
@@ -535,22 +530,15 @@ def stage_captured_proposals(context, snapshot, base_candidates, catalog, *,
                         new_e = j1 + (e - i1) if tag == 'equal' else j2
                 mapped_prior.append((new_s, new_e))
             prior_spans = mapped_prior
-            for tag, _i1, _i2, j1, j2 in modern_opcodes:
-                if tag != 'equal':
-                    prior_spans.append((j1, j2))
-        elif middle_bytes is None and modern_edit_spans:
+            prior_spans.extend((j1, j2) for tag, _i1, _i2, j1, j2 in modern_opcodes if tag != 'equal')
+        elif missing_pre_modern:
             prior_spans.extend(modern_edit_spans)
         if prior_spans and _overlaps_spans(initial_plan.edits, tuple(prior_spans)):
-            for rid in proposing_rules:
-                withheld_by_rule[rid] += 1
-            withheld_sources.append(dict(
-                path=path,
-                baseline_sha256=current_sha,
-                rule_id=proposing_rules[0] if len(proposing_rules) == 1 else None,
-                rule_ids=list(proposing_rules),
-                reason_code='prior-stage-edit-overlap',
-                reason='Captured proposal overlaps an edit produced by an earlier preview stage',
-            ))
+            record_withheld(
+                path, current_sha, 'prior-stage-edit-overlap',
+                'Captured proposal overlaps an edit produced by an earlier preview stage',
+                rule_ids=proposing_rules,
+            )
             continue
 
         # Run bounded convergence + fresh parse + reanalysis + directive ownership + determinism checks.
@@ -607,7 +595,7 @@ def stage_captured_proposals(context, snapshot, base_candidates, catalog, *,
                         opcodes=modern_opcodes,
                         modern_edit_spans=tuple(modern_edit_spans),
                     )
-                elif middle_bytes is None and modern_edit_spans:
+                elif missing_pre_modern:
                     raise SafetyError(
                         'Pre-modern source snapshot is required to map conditional footnote calls across modern highlight edits'
                     )
@@ -619,19 +607,13 @@ def stage_captured_proposals(context, snapshot, base_candidates, catalog, *,
             for attr in candidate.edits:
                 attr.edit.replacement.decode('utf-8')
         except (AdapterError, SafetyError, InputError, ValueError, UnicodeDecodeError) as error:
-            for rid in proposing_rules:
-                withheld_by_rule[rid] += 1
             reason_code = ('overlapping-captured-proposals'
                            if 'overlap' in str(error).lower() or 'conflict' in str(error).lower()
                            else 'verification-failed')
-            withheld_sources.append(dict(
-                path=path,
-                baseline_sha256=current_sha,
-                rule_id=proposing_rules[0] if len(proposing_rules) == 1 else None,
-                rule_ids=list(proposing_rules),
-                reason_code=reason_code,
-                reason=str(error),
-            ))
+            record_withheld(
+                path, current_sha, reason_code, str(error),
+                rule_ids=proposing_rules,
+            )
             continue
 
         applied_rules = tuple(sorted({rid for attr in candidate.edits for rid in attr.rule_ids}))

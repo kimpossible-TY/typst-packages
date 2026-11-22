@@ -623,6 +623,40 @@ class DocumentCapturedRulesTests(unittest.TestCase):
             captured_rules.capture_reviewed_packages(
                 (str(self.packages),), ('@local/math-blocks:0.2.0',))
 
+    def test_read_reviewed_package_from_snapshot_optional_requires_unavailable_records(self):
+        from package_loader import (
+            PackageInputError,
+            PackageUnavailable,
+            read_reviewed_package_from_snapshot,
+        )
+
+        class UntouchedSnapshot:
+            def exists(self, *args, **kwargs):
+                raise AssertionError('snapshot.exists must not be called when optional guards fail')
+
+            def read(self, *args, **kwargs):
+                raise AssertionError('snapshot.read must not be called when optional guards fail')
+
+        unavailable = PackageUnavailable('@local/math-blocks:0.2.0', 'missing-package-artifact', 'missing')
+        invalid_pairs = (
+            (None, unavailable),
+            (unavailable, None),
+            (None, None),
+            ('not-unavailable', unavailable),
+            (unavailable, {'code': 'missing'}),
+        )
+        for missing_manifest, missing_entrypoint in invalid_pairs:
+            with self.subTest(missing_manifest=missing_manifest, missing_entrypoint=missing_entrypoint):
+                with self.assertRaisesRegex(PackageInputError, 'PackageUnavailable'):
+                    read_reviewed_package_from_snapshot(
+                        UntouchedSnapshot(),
+                        object(),
+                        object(),
+                        optional=True,
+                        missing_manifest=missing_manifest,
+                        missing_entrypoint=missing_entrypoint,
+                    )
+
 
 if __name__ == '__main__':
     unittest.main()

@@ -181,7 +181,7 @@ class ModernHighlightAnalyzer:
                     execution_proved=False, coverage_complete=False, edit_permission=False,
                     compiler_permission=False, render_equivalence_proved=False)
 
-    def new_shared_analyzer(self):
+    def _new_shared_analyzer(self):
         """Issue one reusable graph-cache analyzer bound to this exact capture."""
         self._check()
         shared = _ModernAnalyzer(
@@ -220,7 +220,10 @@ class ModernHighlightAnalyzer:
                 or shared.evidence is not issued[7]
                 or shared.known_rule_ids is not issued[8]
                 or type(shared.packages) is not dict
-                or tuple(shared.packages.items()) != issued[9]):
+                or tuple(shared.packages.items()) != issued[9]
+                or type(shared.trees) is not dict
+                or type(shared.modules) is not dict
+                or type(shared.refusals) is not dict):
             raise InputError('Shared modern highlight analyzer does not match this issued session')
 
     def analyze(self, tree, path, *, _shared_analyzer=None):

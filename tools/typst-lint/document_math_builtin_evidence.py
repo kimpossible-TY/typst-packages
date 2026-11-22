@@ -160,7 +160,10 @@ def _check_engine(session, engine):
             or engine.reason != issued[4]
             or engine.evidence is not issued[5]
             or type(engine.packages) is not dict
-            or tuple(engine.packages.items()) != issued[6]):
+            or tuple(engine.packages.items()) != issued[6]
+            or type(engine.trees) is not dict
+            or type(engine.modules) is not dict
+            or type(engine.refusals) is not dict):
         raise InputError('Shared math namespace engine does not match this issued session')
 
 

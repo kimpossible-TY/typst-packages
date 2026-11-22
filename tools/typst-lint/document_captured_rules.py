@@ -490,9 +490,6 @@ def normalize_rule_result(value, *, strip_edits: bool = False) -> CapturedRuleRe
     )
 
 
-_normalize_result = normalize_rule_result
-
-
 def refusal_reasons(rule_id: str, skips: tuple[str, ...]) -> tuple[str, ...]:
     """Select rule-relevant refusal or withholding reasons from skip tuples."""
     relevant = tuple(
@@ -501,9 +498,6 @@ def refusal_reasons(rule_id: str, skips: tuple[str, ...]) -> tuple[str, ...]:
             or rule_id in reason)
     )
     return relevant if relevant else skips
-
-
-_refusal_reasons = refusal_reasons
 
 
 def analyze_source(tree: Tree, path: str, *, rule_set: str = 'core', packages=(),

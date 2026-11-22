@@ -451,36 +451,38 @@ def main(arguments=None, *, gate=False):
                 context, snapshot, catalog['rules'], entrypoint=args.entrypoint)
         review = review_sources(context, records, withheld if partial_requested else None) if args.review_edits else None
         phase = 'compile'
+        staging_options = dict(
+            profile=profile,
+            footnote_evidence=None if args.compose_modern_highlights else footnote_evidence,
+            partial_unsupported=args.partial_unsupported_preview,
+            withheld_records=withheld if partial_requested else None,
+            partial_unproven_binding=args.partial_unproven_binding_preview,
+            explicit_withheld_sources=explicit_paths,
+            conditional_continuations=args.conditional_continuations,
+            conditional_capitalization=args.conditional_capitalization,
+            conditional_prose_markers=args.conditional_prose_markers,
+            conditional_adjacent_punctuation=args.conditional_adjacent_punctuation,
+            conditional_deferred_footnotes=args.conditional_deferred_footnotes,
+            aligned_spacer_target=args.conditional_aligned_spacer,
+        )
+        if args.compose_modern_highlights:
+            staging_options.update(
+                composed_modern_evidence=footnote_evidence,
+                sequence_facade_evidence=args.conditional_facade_footnotes,
+                composed_reviewed_math=args.compose_reviewed_math_highlights,
+            )
+            if args.compose_highlight_references:
+                staging_options['composed_references'] = True
+        if phase_timings is not None:
+            staging_options['phase_timings'] = phase_timings
         if args.conditional_captured_proposals:
             import document_captured_preview_stage
-            stage_options = {}
             if args.compose_modern_highlights:
-                stage_options = dict(
-                    composed_modern_evidence=footnote_evidence,
-                    sequence_facade_evidence=args.conditional_facade_footnotes,
-                    composed_reviewed_math=args.compose_reviewed_math_highlights,
-                    allow_empty_composed=True,
-                )
-                if args.compose_highlight_references:
-                    stage_options['composed_references'] = True
-            if phase_timings is not None:
-                stage_options['phase_timings'] = phase_timings
+                staging_options['allow_empty_composed'] = True
             base_candidates, composed_modern_summary, composed_view = (
                 document_preview_compile.stage_preview_candidates(
                     context, records, catalog['rules'], snapshot,
-                    profile=profile,
-                    footnote_evidence=None if args.compose_modern_highlights else footnote_evidence,
-                    partial_unsupported=args.partial_unsupported_preview,
-                    withheld_records=withheld if partial_requested else None,
-                    partial_unproven_binding=args.partial_unproven_binding_preview,
-                    explicit_withheld_sources=explicit_paths,
-                    conditional_continuations=args.conditional_continuations,
-                    conditional_capitalization=args.conditional_capitalization,
-                    conditional_prose_markers=args.conditional_prose_markers,
-                    conditional_adjacent_punctuation=args.conditional_adjacent_punctuation,
-                    conditional_deferred_footnotes=args.conditional_deferred_footnotes,
-                    aligned_spacer_target=args.conditional_aligned_spacer,
-                    **stage_options,
+                    **staging_options,
                 )
             )
             prior_withheld_paths = frozenset(row['path'] for row in (withheld or ()))
@@ -513,30 +515,16 @@ def main(arguments=None, *, gate=False):
                 composed_modern_evidence=footnote_evidence if args.compose_modern_highlights else None,
             )
         else:
-            compile_options = {'modern_highlight_evidence': modern_evidence} if modern_evidence is not None else {}
-            if args.compose_modern_highlights:
-                compile_options = dict(composed_modern_evidence=footnote_evidence,
-                                       sequence_facade_evidence=args.conditional_facade_footnotes,
-                                       composed_reviewed_math=args.compose_reviewed_math_highlights)
-                if args.compose_highlight_references:
-                    compile_options['composed_references'] = True
-            if phase_timings is not None:
-                compile_options['phase_timings'] = phase_timings
-            preview = document_preview_compile.compile_preview(context, records, catalog['rules'], snapshot,
-                                                               entrypoint=args.entrypoint, cancel_event=cancel,
-                                                               expected_dependencies=observed,
-                                                               expected_baseline_sha256=discovery_baseline_sha256,
-                                                               profile=profile, starts=starts,
-                                                               footnote_evidence=None if args.compose_modern_highlights else footnote_evidence,
-                                                               partial_unsupported=args.partial_unsupported_preview,
-                                                               withheld_records=withheld if partial_requested else None,
-                                                               partial_unproven_binding=args.partial_unproven_binding_preview,
-                                                               explicit_withheld_sources=explicit_paths,
-                                                               conditional_continuations=args.conditional_continuations, conditional_capitalization=args.conditional_capitalization, conditional_prose_markers=args.conditional_prose_markers,
-                                                               conditional_adjacent_punctuation=args.conditional_adjacent_punctuation,
-                                                               conditional_deferred_footnotes=args.conditional_deferred_footnotes,
-                                                               aligned_spacer_target=args.conditional_aligned_spacer,
-                                                               **compile_options)
+            if modern_evidence is not None and not args.compose_modern_highlights:
+                staging_options['modern_highlight_evidence'] = modern_evidence
+            preview = document_preview_compile.compile_preview(
+                context, records, catalog['rules'], snapshot,
+                entrypoint=args.entrypoint, cancel_event=cancel,
+                expected_dependencies=observed,
+                expected_baseline_sha256=discovery_baseline_sha256,
+                starts=starts,
+                **staging_options,
+            )
         modern_summary = preview.modern_highlight_evidence if (args.conditional_modern_highlights
                                                               or args.compose_modern_highlights) else None
         if captured_proposals_summary is not None:

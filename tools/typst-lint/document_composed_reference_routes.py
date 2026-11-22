@@ -180,7 +180,7 @@ def verify(view, analyzer, final, edits_by_path, baseline, diagnostics):
         raise RouteBudgetExceeded('Final reference route work budget exceeded')
     # Reuse immutable graph/module evaluation caches across target files so
     # actual CPU work matches the single 2 * graph_work deduction above.
-    shared_modern = analyzer.new_shared_analyzer()
+    shared_modern = analyzer._new_shared_analyzer()
     shared_math_engine = math_evidence._engine(analyzer._session)
     for path, extra in sorted(targets_by_path.items()):
         tree = context.source_for(path).tree

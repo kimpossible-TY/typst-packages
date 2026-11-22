@@ -491,6 +491,12 @@ def read_reviewed_package_from_snapshot(snapshot: PackageSnapshot, package_direc
                                         missing_entrypoint: PackageUnavailable | None = None,
                                         allow_malformed_manifest: bool = False) -> ReviewedPackageOutcome:
     """Read and validate one reviewed package under an already-opened version directory."""
+    if optional:
+        _require(
+            isinstance(missing_manifest, PackageUnavailable)
+            and isinstance(missing_entrypoint, PackageUnavailable),
+            'Optional reviewed package reads require PackageUnavailable records for missing manifest and entrypoint',
+        )
     if optional and not snapshot.exists(package_directory, 'typst.toml'):
         return ReviewedPackageOutcome(unavailable=missing_manifest)
     manifest_path = str(package_directory.path / 'typst.toml')

@@ -174,7 +174,12 @@ def _workspace_guard(base, allowed_files, allowed_dirs, output_limits):
 
 def _validate_stage_options(*, original_only=False, modern_highlight_evidence=None,
                             composed_modern_evidence=None, composed_reviewed_math=False,
-                            composed_references=False, aligned_spacer_target=None):
+                            composed_references=False, aligned_spacer_target=None,
+                            allow_empty_composed=False):
+    if type(original_only) is not bool:
+        raise SafetyError('Original-only selection must be Boolean')
+    if type(allow_empty_composed) is not bool:
+        raise SafetyError('Empty composed preview selection must be Boolean')
     if type(composed_reviewed_math) is not bool or (composed_reviewed_math and composed_modern_evidence is None):
         raise SafetyError('Reviewed math requires an explicit composed modern preview')
     if (type(composed_references) is not bool or (composed_references
@@ -191,7 +196,8 @@ def _validate_compile_inputs(context, snapshot, *, entrypoint, deadline_seconds,
                              expected_dependencies, expected_baseline_sha256, phase_timings,
                              original_only=False, modern_highlight_evidence=None,
                              composed_modern_evidence=None, composed_reviewed_math=False,
-                             composed_references=False, aligned_spacer_target=None):
+                             composed_references=False, aligned_spacer_target=None,
+                             allow_empty_composed=False):
     if phase_timings is not None and type(phase_timings) is not dict:
         raise SafetyError('Phase timing sink must be a dictionary')
     if (type(deadline_seconds) not in (int, float) or isinstance(deadline_seconds, bool)
@@ -203,7 +209,8 @@ def _validate_compile_inputs(context, snapshot, *, entrypoint, deadline_seconds,
         original_only=original_only, modern_highlight_evidence=modern_highlight_evidence,
         composed_modern_evidence=composed_modern_evidence,
         composed_reviewed_math=composed_reviewed_math,
-        composed_references=composed_references, aligned_spacer_target=aligned_spacer_target)
+        composed_references=composed_references, aligned_spacer_target=aligned_spacer_target,
+        allow_empty_composed=allow_empty_composed)
     if expected_dependencies is not None:
         if (type(expected_dependencies) is not tuple or len(expected_dependencies) > document_resources.MAX_FILES
                 or any(type(item) is not tuple or len(item) != 2 or any(type(x) is not str for x in item)
@@ -246,7 +253,8 @@ def stage_preview_candidates(context, records, catalog, snapshot, *, profile='st
         original_only=original_only, modern_highlight_evidence=modern_highlight_evidence,
         composed_modern_evidence=composed_modern_evidence,
         composed_reviewed_math=composed_reviewed_math,
-        composed_references=composed_references, aligned_spacer_target=aligned_spacer_target)
+        composed_references=composed_references, aligned_spacer_target=aligned_spacer_target,
+        allow_empty_composed=allow_empty_composed)
     include_context.assert_include_context(context)
     document_resources.assert_capture(snapshot)
     modern_summary = None
@@ -328,14 +336,13 @@ def compile_staged_candidates(context, snapshot, candidates, *, entrypoint, dead
     written. This is a bounded preview, not proof of complete future reads or
     permission to publish/apply changes.
     """
-    if type(original_only) is not bool:
-        raise SafetyError('Original-only selection must be Boolean')
     if modern_summary is not None and type(modern_summary) is not dict:
         raise SafetyError('Modern highlight summary must be a dictionary')
     roots = _validate_compile_inputs(
         context, snapshot, entrypoint=entrypoint, deadline_seconds=deadline_seconds,
         cancel_event=cancel_event, expected_dependencies=expected_dependencies,
-        expected_baseline_sha256=expected_baseline_sha256, phase_timings=phase_timings)
+        expected_baseline_sha256=expected_baseline_sha256, phase_timings=phase_timings,
+        original_only=original_only)
 
     def cancelled():
         if cancel_event is not None and cancel_event.is_set():

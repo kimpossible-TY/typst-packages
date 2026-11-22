@@ -30,7 +30,7 @@ import document_preview_cli
 import document_preview_compile as preview_compile
 import document_resources
 import document_sequence_preview as sequence
-from edit_plan import Edit, plan
+from edit_plan import Edit
 import include_context
 from reference_catalog import parse_reference_catalog
 import script_rule
@@ -909,6 +909,33 @@ class CompileStagedPreviewParityTests(unittest.TestCase):
                     self.context, self.snapshot, hl_cands, entrypoint='main.typ',
                     modern_highlight_evidence=hl_evidence, modern_summary=hl_summary)
             capture.assert_not_called()
+
+    def test_strict_bool_validation_rejects_non_bool_original_only_and_allow_empty_composed(self):
+        for bad_value in (0, 1, 'true', None):
+            with self.subTest(option='original_only', value=bad_value):
+                with self.assertRaisesRegex(SafetyError, 'Original-only selection must be Boolean'):
+                    preview_compile._validate_stage_options(original_only=bad_value)
+                with self.assertRaisesRegex(SafetyError, 'Original-only selection must be Boolean'):
+                    preview_compile.stage_preview_candidates(
+                        None, None, None, None, original_only=bad_value)
+                with self.assertRaisesRegex(SafetyError, 'Original-only selection must be Boolean'):
+                    preview_compile.compile_staged_candidates(
+                        None, None, None, entrypoint='main.typ', original_only=bad_value)
+                with self.assertRaisesRegex(SafetyError, 'Original-only selection must be Boolean'):
+                    preview_compile._compile_captured(
+                        None, None, None, None, entrypoint='main.typ', original_only=bad_value)
+            with self.subTest(option='allow_empty_composed', value=bad_value):
+                with self.assertRaisesRegex(SafetyError, 'Empty composed preview selection must be Boolean'):
+                    preview_compile._validate_stage_options(allow_empty_composed=bad_value)
+                with self.assertRaisesRegex(SafetyError, 'Empty composed preview selection must be Boolean'):
+                    preview_compile.stage_preview_candidates(
+                        None, None, None, None, allow_empty_composed=bad_value)
+                with self.assertRaisesRegex(SafetyError, 'Empty composed preview selection must be Boolean'):
+                    preview_compile._validate_compile_inputs(
+                        None, None, entrypoint='main.typ', deadline_seconds=10.0,
+                        cancel_event=None, expected_dependencies=None,
+                        expected_baseline_sha256=None, phase_timings=None,
+                        allow_empty_composed=bad_value)
 
 
 @unittest.skipUnless(EXECUTABLE.is_file(), 'Requires the pinned syntax adapter')

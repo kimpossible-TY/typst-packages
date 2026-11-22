@@ -107,7 +107,7 @@ class ComposedReferenceCacheAlignmentTests(unittest.TestCase):
             proof, records)
         diag_by_path = {row['path']: row for row in diagnostics['by_file']}
 
-        shared_modern = analyzer.new_shared_analyzer()
+        shared_modern = analyzer._new_shared_analyzer()
         shared_math = math_evidence._engine(analyzer._session)
         for path in ('ch1.typ', 'ch2.typ', 'ch3.typ'):
             tree = view.context.source_for(path).tree
@@ -227,9 +227,9 @@ class ComposedReferenceCacheAlignmentTests(unittest.TestCase):
 
         # 1. Shared _ModernAnalyzer from another ModernHighlightAnalyzer instance or unissued instance.
         for bad_shared in (
-            other_analyzer_same_session.new_shared_analyzer(),
-            other_scoped_analyzer.new_shared_analyzer(),
-            other_session_analyzer.new_shared_analyzer(),
+            other_analyzer_same_session._new_shared_analyzer(),
+            other_scoped_analyzer._new_shared_analyzer(),
+            other_session_analyzer._new_shared_analyzer(),
             modern._ModernAnalyzer(analyzer._session, analyzer._variant, scoped_callbacks=True),
         ):
             with self.subTest(bad_shared=type(bad_shared).__name__):
@@ -237,12 +237,12 @@ class ComposedReferenceCacheAlignmentTests(unittest.TestCase):
                     analyzer.analyze(tree, 'ch1.typ', _shared_analyzer=bad_shared)
 
         # 2. Mutating a validly issued shared _ModernAnalyzer must fail closed.
-        mutated_shared = analyzer.new_shared_analyzer()
+        mutated_shared = analyzer._new_shared_analyzer()
         mutated_shared.packages['@local/evil:0.0.1'] = None
         with self.assertRaises(InputError):
             analyzer.analyze(tree, 'ch1.typ', _shared_analyzer=mutated_shared)
 
-        mutated_flag = analyzer.new_shared_analyzer()
+        mutated_flag = analyzer._new_shared_analyzer()
         mutated_flag.scoped_callbacks = False
         with self.assertRaises(InputError):
             analyzer.analyze(tree, 'ch1.typ', _shared_analyzer=mutated_flag)
@@ -261,6 +261,33 @@ class ComposedReferenceCacheAlignmentTests(unittest.TestCase):
         mutated_engine.packages['@local/evil:0.0.1'] = None
         with self.assertRaises(InputError):
             math_evidence._analyze_report(analyzer, 'ch1.typ', diag_row, engine=mutated_engine)
+
+    def test_replaced_internal_cache_containers_refuse_fail_closed(self):
+        class _DictSubclass(dict):
+            pass
+
+        proof, records = self._capture_multifile(chapter_count=2)
+        view, analyzer, _, _, _, diagnostics = self._prepare_verify_inputs(proof, records)
+        diag_row = next(row for row in diagnostics['by_file'] if row['path'] == 'ch1.typ')
+        tree = view.context.source_for('ch1.typ').tree
+
+        bad_factories = (
+            ('non-dict-list', list),
+            ('non-dict-none', lambda: None),
+            ('dict-subclass', _DictSubclass),
+        )
+        for attr in ('trees', 'modules', 'refusals'):
+            for kind, factory in bad_factories:
+                with self.subTest(target='shared_modern', attr=attr, kind=kind):
+                    shared = analyzer._new_shared_analyzer()
+                    setattr(shared, attr, factory())
+                    with self.assertRaises(InputError):
+                        analyzer.analyze(tree, 'ch1.typ', _shared_analyzer=shared)
+                with self.subTest(target='shared_math_engine', attr=attr, kind=kind):
+                    engine = math_evidence._engine(analyzer._session)
+                    setattr(engine, attr, factory())
+                    with self.assertRaises(InputError):
+                        math_evidence._analyze_report(analyzer, 'ch1.typ', diag_row, engine=engine)
 
     def test_tight_budget_and_mid_verify_session_mutation_refuse_fail_closed(self):
         proof, records = self._capture_multifile(chapter_count=2)
