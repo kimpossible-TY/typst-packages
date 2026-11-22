@@ -576,10 +576,14 @@ compilation. Existing reviewed-math edits are kept when reference expansion or
 its optional work budget cannot preserve them. Imported sources remain
 withheld. Reference resolution, show rules, runtime binding and rendering are
 unproved; splitting may change emphasis, punctuation, spacing and page layout.
-This is not permission to edit source. It is deliberately expensive: a single
-PDE capture measured the expanded proof at about 69 seconds **per pass**, and
-this option performs two such passes plus the existing-plan comparison and
-independent candidate/route replay. Timings vary by project and machine.
+This is not permission to edit source. It is deliberately expensive: an earlier
+single PDE capture measured the expanded proof at about 69 seconds **per pass**
+(performing two such passes plus the existing-plan comparison and independent
+candidate/route replay). Later isolated PDE captures measured roughly 202–210
+seconds for `highlight_analysis_seconds` and 164–166 seconds for
+`highlight_replay_seconds` across those two passes (around 463–472 seconds total
+for a full Mode D (`--compose-highlight-references`) composed `preview-compile`
+single run). Timings vary by project and machine.
 
 Add `--phase-timings --format json` (or use `--phase-timings --pdf-stdout`)
 to include a single run's monotonic elapsed wall times in `phase_timings`.
@@ -625,6 +629,27 @@ can still execute in the PDF preview; included sources are not automatically
 excluded. Use it only with non-adversarial inputs. The sandbox
 denies network and writes outside its workspace, but does not prevent every read
 or transient input modification within it. See the preview contract for limits.
+
+The separate `--conditional-captured-proposals` option verifies and composes
+non-overlapping in-memory candidates for the 9 remaining proposal-capable
+captured rules (`core.scoped-function-call`, `core.scoped-anchor-access`,
+`core.scoped-reference-access`, `core.project-ref-arguments`,
+`pde.import-order`, `pde.no-redundant-facade-import`,
+`pde.flowbox-colored-border`, `pde.paragraph-marker-target`,
+`pde.prose-footnote-no-spacer`) from the captured snapshot and captured
+resources without re-reading the filesystem. Overlapping, imported, or unproven
+sources are withheld fail-closed; it cannot be combined with
+`--conditional-modern-highlights` or `--review-edits` (`parser.error`, exit 2);
+on the CLI route, `core.project-ref-arguments` candidates are withheld because
+the CLI route does not accept a `reference_catalog`; runtime binding, execution,
+and visual equivalence remain unproved and no source-write authority is granted.
+The separate `--inspect-all-captured-rules` option records bounded 33/33
+captured-rule inspection over captured snapshots and resources (13 existing
+preview rules + 9 captured-proposal rules + 11 diagnostic-only rules) without
+filesystem re-reads; `global_coverage_complete` remains `False`, exit status
+remains `2`, and `source_apply_gate.eligible` remains `False` (no source-write
+authority or runtime proof).
+
 The ordinary, unprofiled compile gate remains blocked; the preview neither
 accepts compiler-tail arguments nor publishes a PDF. The separate explicit
 [`--compile-original --pdf-stdout` route](DOCUMENT_ORIGINAL_COMPILE_CONTRACT.md)
@@ -1672,7 +1697,7 @@ The repository test workflow (PRs and relevant main changes) builds the pinned
 adapter and tests Python 3.11/3.15. It neither builds consumer documents nor
 publishes/deploys anything. Renderer-dependent characterization is separate.
 
-CI uses four workers per interpreter with the explicit `measured-v1` balance
+CI uses eight workers per interpreter with the explicit `measured-v1` balance
 profile in [ci-balance-v1.json](ci-balance-v1.json). It assigns estimated longer work first using
 versioned GitHub log timings. Modules stay together except the reviewed
 `CapturedTextUtilsParagraphBoundaryFixTests` and `CapturedTextUtilsParagraphFixTests`
@@ -1684,23 +1709,27 @@ changes to that exception. All discovered cases remain selected exactly once;
 the default runner selection still uses whole-module round-robin.
 
 ```sh
-python3 tools/typst-lint/run_test_shard.py --shard-index 1 --shard-count 4 --balance-profile measured-v1
+python3 tools/typst-lint/run_test_shard.py --shard-index 1 --shard-count 8 --balance-profile measured-v1
 ```
 
-The frozen baseline model estimates a longest test interval of about 12 minutes
+As historical 4-worker `measured-v1` baseline checkpoints, the frozen 4-worker
+baseline model estimates a longest test interval of about 12 minutes
 instead of 22 minutes. The first [measured-profile CI run](https://github.com/kimpossible-TY/typst-packages/actions/runs/42440322213)
-completed in 14m52s versus the previous 21m59s: about 32% shorter. The model
+(under 4 workers) completed in 14m52s versus the previous 21m59s: about 32% shorter. The model
 underestimated that run's slowest test interval; buffered log timestamps and
 runner variance limit predictions for later runs. The following marker-gap
-run passed in 18m14s, with the same shard still longest. Job counts, test and
-compiler deadlines, adapter checks and both aggregate gates retain their
-existing settings. The [partition evidence](audit/ci-balance-evidence.json)
-records the earlier partition, not a fresh result for the current profile.
-After the second reviewed class was split, replaying completed Python 3.15
+run passed in 18m14s, with the same shard still longest. In those 4-worker runs,
+job counts, test and compiler deadlines, adapter checks and both aggregate gates
+retained their prior settings (whereas the current workflow increases shard jobs
+from 4 to 8 per interpreter, i.e., 16 shard jobs plus both aggregate gates). The
+[partition evidence](audit/ci-balance-evidence.json) records the earlier
+partition, not a fresh result for the current profile. After the second reviewed
+class was split, replaying completed Python 3.15
 [CI run 42475379713](https://github.com/kimpossible-TY/typst-packages/actions/runs/42475379713)
-timestamps against the new assignment yields an approximate longest interval
-of 768s versus 897s before splitting. This is an estimate, not a new CI run:
-later added tests are not included, and buffering and runner variance apply.
+timestamps against that 4-worker split assignment yielded an approximate longest
+interval of 768s versus 897s before splitting (no separate 8-worker replay or
+measured timing is recorded here). This is an estimate, not a new CI run: later
+added tests are not included, and buffering and runner variance apply.
 
 Next work: extend only provable directive scopes and Markdown extraction contexts; expand
 verified package/local-facade graphs and paragraph ownership; implement
