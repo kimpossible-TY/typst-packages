@@ -1,0 +1,272 @@
+{
+  "actual_package_theme_newline_cases": [
+    {
+      "continuation_upward_points": 0.0,
+      "continuation_x_after": "70.866140",
+      "continuation_x_before": "70.866140",
+      "diagnostics_after": 0,
+      "diagnostics_before": 1,
+      "edit": {
+        "candidate_sha256": "ddec8271f60f941de3848ee6d2562db6c517a36111b022afbfaa8aaa3c261a0a",
+        "end": 123,
+        "line": 4,
+        "replacement": "\n",
+        "source_sha256": "c4b8ea5fb5c7c437c1806df0212c640a36c54bee477dd87c0ab33069b1fd68b3",
+        "start": 119
+      },
+      "equation_bodies_equal": true,
+      "marked_paragraph_x_after": "88.866140",
+      "marked_paragraph_x_before": "88.866140",
+      "newline": "lf",
+      "pdf_bytes_equal": true,
+      "pdf_sha256": "bddca1dc6648e54e147ce1fb7a0bc34c87330a94b864142a82244f7bfcc5d777",
+      "theme": "light",
+      "word_sequence_equal": true
+    },
+    {
+      "continuation_upward_points": 0.0,
+      "continuation_x_after": "70.866140",
+      "continuation_x_before": "70.866140",
+      "diagnostics_after": 0,
+      "diagnostics_before": 1,
+      "edit": {
+        "candidate_sha256": "ddec8271f60f941de3848ee6d2562db6c517a36111b022afbfaa8aaa3c261a0a",
+        "end": 123,
+        "line": 4,
+        "replacement": "\n",
+        "source_sha256": "c4b8ea5fb5c7c437c1806df0212c640a36c54bee477dd87c0ab33069b1fd68b3",
+        "start": 119
+      },
+      "equation_bodies_equal": true,
+      "marked_paragraph_x_after": "88.866140",
+      "marked_paragraph_x_before": "88.866140",
+      "newline": "lf",
+      "pdf_bytes_equal": true,
+      "pdf_sha256": "9e604f15bf03297e3d084f9a263b9ee6a2e6a656f8c7802082fcb3c87220030c",
+      "theme": "dark",
+      "word_sequence_equal": true
+    },
+    {
+      "continuation_upward_points": 0.0,
+      "continuation_x_after": "70.866140",
+      "continuation_x_before": "70.866140",
+      "diagnostics_after": 0,
+      "diagnostics_before": 1,
+      "edit": {
+        "candidate_sha256": "42693e61a92d4e7024bc953c7308d2f9ded707da6b5abf9721c4b3282a6ba7f5",
+        "end": 130,
+        "line": 4,
+        "replacement": "\r\n",
+        "source_sha256": "14f8ed5e5de7db9f08a2a3817c1d07a9219bf51c8a9ee7f5181273937f30f7c0",
+        "start": 124
+      },
+      "equation_bodies_equal": true,
+      "marked_paragraph_x_after": "88.866140",
+      "marked_paragraph_x_before": "88.866140",
+      "newline": "crlf",
+      "pdf_bytes_equal": true,
+      "pdf_sha256": "bddca1dc6648e54e147ce1fb7a0bc34c87330a94b864142a82244f7bfcc5d777",
+      "theme": "light",
+      "word_sequence_equal": true
+    },
+    {
+      "continuation_upward_points": 0.0,
+      "continuation_x_after": "70.866140",
+      "continuation_x_before": "70.866140",
+      "diagnostics_after": 0,
+      "diagnostics_before": 1,
+      "edit": {
+        "candidate_sha256": "42693e61a92d4e7024bc953c7308d2f9ded707da6b5abf9721c4b3282a6ba7f5",
+        "end": 130,
+        "line": 4,
+        "replacement": "\r\n",
+        "source_sha256": "14f8ed5e5de7db9f08a2a3817c1d07a9219bf51c8a9ee7f5181273937f30f7c0",
+        "start": 124
+      },
+      "equation_bodies_equal": true,
+      "marked_paragraph_x_after": "88.866140",
+      "marked_paragraph_x_before": "88.866140",
+      "newline": "crlf",
+      "pdf_bytes_equal": true,
+      "pdf_sha256": "9e604f15bf03297e3d084f9a263b9ee6a2e6a656f8c7802082fcb3c87220030c",
+      "theme": "dark",
+      "word_sequence_equal": true
+    }
+  ],
+  "baseline_commit": "b879f9ded0822761051b8f4971f035bbf8989f23",
+  "command": "python3 tools/typst-lint/typst-lint inspect-document --root <consumer> --entrypoint main.typ --rule-set pde --format json",
+  "compiler_sha256": "08d01e5a434e821c4a1ce30dd1593e1bbc57c9b1203c4d760d8912ef4ce6a621",
+  "compiler_version": "typst 0.15.1",
+  "focused_tests": {
+    "test_display_rules_with_native": 27,
+    "test_document_cli": 15,
+    "test_document_display": 19,
+    "test_document_display_render": 1,
+    "test_foundation": 22
+  },
+  "focused_tests_total": 84,
+  "full_document_characterization": {
+    "after_pages": 302,
+    "after_pdf_sha256": "e008231599707751b5c33d0f02c3afefa975178718b3d6f1181bf6e5ddd135c3",
+    "after_seconds": 11.466,
+    "before_pages": 302,
+    "before_pdf_sha256": "e008231599707751b5c33d0f02c3afefa975178718b3d6f1181bf6e5ddd135c3",
+    "before_seconds": 13.081,
+    "changed_sources": [
+      {
+        "candidate_sha256": "3b35142ead9c0dcbab9f8982c9d82a8d8026cdf03a232086d67864f94bf6205f",
+        "path": "Preliminaries/Riemannian manifolds/Levi-chivita.typ",
+        "source_gaps": 3,
+        "source_sha256": "6741c0b74b20d4686ea05e98e72988e6342db8a232725a03e5343092c3d5f574"
+      },
+      {
+        "candidate_sha256": "d09ff03f2dcd176de0dcbc62f78af23e9eadcaf0d4d118e6ffe276736f5861a7",
+        "path": "Preliminaries/Riemannian manifolds/conection.typ",
+        "source_gaps": 2,
+        "source_sha256": "2821e26bf5717a5dc35ada70019f14faf9e17ba1674fba7ce35591d139e25a4f"
+      },
+      {
+        "candidate_sha256": "624c718eae17716b0f9656e6f2258995e78c2d3036c8e012b69a7a566c92d0e2",
+        "path": "Preliminaries/Riemannian manifolds/covariant Derivatives of tensor fields.typ",
+        "source_gaps": 4,
+        "source_sha256": "a1a1926131d80e276adef8c398a6c046670f774fbe184da84408998e59451cca"
+      },
+      {
+        "candidate_sha256": "b47c2688c793351d20267b540bfbf22cf6c6a6965f3f5ac6923b25d3aa0d52cc",
+        "path": "chapter 1/1.11.typ",
+        "source_gaps": 9,
+        "source_sha256": "07a5e7f1ef87a4529fab3c4a0d22e956997306c66a4241968e317127eeda2fdb"
+      },
+      {
+        "candidate_sha256": "e9ae671d229032235b945da84b791bf0cb71c0b13eb59309aeb8d959e58d1b38",
+        "path": "chapter 1/1.15.typ",
+        "source_gaps": 5,
+        "source_sha256": "ea19a9186c098a83bc243c3dd35dd941c5a59f9bafbe953a079205eb13361d07"
+      },
+      {
+        "candidate_sha256": "80b922509bff5423dd4f6f1c626fd3da3076b0a29808a385b0a764115e2f15c2",
+        "path": "chapter 1/1.16.typ",
+        "source_gaps": 6,
+        "source_sha256": "7296e79dc5f111db4f8ba8c232a7e65d20818b74a2ef03168a454fbfd2b8c297"
+      },
+      {
+        "candidate_sha256": "e849c08f919a925b4eb6d97ed3407d30864d375c9a49aff93a32d4693ee15224",
+        "path": "chapter 2/2.11.typ",
+        "source_gaps": 8,
+        "source_sha256": "2960392edc8c70826c022079120a6921373bd33834cbe4860edf4c0ccc8c1e32"
+      },
+      {
+        "candidate_sha256": "b61d2e7b427d2c570a0cf8dce4e4f43f799d0855d3905369f1cb0a5f12bc1fdb",
+        "path": "chapter 2/2.2.typ",
+        "source_gaps": 3,
+        "source_sha256": "2cfc76e936897039f477dbe263d9c182f9042390023f614e7270bf8e7a6da312"
+      },
+      {
+        "candidate_sha256": "b02d13f7d1ae506f84fb86a705a7bd14e5dd29497ce43c4ab60b6aecef7e396d",
+        "path": "chapter 2/2.3.typ",
+        "source_gaps": 8,
+        "source_sha256": "8773f392b8d2ab0d6614bba20dd8c17ac57ccf731c9c57d4f36b90d1748fd7cb"
+      },
+      {
+        "candidate_sha256": "40c962d69b2f3385f2235f277ab0dd88ead1312402e39bd4b423aa4338f33884",
+        "path": "chapter 2/2.4.typ",
+        "source_gaps": 4,
+        "source_sha256": "ba858b05e30bd6aed1fd32423e30288118c88a38c64a3e9cd6f273bdfc0ddf11"
+      },
+      {
+        "candidate_sha256": "e66f17446363c893c2ed8e89fc57d516a30cdb1af08512ae6923ba2a9126d3ea",
+        "path": "chapter 2/2.5.typ",
+        "source_gaps": 2,
+        "source_sha256": "1e77854655e6b8d59ba643408173f35fae8f9bdf12d628d8e07d695a88df36fe"
+      },
+      {
+        "candidate_sha256": "fd4b101ed15aed2ea9346c61b677d4b9ba9f603cabad625738e186f37aabb811",
+        "path": "chapter 2/2.6.typ",
+        "source_gaps": 1,
+        "source_sha256": "6b2f33447fa2f8bd977064f31174a02b07f3ec17b5b830cf5033578df098721c"
+      },
+      {
+        "candidate_sha256": "0467ee4ea83eb1617d9b61874171a923576911bd804c5635f38a55f0b72a2fc2",
+        "path": "chapter 2/2.7.typ",
+        "source_gaps": 3,
+        "source_sha256": "bd0cc51688751e1cac146e73208e2d489d4ce38c8c82e98a559dbd96fe8d6172"
+      },
+      {
+        "candidate_sha256": "c9cb72d02f5b15bc8310f2357931163cad3fffac04a68af3fc27c4c7b71af085",
+        "path": "chapter 2/2.8.typ",
+        "source_gaps": 1,
+        "source_sha256": "74e25068ab603e97a66c9f047004d5bc6e42690aefb649992aeb21d469ef4143"
+      },
+      {
+        "candidate_sha256": "c669619ebb99081b44f8c6d404aa4cc129e199fa2192d7a2ffeb2575a81bb719",
+        "path": "chapter 2/2.9.typ",
+        "source_gaps": 1,
+        "source_sha256": "f97a5bb6037bb5f041b87b0e7d50a01dc88b3600da168e9cf18bd23d4224a968"
+      },
+      {
+        "candidate_sha256": "90e38b74b617ef5639dd793124c7db282f50ae47220cd73c9f45aa50b0ff0e77",
+        "path": "chapter 3/3.3.typ",
+        "source_gaps": 2,
+        "source_sha256": "0314da97df705c00d0eed02edcf138b9bc6c314ba3d2c4a114403519f7db52f3"
+      },
+      {
+        "candidate_sha256": "b89a108c4437c79f1cc332fc8893d4d28b0e643464875daa730df86e5c0a27e8",
+        "path": "chapter 3/3.4.typ",
+        "source_gaps": 1,
+        "source_sha256": "24fd9126b1e5e77d11cc5d778e043a0d005c8d216e46bfd4db53d67e3e9eae49"
+      }
+    ],
+    "exact_word_boxes_equal": true,
+    "matched_gaps": 63,
+    "original_snapshot_sha256": "53987ff3e4464c9ef4495969179bd372c5f5ef191fa75a1e848c3df811c3956f",
+    "original_sources_unchanged": true,
+    "pdf_bytes_equal": true,
+    "second_pass_zero_gap_findings": true,
+    "unsupported_contexts_retained": 565
+  },
+  "generated_utc": "2026-11-07T23:13:07.230763+00:00",
+  "inspection": {
+    "available_backends": [
+      "core.parenthesized-scripts",
+      "pde.display-continuation-gap"
+    ],
+    "diagnostics_by_rule": {
+      "core.parenthesized-scripts": 5044,
+      "pde.display-continuation-gap": 63
+    },
+    "display_edits": 0,
+    "enabled_rules": 33,
+    "global_complete": false,
+    "script_insertions": 9686,
+    "sources": 37,
+    "uninspected_rules": 31,
+    "unsupported_display_contexts": 565
+  },
+  "limitations": [
+    "Source-style diagnostics do not prove enclosing calls execute or render as ordinary prose",
+    "Source-gap candidates were constructed only in privately owned characterization copies",
+    "The public command exports zero display-gap edits and grants no application/compiler authority",
+    "Observed identical PDFs do not establish general equivalence for arbitrary wrappers or show rules",
+    "31 PDE rules remain uninspected by this explicit document route",
+    "No consumer rollout, installed-resource change or new remote publication"
+  ],
+  "local_changes_remote_ci": "not-published",
+  "openspec_strict_passed": true,
+  "public_report_sha256": "33cbc1217e96248685af59e72bdf87cf4ab7e7aa4aa8e4b81f4380da0e354288",
+  "published_baseline": {
+    "ci_run": 42421344481,
+    "commit": "618052837ca67717374a604a36827dfdb844d4a3",
+    "conclusion": "success"
+  },
+  "runtime_fingerprint": "c0d2289b75144538084d2a629307cbce3b29cc0cd2ca10934018cc841b2343ab",
+  "runtime_sha256": {
+    "display_rules.py": "90b86eb0c4c204155187f0e62173217f7d5bb0925fb08cf01a64d7e9b735e659",
+    "document_cli.py": "8ade3e9fe55b2f60b9c554d956a04ba9e35f292b431fe29623f7ade3addcb5d0",
+    "document_display.py": "33ac544d419c4198e24f3e1df1c1208d2003592ab9a7c0909ef11c300414df26",
+    "script_rule.py": "de23a485a15a62f968ab1fa6f707899fc5fb05ce00f2aac0836f5db665459b5f",
+    "suppression.py": "398c990af7e65016a739572a62c6b385ce381554185fc96c4bf7b6cadb404057",
+    "syntax_client.py": "4886db74e8314da44f59085254e13e9a683837e4705d80c15ed11c4d2a168562"
+  },
+  "schema": 1,
+  "whitespace_passed": true
+}

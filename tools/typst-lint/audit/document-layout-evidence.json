@@ -1,0 +1,320 @@
+{
+  "baseline_commit": "69723278255f545533bf67f60069c1c6d6217cb9",
+  "combined_copy_characterization": {
+    "exact_word_boxes_equal": true,
+    "final_diagnostics_by_rule": {
+      "core.parenthesized-scripts": 5044
+    },
+    "final_display_findings": 0,
+    "pages": 302,
+    "pdf_bytes_equal": true,
+    "pdf_sha256": "e008231599707751b5c33d0f02c3afefa975178718b3d6f1181bf6e5ddd135c3",
+    "second_phase_gaps": 63,
+    "second_phase_seconds": 12.631,
+    "second_phase_sources": [
+      {
+        "candidate_sha256": "3b35142ead9c0dcbab9f8982c9d82a8d8026cdf03a232086d67864f94bf6205f",
+        "gaps": 3,
+        "path": "Preliminaries/Riemannian manifolds/Levi-chivita.typ",
+        "source_sha256": "6741c0b74b20d4686ea05e98e72988e6342db8a232725a03e5343092c3d5f574"
+      },
+      {
+        "candidate_sha256": "d09ff03f2dcd176de0dcbc62f78af23e9eadcaf0d4d118e6ffe276736f5861a7",
+        "gaps": 2,
+        "path": "Preliminaries/Riemannian manifolds/conection.typ",
+        "source_sha256": "2821e26bf5717a5dc35ada70019f14faf9e17ba1674fba7ce35591d139e25a4f"
+      },
+      {
+        "candidate_sha256": "624c718eae17716b0f9656e6f2258995e78c2d3036c8e012b69a7a566c92d0e2",
+        "gaps": 4,
+        "path": "Preliminaries/Riemannian manifolds/covariant Derivatives of tensor fields.typ",
+        "source_sha256": "a1a1926131d80e276adef8c398a6c046670f774fbe184da84408998e59451cca"
+      },
+      {
+        "candidate_sha256": "b47c2688c793351d20267b540bfbf22cf6c6a6965f3f5ac6923b25d3aa0d52cc",
+        "gaps": 9,
+        "path": "chapter 1/1.11.typ",
+        "source_sha256": "07a5e7f1ef87a4529fab3c4a0d22e956997306c66a4241968e317127eeda2fdb"
+      },
+      {
+        "candidate_sha256": "e9ae671d229032235b945da84b791bf0cb71c0b13eb59309aeb8d959e58d1b38",
+        "gaps": 5,
+        "path": "chapter 1/1.15.typ",
+        "source_sha256": "ea19a9186c098a83bc243c3dd35dd941c5a59f9bafbe953a079205eb13361d07"
+      },
+      {
+        "candidate_sha256": "90903f3d0543a39d3ec0461fc808a1de695449bc1f7d87defe608af43e0b429c",
+        "gaps": 6,
+        "path": "chapter 1/1.16.typ",
+        "source_sha256": "770dda9d07285f9191de1f874058f95e0991aed7490228bdb57f81d679fc289c"
+      },
+      {
+        "candidate_sha256": "e849c08f919a925b4eb6d97ed3407d30864d375c9a49aff93a32d4693ee15224",
+        "gaps": 8,
+        "path": "chapter 2/2.11.typ",
+        "source_sha256": "2960392edc8c70826c022079120a6921373bd33834cbe4860edf4c0ccc8c1e32"
+      },
+      {
+        "candidate_sha256": "f1d16555ea9e54b744cba590c0170536b72d37982ded256f6a8f8c53d602016f",
+        "gaps": 3,
+        "path": "chapter 2/2.2.typ",
+        "source_sha256": "33ac8b27ff8a50c4f4820b6c392508ba321424059d25e5242ba7b924fb6dcac3"
+      },
+      {
+        "candidate_sha256": "d8ac7523397cf5c22f6f3ed7a7fe1c9d8155febc09c9cb832676a7dbd385a90a",
+        "gaps": 8,
+        "path": "chapter 2/2.3.typ",
+        "source_sha256": "2bf75a39f64a3f5e9037201793e58e39fbd3c4bbec8c1ec94c50c77a3d6fe3cd"
+      },
+      {
+        "candidate_sha256": "40c962d69b2f3385f2235f277ab0dd88ead1312402e39bd4b423aa4338f33884",
+        "gaps": 4,
+        "path": "chapter 2/2.4.typ",
+        "source_sha256": "ba858b05e30bd6aed1fd32423e30288118c88a38c64a3e9cd6f273bdfc0ddf11"
+      },
+      {
+        "candidate_sha256": "e66f17446363c893c2ed8e89fc57d516a30cdb1af08512ae6923ba2a9126d3ea",
+        "gaps": 2,
+        "path": "chapter 2/2.5.typ",
+        "source_sha256": "1e77854655e6b8d59ba643408173f35fae8f9bdf12d628d8e07d695a88df36fe"
+      },
+      {
+        "candidate_sha256": "1105be43deaae14787e8e50608d65420cddd9be555c61fb3eb73f07dbb8a7849",
+        "gaps": 1,
+        "path": "chapter 2/2.6.typ",
+        "source_sha256": "efb8495b9204b860257c230d475f05d8747e0f7685ddd5dd9ba77b76e5ae7975"
+      },
+      {
+        "candidate_sha256": "4fb8a97d0f2ed287c7f2b6d9ae10cb1c690a7398ebe22688ff32531b4c758fdb",
+        "gaps": 3,
+        "path": "chapter 2/2.7.typ",
+        "source_sha256": "448d9199fd420df152956742d3e0c147bae2a85d93c9f6bcb3adbab51b50f7cc"
+      },
+      {
+        "candidate_sha256": "c9cb72d02f5b15bc8310f2357931163cad3fffac04a68af3fc27c4c7b71af085",
+        "gaps": 1,
+        "path": "chapter 2/2.8.typ",
+        "source_sha256": "74e25068ab603e97a66c9f047004d5bc6e42690aefb649992aeb21d469ef4143"
+      },
+      {
+        "candidate_sha256": "c669619ebb99081b44f8c6d404aa4cc129e199fa2192d7a2ffeb2575a81bb719",
+        "gaps": 1,
+        "path": "chapter 2/2.9.typ",
+        "source_sha256": "f97a5bb6037bb5f041b87b0e7d50a01dc88b3600da168e9cf18bd23d4224a968"
+      },
+      {
+        "candidate_sha256": "90e38b74b617ef5639dd793124c7db282f50ae47220cd73c9f45aa50b0ff0e77",
+        "gaps": 2,
+        "path": "chapter 3/3.3.typ",
+        "source_sha256": "0314da97df705c00d0eed02edcf138b9bc6c314ba3d2c4a114403519f7db52f3"
+      },
+      {
+        "candidate_sha256": "b89a108c4437c79f1cc332fc8893d4d28b0e643464875daa730df86e5c0a27e8",
+        "gaps": 1,
+        "path": "chapter 3/3.4.typ",
+        "source_sha256": "24fd9126b1e5e77d11cc5d778e043a0d005c8d216e46bfd4db53d67e3e9eae49"
+      }
+    ]
+  },
+  "command": "python3 tools/typst-lint/typst-lint inspect-document --root <consumer> --entrypoint main.typ --rule-set pde --format json",
+  "compiler_sha256": "08d01e5a434e821c4a1ce30dd1593e1bbc57c9b1203c4d760d8912ef4ce6a621",
+  "compiler_version": "typst 0.15.1",
+  "focused_source_tests_total": 57,
+  "focused_tests": {
+    "test_document_cli": 16,
+    "test_document_display": 39,
+    "test_document_display_render": 2
+  },
+  "generated_utc": "2026-11-07T23:41:53.714501+00:00",
+  "guard_regression_count": 3,
+  "inspection": {
+    "available_backends": [
+      "core.parenthesized-scripts",
+      "pde.standalone-display",
+      "pde.display-continuation-gap"
+    ],
+    "diagnostics_by_rule": {
+      "core.parenthesized-scripts": 5044,
+      "pde.display-continuation-gap": 63,
+      "pde.standalone-display": 7
+    },
+    "display_edits": 0,
+    "enabled_rules": 33,
+    "global_complete": false,
+    "source_display_coverage": {
+      "pde.display-continuation-gap": {
+        "diagnostics": 63,
+        "unresolved_contexts": 566
+      },
+      "pde.standalone-display": {
+        "diagnostics": 7,
+        "unresolved_contexts": 306
+      }
+    },
+    "sources": 37,
+    "uninspected_rules": 30
+  },
+  "limitations": [
+    "Diagnostic-only source patterns do not certify runtime execution, bindings or resources",
+    "Public proposals remain script-only; no display edits or source-application authority",
+    "Characterization edits apply only to explicitly owned private copies",
+    "Observed identical PDFs are not a general equivalence proof for arbitrary wrappers",
+    "An extra concurrent local validation run hit prelaunch/compiler timeouts under native-render contention; serial checks passed with limits unchanged",
+    "Thirty PDE rules remain uninspected by this explicit command"
+  ],
+  "native_fixture_compile_count": 16,
+  "published_ci": {
+    "conclusion": "failure",
+    "execution_shards_failed": 1,
+    "execution_shards_passed": 7,
+    "failing_test": "test_running_child_original_input_and_resource_drift_is_caught_before_timeout (font)",
+    "failure_reason": "child safety monitor can terminate before post-mutation handshake is written",
+    "head": "4402f70f7cfe3075dcb4dd5feb8288a541e878db",
+    "local_test_only_fix": "6972327",
+    "run": 42424446933
+  },
+  "remote_ci_for_later_source_layout_changes": "not-published",
+  "runtime_fingerprint": "3b7ad14d83fda7e6c668fcf7a3ce6a226bf92ed6b88c9a91573abc30b2b8d108",
+  "runtime_sha256": {
+    "display_rules.py": "90b86eb0c4c204155187f0e62173217f7d5bb0925fb08cf01a64d7e9b735e659",
+    "document_cli.py": "bb5db3a58fccef3dcd1d6d8e643dc488cd5043f65fa94e1064ab74bddaa402f7",
+    "document_display.py": "c5b7f492bfc37935d94f63e901ea72b661e96cb6f0dc376bdfc4027879d1f30e",
+    "script_rule.py": "de23a485a15a62f968ab1fa6f707899fc5fb05ce00f2aac0836f5db665459b5f",
+    "suppression.py": "398c990af7e65016a739572a62c6b385ce381554185fc96c4bf7b6cadb404057",
+    "syntax_client.py": "4886db74e8314da44f59085254e13e9a683837e4705d80c15ed11c4d2a168562"
+  },
+  "schema": 1,
+  "serial_guard_regressions": [
+    "running-child-six-role-byte-drift",
+    "handshaken-cancellation",
+    "real-timeout"
+  ],
+  "source_snapshot_sha256": "53987ff3e4464c9ef4495969179bd372c5f5ef191fa75a1e848c3df811c3956f",
+  "standalone_copy_characterization": {
+    "after_gap_findings": 63,
+    "after_pages": 302,
+    "after_pdf_sha256": "e008231599707751b5c33d0f02c3afefa975178718b3d6f1181bf6e5ddd135c3",
+    "after_standalone_findings": 0,
+    "before_pages": 302,
+    "before_pdf_sha256": "e008231599707751b5c33d0f02c3afefa975178718b3d6f1181bf6e5ddd135c3",
+    "displays": 7,
+    "exact_word_boxes_equal": true,
+    "inserted_newlines": 8,
+    "original_sources_unchanged": true,
+    "pdf_bytes_equal": true,
+    "sources": [
+      {
+        "candidate_sha256": "67bbb8ccd3b448c8a27e76a9e348af5a4b348776f07b0be6e7893226b0bfed1a",
+        "edits": [
+          {
+            "end": 11288,
+            "replacement": "\n",
+            "start": 11287
+          }
+        ],
+        "equation_bytes_preserved": true,
+        "inserted_newlines": 1,
+        "label_bytes_preserved": true,
+        "literal_text_ownership_preserved": true,
+        "path": "Preliminaries/Riemannian manifolds/parallel_transport.typ",
+        "source_sha256": "5f64d3ede81f17ff923b2c8a4ed2fa5f4f76962d8df3c09c93b206d5073db078",
+        "standalone_displays": 1
+      },
+      {
+        "candidate_sha256": "770dda9d07285f9191de1f874058f95e0991aed7490228bdb57f81d679fc289c",
+        "edits": [
+          {
+            "end": 3878,
+            "replacement": "\n",
+            "start": 3877
+          }
+        ],
+        "equation_bytes_preserved": true,
+        "inserted_newlines": 1,
+        "label_bytes_preserved": true,
+        "literal_text_ownership_preserved": true,
+        "path": "chapter 1/1.16.typ",
+        "source_sha256": "7296e79dc5f111db4f8ba8c232a7e65d20818b74a2ef03168a454fbfd2b8c297",
+        "standalone_displays": 1
+      },
+      {
+        "candidate_sha256": "33ac8b27ff8a50c4f4820b6c392508ba321424059d25e5242ba7b924fb6dcac3",
+        "edits": [
+          {
+            "end": 9042,
+            "replacement": "\n",
+            "start": 9041
+          }
+        ],
+        "equation_bytes_preserved": true,
+        "inserted_newlines": 1,
+        "label_bytes_preserved": true,
+        "literal_text_ownership_preserved": true,
+        "path": "chapter 2/2.2.typ",
+        "source_sha256": "2cfc76e936897039f477dbe263d9c182f9042390023f614e7270bf8e7a6da312",
+        "standalone_displays": 1
+      },
+      {
+        "candidate_sha256": "2bf75a39f64a3f5e9037201793e58e39fbd3c4bbec8c1ec94c50c77a3d6fe3cd",
+        "edits": [
+          {
+            "end": 1164,
+            "replacement": "\n",
+            "start": 1163
+          },
+          {
+            "end": 1179,
+            "replacement": "\n",
+            "start": 1179
+          },
+          {
+            "end": 2865,
+            "replacement": "\n",
+            "start": 2864
+          }
+        ],
+        "equation_bytes_preserved": true,
+        "inserted_newlines": 3,
+        "label_bytes_preserved": true,
+        "literal_text_ownership_preserved": true,
+        "path": "chapter 2/2.3.typ",
+        "source_sha256": "8773f392b8d2ab0d6614bba20dd8c17ac57ccf731c9c57d4f36b90d1748fd7cb",
+        "standalone_displays": 2
+      },
+      {
+        "candidate_sha256": "efb8495b9204b860257c230d475f05d8747e0f7685ddd5dd9ba77b76e5ae7975",
+        "edits": [
+          {
+            "end": 15471,
+            "replacement": "\n",
+            "start": 15470
+          }
+        ],
+        "equation_bytes_preserved": true,
+        "inserted_newlines": 1,
+        "label_bytes_preserved": true,
+        "literal_text_ownership_preserved": true,
+        "path": "chapter 2/2.6.typ",
+        "source_sha256": "6b2f33447fa2f8bd977064f31174a02b07f3ec17b5b830cf5033578df098721c",
+        "standalone_displays": 1
+      },
+      {
+        "candidate_sha256": "448d9199fd420df152956742d3e0c147bae2a85d93c9f6bcb3adbab51b50f7cc",
+        "edits": [
+          {
+            "end": 14568,
+            "replacement": "\n",
+            "start": 14567
+          }
+        ],
+        "equation_bytes_preserved": true,
+        "inserted_newlines": 1,
+        "label_bytes_preserved": true,
+        "literal_text_ownership_preserved": true,
+        "path": "chapter 2/2.7.typ",
+        "source_sha256": "bd0cc51688751e1cac146e73208e2d489d4ce38c8c82e98a559dbd96fe8d6172",
+        "standalone_displays": 1
+      }
+    ]
+  }
+}

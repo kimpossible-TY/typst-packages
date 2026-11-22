@@ -2,7 +2,7 @@
 
 ## Purpose
 
-Apply the author's mechanical style rules automatically, including their intended presentation effects, without overwriting unrelated edits or guessing missing mathematical intent. `fix-policy.md` defines the normative repair contract for all 32 rule IDs.
+Apply the author's mechanical style rules automatically, including their intended presentation effects, without overwriting unrelated edits or guessing missing mathematical intent. `fix-policy.md` defines the normative repair contract for all 33 rule IDs.
 
 ## ADDED Requirements
 
@@ -10,8 +10,8 @@ Apply the author's mechanical style rules automatically, including their intende
 The linter SHALL implement separate check, dry-run and fix modes. Check and dry-run SHALL NOT modify source. Fix SHALL apply all eligible, unsuppressed repairs from `fix-policy.md` without a per-finding prompt when the protected transaction is available. It SHALL report a reason for each unavailable repair. Rule grades SHALL NOT determine repair eligibility. No catalog target, namespace, mathematical expression, punctuation or helper import SHALL be invented outside an explicit repair contract.
 
 #### Scenario: Author-intended paragraph effect
-- **WHEN** a known new-prose boundary before lowercase `second idea.` lacks its marker and the shared paragraph show binding is verified
-- **THEN** fix inserts the blank-line/marker form while preserving the original lowercase prose bytes, and a rendered fixture verifies the intended indentation and capitalized initial letter.
+- **WHEN** a known new-prose boundary before lowercase `this consequence follows.` lacks its marker and the shared paragraph show binding is verified
+- **THEN** the marker repair inserts the blank-line/marker form while preserving the original prose bytes; a separate capitalization repair may change the initial only under its own English/context policy, and rendering verifies the intended source case and indentation.
 
 #### Scenario: Missing reference has no unique correction
 - **WHEN** a configured catalog lacks the requested global label

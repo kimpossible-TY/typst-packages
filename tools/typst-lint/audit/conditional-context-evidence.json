@@ -1,0 +1,122 @@
+{
+  "baseline_commit": "c6cf74e608dbb29927f39d03f253bf42036aab91",
+  "command": "typst-lint inspect-document --root <consumer> --entrypoint main.typ --rule-set pde --package-path <explicit-captured-root> --format json",
+  "focused_tests": {
+    "test_conditional_highlight": 47,
+    "test_document_cli": 30,
+    "total": 77
+  },
+  "generated_utc": "2026-11-08T04:11:33.142089+00:00",
+  "inspection": {
+    "added_sites": [
+      {
+        "column": 213,
+        "line": 155,
+        "path": "chapter 3/3.5.typ",
+        "root_sha256": "06b43d99740643427c434640ffcbb5c6fa2c07c7cbeceb7318563b0a97b57e1e"
+      },
+      {
+        "column": 213,
+        "line": 163,
+        "path": "chapter 3/3.5.typ",
+        "root_sha256": "06b43d99740643427c434640ffcbb5c6fa2c07c7cbeceb7318563b0a97b57e1e"
+      },
+      {
+        "column": 369,
+        "line": 170,
+        "path": "chapter 3/3.5.typ",
+        "root_sha256": "06b43d99740643427c434640ffcbb5c6fa2c07c7cbeceb7318563b0a97b57e1e"
+      },
+      {
+        "column": 159,
+        "line": 375,
+        "path": "chapter 3/3.5.typ",
+        "root_sha256": "06b43d99740643427c434640ffcbb5c6fa2c07c7cbeceb7318563b0a97b57e1e"
+      },
+      {
+        "column": 2,
+        "line": 452,
+        "path": "chapter 3/3.5.typ",
+        "root_sha256": "06b43d99740643427c434640ffcbb5c6fa2c07c7cbeceb7318563b0a97b57e1e"
+      },
+      {
+        "column": 121,
+        "line": 794,
+        "path": "chapter 3/3.5.typ",
+        "root_sha256": "06b43d99740643427c434640ffcbb5c6fa2c07c7cbeceb7318563b0a97b57e1e"
+      }
+    ],
+    "budget_refusals": 0,
+    "conditional_edits": 0,
+    "conditional_findings": {
+      "pde.paragraph-marker-gap": 19,
+      "pde.text-only-highlight": 79
+    },
+    "global_complete": false,
+    "include_snapshot_equal": true,
+    "previous_records_equal": true,
+    "retained_sources": 44,
+    "script_proposals": 9686,
+    "source_backends": [
+      "core.parenthesized-scripts",
+      "pde.standalone-display",
+      "pde.display-continuation-gap"
+    ],
+    "source_diagnostics": {
+      "core.parenthesized-scripts": 5044,
+      "pde.display-continuation-gap": 63,
+      "pde.standalone-display": 7
+    },
+    "source_diagnostics_and_proposals_equal": true,
+    "source_hashes_current": true,
+    "sources": 37,
+    "uninspected_pde_rules": 30
+  },
+  "limitations": [
+    "Inside admitted callbacks, Contextual expressions preserve later lexical bindings only when the syntactic scan detects no assignment or return; the body, other effects and rendering remain unresolved.",
+    "Assignments, returns and root-level Contextual expressions retain conservative handling.",
+    "Conditional hints grant no trusted binding, edit permission, rendering proof or full rule coverage.",
+    "The native result is one owned genuine-facade fixture, not general rendering or PDF equivalence.",
+    "User originals, packages, caches and editor settings are preserved."
+  ],
+  "native_callback_fixture": {
+    "compiler_invocations": 1,
+    "context_body_unresolved": true,
+    "diagnostics": 1,
+    "edit_permission": false,
+    "private_cache_empty": true,
+    "rendered_inside_and_after": true,
+    "scope": "owned genuine-facade scoped callback and proof",
+    "source_sha256": "1395d3f9dfd01e6078734dbb234a14f89dcfb8612cf4272451399f40f1c026ee",
+    "source_unchanged": true,
+    "status": "passed",
+    "text_extractions": 1
+  },
+  "native_scope_probe": {
+    "context_local_binding": "inside",
+    "outer_binding": "before",
+    "source": "owned synthetic Typst 0.15.1 evaluation"
+  },
+  "package_source_files_verified": 80,
+  "published_baseline_ci": {
+    "aggregate_gates": 2,
+    "completed_utc": "2026-11-08T04:09:36Z",
+    "conclusion": "success",
+    "elapsed_seconds": 1024,
+    "execution_jobs": 8,
+    "head": "c6cf74e608dbb29927f39d03f253bf42036aab91",
+    "run": 42444503830
+  },
+  "remote_ci_for_this_change": "not-published",
+  "runtime_sha256": {
+    "conditional_highlight.py": "88963508a370fda91e9df74bac354b3d404e63664dbc42618497bfebbb27449c",
+    "document_cli.py": "af6f1380f23428f24d70ac6ba2773da5d9839fae34ea97c5cc41f6c5fa964641",
+    "document_display.py": "c5b7f492bfc37935d94f63e901ea72b661e96cb6f0dc376bdfc4027879d1f30e",
+    "import_graph.py": "11caef3fe01bb107acdb08fae646764372a2832d8b11b1582e04e6d0bc7fbda4",
+    "namespace_packages.py": "3f2e07a3dd8cccf2be24a21c184639d1be4888a08f94bd60a6717e10cbd1cdf2",
+    "script_rule.py": "de23a485a15a62f968ab1fa6f707899fc5fb05ce00f2aac0836f5db665459b5f",
+    "suppression.py": "398c990af7e65016a739572a62c6b385ce381554185fc96c4bf7b6cadb404057",
+    "syntax_client.py": "4886db74e8314da44f59085254e13e9a683837e4705d80c15ed11c4d2a168562"
+  },
+  "schema": 1
+}

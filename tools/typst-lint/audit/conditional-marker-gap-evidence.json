@@ -1,0 +1,486 @@
+{
+  "baseline_commit": "7bfa9663422847da311539acd1db6ee8bb3de0f4",
+  "command": "typst-lint inspect-document --root <consumer> --entrypoint main.typ --rule-set pde --package-path <explicit-captured-root> --format json",
+  "focused_tests": {
+    "test_conditional_highlight": 37,
+    "test_document_cli": 25,
+    "total": 62
+  },
+  "generated_utc": "2026-11-08T03:11:00.667817+00:00",
+  "inspection": {
+    "budget_refusals": 0,
+    "conditional_backends": [
+      "pde.text-only-highlight",
+      "pde.paragraph-marker-gap"
+    ],
+    "conditional_diagnostics": {
+      "pde.paragraph-marker-gap": 8,
+      "pde.text-only-highlight": 29
+    },
+    "coverage_reasons_by_rule": {
+      "pde.paragraph-marker-gap": {
+        "Nested paragraph-marker expression has unresolved binding/execution context": 307,
+        "Unknown root namespace scope": 31
+      },
+      "pde.text-only-highlight": {
+        "Nested or deferred helper call has unresolved execution context": 62,
+        "Unknown root namespace scope": 31
+      }
+    },
+    "global_complete": false,
+    "highlight_records_equal": true,
+    "include_snapshot_equal": true,
+    "marker_edits": 0,
+    "marker_gap_sites": [
+      {
+        "column": 1,
+        "conditions": [
+          "Every referenced module loads and initializes successfully; initializer purity is not proved.",
+          "Runtime imports select the exact captured package versions and bytes; ambient package selection is not proved.",
+          "The reported source marker is emitted and used as a paragraph marker in the intended document context.",
+          "The document applies the captured paragraph-tab transformation; this source pattern does not prove paragraph rendering."
+        ],
+        "edit_permission": false,
+        "end": 523,
+        "line": 12,
+        "path": "Preliminaries/Riemannian manifolds/parallel_transport.typ",
+        "root_sha256": "5f64d3ede81f17ff923b2c8a4ed2fa5f4f76962d8df3c09c93b206d5073db078",
+        "route": [
+          {
+            "imported_name": "paragraph_tab",
+            "local_name": "paragraph_tab",
+            "operation": "package-export",
+            "path": "@local/text-utils:0.1.2",
+            "request": "@local/text-utils:0.1.2",
+            "source_sha256": "7e151150dac47b01ebf7706457906133d74a52abee1b5c43ce824ff89279bd71"
+          },
+          {
+            "imported_name": "paragraph_tab",
+            "local_name": "paragraph_tab",
+            "operation": "wildcard-import",
+            "path": "Styles/styles.typ",
+            "request": "@local/text-utils:0.1.2",
+            "source_sha256": "ed4ab7c876bd3080f8a0ef9de00fd855c8a8b5c3544483bb6112bdf5e1d466ed"
+          },
+          {
+            "imported_name": "paragraph_tab",
+            "local_name": "paragraph_tab",
+            "operation": "wildcard-import",
+            "path": "Preliminaries/Riemannian manifolds/parallel_transport.typ",
+            "request": "../../Styles/styles.typ",
+            "source_sha256": "5f64d3ede81f17ff923b2c8a4ed2fa5f4f76962d8df3c09c93b206d5073db078"
+          }
+        ],
+        "start": 509,
+        "status": "CONDITIONAL"
+      },
+      {
+        "column": 1,
+        "conditions": [
+          "Every referenced module loads and initializes successfully; initializer purity is not proved.",
+          "Runtime imports select the exact captured package versions and bytes; ambient package selection is not proved.",
+          "The reported source marker is emitted and used as a paragraph marker in the intended document context.",
+          "The document applies the captured paragraph-tab transformation; this source pattern does not prove paragraph rendering."
+        ],
+        "edit_permission": false,
+        "end": 22217,
+        "line": 405,
+        "path": "chapter 1/1.11.typ",
+        "root_sha256": "07a5e7f1ef87a4529fab3c4a0d22e956997306c66a4241968e317127eeda2fdb",
+        "route": [
+          {
+            "imported_name": "paragraph_tab",
+            "local_name": "paragraph_tab",
+            "operation": "package-export",
+            "path": "@local/text-utils:0.1.2",
+            "request": "@local/text-utils:0.1.2",
+            "source_sha256": "7e151150dac47b01ebf7706457906133d74a52abee1b5c43ce824ff89279bd71"
+          },
+          {
+            "imported_name": "paragraph_tab",
+            "local_name": "paragraph_tab",
+            "operation": "wildcard-import",
+            "path": "Styles/styles.typ",
+            "request": "@local/text-utils:0.1.2",
+            "source_sha256": "ed4ab7c876bd3080f8a0ef9de00fd855c8a8b5c3544483bb6112bdf5e1d466ed"
+          },
+          {
+            "imported_name": "paragraph_tab",
+            "local_name": "paragraph_tab",
+            "operation": "wildcard-import",
+            "path": "chapter 1/1.11.typ",
+            "request": "../Styles/styles.typ",
+            "source_sha256": "07a5e7f1ef87a4529fab3c4a0d22e956997306c66a4241968e317127eeda2fdb"
+          }
+        ],
+        "start": 22203,
+        "status": "CONDITIONAL"
+      },
+      {
+        "column": 1,
+        "conditions": [
+          "Every referenced module loads and initializes successfully; initializer purity is not proved.",
+          "Runtime imports select the exact captured package versions and bytes; ambient package selection is not proved.",
+          "The reported source marker is emitted and used as a paragraph marker in the intended document context.",
+          "The document applies the captured paragraph-tab transformation; this source pattern does not prove paragraph rendering."
+        ],
+        "edit_permission": false,
+        "end": 17045,
+        "line": 363,
+        "path": "chapter 1/1.16.typ",
+        "root_sha256": "7296e79dc5f111db4f8ba8c232a7e65d20818b74a2ef03168a454fbfd2b8c297",
+        "route": [
+          {
+            "imported_name": "paragraph_tab",
+            "local_name": "paragraph_tab",
+            "operation": "package-export",
+            "path": "@local/text-utils:0.1.2",
+            "request": "@local/text-utils:0.1.2",
+            "source_sha256": "7e151150dac47b01ebf7706457906133d74a52abee1b5c43ce824ff89279bd71"
+          },
+          {
+            "imported_name": "paragraph_tab",
+            "local_name": "paragraph_tab",
+            "operation": "wildcard-import",
+            "path": "Styles/styles.typ",
+            "request": "@local/text-utils:0.1.2",
+            "source_sha256": "ed4ab7c876bd3080f8a0ef9de00fd855c8a8b5c3544483bb6112bdf5e1d466ed"
+          },
+          {
+            "imported_name": "paragraph_tab",
+            "local_name": "paragraph_tab",
+            "operation": "wildcard-import",
+            "path": "chapter 1/1.16.typ",
+            "request": "../Styles/styles.typ",
+            "source_sha256": "7296e79dc5f111db4f8ba8c232a7e65d20818b74a2ef03168a454fbfd2b8c297"
+          }
+        ],
+        "start": 17031,
+        "status": "CONDITIONAL"
+      },
+      {
+        "column": 1,
+        "conditions": [
+          "Every referenced module loads and initializes successfully; initializer purity is not proved.",
+          "Runtime imports select the exact captured package versions and bytes; ambient package selection is not proved.",
+          "The reported source marker is emitted and used as a paragraph marker in the intended document context.",
+          "The document applies the captured paragraph-tab transformation; this source pattern does not prove paragraph rendering."
+        ],
+        "edit_permission": false,
+        "end": 2155,
+        "line": 49,
+        "path": "chapter 2/2.4.typ",
+        "root_sha256": "ba858b05e30bd6aed1fd32423e30288118c88a38c64a3e9cd6f273bdfc0ddf11",
+        "route": [
+          {
+            "imported_name": "paragraph_tab",
+            "local_name": "paragraph_tab",
+            "operation": "package-export",
+            "path": "@local/text-utils:0.1.2",
+            "request": "@local/text-utils:0.1.2",
+            "source_sha256": "7e151150dac47b01ebf7706457906133d74a52abee1b5c43ce824ff89279bd71"
+          },
+          {
+            "imported_name": "paragraph_tab",
+            "local_name": "paragraph_tab",
+            "operation": "wildcard-import",
+            "path": "Styles/styles.typ",
+            "request": "@local/text-utils:0.1.2",
+            "source_sha256": "ed4ab7c876bd3080f8a0ef9de00fd855c8a8b5c3544483bb6112bdf5e1d466ed"
+          },
+          {
+            "imported_name": "paragraph_tab",
+            "local_name": "paragraph_tab",
+            "operation": "wildcard-import",
+            "path": "chapter 2/2.4.typ",
+            "request": "../Styles/styles.typ",
+            "source_sha256": "ba858b05e30bd6aed1fd32423e30288118c88a38c64a3e9cd6f273bdfc0ddf11"
+          }
+        ],
+        "start": 2141,
+        "status": "CONDITIONAL"
+      },
+      {
+        "column": 1,
+        "conditions": [
+          "Every referenced module loads and initializes successfully; initializer purity is not proved.",
+          "Runtime imports select the exact captured package versions and bytes; ambient package selection is not proved.",
+          "The reported source marker is emitted and used as a paragraph marker in the intended document context.",
+          "The document applies the captured paragraph-tab transformation; this source pattern does not prove paragraph rendering."
+        ],
+        "edit_permission": false,
+        "end": 12127,
+        "line": 193,
+        "path": "chapter 2/2.4.typ",
+        "root_sha256": "ba858b05e30bd6aed1fd32423e30288118c88a38c64a3e9cd6f273bdfc0ddf11",
+        "route": [
+          {
+            "imported_name": "paragraph_tab",
+            "local_name": "paragraph_tab",
+            "operation": "package-export",
+            "path": "@local/text-utils:0.1.2",
+            "request": "@local/text-utils:0.1.2",
+            "source_sha256": "7e151150dac47b01ebf7706457906133d74a52abee1b5c43ce824ff89279bd71"
+          },
+          {
+            "imported_name": "paragraph_tab",
+            "local_name": "paragraph_tab",
+            "operation": "wildcard-import",
+            "path": "Styles/styles.typ",
+            "request": "@local/text-utils:0.1.2",
+            "source_sha256": "ed4ab7c876bd3080f8a0ef9de00fd855c8a8b5c3544483bb6112bdf5e1d466ed"
+          },
+          {
+            "imported_name": "paragraph_tab",
+            "local_name": "paragraph_tab",
+            "operation": "wildcard-import",
+            "path": "chapter 2/2.4.typ",
+            "request": "../Styles/styles.typ",
+            "source_sha256": "ba858b05e30bd6aed1fd32423e30288118c88a38c64a3e9cd6f273bdfc0ddf11"
+          }
+        ],
+        "start": 12113,
+        "status": "CONDITIONAL"
+      },
+      {
+        "column": 1,
+        "conditions": [
+          "Every referenced module loads and initializes successfully; initializer purity is not proved.",
+          "Runtime imports select the exact captured package versions and bytes; ambient package selection is not proved.",
+          "The reported source marker is emitted and used as a paragraph marker in the intended document context.",
+          "The document applies the captured paragraph-tab transformation; this source pattern does not prove paragraph rendering."
+        ],
+        "edit_permission": false,
+        "end": 16058,
+        "line": 274,
+        "path": "chapter 2/2.4.typ",
+        "root_sha256": "ba858b05e30bd6aed1fd32423e30288118c88a38c64a3e9cd6f273bdfc0ddf11",
+        "route": [
+          {
+            "imported_name": "paragraph_tab",
+            "local_name": "paragraph_tab",
+            "operation": "package-export",
+            "path": "@local/text-utils:0.1.2",
+            "request": "@local/text-utils:0.1.2",
+            "source_sha256": "7e151150dac47b01ebf7706457906133d74a52abee1b5c43ce824ff89279bd71"
+          },
+          {
+            "imported_name": "paragraph_tab",
+            "local_name": "paragraph_tab",
+            "operation": "wildcard-import",
+            "path": "Styles/styles.typ",
+            "request": "@local/text-utils:0.1.2",
+            "source_sha256": "ed4ab7c876bd3080f8a0ef9de00fd855c8a8b5c3544483bb6112bdf5e1d466ed"
+          },
+          {
+            "imported_name": "paragraph_tab",
+            "local_name": "paragraph_tab",
+            "operation": "wildcard-import",
+            "path": "chapter 2/2.4.typ",
+            "request": "../Styles/styles.typ",
+            "source_sha256": "ba858b05e30bd6aed1fd32423e30288118c88a38c64a3e9cd6f273bdfc0ddf11"
+          }
+        ],
+        "start": 16044,
+        "status": "CONDITIONAL"
+      },
+      {
+        "column": 1,
+        "conditions": [
+          "Every referenced module loads and initializes successfully; initializer purity is not proved.",
+          "Runtime imports select the exact captured package versions and bytes; ambient package selection is not proved.",
+          "The reported source marker is emitted and used as a paragraph marker in the intended document context.",
+          "The document applies the captured paragraph-tab transformation; this source pattern does not prove paragraph rendering."
+        ],
+        "edit_permission": false,
+        "end": 4861,
+        "line": 92,
+        "path": "chapter 2/2.5.typ",
+        "root_sha256": "1e77854655e6b8d59ba643408173f35fae8f9bdf12d628d8e07d695a88df36fe",
+        "route": [
+          {
+            "imported_name": "paragraph_tab",
+            "local_name": "paragraph_tab",
+            "operation": "package-export",
+            "path": "@local/text-utils:0.1.2",
+            "request": "@local/text-utils:0.1.2",
+            "source_sha256": "7e151150dac47b01ebf7706457906133d74a52abee1b5c43ce824ff89279bd71"
+          },
+          {
+            "imported_name": "paragraph_tab",
+            "local_name": "paragraph_tab",
+            "operation": "wildcard-import",
+            "path": "Styles/styles.typ",
+            "request": "@local/text-utils:0.1.2",
+            "source_sha256": "ed4ab7c876bd3080f8a0ef9de00fd855c8a8b5c3544483bb6112bdf5e1d466ed"
+          },
+          {
+            "imported_name": "paragraph_tab",
+            "local_name": "paragraph_tab",
+            "operation": "wildcard-import",
+            "path": "chapter 2/2.5.typ",
+            "request": "../Styles/styles.typ",
+            "source_sha256": "1e77854655e6b8d59ba643408173f35fae8f9bdf12d628d8e07d695a88df36fe"
+          }
+        ],
+        "start": 4847,
+        "status": "CONDITIONAL"
+      },
+      {
+        "column": 1,
+        "conditions": [
+          "Every referenced module loads and initializes successfully; initializer purity is not proved.",
+          "Runtime imports select the exact captured package versions and bytes; ambient package selection is not proved.",
+          "The reported source marker is emitted and used as a paragraph marker in the intended document context.",
+          "The document applies the captured paragraph-tab transformation; this source pattern does not prove paragraph rendering."
+        ],
+        "edit_permission": false,
+        "end": 1700,
+        "line": 32,
+        "path": "chapter 2/2.7.typ",
+        "root_sha256": "bd0cc51688751e1cac146e73208e2d489d4ce38c8c82e98a559dbd96fe8d6172",
+        "route": [
+          {
+            "imported_name": "paragraph-tab",
+            "local_name": "paragraph-tab",
+            "operation": "package-export",
+            "path": "@local/text-utils:0.1.2",
+            "request": "@local/text-utils:0.1.2",
+            "source_sha256": "7e151150dac47b01ebf7706457906133d74a52abee1b5c43ce824ff89279bd71"
+          },
+          {
+            "imported_name": "paragraph-tab",
+            "local_name": "paragraph-tab",
+            "operation": "wildcard-import",
+            "path": "Styles/styles.typ",
+            "request": "@local/text-utils:0.1.2",
+            "source_sha256": "ed4ab7c876bd3080f8a0ef9de00fd855c8a8b5c3544483bb6112bdf5e1d466ed"
+          },
+          {
+            "imported_name": "paragraph-tab",
+            "local_name": "paragraph-tab",
+            "operation": "wildcard-import",
+            "path": "chapter 2/2.7.typ",
+            "request": "../Styles/styles.typ",
+            "source_sha256": "bd0cc51688751e1cac146e73208e2d489d4ce38c8c82e98a559dbd96fe8d6172"
+          }
+        ],
+        "start": 1686,
+        "status": "CONDITIONAL"
+      }
+    ],
+    "retained_sources": 44,
+    "script_proposals": 9686,
+    "source_backends": [
+      "core.parenthesized-scripts",
+      "pde.standalone-display",
+      "pde.display-continuation-gap"
+    ],
+    "source_diagnostics": {
+      "core.parenthesized-scripts": 5044,
+      "pde.display-continuation-gap": 63,
+      "pde.standalone-display": 7
+    },
+    "source_diagnostics_and_proposals_equal": true,
+    "source_hashes_current": true,
+    "sources": 37,
+    "uninspected_pde_rules": 30
+  },
+  "limitations": [
+    "Both conditional rules retain successful-initialization/runtime-package/render-context conditions and no edit authority.",
+    "Marker gaps additionally require the captured paragraph-tab transformation to be active; source layout does not prove paragraph rendering.",
+    "Unknown callbacks and bare-CR boundaries remain unresolved; following headings/displays take marker-target precedence.",
+    "The native fixture is an owned manual one-newline candidate, not a public repair or general PDF/geometry certificate.",
+    "Source/compiler transaction authority, available backends and full PDE acceptance are unchanged.",
+    "User originals, packages, caches and editor settings are preserved."
+  ],
+  "native_fixture": {
+    "diagnostics_before_after": [
+      1,
+      0
+    ],
+    "elapsed_seconds": 0.697,
+    "executions": {
+      "compile": 2,
+      "eval_query": 0,
+      "pdftotext": 2,
+      "version": 1
+    },
+    "general_geometry_pdf_equivalence_claim": false,
+    "namespace_packages": 6,
+    "native_observations": {
+      "all_word_bboxes_equal": true,
+      "before_after": [
+        {
+          "heading_x_min_pt": 30.0,
+          "page_left_pt": 30.0,
+          "prose_indent_pt": 18.0,
+          "prose_x_min_pt": 48.0,
+          "prose_y_min_pt": 47.004
+        },
+        {
+          "heading_x_min_pt": 30.0,
+          "page_left_pt": 30.0,
+          "prose_indent_pt": 18.0,
+          "prose_x_min_pt": 48.0,
+          "prose_y_min_pt": 47.004
+        }
+      ],
+      "full_word_order_equal": true,
+      "max_abs_bbox_delta_pt": 0.0,
+      "word_order": [
+        "Owned",
+        "heading",
+        "Marker",
+        "prose",
+        "retains",
+        "indentation."
+      ]
+    },
+    "preserved": {
+      "facade_and_consumer_originals": true,
+      "owned_sources_except_one_added_newline": true,
+      "package_files": 80,
+      "private_cache_empty": true
+    },
+    "retries": 0,
+    "rule": "pde.paragraph-marker-gap",
+    "runs": 1,
+    "runtime_package_trees": 9,
+    "scope": "one owned genuine-facade heading/marker/direct-prose fixture",
+    "status": "passed",
+    "tests": 1,
+    "typst_version": "typst 0.15.1 (unknown commit)",
+    "writer_or_edit_permission": false
+  },
+  "published_baseline_ci": {
+    "conclusion": "success",
+    "elapsed_seconds": 892,
+    "head": "7bfa9663422847da311539acd1db6ee8bb3de0f4",
+    "passed_per_interpreter": 2030,
+    "run": 42440322213,
+    "skipped_per_interpreter": 55
+  },
+  "remote_ci_for_this_change": "not-published",
+  "runtime_sha256": {
+    "conditional_highlight.py": "d58bf26a6c0320376c89d29534f9086e1efbfbe5be8c367fbe4d22c3ddde2b06",
+    "document_cli.py": "12ff3eb624dbdb2e50fdce1f1974aaa8520d402a687c8f082028c7a1c163b89e",
+    "document_display.py": "c5b7f492bfc37935d94f63e901ea72b661e96cb6f0dc376bdfc4027879d1f30e",
+    "import_graph.py": "11caef3fe01bb107acdb08fae646764372a2832d8b11b1582e04e6d0bc7fbda4",
+    "namespace_packages.py": "3f2e07a3dd8cccf2be24a21c184639d1be4888a08f94bd60a6717e10cbd1cdf2",
+    "script_rule.py": "de23a485a15a62f968ab1fa6f707899fc5fb05ce00f2aac0836f5db665459b5f",
+    "suppression.py": "398c990af7e65016a739572a62c6b385ce381554185fc96c4bf7b6cadb404057",
+    "syntax_client.py": "4886db74e8314da44f59085254e13e9a683837e4705d80c15ed11c4d2a168562"
+  },
+  "schema": 1,
+  "source_pattern_inventory": {
+    "coverage_reason_count_is_not_violation_count": true,
+    "deferred_callback_candidates": 13,
+    "hyphen": 145,
+    "missing_blank_candidates": 21,
+    "reported_root_candidates": 8,
+    "root_spellings": 186,
+    "typed_export_spellings": 549,
+    "underscore": 404
+  }
+}

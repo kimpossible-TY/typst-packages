@@ -4,7 +4,7 @@
 
 Specify mechanically observable PDE content conventions layered on the core pack, especially source paragraph boundaries and the distinct footnote policies for prose, aligned displays, and unaligned displays.
 
-Source keys **My**, **Packages**, **Projects**, and **PDE** have the meanings recorded in `design.md` and the core spec. These 17 rules apply only to the `pde` pack. Scenarios assume resolved helper bindings; non-violation means no finding from the named rule. Snippets can be fragments within the indicated surrounding content.
+Source keys **My**, **Packages**, **Projects**, **PDE**, and **User** have the meanings recorded in `design.md` and the core spec. These 18 rules apply only to the `pde` pack. Scenarios assume resolved helper bindings; non-violation means no finding from the named rule. Snippets can be fragments within the indicated surrounding content.
 
 ## ADDED Requirements
 
@@ -356,3 +356,29 @@ $ A &= B $
 #### Scenario: Non-violation using the active palette
 - **WHEN** the implementation contains `context { let theme = theme-from-text-fill(); block(stroke: 1pt + theme.rule, body) }`
 - **THEN** this rule emits no finding.
+
+
+### Requirement: pde.paragraph-capitalization
+- **Grade:** warning
+- **Source:** User / Paragraph capitalization (2026-11-07); design / Automatic fixing and compilation.
+- **Description:** The linter SHALL warn and uppercase only the first ASCII byte of an eligible lowercase starter after a resolved paragraph marker. Eligibility and skips SHALL follow the exact English/context/starter policy in `design.md`. This rule, not marker insertion or hidden package rendering, SHALL own the source casing edit.
+
+#### Scenario: Supported English paragraph starter
+- **WHEN** a resolved standalone `#paragraph_tab` immediately precedes, with exactly one LF/CRLF, an explicitly English ordinary paragraph with `therefore $x = y$ follows.`
+- **THEN** this rule proposes `Therefore $x = y$ follows.`, changing only the initial ASCII byte, and the repeated analysis emits no finding.
+
+#### Scenario: Preserve math, names and language boundaries
+- **WHEN** the paragraph begins with `$x$ is positive`, raw/code, a call, quote, reference, `iPhone`, `eBay`, a single letter, non-ASCII text, an unknown starter, or an unknown/non-English language
+- **THEN** the rule makes no edit, records its applicability limit and does not skip the initial construct to capitalize a later word.
+
+#### Scenario: Explicit intentional lowercase
+- **WHEN** a reasoned `ignore-next pde.paragraph-capitalization` covers the paragraph construct
+- **THEN** the diagnostic and source edit are both suppressed, while marker-gap and other enabled rules remain active.
+
+#### Scenario: Source language overrides configuration
+- **WHEN** configuration declares English but the effective source language is statically non-English or dynamic
+- **THEN** the actual effective language is used, or the rule skips as unknown; configuration is not permission to guess.
+
+#### Scenario: A new marker and capitalization converge
+- **WHEN** the marker rule inserts `#paragraph_tab` before a known English paragraph starting `this consequence follows.`
+- **THEN** marker insertion preserves the prose on its pass and the capitalization rule changes only `t` to `T` on a later pass; the final source has no further edits.
